@@ -1,0 +1,66 @@
+<template>
+  <div class="layout-wrapper">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">
+        <span class="logo-icon">💬</span>
+        <div>
+          <span class="logo-text">LINE Bot</span>
+          <span class="logo-sub">管理系統</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <NuxtLink
+          v-for="item in navItems"
+          :key="item.to"
+          :to="item.to"
+          class="nav-item"
+          :class="{ active: route.path === item.to }"
+        >
+          <span class="nav-icon">{{ item.icon }}</span>
+          <span>{{ item.label }}</span>
+        </NuxtLink>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="flex items-center gap-1" style="margin-bottom:0.75rem;">
+          <div
+            style="
+              width:32px;height:32px;border-radius:50%;
+              background:var(--bg-hover);display:grid;
+              place-items:center;font-size:0.9rem;flex-shrink:0;
+            "
+          >
+            👤
+          </div>
+          <div style="flex:1;min-width:0;">
+            <div class="truncate text-sm font-bold" style="max-width:140px;">
+              {{ user?.email ?? '管理員' }}
+            </div>
+            <div class="text-xs text-muted">Admin</div>
+          </div>
+        </div>
+        <button class="btn btn-secondary btn-sm w-full" @click="logout">
+          🚪 登出
+        </button>
+      </div>
+    </aside>
+
+    <!-- Page Content -->
+    <main class="main-content">
+      <slot />
+    </main>
+  </div>
+</template>
+
+<script setup lang="ts">
+const route = useRoute()
+const { user, logout } = useAuth()
+
+const navItems = [
+  { to: '/admin', icon: '🏠', label: '儀表板' },
+  { to: '/admin/richmenu', icon: '🗂️', label: 'Rich Menu' },
+  { to: '/admin/flow', icon: '🤖', label: '對話流程' },
+]
+</script>
