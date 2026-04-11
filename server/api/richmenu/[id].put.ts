@@ -27,12 +27,19 @@ export default defineEventHandler(async (event) => {
   try {
     newRichMenuId = await createRichMenu(richMenuPayload)
   } catch (err: any) {
-    if (err.originalError?.response?.data) {
-      throw createError({ statusCode: 400, statusMessage: JSON.stringify(err.originalError.response.data) })
-    } else {
-      throw createError({ statusCode: 400, statusMessage: err.message || 'Unknown LINE error' })
-    }
+    // Try to read LINE's actual error body from the Response cause
+    let lineDetail = ''
+    try {
+      const resp = err.cause ?? err.originalError?.response
+      if (resp && typeof resp.json === 'function') {
+        const body = await resp.json()
+        lineDetail = JSON.stringify(body)
+      }
+    } catch {}
+    console.error('[richmenu/put] LINE createRichMenu error:', lineDetail || err.message)
+    throw createError({ statusCode: 400, statusMessage: lineDetail || err.message || 'Unknown LINE error' })
   }
+
 
   // 2. Upload Image to NEW Rich Menu
   let imageBuffer: Buffer
