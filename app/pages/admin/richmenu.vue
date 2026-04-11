@@ -495,13 +495,18 @@ function openEditModal(menu: any) {
     selected: true,
     setAsDefault: menu.isDefault || false,
     areas: JSON.parse(JSON.stringify(menu.areas || [])).map((a: any) => {
-      // Restore switch menu state from postback
+      // Restore switch menu state from legacy postback format
       if (a.action.type === 'postback' && a.action.data?.startsWith('switchMenu=')) {
         return { ...a, action: { type: 'switch', data: a.action.data } }
       }
-      // Migrate legacy richmenuswitch
+      // Restore from native richmenuswitch: extract target Firestore ID from aliasId
       if (a.action.type === 'richmenuswitch') {
-        return { ...a, action: { type: 'switch', data: '' } }
+        const richMenuAliasId: string = a.action.richMenuAliasId ?? ''
+        // aliasId format is "menu-{firestoreId}", strip prefix to get firestoreId
+        const targetFirestoreId = richMenuAliasId.startsWith('menu-')
+          ? richMenuAliasId.slice('menu-'.length)
+          : richMenuAliasId
+        return { ...a, action: { type: 'switch', data: `switchMenu=${targetFirestoreId}` } }
       }
       return a
     })
