@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     areas,
   }
 
-  let richMenuId: string;
+  let richMenuId: string
   try {
     richMenuId = await createRichMenu(richMenuPayload)
   } catch (err: any) {
@@ -34,10 +34,21 @@ export default defineEventHandler(async (event) => {
     await batch.commit()
   }
 
+  // Generate Firestore ID first so we can use it as alias
   const id = uuidv4()
+  const aliasId = `menu-${id}`
+
+  // Create Rich Menu Alias for instant richmenuswitch support
+  try {
+    await createRichMenuAlias(richMenuId, aliasId)
+  } catch (e) {
+    console.warn('[richmenu/create] Failed to create alias:', e)
+  }
+
   const doc = await createDoc('richmenus', id, {
     name,
     richMenuId,
+    aliasId,
     size: size ?? { width: 2500, height: 843 },
     areas,
     chatBarText: chatBarText ?? '選單',

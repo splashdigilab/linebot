@@ -90,3 +90,25 @@ export async function getUserProfile(userId: string) {
 export async function linkRichMenuIdToUser(userId: string, richMenuId: string) {
   return getClient().linkRichMenuIdToUser(userId, richMenuId)
 }
+
+/** Create a Rich Menu Alias (for instant richmenuswitch) */
+export async function createRichMenuAlias(richMenuId: string, richMenuAliasId: string) {
+  return getClient().createRichMenuAlias({ richMenuId, richMenuAliasId })
+}
+
+/** Delete a Rich Menu Alias */
+export async function deleteRichMenuAlias(richMenuAliasId: string) {
+  try {
+    return await getClient().deleteRichMenuAlias(richMenuAliasId)
+  } catch {
+    // Ignore if alias doesn't exist
+  }
+}
+
+/** Update a Rich Menu Alias to point to a new richMenuId.
+ *  LINE doesn't have a direct "update" API, so we delete then recreate. */
+export async function updateRichMenuAlias(richMenuId: string, richMenuAliasId: string) {
+  await deleteRichMenuAlias(richMenuAliasId)
+  return createRichMenuAlias(richMenuId, richMenuAliasId)
+}
+

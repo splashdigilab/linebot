@@ -787,13 +787,17 @@ async function submitCreate() {
     return showToast('發現超出邊界的區塊，已自動為您修正！請重新確認後再送出', 'error')
   }
 
-  // Pre-process areas: transform "switch" back to "postback" for standard API payload
+  // Pre-process areas: transform "switch" to LINE's native richmenuswitch action
+  // aliasId = "menu-{targetFirestoreId}" which was set when the target menu was created
   const apiAreas = form.value.areas.map(a => {
     if (a.action.type === 'switch' || a.action.type === 'richmenuswitch') {
-      return { ...a, action: { type: 'postback', data: a.action.data || 'switchMenu=' } }
+      const targetFirestoreId = (a.action.data ?? '').replace('switchMenu=', '')
+      const aliasId = `menu-${targetFirestoreId}`
+      return { ...a, action: { type: 'richmenuswitch', richMenuAliasId: aliasId } }
     }
     return a
   })
+
 
   creating.value = true
   try {

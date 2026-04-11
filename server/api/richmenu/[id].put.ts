@@ -11,6 +11,9 @@ export default defineEventHandler(async (event) => {
   const oldDoc = await getDoc<any>('richmenus', firestoreId)
   if (!oldDoc) throw createError({ statusCode: 404, statusMessage: 'Rich Menu not found' })
 
+  // The alias ID stays the same (based on firestoreId), only richMenuId changes
+  const aliasId = oldDoc.aliasId ?? `menu-${firestoreId}`
+
   // 1. Create NEW Rich Menu on LINE
   const richMenuPayload: messagingApi.RichMenuRequest = {
     size: size ?? { width: 2500, height: 843 },
@@ -19,8 +22,6 @@ export default defineEventHandler(async (event) => {
     chatBarText: chatBarText ?? '選單',
     areas,
   }
-
-  console.log('[richmenu/put] payload areas:', JSON.stringify(richMenuPayload.areas, null, 2))
 
   let newRichMenuId: string
   try {
@@ -38,34 +39,34 @@ export default defineEventHandler(async (event) => {
   let finalContentType = contentType ?? 'image/png'
 
   if (imageBase64) {
-    // Has new image uploaded during edit
     imageBuffer = Buffer.from(imageBase64, 'base64')
   } else if (oldDoc.imageUrl) {
-    // Inherit old image
     try {
       const response = await fetch(oldDoc.imageUrl)
       const arrayBuffer = await response.arrayBuffer()
       imageBuffer = Buffer.from(arrayBuffer)
       finalContentType = response.headers.get('content-type') || 'image/png'
     } catch (e) {
-      // If fetching old image fails, we might still want to proceed or throw
-      // In this case we throw since LINE requires an image to activate it.
       await deleteLineRichMenu(newRichMenuId)
       throw createError({ statusCode: 500, statusMessage: 'Failed to fetch existing image from storage' })
     }
   } else {
-    // Failsafe
     await deleteLineRichMenu(newRichMenuId)
     throw createError({ statusCode: 400, statusMessage: 'No image provided and no existing image found' })
   }
 
-  // Actually upload to LINE
   await uploadRichMenuImage(newRichMenuId, imageBuffer, finalContentType)
 
-  // 3. Handle default setting
+  // 3. Update Alias to point to the NEW richMenuId (delete old → recreate same aliasId)
+  try {
+    await updateRichMenuAlias(newRichMenuId, aliasId)
+  } catch (e) {
+    console.warn('[richmenu/put] Failed to update alias:', e)
+  }
+
+  // 4. Handle default setting
   if (setAsDefault) {
     await setDefaultRichMenu(newRichMenuId)
-    // Clear others
     const db = getDb()
     const prev = await db.collection('richmenus').where('isDefault', '==', true).get()
     const batch = db.batch()
@@ -73,13 +74,9 @@ export default defineEventHandler(async (event) => {
       if (d.id !== firestoreId) batch.update(d.ref, { isDefault: false })
     })
     await batch.commit()
-  } else if (oldDoc.isDefault) {
-    // If it was default and user un-checked the box...
-    // LINE doesn't have "remove default", it just stays default until replaced.
-    // However we update firestore to reflect intention.
   }
 
-  // 4. Delete old Rich Menu from LINE
+  // 5. Delete old Rich Menu from LINE
   if (oldDoc.richMenuId) {
     try {
       await deleteLineRichMenu(oldDoc.richMenuId)
@@ -88,9 +85,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // 5. Update Firestore record
-  // Note: we update the existing doc (which preserves createdAt and id)
-  // We keep the old imageUrl if imageBase64 is empty, otherwise we'd need to re-upload to Cloud Storage.
+  // 6. Update Firestore record
   let finalImageUrl = oldDoc.imageUrl
   if (imageBase64) {
     const storage = getStorage()
@@ -105,13 +100,14 @@ export default defineEventHandler(async (event) => {
 
   await updateDoc('richmenus', firestoreId, {
     richMenuId: newRichMenuId,
+    aliasId,
     name,
     size: size ?? { width: 2500, height: 843 },
     chatBarText: chatBarText ?? '選單',
     areas,
     isDefault: setAsDefault ?? false,
-    imageUrl: finalImageUrl
+    imageUrl: finalImageUrl,
   })
 
-  return { success: true, richMenuId: newRichMenuId, imageUrl: finalImageUrl }
+  return { success: true, richMenuId: newRichMenuId, aliasId, imageUrl: finalImageUrl }
 })
