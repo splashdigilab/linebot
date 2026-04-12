@@ -14,7 +14,7 @@ export default defineEventHandler(async () => {
   for (const doc of snap.docs) {
     const data = doc.data()
     const firestoreId = doc.id
-    const aliasId = data.aliasId ?? `menu-${firestoreId}`
+    const aliasId = data.aliasId ?? `rm${firestoreId.replace(/-/g, '')}`
     const richMenuId = data.richMenuId
 
     if (!richMenuId) {

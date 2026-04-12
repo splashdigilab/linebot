@@ -18,11 +18,12 @@ export default defineEventHandler(async (event) => {
   try {
     richMenuId = await createRichMenu(richMenuPayload)
   } catch (err: any) {
-    if (err.originalError?.response?.data) {
-      throw createError({ statusCode: 400, statusMessage: JSON.stringify(err.originalError.response.data) })
-    } else {
-      throw createError({ statusCode: 400, statusMessage: err.message || 'Unknown LINE error' })
-    }
+    let lineDetail = ''
+    try {
+      const resp = err.cause ?? err.originalError?.response
+      if (resp?.json) lineDetail = JSON.stringify(await resp.json())
+    } catch {}
+    throw createError({ statusCode: 400, statusMessage: lineDetail || err.message || 'Unknown LINE error' })
   }
 
   if (setAsDefault) {
@@ -34,16 +35,12 @@ export default defineEventHandler(async (event) => {
     await batch.commit()
   }
 
-  // Generate Firestore ID first so we can use it as alias
   const id = uuidv4()
-  const aliasId = `menu-${id}`
+  // Alias ID: pure alphanumeric only (no hyphens) so LINE accepts it
+  const aliasId = `rm${id.replace(/-/g, '')}`
 
-  // Create Rich Menu Alias for instant richmenuswitch support
-  try {
-    await createRichMenuAlias(richMenuId, aliasId)
-  } catch (e) {
-    console.warn('[richmenu/create] Failed to create alias:', e)
-  }
+  // Alias is created AFTER image upload in upload.post.ts, not here
+  // (LINE requires image to be present before alias can be created)
 
   const doc = await createDoc('richmenus', id, {
     name,

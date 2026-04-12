@@ -499,13 +499,12 @@ function openEditModal(menu: any) {
       if (a.action.type === 'postback' && a.action.data?.startsWith('switchMenu=')) {
         return { ...a, action: { type: 'switch', data: a.action.data } }
       }
-      // Restore from native richmenuswitch: extract target Firestore ID from aliasId
+      // Restore from native richmenuswitch: look up target menu by aliasId
       if (a.action.type === 'richmenuswitch') {
         const richMenuAliasId: string = a.action.richMenuAliasId ?? ''
-        // aliasId format is "menu-{firestoreId}", strip prefix to get firestoreId
-        const targetFirestoreId = richMenuAliasId.startsWith('menu-')
-          ? richMenuAliasId.slice('menu-'.length)
-          : richMenuAliasId
+        // Find the target menu in our list whose aliasId matches
+        const targetMenu = menus.value.find(m => m.aliasId === richMenuAliasId)
+        const targetFirestoreId = targetMenu?.id ?? ''
         return { ...a, action: { type: 'switch', data: `switchMenu=${targetFirestoreId}` } }
       }
       return a
@@ -793,11 +792,13 @@ async function submitCreate() {
   }
 
   // Pre-process areas: transform "switch" to LINE's native richmenuswitch action
-  // aliasId = "menu-{targetFirestoreId}" which was set when the target menu was created
+  // Look up the target menu's aliasId from the menus list (more reliable than string derivation)
   const apiAreas = form.value.areas.map(a => {
     if (a.action.type === 'switch' || a.action.type === 'richmenuswitch') {
       const targetFirestoreId = (a.action.data ?? '').replace('switchMenu=', '')
-      const aliasId = `menu-${targetFirestoreId}`
+      // Look up the stored aliasId for the target menu
+      const targetMenu = menus.value.find(m => m.id === targetFirestoreId)
+      const aliasId = targetMenu?.aliasId ?? `rm${targetFirestoreId.replace(/-/g, '')}`
       return { ...a, action: { type: 'richmenuswitch', richMenuAliasId: aliasId } }
     }
     return a
