@@ -112,3 +112,9 @@ export async function updateRichMenuAlias(richMenuId: string, richMenuAliasId: s
   return createRichMenuAlias(richMenuId, richMenuAliasId)
 }
 
+/** Get Rich Menu Alias details from LINE */
+export async function getRichMenuAlias(richMenuAliasId: string) {
+  return getClient().getRichMenuAlias(richMenuAliasId)
+}
+
+
