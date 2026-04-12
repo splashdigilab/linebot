@@ -3,7 +3,7 @@
     <!-- ── Left Sidebar: Flow List ─────────────────────────── -->
     <aside class="flow-sidebar">
       <div class="flow-sidebar-header">
-        <span class="flow-sidebar-title">🤖 對話流程</span>
+        <span class="flow-sidebar-title">🤖 機器人模組</span>
         <button class="btn btn-primary btn-sm" @click="openCreate">
           ➕ 新增
         </button>
@@ -14,7 +14,7 @@
       </div>
 
       <div v-else-if="!flows.length" class="flow-sidebar-empty">
-        <span>尚無流程</span>
+        <span>尚無模組</span>
         <button class="btn btn-ghost btn-sm" @click="openCreate">立即建立</button>
       </div>
 
@@ -28,10 +28,7 @@
         >
           <div class="flow-list-name">{{ flow.name }}</div>
           <div class="flow-list-meta">
-            <span class="badge" :class="flow.isActive ? 'badge-green' : 'badge-gray'" style="font-size:0.6rem;">
-              {{ flow.isActive ? '啟用' : '停用' }}
-            </span>
-            <span class="text-xs text-muted">{{ getTriggerDisplay(flow) }}</span>
+            <span class="text-xs text-muted">{{ flow.messages?.length ?? 0 }} 則訊息</span>
           </div>
         </button>
       </div>
@@ -43,93 +40,43 @@
       <!-- Empty state when nothing selected -->
       <div v-if="!selectedFlow && !isCreating" class="flow-empty-state">
         <span class="empty-icon">🤖</span>
-        <h3>選擇一個流程開始編輯</h3>
-        <p>或點擊左側「➕ 新增」建立一個全新的自動回覆流程</p>
-        <button class="btn btn-primary" @click="openCreate">建立流程</button>
+        <h3>選擇一個模組開始編輯</h3>
+        <p>或點擊左側「➕ 新增」建立一個全新的回覆模組</p>
+        <button class="btn btn-primary" @click="openCreate">建立模組</button>
       </div>
 
       <!-- Editor form -->
       <div v-else class="flow-editor-inner">
         <!-- Header -->
         <div class="flow-editor-header">
-          <div>
-            <h2 class="flow-editor-title">{{ isCreating ? '新增流程' : form.name }}</h2>
-            <p class="text-sm text-muted" style="margin-top:0.25rem;">
-              {{ isCreating ? '設定觸發條件與回覆訊息' : `${form.triggers.length} 個觸發詞・${form.messages.length} 則回覆` }}
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+              <span v-if="isCreating" class="flow-editor-title">新增模組:</span>
+              <input 
+                v-model="form.name" 
+                class="input-base" 
+                style="font-size: 1.1rem; font-weight: 700; padding: 0.25rem 0.5rem; border: 1px solid transparent; border-bottom: 1px solid var(--border); box-shadow: none; background: transparent; max-width: 400px;" 
+                placeholder="請輸入模組名稱..." 
+              />
+            </div>
+            <p class="text-sm text-muted" style="margin-top:0.25rem; padding-left: 0.5rem;">
+              共 {{ form.messages.length }} 則回覆訊息
             </p>
           </div>
           <div class="flex gap-1">
-            <!-- Toggle active -->
-            <button
-              v-if="!isCreating && selectedFlow"
-              class="btn btn-sm"
-              :class="form.isActive ? 'btn-secondary' : 'btn-secondary'"
-              style="gap:0.4rem;"
-              @click="toggleActive"
-            >
-              <span>{{ form.isActive ? '✅ 啟用中' : '⏸ 已停用' }}</span>
-            </button>
             <button v-if="!isCreating && selectedFlow" class="btn btn-danger btn-sm" @click="deleteFlow">
               🗑️ 刪除
             </button>
             <button class="btn btn-secondary btn-sm" @click="cancelEdit">取消</button>
             <button class="btn btn-primary btn-sm" :disabled="saving" @click="submitForm">
               <span v-if="saving" class="spinner" style="width:12px;height:12px;" />
-              {{ isCreating ? '建立流程' : '儲存變更' }}
+              {{ isCreating ? '建立模組' : '儲存變更' }}
             </button>
           </div>
         </div>
 
         <div class="flow-editor-body">
-          <!-- Left column: Config -->
-          <div class="flow-editor-config">
 
-            <!-- Name -->
-            <div class="config-section">
-              <div class="config-section-title">📌 流程名稱</div>
-              <input v-model="form.name" placeholder="例：商品查詢流程" class="input-base" />
-            </div>
-
-            <!-- Triggers -->
-            <div class="config-section">
-              <div class="config-section-title">⚡ 觸發關鍵字</div>
-              <p class="config-section-hint">
-                輸入關鍵字後按 <kbd>Enter</kbd> 或 <kbd>,</kbd> 確認。使用者傳送的訊息包含其中一個詞即可觸發。
-              </p>
-              <div class="tag-input-wrap" @click="focusTriggerInput">
-                <span
-                  v-for="(tag, i) in form.triggers"
-                  :key="i"
-                  class="trigger-tag"
-                >
-                  {{ tag }}
-                  <button class="trigger-tag-remove" @click.stop="removeTrigger(i)">×</button>
-                </span>
-                <input
-                  ref="triggerInputRef"
-                  v-model="triggerInputVal"
-                  class="tag-inner-input"
-                  placeholder="輸入關鍵字…"
-                  @keydown="onTriggerKeydown"
-                  @blur="commitTrigger"
-                />
-              </div>
-              <div v-if="form.triggers.length" class="config-section-hint" style="margin-top:0.5rem;">
-                💡 目前共 {{ form.triggers.length }} 個關鍵字觸發
-              </div>
-            </div>
-
-            <!-- Active toggle -->
-            <div class="config-section">
-              <div class="config-section-title">🔘 流程狀態</div>
-              <label class="toggle-label">
-                <div class="toggle-switch" :class="{ on: form.isActive }" @click="form.isActive = !form.isActive">
-                  <div class="toggle-thumb" />
-                </div>
-                <span>{{ form.isActive ? '啟用中 — 使用者觸發時將自動回覆' : '已停用 — 不會自動回覆' }}</span>
-              </label>
-            </div>
-          </div>
 
           <!-- Right column: Messages Preview -->
           <div class="flow-editor-messages">
@@ -282,9 +229,7 @@ const dragOverIndex = ref<number | null>(null)
 
 const defaultForm = () => ({
   name: '',
-  triggers: [] as string[],
   messages: [] as any[],
-  isActive: true,
 })
 const form = ref(defaultForm())
 
@@ -302,24 +247,16 @@ onMounted(loadFlows)
 function selectFlow(flow: any) {
   isCreating.value = false
   selectedId.value = flow.id
-  // Normalize: support legacy trigger string
-  const triggers: string[] = Array.isArray(flow.triggers)
-    ? flow.triggers
-    : (flow.trigger ? [flow.trigger] : [])
   form.value = {
     name: flow.name,
-    triggers,
     messages: JSON.parse(JSON.stringify(flow.messages ?? [])),
-    isActive: flow.isActive,
   }
-  triggerInputVal.value = ''
 }
 
 function openCreate() {
   isCreating.value = true
   selectedId.value = null
   form.value = defaultForm()
-  triggerInputVal.value = ''
 }
 
 function cancelEdit() {
@@ -479,9 +416,7 @@ async function onFileSelected(e: Event) {
 
 // ── Save / Delete ─────────────────────────────────────
 async function submitForm() {
-  commitTrigger()
-  if (!form.value.name) return showToast('請輸入流程名稱', 'error')
-  if (!form.value.triggers.length) return showToast('請至少輸入一個觸發關鍵字', 'error')
+  if (!form.value.name) return showToast('請輸入模組名稱', 'error')
   if (!form.value.messages.length) return showToast('請至少新增一則回覆訊息', 'error')
 
   saving.value = true
@@ -491,12 +426,11 @@ async function submitForm() {
         method: 'POST',
         body: {
           name: form.value.name,
-          triggers: form.value.triggers,
           messages: form.value.messages,
-          isActive: form.value.isActive,
+          isActive: true,
         },
       })
-      showToast('流程已建立 ✅', 'success')
+      showToast('模組已建立 ✅', 'success')
       await loadFlows()
       const newFlow = flows.value.find(f => f.id === res.id) ?? flows.value[0]
       if (newFlow) selectFlow(newFlow)
@@ -506,31 +440,17 @@ async function submitForm() {
         method: 'PUT',
         body: {
           name: form.value.name,
-          triggers: form.value.triggers,
           messages: form.value.messages,
-          isActive: form.value.isActive,
+          isActive: true,
         },
       })
-      showToast('流程已更新 ✅', 'success')
+      showToast('模組已更新 ✅', 'success')
       await loadFlows()
     }
   } catch {
     showToast('儲存失敗', 'error')
   } finally {
     saving.value = false
-  }
-}
-
-async function toggleActive() {
-  if (!selectedId.value) return
-  const newVal = !form.value.isActive
-  try {
-    await $fetch(`/api/flow/${selectedId.value}`, { method: 'PUT', body: { isActive: newVal } })
-    form.value.isActive = newVal
-    await loadFlows()
-    showToast(newVal ? '已啟用' : '已停用', 'success')
-  } catch {
-    showToast('更新失敗', 'error')
   }
 }
 
@@ -548,14 +468,6 @@ async function deleteFlow() {
 }
 
 // ── Helpers ───────────────────────────────────────────
-function getTriggerDisplay(flow: any) {
-  const triggers: string[] = Array.isArray(flow.triggers)
-    ? flow.triggers
-    : (flow.trigger ? [flow.trigger] : [])
-  if (!triggers.length) return '無關鍵字'
-  return triggers.slice(0, 2).join('、') + (triggers.length > 2 ? ` +${triggers.length - 2}` : '')
-}
-
 let toastId = 0
 function showToast(msg: string, type: 'success' | 'error') {
   const id = ++toastId
@@ -711,29 +623,21 @@ function showToast(msg: string, type: 'success' | 'error') {
   color: var(--text-primary);
 }
 
-/* ── Two-column editor body ── */
+/* ── Single-column editor body ── */
 .flow-editor-body {
-  display: grid;
-  grid-template-columns: 340px 1fr;
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: hidden;
 }
 
-.flow-editor-config {
-  border-right: 1px solid var(--border);
-  padding: 1.25rem;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-}
-
 .flow-editor-messages {
-  padding: 1.25rem;
+  padding: 1.25rem 2.5rem;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  flex: 1;
   gap: 1rem;
 }
 

@@ -258,7 +258,7 @@
               <select v-model="area.action.type" @change="onActionTypeChange(area)">
                 <option value="message">message（代發文字）</option>
                 <option value="uri">uri（開啟網址）</option>
-                <option value="postback">postback（觸發流程）</option>
+                <option value="postback">postback（觸發機器人模組）</option>
                 <option value="switch">switch（切換選單）</option>
               </select>
             </div>
@@ -272,8 +272,11 @@
               <input v-model="area.action.uri" placeholder="https://..." />
             </div>
             <div v-if="area.action.type === 'postback'" class="form-group" style="margin:0;">
-              <label>Postback Data</label>
-              <input v-model="area.action.data" placeholder="action=xxx" />
+              <label>選擇目標模組</label>
+              <select v-model="area.action.data">
+                <option disabled value="">請選擇要觸發的機器人模組...</option>
+                <option v-for="mod in modules" :key="mod.id" :value="`triggerModule=${mod.id}`">{{ mod.name }}</option>
+              </select>
             </div>
             <div v-if="area.action.type === 'switch'">
               <div class="form-group" style="margin-bottom:0.5rem;">
@@ -468,10 +471,22 @@ const defaultForm = () => ({
 })
 const form = ref(defaultForm())
 
+const modules = ref<any[]>([])
+
 // ── Fetch ─────────────────────────────────────────────────────
 async function loadMenus() {
   loading.value = true
-  menus.value = await $fetch<any[]>('/api/richmenu/list').catch(() => [])
+  try {
+    const [menusData, modulesData] = await Promise.all([
+      $fetch<any[]>('/api/richmenu/list'),
+      $fetch<any[]>('/api/flow/list')
+    ])
+    menus.value = menusData
+    modules.value = modulesData
+  } catch (err) {
+    menus.value = []
+    modules.value = []
+  }
   loading.value = false
 }
 onMounted(loadMenus)

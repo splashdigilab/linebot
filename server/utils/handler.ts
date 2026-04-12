@@ -36,24 +36,40 @@ async function ensureUser(userId: string): Promise<void> {
 
 async function matchFlow(trigger: string): Promise<FlowDoc | null> {
   const db = getDb()
-  // New format: triggers is an array
-  const snap = await db
+
+  // Step 1: Look in autoReplies collection for a matching keyword
+  const autoReplySnap = await db
+    .collection('autoReplies')
+    .where('keyword', '==', trigger)
+    .where('isActive', '==', true)
+    .limit(1)
+    .get()
+
+  if (!autoReplySnap.empty) {
+    const rule = autoReplySnap.docs[0].data()
+    const moduleSnap = await db.collection('flows').doc(rule.moduleId).get()
+    if (moduleSnap.exists && moduleSnap.data()?.isActive) {
+      return moduleSnap.data() as FlowDoc
+    }
+  }
+
+  // Legacy fallback: direct trigger match on flows collection (backward compatibility)
+  const legacySnap = await db
     .collection('flows')
     .where('triggers', 'array-contains', trigger)
     .where('isActive', '==', true)
     .limit(1)
     .get()
-  if (!snap.empty) return snap.docs[0].data() as FlowDoc
+  if (!legacySnap.empty) return legacySnap.docs[0].data() as FlowDoc
 
-  // Legacy fallback: single trigger string
-  const legacySnap = await db
+  const legacyStrSnap = await db
     .collection('flows')
     .where('trigger', '==', trigger)
     .where('isActive', '==', true)
     .limit(1)
     .get()
-  if (legacySnap.empty) return null
-  return legacySnap.docs[0].data() as FlowDoc
+  if (legacyStrSnap.empty) return null
+  return legacyStrSnap.docs[0].data() as FlowDoc
 }
 
 // ── Main Event Handlers ───────────────────────────────────────────
@@ -143,8 +159,24 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
     }
     return // Stop further processing
   }
+  // Handle direct module trigger
+  if (data.startsWith('triggerModule=')) {
+    const moduleId = data.replace('triggerModule=', '')
+    const db = getDb()
+    const modSnap = await db.collection('flows').doc(moduleId).get()
+    
+    if (modSnap.exists && modSnap.data()?.isActive) {
+      const flow = modSnap.data() as FlowDoc
+      if (event.replyToken) {
+        await replyMessage(event.replyToken, buildLineMessages(flow.messages))
+      }
+    } else {
+      console.warn('[webhook] triggerModule target not found or inactive:', moduleId)
+    }
+    return
+  }
 
-  // Match postback data to a flow
+  // Fallback: Match legacy postback data to an auto-reply keyword (if any)
   const flow = await matchFlow(data)
   if (flow && event.replyToken) {
     await replyMessage(event.replyToken, buildLineMessages(flow.messages))
