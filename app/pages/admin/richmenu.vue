@@ -810,7 +810,7 @@ async function submitCreate() {
       if (!targetMenu.aliasId) {
         throw new Error(`目標選單「${targetMenu.name}」尚未建立快速切換別名，請先上傳圖片再試一次`)
       }
-      return { ...a, action: { type: 'richmenuswitch', richMenuAliasId: targetMenu.aliasId } }
+      return { ...a, action: { type: 'richmenuswitch', richMenuAliasId: targetMenu.aliasId, data: `switchMenu=${targetFirestoreId}` } }
     }
     return a
   })
