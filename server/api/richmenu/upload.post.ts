@@ -20,6 +20,19 @@ export default defineEventHandler(async (event) => {
 
   if (firestoreId) {
     await updateDoc('richmenus', firestoreId, { imageUrl })
+
+    // Create alias AFTER image is uploaded (LINE requires image to exist first)
+    const aliasId = `menu-${firestoreId}`
+    try {
+      // Try to delete existing alias first (ignore error if not exists)
+      await deleteRichMenuAlias(aliasId)
+    } catch {}
+    try {
+      await createRichMenuAlias(richMenuId, aliasId)
+      await updateDoc('richmenus', firestoreId, { aliasId })
+    } catch (e: any) {
+      console.warn('[upload] Failed to create alias:', e?.message ?? e)
+    }
   }
 
   return { imageUrl }
