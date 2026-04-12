@@ -812,6 +812,7 @@ async function submitCreate() {
       }
       return { ...a, action: { type: 'richmenuswitch', richMenuAliasId: targetMenu.aliasId } }
     }
+    return a
   })
 
   creating.value = true
