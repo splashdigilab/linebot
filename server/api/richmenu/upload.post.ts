@@ -18,22 +18,27 @@ export default defineEventHandler(async (event) => {
   await file.makePublic()
   const imageUrl = `https://storage.googleapis.com/${bucket.name}/${fileName}`
 
+  let aliasResult: { aliasId?: string; error?: string } = {}
+
   if (firestoreId) {
     await updateDoc('richmenus', firestoreId, { imageUrl })
 
     // Create alias AFTER image is uploaded (LINE requires image to exist first)
     const aliasId = `menu-${firestoreId}`
-    try {
-      // Try to delete existing alias first (ignore error if not exists)
-      await deleteRichMenuAlias(aliasId)
-    } catch {}
+
+    // Delete existing alias first (ignore error if not exists)
+    try { await deleteRichMenuAlias(aliasId) } catch {}
+
     try {
       await createRichMenuAlias(richMenuId, aliasId)
       await updateDoc('richmenus', firestoreId, { aliasId })
+      aliasResult = { aliasId }
     } catch (e: any) {
-      console.warn('[upload] Failed to create alias:', e?.message ?? e)
+      const errMsg = e?.message ?? String(e)
+      console.warn('[upload] Failed to create alias:', errMsg)
+      aliasResult = { error: errMsg }
     }
   }
 
-  return { imageUrl }
+  return { imageUrl, alias: aliasResult }
 })
