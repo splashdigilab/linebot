@@ -25,7 +25,7 @@ export default defineEventHandler(async (event) => {
 
     // Get or derive aliasId — pure alphanumeric, no hyphens (LINE requirement)
     const stored = await getDoc<any>('richmenus', firestoreId)
-    const aliasId = stored?.aliasId ?? `rm${firestoreId.replace(/-/g, '')}`
+    const aliasId = stored?.aliasId ?? `rm${firestoreId.replace(/-/g, '').slice(0, 28)}`
 
     // Delete existing alias first (ignore error if not exists)
     try { await deleteRichMenuAlias(aliasId) } catch {}

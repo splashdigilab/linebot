@@ -11,9 +11,8 @@ export default defineEventHandler(async (event) => {
   const oldDoc = await getDoc<any>('richmenus', firestoreId)
   if (!oldDoc) throw createError({ statusCode: 404, statusMessage: 'Rich Menu not found' })
 
-  // The alias ID stays the same (based on firestoreId), only richMenuId changes
-  // Use stored aliasId or derive in pure alphanumeric format (no hyphens — LINE requirement)
-  const aliasId = oldDoc.aliasId ?? `rm${firestoreId.replace(/-/g, '')}`
+  // Use stored aliasId or derive — max 32 chars, alphanumeric only (LINE requirement)
+  const aliasId = oldDoc.aliasId ?? `rm${firestoreId.replace(/-/g, '').slice(0, 28)}`
 
   // 1. Create NEW Rich Menu on LINE
   const richMenuPayload: messagingApi.RichMenuRequest = {

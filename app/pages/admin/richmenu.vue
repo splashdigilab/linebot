@@ -798,7 +798,7 @@ async function submitCreate() {
       const targetFirestoreId = (a.action.data ?? '').replace('switchMenu=', '')
       // Look up the stored aliasId for the target menu
       const targetMenu = menus.value.find(m => m.id === targetFirestoreId)
-      const aliasId = targetMenu?.aliasId ?? `rm${targetFirestoreId.replace(/-/g, '')}`
+      const aliasId = targetMenu?.aliasId ?? `rm${targetFirestoreId.replace(/-/g, '').slice(0, 28)}`
       return { ...a, action: { type: 'richmenuswitch', richMenuAliasId: aliasId } }
     }
     return a

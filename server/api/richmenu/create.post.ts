@@ -36,8 +36,9 @@ export default defineEventHandler(async (event) => {
   }
 
   const id = uuidv4()
-  // Alias ID: pure alphanumeric only (no hyphens) so LINE accepts it
-  const aliasId = `rm${id.replace(/-/g, '')}`
+  // aliasId: max 32 chars, alphanumeric only (no hyphens) — LINE requirement
+  // rm + first 28 chars of UUID (without hyphens) = 30 chars total, safe
+  const aliasId = `rm${id.replace(/-/g, '').slice(0, 28)}`
 
   // Alias is created AFTER image upload in upload.post.ts, not here
   // (LINE requires image to be present before alias can be created)
