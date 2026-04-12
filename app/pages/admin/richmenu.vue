@@ -284,6 +284,13 @@
                     <option v-if="m.id !== editingId" :value="`switchMenu=${m.id}`">{{ m.name }}</option>
                   </template>
                 </select>
+                <!-- Warn if current selection points to a deleted menu -->
+                <div
+                  v-if="area.action.data && area.action.data !== '' && !menus.find(m => m.id !== editingId && `switchMenu=${m.id}` === area.action.data)"
+                  style="color:var(--color-error);font-size:0.75rem;margin-top:0.35rem;"
+                >
+                  ⚠️ 所選的目標選單已不存在，請重新選擇
+                </div>
               </div>
             </div>
           </div>
@@ -796,17 +803,20 @@ async function submitCreate() {
   const apiAreas = form.value.areas.map(a => {
     if (a.action.type === 'switch' || a.action.type === 'richmenuswitch') {
       const targetFirestoreId = (a.action.data ?? '').replace('switchMenu=', '')
-      // Look up the stored aliasId for the target menu
       const targetMenu = menus.value.find(m => m.id === targetFirestoreId)
-      const aliasId = targetMenu?.aliasId ?? `rm${targetFirestoreId.replace(/-/g, '').slice(0, 28)}`
-      return { ...a, action: { type: 'richmenuswitch', richMenuAliasId: aliasId } }
+      if (!targetMenu) {
+        throw new Error(`切換選單目標「${targetFirestoreId}」已不存在，請重新選擇目標選單再儲存`)
+      }
+      if (!targetMenu.aliasId) {
+        throw new Error(`目標選單「${targetMenu.name}」尚未建立快速切換別名，請先上傳圖片再試一次`)
+      }
+      return { ...a, action: { type: 'richmenuswitch', richMenuAliasId: targetMenu.aliasId } }
     }
-    return a
   })
-
 
   creating.value = true
   try {
+
     if (editingId.value) {
       // Edit Flow
       await $fetch(`/api/richmenu/${editingId.value}`, {
@@ -853,7 +863,7 @@ async function submitCreate() {
     await loadMenus()
   }
   catch (e: any) {
-    showToast(e?.data?.statusMessage ?? '建立失敗', 'error')
+    showToast(e?.data?.statusMessage ?? e?.message ?? '建立失敗', 'error')
   }
   finally {
     creating.value = false
