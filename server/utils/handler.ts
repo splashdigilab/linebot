@@ -85,17 +85,30 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
 
   // Handle Switch Menu command
   if (data.startsWith('switchMenu=')) {
+    // 檢查是否為 LINE 原生瞬間切換（richmenuswitch）觸發的事件
+    // @ts-ignore: LINE Node SDK's Event type might not perfectly reflect params yet
+    const params = (event.postback as any).params
+    const isRichMenuSwitch = params && params.newRichMenuAliasId
+
+    if (isRichMenuSwitch) {
+      // 若為瞬間切換，LINE App 端已自動更新選單完成，
+      // 若伺服器再重複打一次 link API 反而會造成選單「閃屏重新載入」一次。
+      // 所以此處直接 return 略過即可。
+      console.log('[switchMenu] Handled by native richmenuswitch instantly, skipping redundant link API.')
+      return
+    }
+
+    // 針對舊版 postback (沒有 aliasId) 的相容性回退處理
     const targetFirestoreId = data.replace('switchMenu=', '')
-    console.log('[switchMenu] triggered, targetId:', targetFirestoreId, 'userId:', userId)
+    console.log('[switchMenu] Fallback to server link API, targetId:', targetFirestoreId, 'userId:', userId)
     const db = getDb()
     const targetDoc = await db.collection('richmenus').doc(targetFirestoreId).get()
-    console.log('[switchMenu] doc exists:', targetDoc.exists, 'richMenuId:', targetDoc.data()?.richMenuId)
     
     if (targetDoc.exists && targetDoc.data()?.richMenuId) {
       const lineRichMenuId = targetDoc.data()!.richMenuId
       try {
-        const result = await linkRichMenuIdToUser(userId, lineRichMenuId)
-        console.log('[switchMenu] linkRichMenuIdToUser success:', result)
+        await linkRichMenuIdToUser(userId, lineRichMenuId)
+        console.log('[switchMenu] Fallback linkRichMenuIdToUser success')
       } catch (e) {
         console.error('[webhook] Failed to link rich menu:', e)
       }
