@@ -151,14 +151,25 @@
               v-for="(msg, i) in form.messages"
               :key="i"
               class="message-card"
+              :class="{ dragging: dragIndex === i, 'drag-over': dragOverIndex === i && dragIndex !== i }"
+              @dragover.prevent="onDragOver($event, i)"
+              @dragenter.prevent
+              @dragleave="onDragLeave"
+              @drop="onDrop($event, i)"
             >
               <div class="message-card-header">
-                <span class="badge" :class="msg.type === 'text' ? 'badge-blue' : 'badge-orange'">
-                  {{ msg.type === 'text' ? '📝 文字訊息' : '🖼️ 圖片訊息' }}
-                </span>
+                <div class="flex gap-1" style="align-items: center;">
+                  <span
+                    class="drag-handle"
+                    draggable="true"
+                    @dragstart="onDragStart($event, i)"
+                    @dragend="onDragEnd"
+                  >⠿</span>
+                  <span class="badge" :class="msg.type === 'text' ? 'badge-blue' : 'badge-orange'">
+                    {{ msg.type === 'text' ? '📝 文字訊息' : '🖼️ 圖片訊息' }}
+                  </span>
+                </div>
                 <div class="flex gap-1">
-                  <button v-if="i > 0" class="btn btn-ghost btn-sm" style="padding:0.1rem 0.4rem;" @click="moveMessage(i, -1)">↑</button>
-                  <button v-if="i < form.messages.length - 1" class="btn btn-ghost btn-sm" style="padding:0.1rem 0.4rem;" @click="moveMessage(i, 1)">↓</button>
                   <button class="btn btn-ghost btn-sm" style="color:var(--color-error);padding:0.1rem 0.4rem;" @click="removeMessage(i)">✕</button>
                 </div>
               </div>
@@ -171,22 +182,55 @@
                     rows="3"
                     class="bubble-textarea"
                     placeholder="輸入回覆文字..."
+                    :maxlength="msg.buttons && msg.buttons.length > 0 ? 160 : 5000"
                   />
+                  <div class="text-xs text-muted" style="text-align: right; margin-top: 0.25rem;">
+                    {{ msg.text?.length || 0 }} / {{ msg.buttons && msg.buttons.length > 0 ? 160 : 5000 }}
+                  </div>
                 </div>
+                
+                <!-- Buttons List -->
+                <div v-if="msg.buttons && msg.buttons.length" class="message-buttons-list">
+                  <div v-for="(btn, bIdx) in msg.buttons" :key="bIdx" class="action-button-editor">
+                    <div class="flex gap-1 items-center" style="margin-bottom: 0.5rem;">
+                      <select v-model="btn.type" class="input-base" style="width: auto; padding: 0.25rem 0.5rem; font-size: 0.8rem;">
+                        <option value="message">傳送文字</option>
+                        <option value="uri">開啟網址</option>
+                      </select>
+                      <button class="btn btn-ghost btn-sm" style="color:var(--color-error); margin-left: auto;" @click="removeButton(msg, bIdx)">✕</button>
+                    </div>
+                    <input v-model="btn.label" placeholder="按鈕名稱 (最多 20 字)" maxlength="20" class="input-base mb-1" />
+                    <input v-if="btn.type === 'message'" v-model="btn.text" placeholder="用戶點擊後傳送的文字..." maxlength="300" class="input-base" />
+                    <input v-if="btn.type === 'uri'" v-model="btn.uri" placeholder="https://..." class="input-base" />
+                  </div>
+                </div>
+
+                <!-- Add Button Toggle -->
+                <button
+                  v-if="!msg.buttons || msg.buttons.length < 4"
+                  class="btn btn-ghost"
+                  style="width: 100%; justify-content: center; border: 1px dashed var(--border); margin-top: 0.5rem;"
+                  @click="addButton(msg)"
+                >
+                  ⊕ 新增按鈕 (非必需)
+                </button>
               </div>
 
               <!-- Image message -->
               <div v-if="msg.type === 'image'" class="message-image-wrap">
-                <div class="form-group" style="margin-bottom:0.5rem;">
-                  <label>圖片 URL（原始尺寸）</label>
-                  <input v-model="msg.originalContentUrl" placeholder="https://..." class="input-base" />
+                <div v-if="msg.originalContentUrl" class="image-preview" style="position: relative;">
+                  <img :src="msg.originalContentUrl" alt="preview" style="max-width: 100%; border-radius: var(--radius-md); display: block;" />
+                  <button class="btn btn-sm btn-danger" style="position: absolute; top: 0.5rem; right: 0.5rem; opacity: 0.8;" @click="msg.originalContentUrl = ''; msg.previewImageUrl = ''">更換圖片</button>
                 </div>
-                <div class="form-group" style="margin:0;">
-                  <label>預覽圖片 URL</label>
-                  <input v-model="msg.previewImageUrl" placeholder="https://..." class="input-base" />
-                </div>
-                <div v-if="msg.originalContentUrl" class="image-preview">
-                  <img :src="msg.originalContentUrl" alt="preview" />
+                <div v-else class="upload-zone" @click="triggerImageUpload(i)">
+                  <div v-if="uploadingIndex === i" style="text-align: center; color: var(--text-muted);">
+                    <div class="spinner" style="margin: 0 auto 0.5rem auto;"></div>
+                    <span>上傳中...</span>
+                  </div>
+                  <div v-else style="text-align: center; color: var(--text-muted);">
+                    <span style="font-size: 2rem; display: block; margin-bottom: 0.5rem;">📷</span>
+                    <span>點擊上傳圖片</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -194,6 +238,15 @@
         </div>
       </div>
     </main>
+
+    <!-- Hidden File Input for Image Upload -->
+    <input
+      ref="fileInputRef"
+      type="file"
+      accept="image/png, image/jpeg"
+      style="display: none"
+      @change="onFileSelected"
+    />
 
     <!-- Toast -->
     <div class="toast-bar">
@@ -217,6 +270,15 @@ const isCreating = ref(false)
 const toasts = ref<{ id: number; msg: string; type: 'success' | 'error' }[]>([])
 const triggerInputRef = ref<HTMLInputElement | null>(null)
 const triggerInputVal = ref('')
+
+// Image Upload State
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const uploadTargetIndex = ref<number | null>(null)
+const uploadingIndex = ref<number | null>(null)
+
+// Drag and Drop State
+const dragIndex = ref<number | null>(null)
+const dragOverIndex = ref<number | null>(null)
 
 const defaultForm = () => ({
   name: '',
@@ -299,7 +361,7 @@ function removeTrigger(i: number) {
 
 // ── Messages ──────────────────────────────────────────
 function addMessage(type: 'text' | 'image') {
-  if (type === 'text') form.value.messages.push({ type: 'text', text: '' })
+  if (type === 'text') form.value.messages.push({ type: 'text', text: '', buttons: [] })
   if (type === 'image') form.value.messages.push({ type: 'image', originalContentUrl: '', previewImageUrl: '' })
 }
 
@@ -312,6 +374,107 @@ function moveMessage(i: number, dir: -1 | 1) {
   const j = i + dir
   if (j < 0 || j >= arr.length) return
   ;[arr[i], arr[j]] = [arr[j], arr[i]]
+}
+
+function onDragStart(e: DragEvent, i: number) {
+  dragIndex.value = i
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.dropEffect = 'move'
+    e.dataTransfer.setData('text/plain', i.toString())
+  }
+  // Small delay so the card has time to render before ghost appears
+  setTimeout(() => {
+    // intentionally empty - triggers repaint for ghost image
+  }, 0)
+}
+
+function onDragOver(_e: DragEvent, i: number) {
+  dragOverIndex.value = i
+}
+
+function onDragLeave() {
+  dragOverIndex.value = null
+}
+
+function onDragEnd() {
+  dragIndex.value = null
+  dragOverIndex.value = null
+}
+
+function onDrop(e: DragEvent, dropIndex: number) {
+  const fromIndex = dragIndex.value
+  if (fromIndex !== null && fromIndex !== dropIndex) {
+    const item = form.value.messages.splice(fromIndex, 1)[0]
+    form.value.messages.splice(dropIndex, 0, item)
+  }
+  dragIndex.value = null
+  dragOverIndex.value = null
+}
+
+function addButton(msg: any) {
+  if (!msg.buttons) msg.buttons = []
+  if (msg.buttons.length >= 4) {
+    showToast('最多只能新增 4 個按鈕', 'error')
+    return
+  }
+  msg.buttons.push({ type: 'message', label: '', text: '', uri: '' })
+}
+
+function removeButton(msg: any, bIdx: number) {
+  if (msg.buttons) {
+    msg.buttons.splice(bIdx, 1)
+  }
+}
+
+// ── Image Upload ──────────────────────────────────────
+function triggerImageUpload(index: number) {
+  uploadTargetIndex.value = index
+  fileInputRef.value?.click()
+}
+
+async function onFileSelected(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  if (file.size > 5 * 1024 * 1024) {
+    showToast('圖片不能超過 5MB', 'error')
+    input.value = ''
+    return
+  }
+
+  const index = uploadTargetIndex.value
+  if (index === null || !form.value.messages[index]) return
+  
+  uploadingIndex.value = index
+
+  try {
+    const base64 = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(file)
+    })
+
+    const res = await $fetch<any>('/api/upload', {
+      method: 'POST',
+      body: {
+        imageBase64: base64,
+        contentType: file.type,
+      },
+    })
+
+    form.value.messages[index].originalContentUrl = res.imageUrl
+    form.value.messages[index].previewImageUrl = res.imageUrl
+  } catch (err) {
+    console.error('Upload error:', err)
+    showToast('圖片上傳失敗', 'error')
+  } finally {
+    uploadingIndex.value = null
+    uploadTargetIndex.value = null
+    input.value = ''
+  }
 }
 
 // ── Save / Delete ─────────────────────────────────────
@@ -739,15 +902,48 @@ kbd {
 }
 
 .message-card {
+  flex-shrink: 0;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   overflow: hidden;
-  transition: box-shadow 0.15s;
+  transition: box-shadow 0.15s, opacity 0.15s, transform 0.15s;
+  position: relative;
+}
+
+.message-card.dragging {
+  opacity: 0.35;
+  transform: scale(0.98);
+}
+
+.message-card.drag-over {
+  border-color: var(--color-line);
+  box-shadow: 0 0 0 2px rgba(6, 199, 85, 0.35);
 }
 
 .message-card:hover {
   box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.drag-handle {
+  display: flex;
+  align-items: center;
+  cursor: grab;
+  color: var(--text-muted);
+  padding: 0 0.25rem;
+  font-size: 1rem;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+  user-select: none;
+}
+
+.drag-handle:hover {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.drag-handle:active {
+  cursor: grabbing;
 }
 
 .message-card-header {
@@ -793,15 +989,46 @@ kbd {
 }
 
 .image-preview {
-  margin-top: 0.5rem;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   overflow: hidden;
-  max-height: 140px;
+  background: #000;
 }
 
 .image-preview img {
   width: 100%;
-  object-fit: cover;
+  height: auto;
   display: block;
+  object-fit: contain;
+}
+
+.message-buttons-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.action-button-editor {
+  border: 1px solid var(--border);
+  background: var(--bg-hover, rgba(0,0,0,0.02));
+  border-radius: var(--radius-sm);
+  padding: 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.upload-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 2.5rem 1rem;
+  cursor: pointer;
+  background: var(--bg-card);
+  transition: all 0.2s;
+}
+
+.upload-zone:hover {
+  border-color: var(--color-line);
+  background: rgba(6, 199, 85, 0.05); /* slightly green */
 }
 </style>
