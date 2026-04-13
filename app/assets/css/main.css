@@ -2,29 +2,29 @@
 
 /* ── CSS Variables ───────────────────────────────────────────── */
 :root {
-  /* Brand */
-  --color-line: #06C755;
-  --color-line-dark: #04a344;
-  --color-line-glow: rgba(6, 199, 85, 0.25);
+  /* Brand: Monochrome Theme (Light) */
+  --color-line: #171717;
+  --color-line-dark: #0a0a0a;
+  --color-line-glow: rgba(0, 0, 0, 0.15);
 
   /* Background */
-  --bg-base: #0d0f14;
-  --bg-surface: #161920;
-  --bg-elevated: #1e2130;
-  --bg-hover: #252a3a;
-  --bg-glass: rgba(30, 33, 48, 0.7);
+  --bg-base: #f3f4f6;
+  --bg-surface: #ffffff;
+  --bg-elevated: #f9fafb;
+  --bg-hover: #e5e7eb;
+  --bg-glass: rgba(255, 255, 255, 0.8);
 
   /* Text */
-  --text-primary: #f0f2f8;
-  --text-secondary: #8b92a8;
-  --text-muted: #555e7a;
+  --text-primary: #111827;
+  --text-secondary: #4b5563;
+  --text-muted: #9ca3af;
 
   /* Border */
-  --border: rgba(255,255,255,0.07);
-  --border-active: rgba(6, 199, 85, 0.4);
+  --border: rgba(0, 0, 0, 0.08);
+  --border-active: rgba(0, 0, 0, 0.3);
 
   /* Status */
-  --color-success: #06C755;
+  --color-success: #10b981;
   --color-warning: #f59e0b;
   --color-error: #ef4444;
   --color-info: #3b82f6;
@@ -36,10 +36,10 @@
   --radius-xl: 24px;
 
   /* Shadows */
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
-  --shadow-md: 0 4px 16px rgba(0,0,0,0.5);
-  --shadow-lg: 0 8px 32px rgba(0,0,0,0.6);
-  --shadow-green: 0 0 20px rgba(6,199,85,0.2);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --shadow-glow: 0 0 15px rgba(0, 0, 0, 0.08);
 
   /* Sidebar */
   --sidebar-width: 240px;
@@ -233,7 +233,7 @@ select option { background: var(--bg-elevated); }
 
 .stat-card:hover {
   border-color: var(--border-active);
-  box-shadow: var(--shadow-green);
+  box-shadow: var(--shadow-glow);
 }
 
 .stat-icon {
@@ -296,10 +296,10 @@ select option { background: var(--bg-elevated); }
 
 .btn-primary {
   background: var(--color-line);
-  color: #fff;
+  color: var(--bg-base);
   box-shadow: 0 2px 8px var(--color-line-glow);
 }
-.btn-primary:hover { background: var(--color-line-dark); box-shadow: var(--shadow-green); }
+.btn-primary:hover { background: var(--color-line-dark); box-shadow: var(--shadow-glow); }
 
 .btn-secondary {
   background: var(--bg-elevated);
@@ -357,11 +357,11 @@ tbody tr:hover td { background: var(--bg-hover); color: var(--text-primary); }
   font-size: 0.75rem;
   font-weight: 600;
 }
-.badge-green { background: rgba(6,199,85,0.15); color: var(--color-line); }
-.badge-orange { background: rgba(245,158,11,0.15); color: var(--color-warning); }
-.badge-red { background: rgba(239,68,68,0.15); color: var(--color-error); }
-.badge-blue { background: rgba(59,130,246,0.15); color: var(--color-info); }
-.badge-gray { background: rgba(139,146,168,0.15); color: var(--text-secondary); }
+.badge-green { background: rgba(16, 185, 129, 0.15); color: var(--color-success); }
+.badge-orange { background: rgba(245, 158, 11, 0.15); color: var(--color-warning); }
+.badge-red { background: rgba(239, 68, 68, 0.15); color: var(--color-error); }
+.badge-blue { background: rgba(59, 130, 246, 0.15); color: var(--color-info); }
+.badge-gray { background: rgba(75, 85, 99, 0.15); color: var(--text-secondary); }
 
 /* ── Modal ───────────────────────────────────────────────────── */
 .modal-backdrop {

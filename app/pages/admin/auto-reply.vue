@@ -25,7 +25,7 @@
           :class="{ active: selectedId === rule.id }"
           @click="selectRule(rule)"
         >
-          <div class="ar-list-keyword">{{ rule.keyword || '(空白觸發)' }}</div>
+          <div class="ar-list-keyword">{{ rule.name || rule.keyword || '(未命名)' }}</div>
           <div class="ar-list-meta">
             <span class="badge" :class="rule.isActive ? 'badge-green' : 'badge-gray'" style="font-size:0.6rem;">
               {{ rule.isActive ? '啟用' : '停用' }}
@@ -48,20 +48,29 @@
       <div v-else class="ar-editor-inner">
         <!-- Editor Header -->
         <div class="ar-editor-header">
-          <div>
-            <h2 class="ar-editor-title">{{ isCreating ? '新增自動回覆規則' : `規則：「${form.keyword}」` }}</h2>
-            <p class="text-sm text-muted" style="margin-top:0.25rem;">
-              {{ isCreating ? '設定觸發關鍵字，並選擇要回覆的機器人模組' : '關鍵字完全符合時觸發' }}
+          <div style="flex: 1;">
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+              <span v-if="isCreating" class="ar-editor-title">新增規則:</span>
+              <input 
+                v-model="form.name" 
+                class="input-base" 
+                style="font-size: 1.1rem; font-weight: 700; padding: 0.25rem 0.5rem; border: 1px solid transparent; border-bottom: 1px solid var(--border); box-shadow: none; background: transparent; max-width: 400px;" 
+                placeholder="請輸入規則名稱..." 
+                @keydown.enter.prevent="submitForm"
+              />
+            </div>
+            <p class="text-sm text-muted" style="margin-top:0.25rem; padding-left: 0.5rem;">
+              為這個自動回覆規則命名，方便後續管理
             </p>
           </div>
-          <div class="flex gap-1">
-            <button
-              v-if="!isCreating && selectedRule"
-              class="btn btn-sm btn-secondary"
-              @click="toggleActive"
-            >
-              {{ form.isActive ? '✅ 啟用中' : '⏸ 已停用' }}
-            </button>
+          <div class="flex gap-2" style="align-items: center;">
+            <!-- Toggle Switch in Header -->
+            <label v-if="!isCreating && selectedRule" class="toggle-label" style="margin-right: 0.75rem;">
+              <div class="toggle-switch" :class="{ on: form.isActive }" @click="toggleActive">
+                <div class="toggle-thumb" />
+              </div>
+              <span class="text-sm">{{ form.isActive ? '✅ 啟用中' : '⏸ 已停用' }}</span>
+            </label>
             <button v-if="!isCreating && selectedRule" class="btn btn-danger btn-sm" @click="deleteRule">
               🗑️ 刪除
             </button>
@@ -118,16 +127,6 @@
             </div>
           </div>
 
-          <!-- Status toggle -->
-          <div class="ar-section">
-            <div class="ar-section-title">🔘 規則狀態</div>
-            <label class="toggle-label">
-              <div class="toggle-switch" :class="{ on: form.isActive }" @click="form.isActive = !form.isActive">
-                <div class="toggle-thumb" />
-              </div>
-              <span>{{ form.isActive ? '啟用中 — 用戶輸入關鍵字時會自動回覆' : '已停用 — 不會自動觸發' }}</span>
-            </label>
-          </div>
         </div>
       </div>
     </main>
@@ -156,6 +155,7 @@ const isCreating = ref(false)
 const toasts = ref<{ id: number; msg: string; type: 'success' | 'error' }[]>([])
 
 const defaultForm = () => ({
+  name: '',
   keyword: '',
   moduleId: '',
   isActive: true,
@@ -187,6 +187,7 @@ function selectRule(rule: any) {
   isCreating.value = false
   selectedId.value = rule.id
   form.value = {
+    name: rule.name ?? '',
     keyword: rule.keyword ?? '',
     moduleId: rule.moduleId ?? '',
     isActive: rule.isActive ?? true,
@@ -212,6 +213,7 @@ function cancelEdit() {
 
 // ── Save / Delete ─────────────────────────────────────────
 async function submitForm() {
+  if (!form.value.name.trim()) return showToast('請輸入規則名稱', 'error')
   if (!form.value.keyword.trim()) return showToast('請輸入觸發關鍵字', 'error')
   if (!form.value.moduleId) return showToast('請選擇一個機器人模組', 'error')
 
@@ -220,7 +222,7 @@ async function submitForm() {
     if (isCreating.value) {
       const res = await $fetch<any>('/api/auto-reply/create', {
         method: 'POST',
-        body: { keyword: form.value.keyword.trim(), moduleId: form.value.moduleId, isActive: form.value.isActive },
+        body: { name: form.value.name.trim(), keyword: form.value.keyword.trim(), moduleId: form.value.moduleId, isActive: form.value.isActive },
       })
       showToast('規則已建立 ✅', 'success')
       await loadRules()
@@ -230,7 +232,7 @@ async function submitForm() {
     } else {
       await $fetch(`/api/auto-reply/${selectedId.value}`, {
         method: 'PUT',
-        body: { keyword: form.value.keyword.trim(), moduleId: form.value.moduleId, isActive: form.value.isActive },
+        body: { name: form.value.name.trim(), keyword: form.value.keyword.trim(), moduleId: form.value.moduleId, isActive: form.value.isActive },
       })
       showToast('規則已更新 ✅', 'success')
       await loadRules()
@@ -256,7 +258,7 @@ async function toggleActive() {
 }
 
 async function deleteRule() {
-  if (!selectedId.value || !confirm(`確定刪除「${form.value.keyword}」這條規則？`)) return
+  if (!selectedId.value || !confirm(`確定刪除「${form.value.name || form.value.keyword}」這條規則？`)) return
   try {
     await $fetch(`/api/auto-reply/${selectedId.value}`, { method: 'DELETE' })
     showToast('已刪除', 'success')
@@ -350,9 +352,9 @@ function showToast(msg: string, type: 'success' | 'error') {
 
 .ar-list-item:hover { background: var(--bg-hover); color: var(--text-primary); }
 .ar-list-item.active {
-  background: rgba(255, 175, 0, 0.1);
-  border-color: #ffaf00;
-  color: #d4900a;
+  background: var(--color-line-glow);
+  border-color: var(--color-line);
+  color: var(--color-line);
 }
 
 .ar-list-keyword {
@@ -484,12 +486,12 @@ function showToast(msg: string, type: 'success' | 'error') {
 
 .module-option:hover {
   border-color: var(--color-line);
-  background: var(--color-line-glow, rgba(6,199,85,0.05));
+  background: var(--color-line-glow);
 }
 
 .module-option.selected {
   border-color: var(--color-line);
-  background: var(--color-line-glow, rgba(6,199,85,0.12));
+  background: var(--color-line-glow);
 }
 
 .module-option-check {

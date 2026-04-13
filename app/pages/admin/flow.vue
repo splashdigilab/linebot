@@ -629,16 +629,18 @@ function showToast(msg: string, type: 'success' | 'error') {
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .flow-editor-messages {
   padding: 1.25rem 2.5rem;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   flex: 1;
   gap: 1rem;
+  max-width: 600px;
+  width: 100%;
+  margin: 0;
 }
 
 /* ── Config Sections ── */

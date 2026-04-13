@@ -26,74 +26,39 @@
     </div>
 
     <!-- Menu List -->
-    <div v-else class="grid-2" style="align-items:start;">
-      <div
-        v-for="menu in menus"
-        :key="menu.id"
-        class="card menu-card"
-        @click="openEditModal(menu)"
-      >
-        <!-- Image Preview -->
-        <div class="menu-preview">
-          <img
-            v-if="menu.imageUrl"
-            :src="menu.imageUrl"
-            :alt="menu.name"
-            style="width:100%;border-radius:var(--radius-md);object-fit:cover;"
-          >
-          <div v-else class="menu-preview-placeholder">
-            <span>🖼️</span>
-            <span>尚未上傳圖片</span>
-          </div>
-        </div>
-
-        <!-- Info -->
-        <div>
-          <div class="flex items-center gap-1">
-            <h3 style="font-size:1rem;font-weight:700;">{{ menu.name }}</h3>
-            <span v-if="menu.isDefault" class="badge badge-green">預設</span>
-          </div>
-          <p class="text-xs text-muted" style="margin-top:0.25rem;">
-            {{ menu.areas?.length ?? 0 }} 個區塊 · {{ menu.size?.width }}×{{ menu.size?.height }}
-          </p>
-          <p class="text-xs text-muted truncate" style="margin-top:0.15rem;">
-            LINE ID: {{ menu.richMenuId }}
-          </p>
-        </div>
-
-        <!-- Areas -->
-        <div v-if="menu.areas?.length" class="card-sm" style="padding:0.75rem;display:flex;flex-direction:column;gap:0.5rem;">
-          <p class="text-xs" style="color:var(--text-muted);font-weight:600;margin-bottom:0.25rem;">區塊設定</p>
-          <div
-            v-for="(area, i) in menu.areas"
-            :key="i"
-            class="flex items-center gap-1"
-            style="font-size:0.78rem;color:var(--text-secondary);"
-          >
-            <span class="badge badge-blue" style="font-size:0.65rem;">{{ i + 1 }}</span>
-            <span>{{ area.action?.type }}</span>
-            <span class="text-muted">·</span>
-            <span class="truncate">{{ getActionLabel(area.action) }}</span>
-          </div>
-        </div>
-
-        <!-- Actions -->
-        <div class="flex gap-1" style="flex-wrap:wrap;">
-          <button class="btn btn-secondary btn-sm" @click.stop="openUpload(menu)">
-            🖼️ 上傳圖片
-          </button>
-          <button
-            v-if="!menu.isDefault"
-            class="btn btn-secondary btn-sm"
-            @click.stop="setAsDefault(menu)"
-          >
-            ⭐ 設為預設
-          </button>
-          <button class="btn btn-danger btn-sm" @click.stop="confirmDelete(menu)">
-            🗑️ 刪除
-          </button>
-        </div>
-      </div>
+    <div v-else class="card" style="padding: 0; overflow-x: auto;">
+      <table style="width: 100%; border-collapse: collapse; text-align: left;">
+        <thead>
+          <tr style="border-bottom: 1px solid var(--border); background: var(--bg-surface);">
+            <th style="padding: 1rem 1.25rem; font-weight: 600; color: var(--text-secondary); width: 120px;">預覽圖片</th>
+            <th style="padding: 1rem 1.25rem; font-weight: 600; color: var(--text-secondary);">選單名稱</th>
+            <th style="padding: 1rem 1.25rem; font-weight: 600; color: var(--text-secondary);">狀態</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="menu in sortedMenus" :key="menu.id" class="table-row" style="border-bottom: 1px solid var(--border); transition: background 0.15s; cursor: pointer;" @click="openEditModal(menu)">
+            <td style="padding: 1rem 1.25rem;">
+              <img
+                v-if="menu.imageUrl"
+                :src="menu.imageUrl"
+                :alt="menu.name"
+                style="height: 60px; border-radius: var(--radius-sm); object-fit: contain; background: var(--bg-elevated);"
+              >
+              <div v-else style="height: 60px; width: 60px; background: var(--bg-elevated); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+                🖼️
+              </div>
+            </td>
+            <td style="padding: 1rem 1.25rem; font-weight: 600;">
+              {{ menu.name }}
+              <div class="text-xs text-muted" style="font-weight: 400; margin-top: 0.2rem;">{{ menu.areas?.length ?? 0 }} 個區塊</div>
+            </td>
+            <td style="padding: 1rem 1.25rem;">
+              <span v-if="menu.isDefault" class="badge badge-green">⭐ 預設選單</span>
+              <span v-else class="text-muted text-sm">一般選單</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
 
     <!-- ── Create Modal ── -->
@@ -305,6 +270,7 @@
         </div>
 
         <div class="flex gap-1" style="justify-content:flex-end;">
+          <button v-if="editingId" class="btn btn-danger" style="margin-right: auto;" @click="confirmDeleteFromModal">刪除</button>
           <button class="btn btn-secondary" @click="showCreate = false">取消</button>
           <button class="btn btn-primary" :disabled="creating" @click="submitCreate">
             <span v-if="creating" class="spinner" style="width:14px;height:14px;" />
@@ -314,45 +280,7 @@
       </div>
     </div>
 
-    <!-- ── Upload Modal ── -->
-    <div v-if="showUpload" class="modal-backdrop" @click.self="showUpload = false">
-      <div class="modal" style="max-width:440px;">
-        <div class="modal-header">
-          <h3>上傳圖片</h3>
-          <button class="btn btn-ghost btn-sm" @click="showUpload = false">✕</button>
-        </div>
-        <p class="text-sm text-muted" style="margin-bottom:1rem;">
-          為「{{ uploadTarget?.name }}」上傳 Rich Menu 圖片（PNG/JPEG）
-        </p>
 
-        <div
-          class="upload-zone"
-          :class="{ dragging: isUploadDragging }"
-          @dragleave="isUploadDragging = false"
-          @dragover.prevent="isUploadDragging = true"
-          @drop.prevent="onDrop"
-          @click="triggerFile"
-        >
-          <input ref="fileInput" type="file" accept="image/png,image/jpeg" style="display:none;" @change="onFileSelect" />
-          <div v-if="previewUrl">
-            <img :src="previewUrl" style="max-width:100%;border-radius:var(--radius-md);" />
-          </div>
-          <div v-else style="text-align:center;color:var(--text-muted);">
-            <div style="font-size:2rem;">📁</div>
-            <p style="font-size:0.875rem;">拖放圖片或點擊選擇</p>
-            <p style="font-size:0.75rem;margin-top:0.25rem;">PNG / JPEG · 最大 1MB</p>
-          </div>
-        </div>
-
-        <div class="flex gap-1" style="justify-content:flex-end;margin-top:1rem;">
-          <button class="btn btn-secondary" @click="showUpload = false">取消</button>
-          <button class="btn btn-primary" :disabled="!selectedFile || uploading" @click="submitUpload">
-            <span v-if="uploading" class="spinner" style="width:14px;height:14px;" />
-            上傳
-          </button>
-        </div>
-      </div>
-    </div>
 
     <!-- Toast -->
     <div class="toast-bar">
@@ -371,15 +299,16 @@ definePageMeta({ middleware: 'auth', layout: 'default' })
 const menus = ref<any[]>([])
 const loading = ref(true)
 const showCreate = ref(false)
-const showUpload = ref(false)
 const creating = ref(false)
-const uploading = ref(false)
-const uploadTarget = ref<any>(null)
-const selectedFile = ref<File | null>(null)
-const previewUrl = ref('')
-const fileInput = ref<HTMLInputElement | null>(null)
-const isUploadDragging = ref(false)
 const toasts = ref<{ id: number; msg: string; type: 'success' | 'error' }[]>([])
+
+const sortedMenus = computed(() => {
+  return [...menus.value].sort((a, b) => {
+    if (a.isDefault && !b.isDefault) return -1;
+    if (!a.isDefault && b.isDefault) return 1;
+    return 0;
+  });
+})
 
 // ── Canvas drag / resize ──────────────────────────────────────
 const canvasRef = ref<HTMLElement | null>(null)
@@ -886,64 +815,6 @@ async function submitCreate() {
   }
 }
 
-// ── Upload ────────────────────────────────────────────────────
-function openUpload(menu: any) {
-  uploadTarget.value = menu
-  selectedFile.value = null
-  previewUrl.value = ''
-  showUpload.value = true
-}
-
-function triggerFile() { fileInput.value?.click() }
-
-function handleFile(file: File) {
-  if (file.size > 1024 * 1024) return showToast('圖片不能超過 1MB', 'error')
-  selectedFile.value = file
-  previewUrl.value = URL.createObjectURL(file)
-}
-
-function onFileSelect(e: Event) {
-  const f = (e.target as HTMLInputElement).files?.[0]
-  if (f) handleFile(f)
-}
-
-function onDrop(e: DragEvent) {
-  isUploadDragging.value = false
-  const f = e.dataTransfer?.files?.[0]
-  if (f) handleFile(f)
-}
-
-async function submitUpload() {
-  if (!selectedFile.value || !uploadTarget.value) return
-  uploading.value = true
-  try {
-    const reader = new FileReader()
-    const base64 = await new Promise<string>((res, rej) => {
-      reader.onload = () => res((reader.result as string).split(',')[1] ?? '')
-      reader.onerror = rej
-      reader.readAsDataURL(selectedFile.value!)
-    })
-
-    await $fetch('/api/richmenu/upload', {
-      method: 'POST',
-      body: {
-        richMenuId: uploadTarget.value.richMenuId,
-        firestoreId: uploadTarget.value.id,
-        imageBase64: base64,
-        contentType: selectedFile.value.type,
-      },
-    })
-    showToast('圖片上傳成功', 'success')
-    showUpload.value = false
-    await loadMenus()
-  }
-  catch (e: any) {
-    showToast(e?.data?.statusMessage ?? '上傳失敗', 'error')
-  }
-  finally {
-    uploading.value = false
-  }
-}
 
 // ── Set Default ───────────────────────────────────────────────
 async function setAsDefault(menu: any) {
@@ -961,11 +832,14 @@ async function setAsDefault(menu: any) {
 }
 
 // ── Delete ────────────────────────────────────────────────────
-async function confirmDelete(menu: any) {
-  if (!confirm(`確定刪除「${menu.name}」？此動作無法復原。`)) return
+async function confirmDeleteFromModal() {
+  if (!editingId.value) return
+  const menuName = form.value.name
+  if (!confirm(`確定刪除「${menuName}」？此動作無法復原。`)) return
   try {
-    await $fetch(`/api/richmenu/${menu.id}`, { method: 'DELETE' })
+    await $fetch(`/api/richmenu/${editingId.value}`, { method: 'DELETE' })
     showToast('已刪除', 'success')
+    showCreate.value = false
     await loadMenus()
   }
   catch {
@@ -1124,4 +998,9 @@ function getActionLabel(action: any) {
   from { opacity: 0; }
   to   { opacity: 1; }
 }
+
+.table-row:hover {
+  background: var(--bg-hover);
+}
+
 </style>
