@@ -83,7 +83,7 @@
             @click="triggerCreateFile"
             style="min-height: 120px; padding: 1.5rem;"
           >
-            <input ref="createFileInput" type="file" accept="image/png,image/jpeg" style="display:none;" @change="onCreateFileSelect" />
+            <input ref="createFileInput" type="file" :accept="IMAGE_ACCEPT_ATTR" style="display:none;" @change="onCreateFileSelect" />
             <div v-if="form.previewUrl" style="text-align:center;">
               <div class="badge badge-green" style="margin-bottom:0.5rem;font-size:0.875rem;">✅ 圖片已上傳 ({{ form.width }} × {{ form.height }})</div>
               <p class="text-xs text-muted">點擊或拖放到此處可重新上傳</p>
@@ -91,7 +91,7 @@
             <div v-else style="text-align:center;color:var(--text-muted);">
               <div style="font-size:1.75rem;margin-bottom:0.25rem;">🖼️</div>
               <p style="font-size:0.875rem;font-weight:600;">拖放圖片或點擊選擇</p>
-              <p class="text-xs text-muted" style="margin-top:0.25rem;">PNG / JPEG · 最大 1MB (建議 2500x1686 或 2500x843)</p>
+              <p class="text-xs text-muted" style="margin-top:0.25rem;">JPG / PNG · 最大 500KB (建議 2500x1686 或 2500x843)</p>
             </div>
           </div>
         </el-form-item>
@@ -282,6 +282,12 @@
 </template>
 
 <script setup lang="ts">
+import {
+  IMAGE_ACCEPT_ATTR,
+  IMAGE_MAX_BYTES,
+  IMAGE_MIME_TYPES,
+} from '../../../shared/upload-rules'
+
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 // ── Data ──────────────────────────────────────────────────────
@@ -414,7 +420,6 @@ const isCreateDragging = ref(false)
 const createFileInput = ref<HTMLInputElement | null>(null)
 const editingId = ref<string | null>(null)
 const originalFormString = ref('')
-
 function openCreateModal() {
   editingId.value = null
   form.value = defaultForm()
@@ -466,8 +471,8 @@ function closeCreateModal() {
 function triggerCreateFile() { createFileInput.value?.click() }
 
 function handleCreateFile(file: File) {
-  if (file.size > 1024 * 1024) return showToast('圖片不能超過 1MB', 'error')
-  if (!['image/jpeg', 'image/png'].includes(file.type)) return showToast('僅支援 JPEG 與 PNG 格式', 'error')
+  if (file.size > IMAGE_MAX_BYTES) return showToast('圖片不能超過 500KB', 'error')
+  if (!IMAGE_MIME_TYPES.includes(file.type)) return showToast('僅支援 JPG / PNG 格式', 'error')
   
   const img = new Image()
   const pUrl = URL.createObjectURL(file)
@@ -484,13 +489,16 @@ function handleCreateFile(file: File) {
     form.value.width = W
     form.value.height = H
     form.value.previewUrl = pUrl
-    form.value.contentType = file.type
-    
-    const reader = new FileReader()
-    reader.onload = () => {
-      form.value.imageBase64 = (reader.result as string).split(',')[1] ?? ''
-    }
-    reader.readAsDataURL(file)
+    // LINE Rich Menu 只支援 JPEG/PNG，將可上傳格式一律轉為 PNG 再送出
+    const canvas = document.createElement('canvas')
+    canvas.width = W
+    canvas.height = H
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return showToast('圖片處理失敗，請重試', 'error')
+    ctx.drawImage(img, 0, 0)
+    const pngDataUrl = canvas.toDataURL('image/png')
+    form.value.contentType = 'image/png'
+    form.value.imageBase64 = pngDataUrl.split(',')[1] ?? ''
   }
   img.src = pUrl
 }

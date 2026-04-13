@@ -140,8 +140,8 @@
               <div v-else-if="msg.type === 'video'" class="message-video-wrap">
                 <p class="fuz-section-label">預覽圖片 <span class="text-muted">(長寬大小與影片一樣)</span></p>
                 <FlowUploadZone v-model="msg.previewImageUrl" type="image" label="點擊上傳預覽圖" hint="建議與影片同尺寸" />
-                <p class="fuz-section-label" style="margin-top: 0.75rem;">影片檔案 <span class="text-muted">(大小不可超過 200 MB)</span></p>
-                <FlowUploadZone v-model="msg.originalContentUrl" type="video" label="點擊上傳影片" hint="支援 MP4 格式" />
+                <p class="fuz-section-label" style="margin-top: 0.75rem;">影片檔案 <span class="text-muted">(大小不可超過 5 MB)</span></p>
+                <FlowUploadZone v-model="msg.originalContentUrl" type="video" label="點擊上傳影片" hint="支援 MP4，最大 5MB" />
               </div>
             </div>
 
@@ -175,7 +175,7 @@
                     show-word-limit
                   />
                   <p v-if="msg.type === 'imageCarousel'" class="fuz-hint-text" style="margin-bottom:0;">
-                    圖片長度不可超過寬度的 3 倍，小於 1 MB，建議每張比例相同
+                    圖片長度不可超過寬度的 3 倍，小於 500 KB，建議每張比例相同
                   </p>
                 </div>
               </div>

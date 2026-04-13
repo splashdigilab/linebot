@@ -36,6 +36,15 @@
 </template>
 
 <script setup lang="ts">
+import {
+  IMAGE_ACCEPT_ATTR,
+  IMAGE_MAX_BYTES,
+  IMAGE_MIME_TYPES,
+  VIDEO_ACCEPT_ATTR,
+  VIDEO_MAX_BYTES,
+  VIDEO_MIME_TYPES,
+} from '../../shared/upload-rules'
+
 const props = defineProps<{
   modelValue: string
   type?: 'image' | 'video'
@@ -53,7 +62,9 @@ const inputRef = ref<HTMLInputElement | null>(null)
 const isUploading = ref(false)
 
 const acceptAttr = computed(() =>
-  props.type === 'video' ? 'video/mp4,video/quicktime' : 'image/png,image/jpeg'
+  props.type === 'video'
+    ? VIDEO_ACCEPT_ATTR
+    : IMAGE_ACCEPT_ATTR
 )
 
 const previewStyle = computed(() => ({
@@ -69,9 +80,18 @@ async function onFileChange(e: Event) {
   const file = input.files?.[0]
   if (!file) return
 
-  const maxMb = props.type === 'video' ? 200 : 5
-  if (file.size > maxMb * 1024 * 1024) {
-    alert(`檔案不能超過 ${maxMb}MB`)
+  const isVideo = props.type === 'video'
+  const allowTypes = isVideo ? VIDEO_MIME_TYPES : IMAGE_MIME_TYPES
+  const maxBytes = isVideo ? VIDEO_MAX_BYTES : IMAGE_MAX_BYTES
+
+  if (!allowTypes.includes(file.type)) {
+    alert(isVideo ? '僅支援 MP4 格式' : '僅支援 JPG / PNG 格式')
+    input.value = ''
+    return
+  }
+
+  if (file.size > maxBytes) {
+    alert(isVideo ? '影片不能超過 5MB' : '圖片不能超過 500KB')
     input.value = ''
     return
   }
