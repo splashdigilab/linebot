@@ -5,9 +5,9 @@
         <h1>Rich Menu 設定</h1>
         <p>建立並部署 LINE Rich Menu</p>
       </div>
-      <button class="btn btn-primary" @click="openCreateModal">
+      <el-button type="primary" @click="openCreateModal">
         ➕ 新增 Rich Menu
-      </button>
+      </el-button>
     </div>
 
     <!-- Loading -->
@@ -16,72 +16,64 @@
     </div>
 
     <!-- Empty -->
-    <div v-else-if="!menus.length" class="card">
+    <el-card v-else-if="!menus.length">
       <div class="empty-state">
         <span class="empty-icon">🗂️</span>
         <h3>尚無 Rich Menu</h3>
         <p>點擊右上角「新增 Rich Menu」開始建立您的第一個選單</p>
-        <button class="btn btn-primary" @click="openCreateModal">建立選單</button>
+        <el-button type="primary" @click="openCreateModal">建立選單</el-button>
       </div>
-    </div>
+    </el-card>
 
     <!-- Menu List -->
-    <div v-else class="card" style="padding: 0; overflow-x: auto;">
-      <table style="width: 100%; border-collapse: collapse; text-align: left;">
-        <thead>
-          <tr style="border-bottom: 1px solid var(--border); background: var(--bg-surface);">
-            <th style="padding: 1rem 1.25rem; font-weight: 600; color: var(--text-secondary); width: 120px;">預覽圖片</th>
-            <th style="padding: 1rem 1.25rem; font-weight: 600; color: var(--text-secondary);">選單名稱</th>
-            <th style="padding: 1rem 1.25rem; font-weight: 600; color: var(--text-secondary);">狀態</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="menu in sortedMenus" :key="menu.id" class="table-row" style="border-bottom: 1px solid var(--border); transition: background 0.15s; cursor: pointer;" @click="openEditModal(menu)">
-            <td style="padding: 1rem 1.25rem;">
-              <img
-                v-if="menu.imageUrl"
-                :src="menu.imageUrl"
-                :alt="menu.name"
-                style="height: 60px; border-radius: var(--radius-sm); object-fit: contain; background: var(--bg-elevated);"
-              >
-              <div v-else style="height: 60px; width: 60px; background: var(--bg-elevated); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
-                🖼️
-              </div>
-            </td>
-            <td style="padding: 1rem 1.25rem; font-weight: 600;">
-              {{ menu.name }}
-              <div class="text-xs text-muted" style="font-weight: 400; margin-top: 0.2rem;">{{ menu.areas?.length ?? 0 }} 個區塊</div>
-            </td>
-            <td style="padding: 1rem 1.25rem;">
-              <span v-if="menu.isDefault" class="badge badge-green">⭐ 預設選單</span>
-              <span v-else class="text-muted text-sm">一般選單</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <el-card v-else shadow="hover" body-style="padding: 0;">
+      <el-table :data="sortedMenus" style="width: 100%" @row-click="openEditModal" row-class-name="cursor-pointer">
+        <el-table-column label="預覽圖片" width="120">
+          <template #default="{ row }">
+            <el-image
+              v-if="row.imageUrl"
+              :src="row.imageUrl"
+              fit="contain"
+              style="height: 60px; border-radius: var(--radius-sm); background: var(--bg-elevated);"
+            />
+            <div v-else style="height: 60px; width: 60px; background: var(--bg-elevated); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+              🖼️
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column label="選單名稱">
+          <template #default="{ row }">
+            <div style="font-weight: 600;">{{ row.name }}</div>
+            <div class="text-xs text-muted" style="font-weight: 400; margin-top: 0.2rem;">{{ row.areas?.length ?? 0 }} 個區塊</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="狀態">
+          <template #default="{ row }">
+            <el-tag v-if="row.isDefault" type="success" effect="light">⭐ 預設選單</el-tag>
+            <span v-else class="text-muted text-sm">一般選單</span>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
 
     <!-- ── Create Modal ── -->
-    <div v-if="showCreate" class="modal-backdrop" @click.self="closeCreateModal">
-      <div class="modal" style="max-width:700px;">
-        <div class="modal-header">
-          <h3>{{ editingId ? '編輯 Rich Menu' : '新增 Rich Menu' }}</h3>
-          <button class="btn btn-ghost btn-sm" @click="closeCreateModal">✕</button>
-        </div>
+    <el-dialog
+      v-model="showCreate"
+      :title="editingId ? '編輯 Rich Menu' : '新增 Rich Menu'"
+      width="700px"
+      :before-close="closeCreateModal"
+    >
+      <el-form label-position="top" @submit.prevent>
+        <el-form-item label="選單名稱">
+          <el-input v-model="form.name" placeholder="例：主選單" />
+        </el-form-item>
 
-        <div class="form-group">
-          <label>選單名稱</label>
-          <input v-model="form.name" placeholder="例：主選單" />
-        </div>
-
-        <div class="form-group">
-          <label>Chat Bar 文字</label>
-          <input v-model="form.chatBarText" placeholder="選單" />
-        </div>
+        <el-form-item label="Chat Bar 文字">
+          <el-input v-model="form.chatBarText" placeholder="選單" />
+        </el-form-item>
 
         <!-- Create Image Upload Zone -->
-        <div class="form-group" style="margin-bottom:1.5rem;">
-          <label>1. 上傳選單背景圖 ({{ editingId ? '選填，若不上傳則自動沿用舊圖' : '必要' }})</label>
+        <el-form-item :label="`1. 上傳選單背景圖 (${editingId ? '選填，若不上傳則自動沿用舊圖' : '必要'})`">
           <div
             class="upload-zone"
             :class="{ dragging: isCreateDragging }"
@@ -99,18 +91,17 @@
             <div v-else style="text-align:center;color:var(--text-muted);">
               <div style="font-size:1.75rem;margin-bottom:0.25rem;">🖼️</div>
               <p style="font-size:0.875rem;font-weight:600;">拖放圖片或點擊選擇</p>
-              <p style="font-size:0.75rem;margin-top:0.25rem;">PNG / JPEG · 最大 1MB (LINE 規範)</p>
+              <p class="text-xs text-muted" style="margin-top:0.25rem;">PNG / JPEG · 最大 1MB (建議 2500x1686 或 2500x843)</p>
             </div>
           </div>
-        </div>
+        </el-form-item>
 
-        <div class="form-group">
-          <label>預設顯示</label>
-          <select v-model="form.selected">
-            <option :value="true">是</option>
-            <option :value="false">否</option>
-          </select>
-        </div>
+        <el-form-item label="預設顯示">
+          <el-select v-model="form.selected" style="width: 100%">
+            <el-option :value="true" label="是" />
+            <el-option :value="false" label="否" />
+          </el-select>
+        </el-form-item>
 
         <!-- Areas Editor (only visible if image uploaded) -->
         <div v-if="form.previewUrl" style="margin-bottom:1rem;">
@@ -118,7 +109,7 @@
             <label style="font-size:0.8rem;font-weight:600;color:var(--text-secondary);">
               2. 區塊設定（{{ form.areas.length }} 個）
             </label>
-            <button class="btn btn-secondary btn-sm" @click="addArea">➕ 新增區塊</button>
+            <el-button size="small" @click="addArea">➕ 新增區塊</el-button>
           </div>
 
           <!-- Visual canvas (drag + resize) -->
@@ -180,105 +171,103 @@
             />
           </div>
 
-          <div
+          <el-card
             v-for="(area, i) in form.areas"
             :key="i"
-            class="card-sm"
+            shadow="never"
             style="margin-bottom:0.75rem;"
+            body-style="padding: 1rem;"
           >
-            <div class="flex items-center justify-between" style="margin-bottom:0.75rem;">
-              <span
-                class="badge"
-                :style="{ background: areaColors[i % areaColors.length], color: '#fff', fontSize:'0.7rem' }"
-              >
-                區塊 {{ i + 1 }}
-              </span>
-              <button class="btn btn-ghost btn-sm" style="color:var(--color-error);" @click="removeArea(i)">✕</button>
-            </div>
+            <template #header>
+              <div style="display: flex; justify-content: space-between; align-items: center;">
+                <el-tag
+                  :color="areaColors[i % areaColors.length]"
+                  style="color: #fff; border: none;"
+                >
+                  區塊 {{ i + 1 }}
+                </el-tag>
+                <el-button link type="danger" @click="removeArea(i)">✕ 移除</el-button>
+              </div>
+            </template>
 
-            <div class="form-row">
-              <div class="form-group" style="margin:0;">
-                <label>X</label>
-                <input v-model.number="area.bounds.x" type="number" @change="clampArea(area)" />
-              </div>
-              <div class="form-group" style="margin:0;">
-                <label>Y</label>
-                <input v-model.number="area.bounds.y" type="number" @change="clampArea(area)" />
-              </div>
-            </div>
-            <div class="form-row" style="margin-top:0.5rem;">
-              <div class="form-group" style="margin:0;">
-                <label>Width</label>
-                <input v-model.number="area.bounds.width" type="number" @change="clampArea(area)" />
-              </div>
-              <div class="form-group" style="margin:0;">
-                <label>Height</label>
-                <input v-model.number="area.bounds.height" type="number" @change="clampArea(area)" />
-              </div>
-            </div>
+            <el-row :gutter="10" style="margin-bottom: 0.5rem;">
+              <el-col :span="12">
+                <el-form-item label="X" style="margin-bottom: 0;">
+                  <el-input-number v-model="area.bounds.x" :min="0" :controls="false" style="width: 100%;" @change="clampArea(area)" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="Y" style="margin-bottom: 0;">
+                  <el-input-number v-model="area.bounds.y" :min="0" :controls="false" style="width: 100%;" @change="clampArea(area)" />
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="10">
+              <el-col :span="12">
+                <el-form-item label="Width" style="margin-bottom: 0;">
+                  <el-input-number v-model="area.bounds.width" :min="0" :controls="false" style="width: 100%;" @change="clampArea(area)" />
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="Height" style="margin-bottom: 0;">
+                  <el-input-number v-model="area.bounds.height" :min="0" :controls="false" style="width: 100%;" @change="clampArea(area)" />
+                </el-form-item>
+              </el-col>
+            </el-row>
 
             <!-- Action -->
-            <div class="form-group" style="margin-top:0.75rem;margin-bottom:0.5rem;">
-              <label>動作類型</label>
-              <select v-model="area.action.type" @change="onActionTypeChange(area)">
-                <option value="message">message（代發文字）</option>
-                <option value="uri">uri（開啟網址）</option>
-                <option value="postback">postback（觸發機器人模組）</option>
-                <option value="switch">switch（切換選單）</option>
-              </select>
-            </div>
+            <el-form-item label="動作類型" style="margin-top: 0.75rem; margin-bottom: 0.5rem;">
+              <el-select v-model="area.action.type" style="width: 100%;" @change="onActionTypeChange(area)">
+                <el-option value="message" label="message（代發文字）" />
+                <el-option value="uri" label="uri（開啟網址）" />
+                <el-option value="postback" label="postback（觸發機器人模組）" />
+                <el-option value="switch" label="switch（切換選單）" />
+              </el-select>
+            </el-form-item>
 
-            <div v-if="area.action.type === 'message'" class="form-group" style="margin:0;">
-              <label>文字內容</label>
-              <input v-model="area.action.text" placeholder="輸入代發文字" />
-            </div>
-            <div v-if="area.action.type === 'uri'" class="form-group" style="margin:0;">
-              <label>網址</label>
-              <input v-model="area.action.uri" placeholder="https://..." />
-            </div>
-            <div v-if="area.action.type === 'postback'" class="form-group" style="margin:0;">
-              <label>選擇目標模組</label>
-              <select v-model="area.action.data">
-                <option disabled value="">請選擇要觸發的機器人模組...</option>
-                <option v-for="mod in modules" :key="mod.id" :value="`triggerModule=${mod.id}`">{{ mod.name }}</option>
-              </select>
-            </div>
-            <div v-if="area.action.type === 'switch'">
-              <div class="form-group" style="margin-bottom:0.5rem;">
-                <label>選擇目標 Rich Menu</label>
-                <select v-model="area.action.data">
-                  <option disabled value="">請選擇要切換的選單...</option>
-                  <template v-for="m in menus" :key="m.id">
-                    <option v-if="m.id !== editingId" :value="`switchMenu=${m.id}`">{{ m.name }}</option>
-                  </template>
-                </select>
-                <!-- Warn if current selection points to a deleted menu -->
-                <div
-                  v-if="area.action.data && area.action.data !== '' && !menus.find(m => m.id !== editingId && `switchMenu=${m.id}` === area.action.data)"
-                  style="color:var(--color-error);font-size:0.75rem;margin-top:0.35rem;"
-                >
-                  ⚠️ 所選的目標選單已不存在，請重新選擇
-                </div>
+            <el-form-item v-if="area.action.type === 'message'" label="文字內容" style="margin-bottom: 0;">
+              <el-input v-model="area.action.text" placeholder="輸入代發文字" />
+            </el-form-item>
+            <el-form-item v-if="area.action.type === 'uri'" label="網址" style="margin-bottom: 0;">
+              <el-input v-model="area.action.uri" placeholder="https://..." />
+            </el-form-item>
+            <el-form-item v-if="area.action.type === 'postback'" label="選擇目標模組" style="margin-bottom: 0;">
+              <el-select v-model="area.action.data" placeholder="請選擇要觸發的機器人模組..." style="width: 100%;">
+                <el-option v-for="mod in modules" :key="mod.id" :value="`triggerModule=${mod.id}`" :label="mod.name" />
+              </el-select>
+            </el-form-item>
+            <el-form-item v-if="area.action.type === 'switch'" label="選擇目標 Rich Menu" style="margin-bottom: 0;">
+              <el-select v-model="area.action.data" placeholder="請選擇要切換的選單..." style="width: 100%;">
+                <template v-for="m in menus" :key="m.id">
+                  <el-option v-if="m.id !== editingId" :value="`switchMenu=${m.id}`" :label="m.name" />
+                </template>
+              </el-select>
+              <!-- Warn if current selection points to a deleted menu -->
+              <div
+                v-if="area.action.data && area.action.data !== '' && !menus.find(m => m.id !== editingId && `switchMenu=${m.id}` === area.action.data)"
+                style="color:var(--color-error);font-size:0.75rem;margin-top:0.35rem;"
+              >
+                ⚠️ 所選的目標選單已不存在，請重新選擇
               </div>
-            </div>
-          </div>
+            </el-form-item>
+          </el-card>
         </div>
 
-        <div v-if="form.previewUrl" class="flex items-center gap-1" style="margin-bottom:1rem;">
-          <input id="setDefault" v-model="form.setAsDefault" type="checkbox" style="width:auto;" />
-          <label for="setDefault" style="font-size:0.875rem;color:var(--text-secondary);">設為預設選單</label>
-        </div>
+        <el-form-item v-if="form.previewUrl">
+          <el-checkbox v-model="form.setAsDefault">設為預設選單</el-checkbox>
+        </el-form-item>
+      </el-form>
 
-        <div class="flex gap-1" style="justify-content:flex-end;">
-          <button v-if="editingId" class="btn btn-danger" style="margin-right: auto;" @click="confirmDeleteFromModal">刪除</button>
-          <button class="btn btn-secondary" @click="showCreate = false">取消</button>
-          <button class="btn btn-primary" :disabled="creating" @click="submitCreate">
-            <span v-if="creating" class="spinner" style="width:14px;height:14px;" />
+      <template #footer>
+        <span class="dialog-footer">
+          <el-button v-if="editingId" type="danger" style="float: left;" @click="confirmDeleteFromModal">刪除</el-button>
+          <el-button @click="showCreate = false">取消</el-button>
+          <el-button type="primary" :loading="creating" @click="submitCreate">
             🚀 部署到 LINE
-          </button>
-        </div>
-      </div>
-    </div>
+          </el-button>
+        </span>
+      </template>
+    </el-dialog>
 
 
 
@@ -862,145 +851,3 @@ function getActionLabel(action: any) {
 }
 </script>
 
-<style scoped>
-.menu-preview {
-  background: var(--bg-elevated);
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border);
-  min-height: 120px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
-}
-.menu-preview-placeholder {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--text-muted);
-  font-size: 0.875rem;
-}
-.menu-card {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.menu-card:hover {
-  border-color: var(--color-primary);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-.upload-zone {
-  border: 2px dashed var(--border);
-  border-radius: var(--radius-md);
-  padding: 2rem;
-  cursor: pointer;
-  transition: border-color var(--t-fast);
-  min-height: 140px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.upload-zone:hover, .upload-zone.dragging {
-  border-color: var(--color-line);
-  background: var(--color-line-glow);
-}
-
-/* ── Canvas area blocks ── */
-.canvas-area {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid rgba(255,255,255,0.4);
-  cursor: grab;
-  transition: border-color 0.15s;
-  box-sizing: border-box;
-}
-.canvas-area:hover,
-.canvas-area.area-active {
-  border-color: #fff;
-  box-shadow: 0 0 0 2px rgba(255,255,255,0.3);
-  z-index: 10;
-}
-.canvas-area.area-active { cursor: grabbing; }
-
-.area-label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #fff;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
-  pointer-events: none;
-}
-
-/* ── Resize handles ── */
-.rh {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  background: #fff;
-  border: 2px solid rgba(0,0,0,0.4);
-  border-radius: 2px;
-  z-index: 20;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-.canvas-area:hover .rh,
-.canvas-area.area-active .rh { opacity: 1; }
-
-/* Corners */
-.rh.nw { top: -5px;  left: -5px;  cursor: nw-resize; }
-.rh.ne { top: -5px;  right: -5px; cursor: ne-resize; }
-.rh.se { bottom: -5px; right: -5px; cursor: se-resize; }
-.rh.sw { bottom: -5px; left: -5px;  cursor: sw-resize; }
-
-/* Edges */
-.rh.n  { top: -5px;  left: 50%; transform: translateX(-50%); cursor: n-resize; }
-.rh.s  { bottom: -5px; left: 50%; transform: translateX(-50%); cursor: s-resize; }
-.rh.e  { right: -5px; top: 50%; transform: translateY(-50%); cursor: e-resize; }
-.rh.w  { left: -5px;  top: 50%; transform: translateY(-50%); cursor: w-resize; }
-
-/* ── Overlap warning ── */
-.canvas-area.area-overlap {
-  border-color: #ff4d4d !important;
-  box-shadow: 0 0 0 2px rgba(255, 77, 77, 0.4) !important;
-  animation: pulse-overlap 1s ease-in-out infinite alternate;
-}
-@keyframes pulse-overlap {
-  from { box-shadow: 0 0 0 2px rgba(255, 77, 77, 0.3); }
-  to   { box-shadow: 0 0 0 4px rgba(255, 77, 77, 0.6); }
-}
-
-/* ── Snap guide lines ── */
-.guide-line {
-  position: absolute;
-  pointer-events: none;
-  z-index: 30;
-  background: #00d4ff;
-  box-shadow: 0 0 4px rgba(0, 212, 255, 0.8);
-  animation: guide-in 0.08s ease-out;
-}
-.guide-line.v {
-  top: -4px;
-  bottom: -4px;
-  width: 1px;
-  transform: translateX(-50%);
-}
-.guide-line.h {
-  left: -4px;
-  right: -4px;
-  height: 1px;
-  transform: translateY(-50%);
-}
-@keyframes guide-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
-}
-
-.table-row:hover {
-  background: var(--bg-hover);
-}
-
-</style>

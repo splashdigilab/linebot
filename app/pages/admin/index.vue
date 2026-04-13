@@ -6,42 +6,54 @@
         <p>歡迎回來，{{ user?.email }}</p>
       </div>
       <div class="flex gap-1">
-        <span class="badge badge-green">● 系統運行中</span>
+        <el-tag type="success">● 系統運行中</el-tag>
       </div>
     </div>
 
     <!-- Stats -->
-    <div class="grid-3">
-      <div class="stat-card">
-        <div class="stat-icon orange">🗂️</div>
-        <div>
-          <div class="stat-label">Rich Menu</div>
-          <div class="stat-value">{{ stats.richmenus }}</div>
-        </div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-icon blue">🤖</div>
-        <div>
-          <div class="stat-label">對話流程</div>
-          <div class="stat-value">{{ stats.flows }}</div>
-        </div>
-      </div>
-    </div>
+    <el-row :gutter="20">
+      <el-col :span="8">
+        <el-card shadow="hover" class="stat-card-el">
+          <div class="stat-card-el-inner">
+            <div class="stat-icon orange">🗂️</div>
+            <div>
+              <div class="stat-label">Rich Menu</div>
+              <div class="stat-value">{{ stats.richmenus }}</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+      <el-col :span="8">
+        <el-card shadow="hover" class="stat-card-el">
+          <div class="stat-card-el-inner">
+            <div class="stat-icon blue">🤖</div>
+            <div>
+              <div class="stat-label">對話流程</div>
+              <div class="stat-value">{{ stats.flows }}</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
 
     <!-- Quick actions -->
-    <div class="card">
+    <el-card style="margin-top: 1.5rem;">
       <h3 style="font-size:1rem;font-weight:700;margin-bottom:1rem;">快速操作</h3>
-      <div class="grid-3">
-        <NuxtLink to="/admin/richmenu" class="quick-action">
-          <span class="quick-icon">🗂️</span>
-          <span>設定 Rich Menu</span>
-        </NuxtLink>
-        <NuxtLink to="/admin/flow" class="quick-action">
-          <span class="quick-icon">🤖</span>
-          <span>對話流程管理</span>
-        </NuxtLink>
-      </div>
-    </div>
+      <el-row :gutter="20">
+        <el-col :span="8">
+          <NuxtLink to="/admin/richmenu" class="quick-action">
+            <span class="quick-icon">🗂️</span>
+            <span>設定 Rich Menu</span>
+          </NuxtLink>
+        </el-col>
+        <el-col :span="8">
+          <NuxtLink to="/admin/flow" class="quick-action">
+            <span class="quick-icon">🤖</span>
+            <span>對話流程管理</span>
+          </NuxtLink>
+        </el-col>
+      </el-row>
+    </el-card>
   </div>
 </template>
 
@@ -70,25 +82,4 @@ async function loadStats() {
 onMounted(loadStats)
 </script>
 
-<style scoped>
-.quick-action {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 1rem;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  color: var(--text-secondary);
-  font-size: 0.875rem;
-  font-weight: 500;
-  transition: all var(--t-fast);
-  text-decoration: none;
-}
-.quick-action:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-  border-color: var(--border-active);
-}
-.quick-icon { font-size: 1.2rem; }
-</style>
+

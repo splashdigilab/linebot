@@ -7,7 +7,31 @@ export default defineNuxtConfig({
     preset: 'aws-amplify',
   },
 
-  css: ['~/assets/css/main.css'],
+  modules: [
+    '@element-plus/nuxt'
+  ],
+
+  elementPlus: {
+    importStyle: 'scss',
+  },
+
+  // Disable SSR for admin pages — they are behind auth and don't need SEO
+  routeRules: {
+    '/admin/**': { ssr: false },
+  },
+
+  vite: {
+    css: {
+      preprocessorOptions: {
+        scss: {
+          api: 'modern-compiler',
+          additionalData: `@use "~/assets/scss/element-variables.scss" as *;`,
+        },
+      },
+    },
+  },
+
+  css: ['~/assets/scss/main.scss'],
 
   runtimeConfig: {
     // Server-only (private)
