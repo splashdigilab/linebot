@@ -107,15 +107,37 @@ function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
 
     // ── Carousel ──
     if (msg.type === 'carousel') {
-      const columns = (msg.columns ?? []).map((col: any) => ({
+      const normalizeCarouselAction = (action: any) => {
+        if (action?.type === 'uri') {
+          return {
+            type: 'uri',
+            label: (action.label || '　').slice(0, 20),
+            uri: action.uri || 'https://google.com',
+          }
+        }
+        return {
+          type: 'message',
+          label: (action?.label || '　').slice(0, 20),
+          text: (action?.text || action?.label || '　').slice(0, 300),
+        }
+      }
+
+      const rawColumns = (msg.columns ?? []).map((col: any) => ({
         thumbnailImageUrl: col.thumbnailImageUrl || undefined,
         title: (col.title || '').slice(0, 80) || undefined,
         text: (col.text || '　').slice(0, 300),
-        actions: (col.actions ?? []).slice(0, 3).map((a: any) => {
-          if (a.type === 'uri') return { type: 'uri', label: (a.label || '').slice(0, 20), uri: a.uri || 'https://google.com' }
-          return { type: 'message', label: (a.label || '').slice(0, 20), text: (a.text || a.label || '').slice(0, 300) }
-        }),
+        actions: (col.actions ?? []).slice(0, 3).map(normalizeCarouselAction),
       }))
+
+      // LINE carousel requires every column to have the same action count (1~3).
+      const targetActionCount = Math.max(1, ...rawColumns.map((col: any) => col.actions.length))
+      const columns = rawColumns.map((col: any) => {
+        const actions = [...col.actions]
+        while (actions.length < targetActionCount) {
+          actions.push({ type: 'message', label: '　', text: '　' })
+        }
+        return { ...col, actions }
+      })
       if (!columns.length) return []
       return [{
         type: 'template',

@@ -119,7 +119,7 @@
                         <el-option value="message" label="傳送文字" />
                         <el-option value="uri" label="開啟網址" />
                       </el-select>
-                      <el-button link type="danger" style="margin-left: auto;" @click="removeButton(msg, bIdx)">✕</el-button>
+                      <el-button link type="danger" style="margin-left: auto;" @click="removeButton(msg, Number(bIdx))">✕</el-button>
                     </div>
                     <el-input v-model="btn.label" placeholder="按鈕名稱 (最多 20 字)" maxlength="20" style="margin-bottom: 0.5rem;" show-word-limit />
                     <el-input v-if="btn.type === 'message'" v-model="btn.text" placeholder="用戶點擊後傳送的文字..." maxlength="300" show-word-limit />
@@ -187,7 +187,7 @@
                 <template v-if="msg.type === 'carousel'">
                   <div v-for="(col, ci) in msg.columns" :key="ci" class="carousel-sub-card">
                     <div class="carousel-card-top">
-                      <span class="carousel-card-idx">{{ ci + 1 }}</span>
+                      <span class="carousel-card-idx">{{ Number(ci) + 1 }}</span>
                       <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(ci, 1)">✕</el-button>
                     </div>
                     <div class="carousel-sub-body">
@@ -196,14 +196,25 @@
                       <el-input v-model="col.text" type="textarea" :rows="2" placeholder="副標題或內容（最多 300 字）" maxlength="300" show-word-limit style="margin-top:0.5rem;" />
                       <div v-if="col.actions?.length" class="carousel-actions">
                         <div v-for="(act, ai) in col.actions" :key="ai" class="carousel-action-row">
-                          <el-select v-model="act.type" size="small" style="width:90px;flex-shrink:0;">
+                          <div class="carousel-action-row-top">
+                            <span class="carousel-action-index">按鈕 {{ Number(ai) + 1 }}</span>
+                            <el-button
+                              link
+                              type="danger"
+                              size="small"
+                              :disabled="col.actions.length <= 1"
+                              @click="removeCarouselAction(col, Number(ai))"
+                            >
+                              ✕
+                            </el-button>
+                          </div>
+                          <el-select v-model="act.type" size="small" style="width:100%;">
                             <el-option value="uri" label="開網址" />
                             <el-option value="message" label="傳文字" />
                           </el-select>
-                          <el-input v-model="act.label" placeholder="按鈕文字" maxlength="20" size="small" style="flex:1;" />
-                          <el-input v-if="act.type==='uri'" v-model="act.uri" placeholder="https://..." size="small" style="flex:2;" />
-                          <el-input v-else v-model="act.text" placeholder="傳送文字" size="small" style="flex:2;" />
-                          <el-button link type="danger" size="small" @click="col.actions.splice(ai,1)">✕</el-button>
+                          <el-input v-model="act.label" placeholder="按鈕文字" maxlength="20" size="small" />
+                          <el-input v-if="act.type==='uri'" v-model="act.uri" placeholder="https://..." size="small" />
+                          <el-input v-else v-model="act.text" placeholder="傳送文字" size="small" />
                         </div>
                       </div>
                       <el-button v-if="!col.actions || col.actions.length < 3" plain size="small" style="width:100%;border-style:dashed;margin-top:0.5rem;" @click="addCarouselAction(col)">⊕ 新增按鈕</el-button>
@@ -215,7 +226,7 @@
                 <template v-else>
                   <div v-for="(col, ci) in msg.columns" :key="ci" class="carousel-sub-card">
                     <div class="carousel-card-top">
-                      <span class="carousel-card-idx">{{ ci + 1 }}</span>
+                      <span class="carousel-card-idx">{{ Number(ci) + 1 }}</span>
                       <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(ci, 1)">✕</el-button>
                     </div>
                     <div class="carousel-sub-body">
@@ -319,7 +330,7 @@ function selectFlow(flow: any) {
   selectedId.value = flow.id
   form.value = {
     name: flow.name,
-    messages: JSON.parse(JSON.stringify(flow.messages ?? [])),
+    messages: normalizeMessages(JSON.parse(JSON.stringify(flow.messages ?? []))),
   }
 }
 
@@ -368,8 +379,12 @@ function newCarouselColumn() {
     thumbnailImageUrl: '',
     title: '',
     text: '',
-    actions: [],
+    actions: [newCarouselAction()],
   }
+}
+
+function newCarouselAction() {
+  return { type: 'uri', label: '', uri: '', text: '' }
 }
 
 function newImageCarouselColumn() {
@@ -389,7 +404,12 @@ function addImageCarouselColumn(msg: any) {
 
 function addCarouselAction(col: any) {
   if (!col.actions) col.actions = []
-  if (col.actions.length < 3) col.actions.push({ type: 'uri', label: '', uri: '', text: '' })
+  if (col.actions.length < 3) col.actions.push(newCarouselAction())
+}
+
+function removeCarouselAction(col: any, actionIndex: number) {
+  if (!col.actions || col.actions.length <= 1) return
+  col.actions.splice(actionIndex, 1)
 }
 
 function removeMessage(i: number) {
@@ -449,6 +469,10 @@ async function submitForm() {
   if (!form.value.name) return showToast('請輸入模組名稱', 'error')
   if (!form.value.messages.length) return showToast('請至少新增一則回覆訊息', 'error')
 
+  form.value.messages = normalizeMessages(form.value.messages)
+  const validationError = validateMessages(form.value.messages)
+  if (validationError) return showToast(validationError, 'error')
+
   saving.value = true
   try {
     if (isCreating.value) {
@@ -503,6 +527,57 @@ function showToast(msg: string, type: 'success' | 'error') {
   const id = ++toastId
   toasts.value.push({ id, msg, type })
   setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id) }, 3500)
+}
+
+function normalizeMessages(messages: any[]) {
+  return (messages ?? []).map((msg) => {
+    if (msg?.type !== 'carousel') return msg
+
+    const columns = Array.isArray(msg.columns) ? msg.columns : []
+    return {
+      ...msg,
+      columns: columns.map((col: any) => ({
+        ...col,
+        actions: Array.isArray(col?.actions) && col.actions.length > 0
+          ? col.actions
+          : [newCarouselAction()],
+      })),
+    }
+  })
+}
+
+function validateMessages(messages: any[]): string | null {
+  for (const msg of messages ?? []) {
+    // text message optional buttons, but if a button exists it must be complete
+    if (msg?.type === 'text' && Array.isArray(msg.buttons)) {
+      for (const btn of msg.buttons) {
+        if (!btn?.label?.trim()) return '按鈕文字為必填'
+        if (btn.type === 'uri' && !btn?.uri?.trim()) return '按鈕網址為必填'
+        if (btn.type === 'message' && !btn?.text?.trim()) return '按鈕傳送文字為必填'
+      }
+    }
+
+    // carousel buttons are required by design and must be complete
+    if (msg?.type === 'carousel' && Array.isArray(msg.columns)) {
+      for (const col of msg.columns) {
+        for (const action of (col?.actions ?? [])) {
+          if (!action?.label?.trim()) return '輪播按鈕文字為必填'
+          if (action.type === 'uri' && !action?.uri?.trim()) return '輪播按鈕網址為必填'
+          if (action.type === 'message' && !action?.text?.trim()) return '輪播按鈕傳送文字為必填'
+        }
+      }
+    }
+
+    // image carousel action payload must be complete when action is enabled
+    if (msg?.type === 'imageCarousel' && Array.isArray(msg.columns)) {
+      for (const col of msg.columns) {
+        const action = col?.action
+        if (action?.type === 'uri' && !action?.uri?.trim()) return '圖片輪播網址為必填'
+        if (action?.type === 'message' && !action?.text?.trim()) return '圖片輪播傳送文字為必填'
+      }
+    }
+  }
+  return null
 }
 </script>
 

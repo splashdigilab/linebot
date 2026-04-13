@@ -391,15 +391,33 @@
 .carousel-actions {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  margin-top: 0.25rem;
+  gap: 0.6rem;
+  margin-top: 0.35rem;
 }
 
 .carousel-action-row {
   display: flex;
-  gap: 0.25rem;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-hover, rgba(0,0,0,0.02));
+  padding: 0.6rem;
+}
+
+.carousel-action-row-top {
+  display: flex;
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.carousel-action-index {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 /* ─── Action button in Editor ───────────────────────────── */
