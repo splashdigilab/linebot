@@ -427,23 +427,7 @@
   letter-spacing: 0.02em;
 }
 
-/* ─── Action button in Editor ───────────────────────────── */
-.message-buttons-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
 
-.action-button-editor {
-  border: 1px solid var(--border);
-  background: var(--bg-hover, rgba(0,0,0,0.02));
-  border-radius: var(--radius-sm);
-  padding: 0.65rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
-}
 
 /* ─── Config sections & Utilities ───────────────────────── */
 .config-section-title {

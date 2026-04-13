@@ -112,21 +112,29 @@
               <!-- Text -->
               <div v-if="msg.type === 'text'" class="message-bubble-wrap">
                 <el-input v-model="msg.text" type="textarea" :rows="3" placeholder="輸入回覆文字..." :maxlength="msg.buttons && msg.buttons.length > 0 ? 160 : 5000" show-word-limit />
-                <div v-if="msg.buttons && msg.buttons.length" class="message-buttons-list">
-                  <div v-for="(btn, bIdx) in msg.buttons" :key="bIdx" class="action-button-editor">
-                    <div class="flex gap-1 items-center" style="margin-bottom: 0.5rem;">
-                      <el-select v-model="btn.type" size="small" style="width: 120px;">
-                        <el-option value="message" label="傳送文字" />
-                        <el-option value="uri" label="開啟網址" />
-                      </el-select>
-                      <el-button link type="danger" style="margin-left: auto;" @click="removeButton(msg, Number(bIdx))">✕</el-button>
+                <div v-if="msg.buttons && msg.buttons.length" class="carousel-actions">
+                  <div v-for="(btn, bIdx) in msg.buttons" :key="bIdx" class="carousel-action-row">
+                    <div class="carousel-action-row-top">
+                      <span class="carousel-action-index">按鈕 {{ Number(bIdx) + 1 }}</span>
+                      <el-button
+                        link
+                        type="danger"
+                        size="small"
+                        @click="removeButton(msg, Number(bIdx))"
+                      >
+                        ✕
+                      </el-button>
                     </div>
-                    <el-input v-model="btn.label" placeholder="按鈕名稱 (最多 20 字)" maxlength="20" style="margin-bottom: 0.5rem;" show-word-limit />
-                    <el-input v-if="btn.type === 'message'" v-model="btn.text" placeholder="用戶點擊後傳送的文字..." maxlength="300" show-word-limit />
-                    <el-input v-if="btn.type === 'uri'" v-model="btn.uri" placeholder="https://..." />
+                    <el-select v-model="btn.type" size="small" style="width:100%;">
+                      <el-option value="uri" label="開網址" />
+                      <el-option value="message" label="傳文字" />
+                    </el-select>
+                    <el-input v-model="btn.label" placeholder="按鈕文字" maxlength="20" size="small" />
+                    <el-input v-if="btn.type === 'uri'" v-model="btn.uri" placeholder="https://..." size="small" />
+                    <el-input v-else v-model="btn.text" placeholder="傳送文字" size="small" />
                   </div>
                 </div>
-                <el-button v-if="!msg.buttons || msg.buttons.length < 4" plain style="width: 100%; justify-content: center; border-style: dashed; margin-top: 0.5rem;" @click="addButton(msg)">
+                <el-button v-if="!msg.buttons || msg.buttons.length < 4" plain size="small" style="width: 100%; border-style: dashed; margin-top: 0.5rem;" @click="addButton(msg)">
                   ⊕ 新增按鈕 (非必需)
                 </el-button>
               </div>
@@ -253,22 +261,27 @@
                     </div>
                     <div class="carousel-sub-body">
                       <FlowUploadZone v-model="col.imageUrl" type="image" label="上傳" preview-height="160px" />
-                      <p class="fuz-section-label" style="margin-top:0.75rem;">圖片動作</p>
-                      <el-select v-model="col.action.type" size="small" style="width:100%;">
-                        <el-option value="none" label="未有行動" />
-                        <el-option value="uri" label="開啟網址" />
-                        <el-option value="message" label="傳送文字" />
-                      </el-select>
-                      <el-input
-                        v-if="col.action.type !== 'none'"
-                        v-model="col.action.label"
-                        placeholder="按鈕文字 (必填)"
-                        maxlength="20"
-                        size="small"
-                        style="margin-top:0.4rem;"
-                      />
-                      <el-input v-if="col.action.type==='uri'" v-model="col.action.uri" placeholder="https://..." size="small" style="margin-top:0.4rem;" />
-                      <el-input v-else-if="col.action.type==='message'" v-model="col.action.text" placeholder="點擊後傳送的文字" size="small" style="margin-top:0.4rem;" />
+                      <div class="carousel-actions" style="margin-top:0.75rem;">
+                        <div class="carousel-action-row">
+                          <div class="carousel-action-row-top">
+                            <span class="carousel-action-index">圖片動作</span>
+                          </div>
+                          <el-select v-model="col.action.type" size="small" style="width:100%;">
+                            <el-option value="none" label="未有行動" />
+                            <el-option value="uri" label="開啟網址" />
+                            <el-option value="message" label="傳送文字" />
+                          </el-select>
+                          <el-input
+                            v-if="col.action.type !== 'none'"
+                            v-model="col.action.label"
+                            placeholder="按鈕文字 (必填)"
+                            maxlength="20"
+                            size="small"
+                          />
+                          <el-input v-if="col.action.type==='uri'" v-model="col.action.uri" placeholder="https://..." size="small" />
+                          <el-input v-else-if="col.action.type==='message'" v-model="col.action.text" placeholder="點擊後傳送的文字" size="small" />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </template>

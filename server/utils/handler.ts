@@ -202,8 +202,8 @@ function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
           } else if (actionType === 'message') {
             action = { type: 'message', label: (col.action.label || '傳送').slice(0, 20), text: (col.action.text || '').slice(0, 300) }
           } else {
-            // LINE API requires an action for image_carousel. If 'none', use a silent postback.
-            action = { type: 'postback', label: ' ', data: 'ignore' }
+            // LINE API requires an action for image_carousel. If 'none', use a silent postback without label.
+            action = { type: 'postback', data: 'ignore' }
           }
           return { imageUrl: col.imageUrl, action }
         })
