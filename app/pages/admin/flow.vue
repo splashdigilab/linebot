@@ -185,9 +185,20 @@
 
                 <!-- Carousel sub-cards -->
                 <template v-if="msg.type === 'carousel'">
-                  <div v-for="(col, ci) in msg.columns" :key="ci" class="carousel-sub-card">
+                  <div
+                    v-for="(col, ci) in msg.columns" :key="ci"
+                    class="carousel-sub-card"
+                    :class="{ 'col-dragging': colDragMsgIndex === i && colDragIndex === ci, 'col-drag-over': colDragMsgIndex === i && colDragOverIndex === ci && colDragIndex !== ci }"
+                    @dragover.prevent.stop="onColDragOver($event, i, ci)"
+                    @dragenter.prevent.stop
+                    @dragleave.stop="onColDragLeave"
+                    @drop.stop="onColDrop($event, i, ci)"
+                  >
                     <div class="carousel-card-top">
-                      <span class="carousel-card-idx">{{ Number(ci) + 1 }}</span>
+                      <div class="flex gap-1 items-center">
+                        <span class="drag-handle" draggable="true" @dragstart.stop="onColDragStart($event, i, ci)" @dragend.stop="onColDragEnd">⠿</span>
+                        <span class="carousel-card-idx">{{ Number(ci) + 1 }}</span>
+                      </div>
                       <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(ci, 1)">✕</el-button>
                     </div>
                     <div class="carousel-sub-body">
@@ -224,9 +235,20 @@
 
                 <!-- imageCarousel sub-cards -->
                 <template v-else>
-                  <div v-for="(col, ci) in msg.columns" :key="ci" class="carousel-sub-card">
+                  <div
+                    v-for="(col, ci) in msg.columns" :key="ci"
+                    class="carousel-sub-card"
+                    :class="{ 'col-dragging': colDragMsgIndex === i && colDragIndex === ci, 'col-drag-over': colDragMsgIndex === i && colDragOverIndex === ci && colDragIndex !== ci }"
+                    @dragover.prevent.stop="onColDragOver($event, i, ci)"
+                    @dragenter.prevent.stop
+                    @dragleave.stop="onColDragLeave"
+                    @drop.stop="onColDrop($event, i, ci)"
+                  >
                     <div class="carousel-card-top">
-                      <span class="carousel-card-idx">{{ Number(ci) + 1 }}</span>
+                      <div class="flex gap-1 items-center">
+                        <span class="drag-handle" draggable="true" @dragstart.stop="onColDragStart($event, i, ci)" @dragend.stop="onColDragEnd">⠿</span>
+                        <span class="carousel-card-idx">{{ Number(ci) + 1 }}</span>
+                      </div>
                       <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(ci, 1)">✕</el-button>
                     </div>
                     <div class="carousel-sub-body">
@@ -294,6 +316,11 @@ const toasts = ref<{ id: number; msg: string; type: 'success' | 'error' }[]>([])
 // Drag and Drop State
 const dragIndex = ref<number | null>(null)
 const dragOverIndex = ref<number | null>(null)
+
+// Carousel column Drag and Drop State
+const colDragMsgIndex = ref<number | null>(null)
+const colDragIndex = ref<number | null>(null)
+const colDragOverIndex = ref<number | null>(null)
 
 const defaultForm = () => ({
   name: '',
@@ -470,6 +497,46 @@ function onDrop(e: DragEvent, dropIndex: number) {
   }
   dragIndex.value = null
   dragOverIndex.value = null
+}
+
+// ── Carousel Column Drag and Drop ──────────────────────────
+function onColDragStart(e: DragEvent, msgIndex: number, colIndex: number) {
+  colDragMsgIndex.value = msgIndex
+  colDragIndex.value = colIndex
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.dropEffect = 'move'
+    e.dataTransfer.setData('text/plain', colIndex.toString())
+  }
+  setTimeout(() => {}, 0)
+}
+
+function onColDragOver(e: DragEvent, msgIndex: number, colIndex: number) {
+  if (colDragMsgIndex.value === msgIndex) {
+    colDragOverIndex.value = colIndex
+  }
+}
+
+function onColDragLeave() {
+  colDragOverIndex.value = null
+}
+
+function onColDragEnd() {
+  colDragMsgIndex.value = null
+  colDragIndex.value = null
+  colDragOverIndex.value = null
+}
+
+function onColDrop(e: DragEvent, msgIndex: number, dropIndex: number) {
+  if (colDragMsgIndex.value === msgIndex && colDragIndex.value !== null && colDragIndex.value !== dropIndex) {
+    const fromIndex = colDragIndex.value
+    const columns = form.value.messages[msgIndex].columns
+    const item = columns.splice(fromIndex, 1)[0]
+    columns.splice(dropIndex, 0, item)
+  }
+  colDragMsgIndex.value = null
+  colDragIndex.value = null
+  colDragOverIndex.value = null
 }
 
 // ── Save / Delete ─────────────────────────────────────

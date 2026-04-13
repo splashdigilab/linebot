@@ -336,6 +336,13 @@
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.15s, opacity 0.15s, transform 0.15s;
+}
+
+.carousel-sub-card.col-dragging { opacity: 0.35; transform: scale(0.98); }
+.carousel-sub-card.col-drag-over {
+  border-color: var(--color-line);
+  box-shadow: 0 0 0 2px rgba(6,199,85,0.15); /* Green glow */
 }
 
 /* Sub-card top bar (index badge + delete) */
