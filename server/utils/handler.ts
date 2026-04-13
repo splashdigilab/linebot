@@ -158,11 +158,12 @@ function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
           } else if (actionType === 'message') {
             action = { type: 'message', label: (col.action.label || '傳送').slice(0, 20), text: (col.action.text || '').slice(0, 300) }
           } else {
-            // 'none' or missing — LINE requires an action, use a no-op message
-            action = { type: 'message', label: '　', text: '　' }
+            // For "none", skip this column to avoid rendering empty button-like actions.
+            return null
           }
           return { imageUrl: col.imageUrl, action }
         })
+        .filter((col: any) => col !== null)
       if (!columns.length) return []
       return [{
         type: 'template',

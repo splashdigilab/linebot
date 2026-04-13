@@ -237,6 +237,14 @@
                         <el-option value="uri" label="開啟網址" />
                         <el-option value="message" label="傳送文字" />
                       </el-select>
+                      <el-input
+                        v-if="col.action.type !== 'none'"
+                        v-model="col.action.label"
+                        placeholder="按鈕文字 (必填)"
+                        maxlength="20"
+                        size="small"
+                        style="margin-top:0.4rem;"
+                      />
                       <el-input v-if="col.action.type==='uri'" v-model="col.action.uri" placeholder="https://..." size="small" style="margin-top:0.4rem;" />
                       <el-input v-else-if="col.action.type==='message'" v-model="col.action.text" placeholder="點擊後傳送的文字" size="small" style="margin-top:0.4rem;" />
                     </div>
@@ -572,8 +580,14 @@ function validateMessages(messages: any[]): string | null {
     if (msg?.type === 'imageCarousel' && Array.isArray(msg.columns)) {
       for (const col of msg.columns) {
         const action = col?.action
-        if (action?.type === 'uri' && !action?.uri?.trim()) return '圖片輪播網址為必填'
-        if (action?.type === 'message' && !action?.text?.trim()) return '圖片輪播傳送文字為必填'
+        if (action?.type === 'uri') {
+          if (!action?.label?.trim()) return '圖片輪播按鈕文字為必填'
+          if (!action?.uri?.trim()) return '圖片輪播網址為必填'
+        }
+        if (action?.type === 'message') {
+          if (!action?.label?.trim()) return '圖片輪播按鈕文字為必填'
+          if (!action?.text?.trim()) return '圖片輪播傳送文字為必填'
+        }
       }
     }
   }
