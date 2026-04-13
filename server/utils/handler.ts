@@ -4,6 +4,30 @@ import { getDb } from './firebase'
 import { replyMessage, getUserProfile, linkRichMenuIdToUser } from './line'
 import { FieldValue } from 'firebase-admin/firestore'
 
+// ── In-Memory Caching to Reduce DB Latency ──────────────────────────
+const userCheckedCache = new Set<string>()
+
+interface CacheEntry<T> {
+  data: T
+  expires: number
+}
+const flowDocCache = new Map<string, CacheEntry<FlowDoc | null>>()
+
+// Cache lifetime in milliseconds (e.g., 30 seconds to allow fast updates but cache burst traffic)
+const CACHE_TTL_MS = 30 * 1000
+
+function getCached<T>(map: Map<string, CacheEntry<T>>, key: string): T | undefined {
+  const cached = map.get(key)
+  if (cached && cached.expires > Date.now()) {
+    return cached.data
+  }
+  return undefined
+}
+
+function setCache<T>(map: Map<string, CacheEntry<T>>, key: string, data: T) {
+  map.set(key, { data, expires: Date.now() + CACHE_TTL_MS })
+}
+
 // ── Type Definitions ──────────────────────────────────────────────
 
 interface FlowDoc {
@@ -21,9 +45,12 @@ interface UserDoc {
 // ── Helpers ───────────────────────────────────────────────────────
 
 async function ensureUser(userId: string): Promise<void> {
+  if (userCheckedCache.has(userId)) return
+
   const db = getDb()
   const ref = db.collection('users').doc(userId)
   const snap = await ref.get()
+  
   if (!snap.exists) {
     const profile = await getUserProfile(userId)
     await ref.set({
@@ -32,9 +59,15 @@ async function ensureUser(userId: string): Promise<void> {
       createdAt: FieldValue.serverTimestamp(),
     } satisfies UserDoc)
   }
+  // Record that we've checked this user, so we don't query Firestore again in this instance
+  userCheckedCache.add(userId)
 }
 
 async function matchFlow(trigger: string): Promise<FlowDoc | null> {
+  const cacheKey = `trigger:${trigger}`
+  const cachedFlow = getCached(flowDocCache, cacheKey)
+  if (cachedFlow !== undefined) return cachedFlow
+
   const db = getDb()
 
   // Step 1: Look in autoReplies collection for a matching keyword
@@ -49,7 +82,9 @@ async function matchFlow(trigger: string): Promise<FlowDoc | null> {
     const rule = autoReplySnap.docs[0].data()
     const moduleSnap = await db.collection('flows').doc(rule.moduleId).get()
     if (moduleSnap.exists && moduleSnap.data()?.isActive) {
-      return moduleSnap.data() as FlowDoc
+      const result = moduleSnap.data() as FlowDoc
+      setCache(flowDocCache, cacheKey, result)
+      return result
     }
   }
 
@@ -60,7 +95,11 @@ async function matchFlow(trigger: string): Promise<FlowDoc | null> {
     .where('isActive', '==', true)
     .limit(1)
     .get()
-  if (!legacySnap.empty) return legacySnap.docs[0].data() as FlowDoc
+  if (!legacySnap.empty) {
+    const result = legacySnap.docs[0].data() as FlowDoc
+    setCache(flowDocCache, cacheKey, result)
+    return result
+  }
 
   const legacyStrSnap = await db
     .collection('flows')
@@ -68,8 +107,13 @@ async function matchFlow(trigger: string): Promise<FlowDoc | null> {
     .where('isActive', '==', true)
     .limit(1)
     .get()
-  if (legacyStrSnap.empty) return null
-  return legacyStrSnap.docs[0].data() as FlowDoc
+  if (legacyStrSnap.empty) {
+    setCache(flowDocCache, cacheKey, null)
+    return null
+  }
+  const result = legacyStrSnap.docs[0].data() as FlowDoc
+  setCache(flowDocCache, cacheKey, result)
+  return result
 }
 
 // ── Main Event Handlers ───────────────────────────────────────────
@@ -183,7 +227,8 @@ export async function handleMessageEvent(event: webhook.MessageEvent): Promise<v
   const userId = event.source?.userId
   if (!userId) return
 
-  await ensureUser(userId)
+  // Run ensureUser concurrently so we don't block the reply process
+  const ensureUserTask = ensureUser(userId).catch(e => console.error('[ensureUser] Error:', e))
 
   // Auto reply: match keyword flows
   if (event.message.type === 'text') {
@@ -193,6 +238,9 @@ export async function handleMessageEvent(event: webhook.MessageEvent): Promise<v
       await replyMessage(event.replyToken, buildLineMessages(flow.messages))
     }
   }
+
+  // Await the background task before returning
+  await ensureUserTask
 }
 
 export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise<void> {
@@ -200,7 +248,8 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
   const userId = event.source?.userId
   if (!userId) return
 
-  await ensureUser(userId)
+  // Run ensureUser concurrently so we don't block the reply process
+  const ensureUserTask = ensureUser(userId).catch(e => console.error('[ensureUser] Error:', e))
 
   const data = event.postback.data
 
@@ -216,6 +265,7 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
       // 若伺服器再重複打一次 link API 反而會造成選單「閃屏重新載入」一次。
       // 所以此處直接 return 略過即可。
       console.log('[switchMenu] Handled by native richmenuswitch instantly, skipping redundant link API.')
+      await ensureUserTask
       return
     }
 
@@ -236,22 +286,37 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
     } else {
       console.warn('[switchMenu] doc not found or missing richMenuId')
     }
+    await ensureUserTask
     return // Stop further processing
   }
   // Handle direct module trigger
   if (data.startsWith('triggerModule=')) {
     const moduleId = data.replace('triggerModule=', '')
-    const db = getDb()
-    const modSnap = await db.collection('flows').doc(moduleId).get()
+    const cacheKey = `flow:${moduleId}`
     
-    if (modSnap.exists && modSnap.data()?.isActive) {
-      const flow = modSnap.data() as FlowDoc
+    let flow: FlowDoc | null = undefined
+    const cachedFlow = getCached(flowDocCache, cacheKey)
+    if (cachedFlow !== undefined) {
+      flow = cachedFlow
+    } else {
+      const db = getDb()
+      const modSnap = await db.collection('flows').doc(moduleId).get()
+      if (modSnap.exists && modSnap.data()?.isActive) {
+        flow = modSnap.data() as FlowDoc
+      } else {
+        flow = null
+      }
+      setCache(flowDocCache, cacheKey, flow)
+    }
+
+    if (flow) {
       if (event.replyToken) {
         await replyMessage(event.replyToken, buildLineMessages(flow.messages))
       }
     } else {
       console.warn('[webhook] triggerModule target not found or inactive:', moduleId)
     }
+    await ensureUserTask
     return
   }
 
@@ -260,5 +325,7 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
   if (flow && event.replyToken) {
     await replyMessage(event.replyToken, buildLineMessages(flow.messages))
   }
+
+  await ensureUserTask
 }
 
