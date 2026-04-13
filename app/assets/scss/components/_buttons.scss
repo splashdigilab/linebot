@@ -1,0 +1,38 @@
+/* ── Buttons ─────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1.15rem;
+  border-radius: var(--radius-md);
+  font-size: 0.875rem;
+  font-weight: 600;
+  transition: all var(--t-fast);
+  border: 1px solid transparent;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-primary {
+  background: var(--color-line);
+  color: var(--bg-base);
+  box-shadow: 0 2px 8px var(--color-line-glow);
+}
+.btn-primary:hover { background: var(--color-line-dark); box-shadow: var(--shadow-glow); }
+
+.btn-secondary {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+.btn-secondary:hover { background: var(--bg-hover); border-color: rgba(255,255,255,0.15); }
+
+.btn-danger { background: rgba(0,0,0,0.1); color: var(--color-error); border-color: rgba(0,0,0,0.2); }
+.btn-danger:hover { background: rgba(0,0,0,0.15); }
+
+.btn-ghost { color: var(--text-secondary); }
+.btn-ghost:hover { color: var(--text-primary); background: var(--bg-hover); }
+
+.btn-sm { padding: 0.35rem 0.75rem; font-size: 0.8rem; }
+.btn-lg { padding: 0.75rem 1.5rem; font-size: 1rem; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }

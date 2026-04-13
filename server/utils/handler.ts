@@ -76,10 +76,10 @@ async function matchFlow(trigger: string): Promise<FlowDoc | null> {
 
 function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
   if (!dbMessages) return []
-  return dbMessages.map((msg) => {
-    // Transform text with buttons to LINE's buttons template
+  return dbMessages.flatMap((msg) => {
+    // ── Text with buttons → Buttons Template ──
     if (msg.type === 'text' && msg.buttons && msg.buttons.length > 0) {
-      return {
+      return [{
         type: 'template',
         altText: msg.text.slice(0, 400),
         template: {
@@ -92,13 +92,69 @@ function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
             return { type: 'message', label: (b.label || '點擊傳送').slice(0, 20), text: (b.text || b.label || '點擊傳送').slice(0, 300) }
           }),
         },
-      } as messagingApi.TemplateMessage
+      } as messagingApi.TemplateMessage]
     }
-    // Clean up internal keys before sending to LINE
+
+    // ── Video ──
+    if (msg.type === 'video') {
+      if (!msg.originalContentUrl || !msg.previewImageUrl) return []
+      return [{
+        type: 'video',
+        originalContentUrl: msg.originalContentUrl,
+        previewImageUrl: msg.previewImageUrl,
+      } as messagingApi.VideoMessage]
+    }
+
+    // ── Carousel ──
+    if (msg.type === 'carousel') {
+      const columns = (msg.columns ?? []).map((col: any) => ({
+        thumbnailImageUrl: col.thumbnailImageUrl || undefined,
+        title: (col.title || '').slice(0, 80) || undefined,
+        text: (col.text || '　').slice(0, 300),
+        actions: (col.actions ?? []).slice(0, 3).map((a: any) => {
+          if (a.type === 'uri') return { type: 'uri', label: (a.label || '').slice(0, 20), uri: a.uri || 'https://google.com' }
+          return { type: 'message', label: (a.label || '').slice(0, 20), text: (a.text || a.label || '').slice(0, 300) }
+        }),
+      }))
+      if (!columns.length) return []
+      return [{
+        type: 'template',
+        altText: (msg.altText || '輪播訊息').slice(0, 400),
+        template: { type: 'carousel', columns },
+      } as messagingApi.TemplateMessage]
+    }
+
+    // ── Image Carousel ──
+    if (msg.type === 'imageCarousel') {
+      const columns = (msg.columns ?? [])
+        .filter((col: any) => col.imageUrl)
+        .map((col: any) => {
+          const actionType = col.action?.type
+          let action: any
+          if (actionType === 'uri') {
+            action = { type: 'uri', label: (col.action.label || '開啟').slice(0, 20), uri: col.action.uri || 'https://google.com' }
+          } else if (actionType === 'message') {
+            action = { type: 'message', label: (col.action.label || '傳送').slice(0, 20), text: (col.action.text || '').slice(0, 300) }
+          } else {
+            // 'none' or missing — LINE requires an action, use a no-op message
+            action = { type: 'message', label: '　', text: '　' }
+          }
+          return { imageUrl: col.imageUrl, action }
+        })
+      if (!columns.length) return []
+      return [{
+        type: 'template',
+        altText: (msg.altText || '圖片輪播').slice(0, 400),
+        template: { type: 'image_carousel', columns },
+      } as messagingApi.TemplateMessage]
+    }
+
+    // ── Default: plain text / image ──
     const { buttons, ...cleanMsg } = msg
-    return cleanMsg as messagingApi.Message
+    return [cleanMsg as messagingApi.Message]
   })
 }
+
 
 export async function handleMessageEvent(event: webhook.MessageEvent): Promise<void> {
   const userId = event.source?.userId

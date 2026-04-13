@@ -23,10 +23,17 @@ export default defineEventHandler(async (event) => {
   const bucket = storage.bucket()
   
   // Decide extension
-  const isJpeg = contentType === 'image/jpeg' || contentType === 'image/jpg'
-  const ext = isJpeg ? 'jpg' : 'png'
-  
-  const fileName = `uploads/${id}.${ext}`
+  const extMap: Record<string, string> = {
+    'image/jpeg': 'jpg',
+    'image/jpg': 'jpg',
+    'image/png': 'png',
+    'video/mp4': 'mp4',
+    'video/quicktime': 'mov',
+  }
+  const ext = extMap[contentType ?? ''] ?? 'bin'
+  const folder = (contentType ?? '').startsWith('video/') ? 'videos' : 'uploads'
+
+  const fileName = `${folder}/${id}.${ext}`
   const file = bucket.file(fileName)
   
   await file.save(imageBuffer, { contentType: contentType ?? 'image/png' })
