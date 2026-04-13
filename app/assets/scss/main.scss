@@ -1,31 +1,31 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
 /* ── Core ────────────────────────────────────────────────────── */
-@import "./core/variables";
-@import "./core/mixins";
+@use "./core/variables";
+@use "./core/mixins";
 
 /* ── Base ────────────────────────────────────────────────────── */
-@import "./base/reset";
-@import "./base/utilities";
+@use "./base/reset";
+@use "./base/utilities";
 
 /* ── Layout ──────────────────────────────────────────────────── */
-@import "./layout/main";
-@import "./layout/sidebar";
-@import "./layout/split-layout";
+@use "./layout/main";
+@use "./layout/sidebar";
+@use "./layout/split-layout";
 
 /* ── Components ──────────────────────────────────────────────── */
-@import "./components/buttons";
-@import "./components/cards";
-@import "./components/tables";
-@import "./components/badges";
-@import "./components/modals";
-@import "./components/forms";
-@import "./components/toasts";
-@import "./components/empty-state";
-@import "./components/loading";
+@use "./components/buttons";
+@use "./components/cards";
+@use "./components/tables";
+@use "./components/badges";
+@use "./components/modals";
+@use "./components/forms";
+@use "./components/toasts";
+@use "./components/empty-state";
+@use "./components/loading";
 
 /* ── Page Splitting ───────────────────────────────────────── */
-@import "./pages/dashboard";
-@import "./pages/richmenu";
-@import "./pages/flow";
-@import "./pages/auto-reply";
+@use "./pages/dashboard";
+@use "./pages/richmenu";
+@use "./pages/flow";
+@use "./pages/auto-reply";
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');

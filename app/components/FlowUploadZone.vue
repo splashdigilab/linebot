@@ -43,7 +43,7 @@ import {
   VIDEO_ACCEPT_ATTR,
   VIDEO_MAX_BYTES,
   VIDEO_MIME_TYPES,
-} from '../../shared/upload-rules'
+} from '~~/shared/upload-rules'
 
 const props = defineProps<{
   modelValue: string

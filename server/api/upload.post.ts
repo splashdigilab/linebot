@@ -5,7 +5,7 @@ import {
   IMAGE_MIME_TYPES,
   VIDEO_MAX_BYTES,
   VIDEO_MIME_TYPES,
-} from '../../shared/upload-rules'
+} from '~~/shared/upload-rules'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)

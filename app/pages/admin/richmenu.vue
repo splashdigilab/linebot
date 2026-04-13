@@ -286,7 +286,7 @@ import {
   IMAGE_ACCEPT_ATTR,
   IMAGE_MAX_BYTES,
   IMAGE_MIME_TYPES,
-} from '../../../shared/upload-rules'
+} from '~~/shared/upload-rules'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
