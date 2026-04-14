@@ -13,8 +13,8 @@ interface CacheEntry<T> {
 }
 const flowDocCache = new Map<string, CacheEntry<FlowDoc | null>>()
 
-// Cache lifetime in milliseconds (e.g., 30 seconds to allow fast updates but cache burst traffic)
-const CACHE_TTL_MS = 30 * 1000
+// Cache lifetime in milliseconds (increased to 60s for better hit rate)
+const CACHE_TTL_MS = 60 * 1000
 
 function getCached<T>(map: Map<string, CacheEntry<T>>, key: string): T | undefined {
   const cached = map.get(key)
@@ -70,50 +70,49 @@ async function matchFlow(trigger: string): Promise<FlowDoc | null> {
 
   const db = getDb()
 
-  // Step 1: Look in autoReplies collection for a matching keyword
-  const autoReplySnap = await db
-    .collection('autoReplies')
-    .where('keyword', '==', trigger)
-    .where('isActive', '==', true)
-    .limit(1)
-    .get()
+  // Execute all potential lookups concurrently to reduce latency
+  const [autoReplySnap, legacySnap, legacyStrSnap] = await Promise.all([
+    db.collection('autoReplies').where('keyword', '==', trigger).where('isActive', '==', true).limit(1).get(),
+    db.collection('flows').where('triggers', 'array-contains', trigger).where('isActive', '==', true).limit(1).get(),
+    db.collection('flows').where('trigger', '==', trigger).where('isActive', '==', true).limit(1).get()
+  ])
 
+  // 1: Match against autoReplies collection
   if (!autoReplySnap.empty) {
     const rule = autoReplySnap.docs[0].data()
+    // try to get from cache first
+    const moduleCacheKey = `flow:${rule.moduleId}`
+    let moduleFlow = getCached(flowDocCache, moduleCacheKey)
+    if (moduleFlow) {
+      setCache(flowDocCache, cacheKey, moduleFlow)
+      return moduleFlow
+    }
+
     const moduleSnap = await db.collection('flows').doc(rule.moduleId).get()
     if (moduleSnap.exists && moduleSnap.data()?.isActive) {
       const result = moduleSnap.data() as FlowDoc
+      setCache(flowDocCache, moduleCacheKey, result)
       setCache(flowDocCache, cacheKey, result)
       return result
     }
   }
 
-  // Legacy fallback: direct trigger match on flows collection (backward compatibility)
-  const legacySnap = await db
-    .collection('flows')
-    .where('triggers', 'array-contains', trigger)
-    .where('isActive', '==', true)
-    .limit(1)
-    .get()
+  // 2: Legacy fallback (array form)
   if (!legacySnap.empty) {
     const result = legacySnap.docs[0].data() as FlowDoc
     setCache(flowDocCache, cacheKey, result)
     return result
   }
 
-  const legacyStrSnap = await db
-    .collection('flows')
-    .where('trigger', '==', trigger)
-    .where('isActive', '==', true)
-    .limit(1)
-    .get()
-  if (legacyStrSnap.empty) {
-    setCache(flowDocCache, cacheKey, null)
-    return null
+  // 3: Legacy fallback (string form)
+  if (!legacyStrSnap.empty) {
+    const result = legacyStrSnap.docs[0].data() as FlowDoc
+    setCache(flowDocCache, cacheKey, result)
+    return result
   }
-  const result = legacyStrSnap.docs[0].data() as FlowDoc
-  setCache(flowDocCache, cacheKey, result)
-  return result
+
+  setCache(flowDocCache, cacheKey, null)
+  return null
 }
 
 // ── Main Event Handlers ───────────────────────────────────────────
