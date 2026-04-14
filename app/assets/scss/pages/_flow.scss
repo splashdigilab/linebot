@@ -481,3 +481,123 @@
 .toggle-switch.on .toggle-thumb {
   left: calc(100% - 18px);
 }
+
+/* ══════════════════════════════════════════════════════════
+   Quick Replies (qr)
+══════════════════════════════════════════════════════════ */
+.quick-reply-wrapper {
+  padding: 0 1rem 1rem 1rem;
+  margin-top: auto;
+  border-top: 1px dashed var(--border);
+  background: var(--bg-surface);
+}
+
+.qr-rail {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.qr-pill-card {
+  flex-shrink: 0;
+  width: 220px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 1.5rem; /* Pill like appearance */
+  padding: 0.75rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.15s;
+  position: relative;
+}
+
+.qr-pill-card:hover {
+  border-color: var(--color-line);
+  box-shadow: var(--shadow-md);
+}
+
+.qr-pill-card.qr-invalid {
+  border-color: #ef4444; /* Red border like in Figure 1 for not configured */
+}
+
+/* Dragging state */
+.qr-pill-card.qr-dragging {
+  opacity: 0.4;
+  transform: scale(0.95);
+}
+.qr-pill-card.qr-drag-over {
+  border-color: var(--color-line);
+  box-shadow: 0 0 0 2px rgba(6,199,85,0.15);
+}
+
+/* Top row inside pill: Action type/Status and Delete */
+.qr-pill-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+}
+
+.qr-pill-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* Middle: Form controls (Type select, Label input etc.) */
+.qr-pill-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* Bottom: Drag handler horizontally centered */
+.qr-pill-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.25rem;
+}
+
+.qr-drag-handle {
+  cursor: grab;
+  color: var(--text-muted);
+  opacity: 0.5;
+  font-size: 1.2rem;
+  line-height: 1;
+  padding: 0 0.5rem;
+}
+.qr-drag-handle:hover {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+.qr-drag-handle:active {
+  cursor: grabbing;
+}
+
+.qr-add-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 48px; /* Rough height of collapsed pill */
+  border: 1px dashed var(--border);
+  border-radius: 1.5rem;
+  background: transparent;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1.2rem;
+  transition: all 0.15s;
+}
+
+.qr-add-btn:hover {
+  border-color: var(--color-line);
+  color: var(--color-line);
+  background: var(--color-line-glow);
+}

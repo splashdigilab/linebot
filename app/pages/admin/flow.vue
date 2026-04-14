@@ -78,6 +78,7 @@
             <el-button size="small" @click="addMessage('video')">＋ 影片</el-button>
             <el-button size="small" @click="addMessage('carousel')">＋ 輪播</el-button>
             <el-button size="small" @click="addMessage('imageCarousel')">＋ 圖片輪播</el-button>
+            <el-button size="small" @click="addMessage('quickReply')">＋ 快速回覆</el-button>
           </div>
         </div>
 
@@ -93,7 +94,7 @@
 
             <!-- ── Normal card: text / image / video ── -->
             <div
-              v-if="!isCarouselType(msg.type)"
+              v-if="msg.type === 'text' || msg.type === 'image' || msg.type === 'video'"
               class="message-card"
               :class="{ dragging: dragIndex === i, 'drag-over': dragOverIndex === i && dragIndex !== i }"
               @dragover.prevent="onDragOver($event, i)"
@@ -128,9 +129,13 @@
                     <el-select v-model="btn.type" size="small" style="width:100%;">
                       <el-option value="uri" label="開網址" />
                       <el-option value="message" label="傳文字" />
+                      <el-option value="module" label="觸發模組" />
                     </el-select>
                     <el-input v-model="btn.label" placeholder="按鈕文字" maxlength="20" size="small" />
-                    <el-input v-if="btn.type === 'uri'" v-model="btn.uri" placeholder="https://..." size="small" />
+                    <el-select v-if="btn.type === 'module'" v-model="btn.moduleId" placeholder="選擇機器人模組" size="small" style="width: 100%;">
+                      <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
+                    </el-select>
+                    <el-input v-else-if="btn.type === 'uri'" v-model="btn.uri" placeholder="https://..." size="small" />
                     <el-input v-else v-model="btn.text" placeholder="傳送文字" size="small" />
                   </div>
                 </div>
@@ -149,13 +154,93 @@
                 <p class="fuz-section-label">預覽圖片 <span class="text-muted">(長寬大小與影片一樣)</span></p>
                 <FlowUploadZone v-model="msg.previewImageUrl" type="image" label="點擊上傳預覽圖" hint="建議與影片同尺寸" />
                 <p class="fuz-section-label" style="margin-top: 0.75rem;">影片檔案 <span class="text-muted">(大小不可超過 5 MB)</span></p>
-                <FlowUploadZone v-model="msg.originalContentUrl" type="video" label="點擊上傳影片" hint="支援 MP4，最大 5MB" />
+              </div>
+            </div>
+
+            <!-- ── Quick Reply block (Carousel layout) ── -->
+            <div
+              v-else-if="msg.type === 'quickReply'"
+              class="carousel-block"
+              :class="{ dragging: dragIndex === i, 'drag-over': dragOverIndex === i && dragIndex !== i }"
+              @dragover.prevent="onDragOver($event, i)"
+              @dragenter.prevent
+              @dragleave="onDragLeave"
+              @drop="onDrop($event, i)"
+            >
+              <!-- Parent Config Card -->
+              <div class="message-card">
+                <div class="message-card-header">
+                  <div class="flex gap-1" style="align-items: center;">
+                    <span class="drag-handle" draggable="true" @dragstart="onDragStart($event, i)" @dragend="onDragEnd">⠿</span>
+                    <span class="badge badge-purple">⚡ 快速回覆</span>
+                  </div>
+                  <el-button link type="danger" style="padding:0.1rem 0.4rem;" @click="removeMessage(i)">✕</el-button>
+                </div>
+                <!-- Text input for the bubble! -->
+                <div class="carousel-alt-wrap" style="padding: 1rem; display: flex; flex-direction: column; gap: 0.65rem;">
+                  <p class="fuz-section-label" style="margin-bottom:0;">搭配的文字內容 <span class="text-muted">(必需輸入)</span></p>
+                  <el-input
+                    v-model="msg.text"
+                    type="textarea"
+                    :rows="2"
+                    placeholder="請輸入主要回覆文字..."
+                    maxlength="5000"
+                    show-word-limit
+                  />
+                </div>
+              </div>
+
+              <!-- Sub-card horizontal rail ── -->
+              <div class="carousel-cards-scroll" style="margin-top: 0.25rem;">
+                <div
+                  v-for="(qr, qi) in msg.quickReplies" :key="qi"
+                  class="carousel-sub-card"
+                  :class="{ 'col-dragging': qrDragMsgIndex === i && qrDragIndex === qi, 'col-drag-over': qrDragMsgIndex === i && qrDragOverIndex === qi && qrDragIndex !== qi }"
+                  @dragover.prevent.stop="onQrDragOver($event, i, qi)"
+                  @dragenter.prevent.stop
+                  @dragleave.stop="onQrDragLeave"
+                  @drop.stop="onQrDrop($event, i, qi)"
+                >
+                  <div class="carousel-card-top">
+                    <div class="flex gap-1 items-center">
+                      <span class="drag-handle" draggable="true" @dragstart.stop="onQrDragStart($event, i, qi)" @dragend.stop="onQrDragEnd">⠿</span>
+                      <span class="carousel-card-idx">{{ Number(qi) + 1 }}</span>
+                    </div>
+                    <el-button link type="danger" size="small" @click="removeQuickReply(msg, qi)">✕</el-button>
+                  </div>
+                  <div class="carousel-sub-body" style="padding-top: 0.5rem;">
+                    <!-- Action Config -->
+                    <div class="carousel-actions">
+                      <div class="carousel-action-row">
+                        <div class="carousel-action-row-top">
+                          <span class="carousel-action-index">按鈕動作</span>
+                        </div>
+                        <el-select v-model="qr.action.type" size="small" style="width: 100%;">
+                          <el-option value="message" label="傳送文字" />
+                          <el-option value="uri" label="開啟網址" />
+                          <el-option value="module" label="觸發模組" />
+                        </el-select>
+                        <el-input v-model="qr.action.label" placeholder="按鈕名稱 (必填，限 20 字)" maxlength="20" size="small" show-word-limit />
+                        <el-select v-if="qr.action.type === 'module'" v-model="qr.action.moduleId" placeholder="選擇機器人模組" size="small" style="width: 100%;">
+                          <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
+                        </el-select>
+                        <el-input v-else-if="qr.action.type === 'message'" v-model="qr.action.text" placeholder="回覆文字" size="small" />
+                        <el-input v-else-if="qr.action.type === 'uri'" v-model="qr.action.uri" placeholder="https://..." size="small" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Add Button -->
+                <button v-if="!msg.quickReplies || msg.quickReplies.length < 13" class="carousel-add-card" @click="addQuickReply(msg)">
+                  <span style="font-size:1.5rem;color:var(--text-muted);">＋</span>
+                </button>
               </div>
             </div>
 
             <!-- ── Carousel block (flat stretch, but parent config is a standard card) ── -->
             <div
-              v-else
+              v-else-if="msg.type === 'carousel' || msg.type === 'imageCarousel'"
               class="carousel-block"
               :class="{ dragging: dragIndex === i, 'drag-over': dragOverIndex === i && dragIndex !== i }"
               @dragover.prevent="onDragOver($event, i)"
@@ -230,9 +315,13 @@
                           <el-select v-model="act.type" size="small" style="width:100%;">
                             <el-option value="uri" label="開網址" />
                             <el-option value="message" label="傳文字" />
+                            <el-option value="module" label="觸發模組" />
                           </el-select>
                           <el-input v-model="act.label" placeholder="按鈕文字" maxlength="20" size="small" />
-                          <el-input v-if="act.type==='uri'" v-model="act.uri" placeholder="https://..." size="small" />
+                          <el-select v-if="act.type === 'module'" v-model="act.moduleId" placeholder="選擇機器人模組" size="small" style="width: 100%;">
+                            <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
+                          </el-select>
+                          <el-input v-else-if="act.type==='uri'" v-model="act.uri" placeholder="https://..." size="small" />
                           <el-input v-else v-model="act.text" placeholder="傳送文字" size="small" />
                         </div>
                       </div>
@@ -270,6 +359,7 @@
                             <el-option value="none" label="未有行動" />
                             <el-option value="uri" label="開啟網址" />
                             <el-option value="message" label="傳送文字" />
+                            <el-option value="module" label="觸發模組" />
                           </el-select>
                           <el-input
                             v-if="col.action.type !== 'none'"
@@ -278,7 +368,10 @@
                             maxlength="20"
                             size="small"
                           />
-                          <el-input v-if="col.action.type==='uri'" v-model="col.action.uri" placeholder="https://..." size="small" />
+                          <el-select v-if="col.action.type === 'module'" v-model="col.action.moduleId" placeholder="選擇機器人模組" size="small" style="width: 100%;">
+                            <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
+                          </el-select>
+                          <el-input v-else-if="col.action.type==='uri'" v-model="col.action.uri" placeholder="https://..." size="small" />
                           <el-input v-else-if="col.action.type==='message'" v-model="col.action.text" placeholder="點擊後傳送的文字" size="small" />
                         </div>
                       </div>
@@ -335,6 +428,12 @@ const colDragMsgIndex = ref<number | null>(null)
 const colDragIndex = ref<number | null>(null)
 const colDragOverIndex = ref<number | null>(null)
 
+// Quick Reply Drag and Drop State
+const qrDragMsgIndex = ref<number | null>(null)
+const qrDragIndex = ref<number | null>(null)
+const qrDragOverIndex = ref<number | null>(null)
+
+
 const defaultForm = () => ({
   name: '',
   messages: [] as any[],
@@ -350,6 +449,7 @@ const MSG_META: Record<string, { label: string; badge: string }> = {
   video:         { label: '🎬 影片訊息', badge: 'badge-gray'   },
   carousel:      { label: '🎠 輪播訊息', badge: 'badge-green'  },
   imageCarousel: { label: '🖼️ 圖片輪播', badge: 'badge-gray'  },
+  quickReply:    { label: '⚡ 快速回覆', badge: 'badge-purple' },
 }
 
 function msgTypeLabel(type: string) {
@@ -419,8 +519,20 @@ function addMessage(type: string) {
       altText: '',
       columns: [newImageCarouselColumn()],
     })
+  } else if (type === 'quickReply') {
+    const existingIndex = form.value.messages.findIndex(m => m.type === 'quickReply')
+    if (existingIndex > -1) {
+      showToast('只能加入一個快速回覆區塊', 'error')
+      return
+    }
+    form.value.messages.push({
+      type: 'quickReply',
+      text: '',
+      quickReplies: [newQuickReplyAction()]
+    })
   }
 }
+
 
 function newCarouselColumn() {
   return {
@@ -440,6 +552,10 @@ function newImageCarouselColumn() {
     imageUrl: '',
     action: { type: 'none', uri: '', text: '', label: '' },
   }
+}
+
+function newQuickReplyAction() {
+  return { imageUrl: '', action: { type: 'message', label: '', text: '' } }
 }
 
 function addCarouselColumn(msg: any) {
@@ -476,6 +592,18 @@ function addButton(msg: any) {
 
 function removeButton(msg: any, bIdx: number) {
   if (msg.buttons) msg.buttons.splice(bIdx, 1)
+}
+
+// ── Quick Replies ─────────────────────────────────────
+function addQuickReply(msg: any) {
+  if (!msg.quickReplies) msg.quickReplies = []
+  if (msg.quickReplies.length < 13) {
+    msg.quickReplies.push(newQuickReplyAction())
+  }
+}
+
+function removeQuickReply(msg: any, qi: number) {
+  if (msg.quickReplies) msg.quickReplies.splice(qi, 1)
 }
 
 // ── Drag and Drop ─────────────────────────────────────
@@ -552,6 +680,46 @@ function onColDrop(e: DragEvent, msgIndex: number, dropIndex: number) {
   colDragOverIndex.value = null
 }
 
+// ── Quick Reply Drag and Drop ──────────────────────────
+function onQrDragStart(e: DragEvent, msgIndex: number, qrIndex: number) {
+  qrDragMsgIndex.value = msgIndex
+  qrDragIndex.value = qrIndex
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.dropEffect = 'move'
+    e.dataTransfer.setData('text/plain', qrIndex.toString())
+  }
+  setTimeout(() => {}, 0)
+}
+
+function onQrDragOver(e: DragEvent, msgIndex: number, qrIndex: number) {
+  if (qrDragMsgIndex.value === msgIndex) {
+    qrDragOverIndex.value = qrIndex
+  }
+}
+
+function onQrDragLeave() {
+  qrDragOverIndex.value = null
+}
+
+function onQrDragEnd() {
+  qrDragMsgIndex.value = null
+  qrDragIndex.value = null
+  qrDragOverIndex.value = null
+}
+
+function onQrDrop(e: DragEvent, msgIndex: number, dropIndex: number) {
+  if (qrDragMsgIndex.value === msgIndex && qrDragIndex.value !== null && qrDragIndex.value !== dropIndex) {
+    const fromIndex = qrDragIndex.value
+    const qrArray = form.value.messages[msgIndex].quickReplies
+    const item = qrArray.splice(fromIndex, 1)[0]
+    qrArray.splice(dropIndex, 0, item)
+  }
+  qrDragMsgIndex.value = null
+  qrDragIndex.value = null
+  qrDragOverIndex.value = null
+}
+
 // ── Save / Delete ─────────────────────────────────────
 async function submitForm() {
   if (!form.value.name) return showToast('請輸入模組名稱', 'error')
@@ -619,7 +787,15 @@ function showToast(msg: string, type: 'success' | 'error') {
 
 function normalizeMessages(messages: any[]) {
   return (messages ?? []).map((msg) => {
-    if (msg?.type !== 'carousel') return msg
+    if (msg.type === 'quickReply') {
+      return {
+        ...msg,
+        text: msg.text || '',
+        quickReplies: Array.isArray(msg.quickReplies) && msg.quickReplies.length > 0 ? msg.quickReplies : [newQuickReplyAction()]
+      }
+    }
+    
+    if (msg.type !== 'carousel') return msg
 
     const columns = Array.isArray(msg.columns) ? msg.columns : []
     return {
@@ -639,9 +815,24 @@ function validateMessages(messages: any[]): string | null {
     // text message optional buttons, but if a button exists it must be complete
     if (msg?.type === 'text' && Array.isArray(msg.buttons)) {
       for (const btn of msg.buttons) {
-        if (!btn?.label?.trim()) return '按鈕文字為必填'
-        if (btn.type === 'uri' && !btn?.uri?.trim()) return '按鈕網址為必填'
-        if (btn.type === 'message' && !btn?.text?.trim()) return '按鈕傳送文字為必填'
+        if (!btn.label) return '文字模組：請輸入按鈕標題'
+        if (btn.type === 'message' && !btn.text) return '文字模組：請輸入按鈕傳送文字'
+        if (btn.type === 'uri' && !btn.uri) return '文字模組：請輸入按鈕網址'
+        if (btn.type === 'module' && !btn.moduleId) return '文字模組：請選擇要觸發的機器人模組'
+      }
+    }
+
+    // Validate quick replies
+    if (msg?.type === 'quickReply') {
+      if (!msg.text?.trim()) return '快速回覆模組：搭配的文字內容為必填'
+
+      if (Array.isArray(msg.quickReplies)) {
+        for (const qr of msg.quickReplies) {
+          if (!qr.action?.label?.trim()) return '快速回覆：請輸入按鈕名稱'
+          if (qr.action.type === 'message' && !qr.action?.text?.trim()) return '快速回覆：回覆文字不可為空'
+          if (qr.action.type === 'uri' && !qr.action?.uri?.trim()) return '快速回覆：網址不可為空'
+          if (qr.action.type === 'module' && !qr.action?.moduleId) return '快速回覆：請選擇要觸發的機器人模組'
+        }
       }
     }
 
@@ -652,6 +843,7 @@ function validateMessages(messages: any[]): string | null {
           if (!action?.label?.trim()) return '輪播按鈕文字為必填'
           if (action.type === 'uri' && !action?.uri?.trim()) return '輪播按鈕網址為必填'
           if (action.type === 'message' && !action?.text?.trim()) return '輪播按鈕傳送文字為必填'
+          if (action.type === 'module' && !action?.moduleId) return '輪播：請選擇要觸發的機器人模組'
         }
       }
     }
@@ -667,6 +859,10 @@ function validateMessages(messages: any[]): string | null {
         if (action?.type === 'message') {
           if (!action?.label?.trim()) return '圖片輪播按鈕文字為必填'
           if (!action?.text?.trim()) return '圖片輪播傳送文字為必填'
+        }
+        if (action?.type === 'module') {
+          if (!action?.label?.trim()) return '圖片輪播按鈕文字為必填'
+          if (!action?.moduleId) return '圖片輪播：請選擇要觸發的機器人模組'
         }
       }
     }
