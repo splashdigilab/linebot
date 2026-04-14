@@ -132,6 +132,9 @@ function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
             if (b.type === 'uri') {
               return { type: 'uri', label: (b.label || '開啟連結').slice(0, 20), uri: b.uri || 'https://google.com' }
             }
+            if (b.type === 'module') {
+              return { type: 'postback', label: (b.label || '觸發模組').slice(0, 20), data: `triggerModule=${b.moduleId}` }
+            }
             return { type: 'message', label: (b.label || '點擊傳送').slice(0, 20), text: (b.text || b.label || '點擊傳送').slice(0, 300) }
           }),
         },
@@ -156,6 +159,13 @@ function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
             type: 'uri',
             label: (action.label || '　').slice(0, 20),
             uri: action.uri || 'https://google.com',
+          }
+        }
+        if (action?.type === 'module') {
+          return {
+            type: 'postback',
+            label: (action.label || '觸發模組').slice(0, 20),
+            data: `triggerModule=${action.moduleId}`
           }
         }
         return {
@@ -198,6 +208,8 @@ function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
           let action: any
           if (actionType === 'uri') {
             action = { type: 'uri', label: (col.action.label || '開啟').slice(0, 20), uri: col.action.uri || 'https://google.com' }
+          } else if (actionType === 'module') {
+            action = { type: 'postback', label: (col.action.label || '觸發模組').slice(0, 20), data: `triggerModule=${col.action.moduleId}` }
           } else if (actionType === 'message') {
             action = { type: 'message', label: (col.action.label || '傳送').slice(0, 20), text: (col.action.text || '').slice(0, 300) }
           } else {
@@ -212,6 +224,33 @@ function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
         altText: (msg.altText || '圖片輪播').slice(0, 400),
         template: { type: 'image_carousel', columns },
       } as messagingApi.TemplateMessage]
+    }
+
+    // ── Quick Reply ──
+    if (msg.type === 'quickReply') {
+      const items = (msg.quickReplies || []).slice(0, 13).map((qr: any) => {
+        let action: any
+        const actionType = qr.action?.type
+        if (actionType === 'uri') {
+          action = { type: 'uri', label: (qr.action.label || '開啟').slice(0, 20), uri: qr.action.uri || 'https://google.com' }
+        } else if (actionType === 'module') {
+          action = { type: 'postback', label: (qr.action.label || '觸發模組').slice(0, 20), data: `triggerModule=${qr.action.moduleId}` }
+        } else {
+          action = { type: 'message', label: (qr.action.label || '傳送').slice(0, 20), text: (qr.action.text || qr.action.label || '傳送').slice(0, 300) }
+        }
+        
+        return {
+          type: 'action',
+          imageUrl: qr.imageUrl || undefined,
+          action
+        }
+      })
+      
+      return [{
+        type: 'text',
+        text: (msg.text || '快速回覆').slice(0, 5000),
+        quickReply: items.length > 0 ? { items } : undefined
+      } as messagingApi.TextMessage]
     }
 
     // ── Default: plain text / image ──
