@@ -1,0 +1,86 @@
+.admin-flex-1 {
+  flex: 1;
+}
+
+.admin-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.admin-title-input {
+  max-width: 400px;
+}
+
+.admin-subtext {
+  margin-top: 0.25rem;
+  padding-left: 0.5rem;
+}
+
+.admin-header-actions {
+  align-items: center;
+}
+
+.admin-badge-xs {
+  font-size: 0.6rem;
+}
+
+.admin-badge-right {
+  margin-left: auto;
+}
+
+.admin-w-full {
+  width: 100%;
+}
+
+.admin-text-center {
+  text-align: center;
+}
+
+.admin-hidden-input {
+  display: none;
+}
+
+.admin-muted-icon {
+  color: var(--text-muted);
+}
+
+.admin-card-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-area-row-gap {
+  margin-bottom: 0.5rem;
+}
+
+.admin-form-item-compact {
+  margin-bottom: 0;
+}
+
+.admin-action-type-field {
+  margin-top: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.admin-warning-inline {
+  color: var(--color-error);
+  font-size: 0.75rem;
+  margin-top: 0.35rem;
+}
+
+.admin-float-left {
+  float: left;
+}
+
+.admin-mt-lg {
+  margin-top: 1.5rem;
+}
+
+.admin-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}

@@ -41,17 +41,17 @@
 
     <!-- ── Editor Header ── -->
     <template #editor-header>
-      <div style="flex: 1;">
-        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+      <div class="admin-flex-1">
+        <div class="admin-title-row">
           <span v-if="isCreating" class="split-editor-title">新增模組:</span>
           <el-input
             v-model="form.name"
             size="large"
-            style="max-width: 400px;"
+            class="admin-title-input"
             placeholder="請輸入模組名稱..."
           />
         </div>
-        <p class="text-sm text-muted" style="margin-top:0.25rem; padding-left: 0.5rem;">
+        <p class="text-sm text-muted admin-subtext">
           共 {{ form.messages.length }} 則回覆訊息
         </p>
       </div>
@@ -71,7 +71,7 @@
       <div class="flow-editor-messages">
         <!-- Sticky header -->
         <div class="fem-header">
-          <span class="config-section-title" style="margin:0;">💬 回覆訊息</span>
+          <span class="config-section-title section-label-tight">💬 回覆訊息</span>
           <div class="msg-type-btns">
             <el-button size="small" @click="addMessage('text')">＋ 文字</el-button>
             <el-button size="small" @click="addMessage('image')">＋ 圖片</el-button>
@@ -79,6 +79,7 @@
             <el-button size="small" @click="addMessage('carousel')">＋ 輪播</el-button>
             <el-button size="small" @click="addMessage('imageCarousel')">＋ 圖片輪播</el-button>
             <el-button size="small" @click="addMessage('quickReply')">＋ 快速回覆</el-button>
+            <el-button size="small" @click="addMessage('userInput')">＋ 用戶輸入</el-button>
           </div>
         </div>
 
@@ -93,26 +94,36 @@
           <template v-for="(msg, i) in form.messages" :key="i">
 
             <!-- ── Normal card: text / image / video ── -->
-            <div
+            <FlowMessageCardShell
               v-if="msg.type === 'text' || msg.type === 'image' || msg.type === 'video'"
-              class="message-card"
+              :badge-label="msgTypeLabel(msg.type)"
+              :badge-class="msgBadgeClass(msg.type)"
               :class="{ dragging: dragIndex === i, 'drag-over': dragOverIndex === i && dragIndex !== i }"
               @dragover.prevent="onDragOver($event, i)"
               @dragenter.prevent
               @dragleave="onDragLeave"
               @drop="onDrop($event, i)"
+              @dragstart="onDragStart($event, i)"
+              @dragend="onDragEnd"
+              @remove="removeMessage(i)"
             >
-              <div class="message-card-header">
-                <div class="flex gap-1" style="align-items: center;">
-                  <span class="drag-handle" draggable="true" @dragstart="onDragStart($event, i)" @dragend="onDragEnd">⠿</span>
-                  <span class="badge" :class="msgBadgeClass(msg.type)">{{ msgTypeLabel(msg.type) }}</span>
-                </div>
-                <el-button link type="danger" style="padding:0.1rem 0.4rem;" @click="removeMessage(i)">✕</el-button>
-              </div>
-
               <!-- Text -->
               <div v-if="msg.type === 'text'" class="message-bubble-wrap">
-                <el-input v-model="msg.text" type="textarea" :rows="3" placeholder="輸入回覆文字..." :maxlength="msg.buttons && msg.buttons.length > 0 ? 160 : 5000" show-word-limit />
+                <div class="flow-textarea-wrapper">
+                  <el-input v-model="msg.text" type="textarea" :rows="3" placeholder="輸入回覆文字..." :maxlength="msg.buttons && msg.buttons.length > 0 ? 160 : 5000" show-word-limit />
+                </div>
+                <div class="var-picker-row">
+                  <el-dropdown trigger="click" @command="(token) => insertVariableToken(msg, 'text', String(token))">
+                    <el-button size="small" text class="var-picker-btn">插入變數</el-button>
+                    <template #dropdown>
+                      <el-dropdown-menu>
+                        <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
+                          {{ opt.label }}
+                        </el-dropdown-item>
+                      </el-dropdown-menu>
+                    </template>
+                  </el-dropdown>
+                </div>
                 <div v-if="msg.buttons && msg.buttons.length" class="carousel-actions">
                   <div v-for="(btn, bIdx) in msg.buttons" :key="bIdx" class="carousel-action-row">
                     <div class="carousel-action-row-top">
@@ -126,20 +137,44 @@
                         ✕
                       </el-button>
                     </div>
-                    <el-select v-model="btn.type" size="small" style="width:100%;">
+                    <el-select v-model="btn.type" size="small" class="control-full">
                       <el-option value="uri" label="開網址" />
                       <el-option value="message" label="傳文字" />
                       <el-option value="module" label="觸發模組" />
                     </el-select>
                     <el-input v-model="btn.label" placeholder="按鈕文字" maxlength="20" size="small" />
-                    <el-select v-if="btn.type === 'module'" v-model="btn.moduleId" placeholder="選擇機器人模組" size="small" style="width: 100%;">
+                    <div class="var-picker-row">
+                      <el-dropdown trigger="click" @command="(token) => insertVariableToken(btn, 'label', String(token))">
+                        <el-button size="small" text class="var-picker-btn">插入變數</el-button>
+                        <template #dropdown>
+                          <el-dropdown-menu>
+                            <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
+                              {{ opt.label }}
+                            </el-dropdown-item>
+                          </el-dropdown-menu>
+                        </template>
+                      </el-dropdown>
+                    </div>
+                    <el-select v-if="btn.type === 'module'" v-model="btn.moduleId" placeholder="選擇機器人模組" size="small" class="control-full">
                       <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
                     </el-select>
                     <el-input v-else-if="btn.type === 'uri'" v-model="btn.uri" placeholder="https://..." size="small" />
                     <el-input v-else v-model="btn.text" placeholder="傳送文字" size="small" />
+                    <div v-if="btn.type === 'message'" class="var-picker-row">
+                      <el-dropdown trigger="click" @command="(token) => insertVariableToken(btn, 'text', String(token))">
+                        <el-button size="small" text class="var-picker-btn">插入變數</el-button>
+                        <template #dropdown>
+                          <el-dropdown-menu>
+                            <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
+                              {{ opt.label }}
+                            </el-dropdown-item>
+                          </el-dropdown-menu>
+                        </template>
+                      </el-dropdown>
+                    </div>
                   </div>
                 </div>
-                <el-button v-if="!msg.buttons || msg.buttons.length < 4" plain size="small" style="width: 100%; border-style: dashed; margin-top: 0.5rem;" @click="addButton(msg)">
+                <el-button v-if="!msg.buttons || msg.buttons.length < 4" plain size="small" class="control-dashed-add" @click="addButton(msg)">
                   ⊕ 新增按鈕 (非必需)
                 </el-button>
               </div>
@@ -153,9 +188,9 @@
               <div v-else-if="msg.type === 'video'" class="message-video-wrap">
                 <p class="fuz-section-label">預覽圖片 <span class="text-muted">(長寬大小與影片一樣)</span></p>
                 <FlowUploadZone v-model="msg.previewImageUrl" type="image" label="點擊上傳預覽圖" hint="建議與影片同尺寸" />
-                <p class="fuz-section-label" style="margin-top: 0.75rem;">影片檔案 <span class="text-muted">(大小不可超過 5 MB)</span></p>
+                <p class="fuz-section-label section-gap-top">影片檔案 <span class="text-muted">(大小不可超過 5 MB)</span></p>
               </div>
-            </div>
+            </FlowMessageCardShell>
 
             <!-- ── Quick Reply block (Carousel layout) ── -->
             <div
@@ -168,30 +203,43 @@
               @drop="onDrop($event, i)"
             >
               <!-- Parent Config Card -->
-              <div class="message-card">
-                <div class="message-card-header">
-                  <div class="flex gap-1" style="align-items: center;">
-                    <span class="drag-handle" draggable="true" @dragstart="onDragStart($event, i)" @dragend="onDragEnd">⠿</span>
-                    <span class="badge badge-purple">⚡ 快速回覆</span>
-                  </div>
-                  <el-button link type="danger" style="padding:0.1rem 0.4rem;" @click="removeMessage(i)">✕</el-button>
-                </div>
+              <FlowMessageCardShell
+                badge-label="⚡ 快速回覆"
+                badge-class="badge-purple"
+                @dragstart="onDragStart($event, i)"
+                @dragend="onDragEnd"
+                @remove="removeMessage(i)"
+              >
                 <!-- Text input for the bubble! -->
-                <div class="carousel-alt-wrap" style="padding: 1rem; display: flex; flex-direction: column; gap: 0.65rem;">
-                  <p class="fuz-section-label" style="margin-bottom:0;">搭配的文字內容 <span class="text-muted">(必需輸入)</span></p>
-                  <el-input
-                    v-model="msg.text"
-                    type="textarea"
-                    :rows="2"
-                    placeholder="請輸入主要回覆文字..."
-                    maxlength="5000"
-                    show-word-limit
-                  />
+                <div class="carousel-alt-wrap card-section-stack">
+                  <p class="fuz-section-label section-label-tight">搭配的文字內容 <span class="text-muted">(必需輸入)</span></p>
+                  <div class="flow-textarea-wrapper">
+                    <el-input
+                      v-model="msg.text"
+                      type="textarea"
+                      :rows="2"
+                      placeholder="請輸入主要回覆文字..."
+                      maxlength="5000"
+                      show-word-limit
+                    />
+                  </div>
+                  <div class="var-picker-row">
+                    <el-dropdown trigger="click" @command="(token) => insertVariableToken(msg, 'text', String(token))">
+                      <el-button size="small" text class="var-picker-btn">插入變數</el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
+                            {{ opt.label }}
+                          </el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                  </div>
                 </div>
-              </div>
+              </FlowMessageCardShell>
 
               <!-- Sub-card horizontal rail ── -->
-              <div class="carousel-cards-scroll" style="margin-top: 0.25rem;">
+              <div class="carousel-cards-scroll cards-scroll-top-gap">
                 <div
                   v-for="(qr, qi) in msg.quickReplies" :key="qi"
                   class="carousel-sub-card"
@@ -208,23 +256,47 @@
                     </div>
                     <el-button link type="danger" size="small" @click="removeQuickReply(msg, qi)">✕</el-button>
                   </div>
-                  <div class="carousel-sub-body" style="padding-top: 0.5rem;">
+                  <div class="carousel-sub-body carousel-sub-body-top-gap">
                     <!-- Action Config -->
                     <div class="carousel-actions">
                       <div class="carousel-action-row">
                         <div class="carousel-action-row-top">
                           <span class="carousel-action-index">按鈕動作</span>
                         </div>
-                        <el-select v-model="qr.action.type" size="small" style="width: 100%;">
+                        <el-select v-model="qr.action.type" size="small" class="control-full">
                           <el-option value="message" label="傳送文字" />
                           <el-option value="uri" label="開啟網址" />
                           <el-option value="module" label="觸發模組" />
                         </el-select>
                         <el-input v-model="qr.action.label" placeholder="按鈕名稱 (必填，限 20 字)" maxlength="20" size="small" show-word-limit />
-                        <el-select v-if="qr.action.type === 'module'" v-model="qr.action.moduleId" placeholder="選擇機器人模組" size="small" style="width: 100%;">
+                        <div class="var-picker-row">
+                          <el-dropdown trigger="click" @command="(token) => insertVariableToken(qr.action, 'label', String(token))">
+                            <el-button size="small" text class="var-picker-btn">插入變數</el-button>
+                            <template #dropdown>
+                              <el-dropdown-menu>
+                                <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
+                                  {{ opt.label }}
+                                </el-dropdown-item>
+                              </el-dropdown-menu>
+                            </template>
+                          </el-dropdown>
+                        </div>
+                        <el-select v-if="qr.action.type === 'module'" v-model="qr.action.moduleId" placeholder="選擇機器人模組" size="small" class="control-full">
                           <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
                         </el-select>
                         <el-input v-else-if="qr.action.type === 'message'" v-model="qr.action.text" placeholder="回覆文字" size="small" />
+                        <div v-if="qr.action.type === 'message'" class="var-picker-row">
+                          <el-dropdown trigger="click" @command="(token) => insertVariableToken(qr.action, 'text', String(token))">
+                            <el-button size="small" text class="var-picker-btn">插入變數</el-button>
+                            <template #dropdown>
+                              <el-dropdown-menu>
+                                <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
+                                  {{ opt.label }}
+                                </el-dropdown-item>
+                              </el-dropdown-menu>
+                            </template>
+                          </el-dropdown>
+                        </div>
                         <el-input v-else-if="qr.action.type === 'uri'" v-model="qr.action.uri" placeholder="https://..." size="small" />
                       </div>
                     </div>
@@ -233,10 +305,89 @@
 
                 <!-- Add Button -->
                 <button v-if="!msg.quickReplies || msg.quickReplies.length < 13" class="carousel-add-card" @click="addQuickReply(msg)">
-                  <span style="font-size:1.5rem;color:var(--text-muted);">＋</span>
+                  <span class="add-card-plus">＋</span>
                 </button>
               </div>
             </div>
+
+            <!-- ── User Input block ── -->
+            <FlowMessageCardShell
+              v-else-if="msg.type === 'userInput'"
+              class="user-input-card"
+              :badge-label="msgTypeLabel(msg.type)"
+              :badge-class="msgBadgeClass(msg.type)"
+              :class="{ dragging: dragIndex === i, 'drag-over': dragOverIndex === i && dragIndex !== i }"
+              @dragover.prevent="onDragOver($event, i)"
+              @dragenter.prevent
+              @dragleave="onDragLeave"
+              @drop="onDrop($event, i)"
+              @dragstart="onDragStart($event, i)"
+              @dragend="onDragEnd"
+              @remove="removeMessage(i)"
+            >
+              <div class="message-bubble-wrap user-input-content">
+                <div class="ui-field">
+                  <p class="fuz-section-label section-label-tight">向用戶提問 <span class="text-muted">(必填)</span></p>
+                  <div class="flow-textarea-wrapper">
+                    <el-input
+                      v-model="msg.text"
+                      type="textarea"
+                      :rows="3"
+                      placeholder="請輸入你的問題 (必需輸入)"
+                      maxlength="500"
+                      show-word-limit
+                      resize="none"
+                    />
+                  </div>
+                  <div class="var-picker-row">
+                    <el-dropdown trigger="click" @command="(token) => insertVariableToken(msg, 'text', String(token))">
+                      <el-button size="small" text class="var-picker-btn">插入變數</el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
+                            {{ opt.label }}
+                          </el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                  </div>
+                </div>
+
+                <div class="ui-settings">
+                  <div class="ui-field">
+                    <div class="ui-label">儲存屬性名稱 <span class="text-muted">(選填)</span></div>
+                    <el-select
+                      v-model="msg.attribute"
+                      size="small"
+                      class="control-full"
+                      filterable
+                      allow-create
+                      clearable
+                      default-first-option
+                      placeholder="選擇或輸入屬性名稱（例：phone, email）"
+                    >
+                      <el-option
+                        v-for="opt in attributeOptions"
+                        :key="opt.value"
+                        :value="opt.value"
+                        :label="opt.label"
+                      />
+                    </el-select>
+                  </div>
+                  
+                  <div class="ui-field">
+                    <div class="ui-label">收到回覆後，觸發下一個模組 <span class="text-muted">(必填)</span></div>
+                    <el-select v-model="msg.moduleId" placeholder="選擇機器人模組" size="small" class="control-full">
+                      <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
+                    </el-select>
+                  </div>
+                </div>
+
+                <div class="ui-warning-text">
+                  用戶在聊天室看到這則提問後輸入回覆，系統會在 24 小時內把回覆存成你設定的屬性（若有填寫），並自動觸發你選擇的下一個模組。注意：超過 24 小時後，則不會觸發下一個行動，也不會將回覆存為自訂屬性。
+                </div>
+              </div>
+            </FlowMessageCardShell>
 
             <!-- ── Carousel block (flat stretch, but parent config is a standard card) ── -->
             <div
@@ -249,32 +400,41 @@
               @drop="onDrop($event, i)"
             >
               <!-- 1. The Parent Config Card (Exactly matches 380px standard card) -->
-              <div class="message-card">
-                <!-- Standard Header -->
-                <div class="message-card-header">
-                  <div class="flex gap-1" style="align-items: center;">
-                    <span class="drag-handle" draggable="true" @dragstart="onDragStart($event, i)" @dragend="onDragEnd">⠿</span>
-                    <span class="badge" :class="msgBadgeClass(msg.type)">{{ msgTypeLabel(msg.type) }}</span>
-                  </div>
-                  <el-button link type="danger" style="padding:0.1rem 0.4rem;" @click="removeMessage(i)">✕</el-button>
-                </div>
-                
+              <FlowMessageCardShell
+                :badge-label="msgTypeLabel(msg.type)"
+                :badge-class="msgBadgeClass(msg.type)"
+                @dragstart="onDragStart($event, i)"
+                @dragend="onDragEnd"
+                @remove="removeMessage(i)"
+              >
                 <!-- Alt Text body (reusing standard padding) -->
-                <div class="carousel-alt-wrap" style="padding: 1rem; display: flex; flex-direction: column; gap: 0.65rem;">
+                <div class="carousel-alt-wrap card-section-stack">
                   <el-input
                     v-model="msg.altText"
                     :placeholder="msg.type === 'imageCarousel' ? '訊息提醒文字（最多 400 字）' : '訊息提醒文字（不支援 Flex 時顯示，最多 400 字）'"
                     maxlength="400"
                     show-word-limit
                   />
-                  <p v-if="msg.type === 'imageCarousel'" class="fuz-hint-text" style="margin-bottom:0;">
+                  <div class="var-picker-row">
+                    <el-dropdown trigger="click" @command="(token) => insertVariableToken(msg, 'altText', String(token))">
+                      <el-button size="small" text class="var-picker-btn">插入變數</el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
+                            {{ opt.label }}
+                          </el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
+                  </div>
+                  <p v-if="msg.type === 'imageCarousel'" class="fuz-hint-text section-label-tight">
                     圖片長度不可超過寬度的 3 倍，小於 500 KB，建議每張比例相同
                   </p>
                 </div>
-              </div>
+              </FlowMessageCardShell>
 
               <!-- 2. Horizontal sub-card rail ── -->
-              <div class="carousel-cards-scroll" style="margin-top: 0.25rem;">
+              <div class="carousel-cards-scroll cards-scroll-top-gap">
 
                 <!-- Carousel sub-cards -->
                 <template v-if="msg.type === 'carousel'">
@@ -296,8 +456,34 @@
                     </div>
                     <div class="carousel-sub-body">
                       <FlowUploadZone v-model="col.thumbnailImageUrl" type="image" label="上傳縮圖" preview-height="140px" />
-                      <el-input v-model="col.title" placeholder="標題（必填，最多 80 字）" maxlength="80" show-word-limit style="margin-top:0.5rem;" />
-                      <el-input v-model="col.text" type="textarea" :rows="2" placeholder="副標題或內容（最多 300 字）" maxlength="300" show-word-limit style="margin-top:0.5rem;" />
+                      <el-input v-model="col.title" class="control-top-gap" placeholder="標題（必填，最多 80 字）" maxlength="80" show-word-limit />
+                      <div class="var-picker-row">
+                        <el-dropdown trigger="click" @command="(token) => insertVariableToken(col, 'title', String(token))">
+                          <el-button size="small" text class="var-picker-btn">插入變數</el-button>
+                          <template #dropdown>
+                            <el-dropdown-menu>
+                              <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
+                                {{ opt.label }}
+                              </el-dropdown-item>
+                            </el-dropdown-menu>
+                          </template>
+                        </el-dropdown>
+                      </div>
+                      <div class="flow-textarea-wrapper control-top-gap">
+                        <el-input v-model="col.text" type="textarea" :rows="2" placeholder="副標題或內容（最多 300 字）" maxlength="300" show-word-limit />
+                      </div>
+                      <div class="var-picker-row">
+                        <el-dropdown trigger="click" @command="(token) => insertVariableToken(col, 'text', String(token))">
+                          <el-button size="small" text class="var-picker-btn">插入變數</el-button>
+                          <template #dropdown>
+                            <el-dropdown-menu>
+                              <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
+                                {{ opt.label }}
+                              </el-dropdown-item>
+                            </el-dropdown-menu>
+                          </template>
+                        </el-dropdown>
+                      </div>
                       <div v-if="col.actions?.length" class="carousel-actions">
                         <div v-for="(act, ai) in col.actions" :key="ai" class="carousel-action-row">
                           <div class="carousel-action-row-top">
@@ -312,20 +498,44 @@
                               ✕
                             </el-button>
                           </div>
-                          <el-select v-model="act.type" size="small" style="width:100%;">
+                          <el-select v-model="act.type" size="small" class="control-full">
                             <el-option value="uri" label="開網址" />
                             <el-option value="message" label="傳文字" />
                             <el-option value="module" label="觸發模組" />
                           </el-select>
                           <el-input v-model="act.label" placeholder="按鈕文字" maxlength="20" size="small" />
-                          <el-select v-if="act.type === 'module'" v-model="act.moduleId" placeholder="選擇機器人模組" size="small" style="width: 100%;">
+                          <div class="var-picker-row">
+                            <el-dropdown trigger="click" @command="(token) => insertVariableToken(act, 'label', String(token))">
+                              <el-button size="small" text class="var-picker-btn">插入變數</el-button>
+                              <template #dropdown>
+                                <el-dropdown-menu>
+                                  <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
+                                    {{ opt.label }}
+                                  </el-dropdown-item>
+                                </el-dropdown-menu>
+                              </template>
+                            </el-dropdown>
+                          </div>
+                          <el-select v-if="act.type === 'module'" v-model="act.moduleId" placeholder="選擇機器人模組" size="small" class="control-full">
                             <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
                           </el-select>
                           <el-input v-else-if="act.type==='uri'" v-model="act.uri" placeholder="https://..." size="small" />
                           <el-input v-else v-model="act.text" placeholder="傳送文字" size="small" />
+                          <div v-if="act.type === 'message'" class="var-picker-row">
+                            <el-dropdown trigger="click" @command="(token) => insertVariableToken(act, 'text', String(token))">
+                              <el-button size="small" text class="var-picker-btn">插入變數</el-button>
+                              <template #dropdown>
+                                <el-dropdown-menu>
+                                  <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
+                                    {{ opt.label }}
+                                  </el-dropdown-item>
+                                </el-dropdown-menu>
+                              </template>
+                            </el-dropdown>
+                          </div>
                         </div>
                       </div>
-                      <el-button v-if="!col.actions || col.actions.length < 3" plain size="small" style="width:100%;border-style:dashed;margin-top:0.5rem;" @click="addCarouselAction(col)">⊕ 新增按鈕</el-button>
+                      <el-button v-if="!col.actions || col.actions.length < 3" plain size="small" class="control-dashed-add" @click="addCarouselAction(col)">⊕ 新增按鈕</el-button>
                     </div>
                   </div>
                 </template>
@@ -350,12 +560,12 @@
                     </div>
                     <div class="carousel-sub-body">
                       <FlowUploadZone v-model="col.imageUrl" type="image" label="上傳" preview-height="160px" />
-                      <div class="carousel-actions" style="margin-top:0.75rem;">
+                      <div class="carousel-actions carousel-actions-top-gap">
                         <div class="carousel-action-row">
                           <div class="carousel-action-row-top">
                             <span class="carousel-action-index">圖片動作</span>
                           </div>
-                          <el-select v-model="col.action.type" size="small" style="width:100%;">
+                          <el-select v-model="col.action.type" size="small" class="control-full">
                             <el-option value="none" label="未有行動" />
                             <el-option value="uri" label="開啟網址" />
                             <el-option value="message" label="傳送文字" />
@@ -368,11 +578,35 @@
                             maxlength="20"
                             size="small"
                           />
-                          <el-select v-if="col.action.type === 'module'" v-model="col.action.moduleId" placeholder="選擇機器人模組" size="small" style="width: 100%;">
+                          <div v-if="col.action.type !== 'none'" class="var-picker-row">
+                            <el-dropdown trigger="click" @command="(token) => insertVariableToken(col.action, 'label', String(token))">
+                              <el-button size="small" text class="var-picker-btn">插入變數</el-button>
+                              <template #dropdown>
+                                <el-dropdown-menu>
+                                  <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
+                                    {{ opt.label }}
+                                  </el-dropdown-item>
+                                </el-dropdown-menu>
+                              </template>
+                            </el-dropdown>
+                          </div>
+                          <el-select v-if="col.action.type === 'module'" v-model="col.action.moduleId" placeholder="選擇機器人模組" size="small" class="control-full">
                             <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
                           </el-select>
                           <el-input v-else-if="col.action.type==='uri'" v-model="col.action.uri" placeholder="https://..." size="small" />
                           <el-input v-else-if="col.action.type==='message'" v-model="col.action.text" placeholder="點擊後傳送的文字" size="small" />
+                          <div v-if="col.action.type==='message'" class="var-picker-row">
+                            <el-dropdown trigger="click" @command="(token) => insertVariableToken(col.action, 'text', String(token))">
+                              <el-button size="small" text class="var-picker-btn">插入變數</el-button>
+                              <template #dropdown>
+                                <el-dropdown-menu>
+                                  <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
+                                    {{ opt.label }}
+                                  </el-dropdown-item>
+                                </el-dropdown-menu>
+                              </template>
+                            </el-dropdown>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -385,7 +619,7 @@
                   class="carousel-add-card"
                   @click="msg.type === 'carousel' ? addCarouselColumn(msg) : addImageCarouselColumn(msg)"
                 >
-                  <span style="font-size:1.5rem;color:var(--text-muted);">＋</span>
+                  <span class="add-card-plus">＋</span>
                 </button>
               </div>
             </div>
@@ -398,13 +632,7 @@
     </template>
   </AdminSplitLayout>
 
-  <!-- Toast -->
-  <div class="toast-bar">
-    <div v-for="t in toasts" :key="t.id" class="toast" :class="t.type">
-      <span>{{ t.type === 'success' ? '✅' : '❌' }}</span>
-      <span>{{ t.msg }}</span>
-    </div>
-  </div>
+  <AdminToastStack :toasts="toasts" />
 </template>
 
 
@@ -417,7 +645,7 @@ const loading = ref(true)
 const saving = ref(false)
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
-const toasts = ref<{ id: number; msg: string; type: 'success' | 'error' }[]>([])
+const { toasts, showToast } = useAdminToast()
 
 // Drag and Drop State
 const dragIndex = ref<number | null>(null)
@@ -441,6 +669,57 @@ const defaultForm = () => ({
 const form = ref(defaultForm())
 
 const selectedFlow = computed(() => flows.value.find(f => f.id === selectedId.value) ?? null)
+const BUILTIN_VARIABLE_LABELS: Record<string, string> = {
+  displayName: '聯絡人名稱（使用者名字）',
+}
+const attributeOptions = computed(() => {
+  const values = new Set<string>()
+
+  const collectAttributes = (messages: any[]) => {
+    for (const msg of (messages ?? [])) {
+      const rawAttr = msg?.type === 'userInput' ? msg?.attribute : ''
+      const attr = typeof rawAttr === 'string' ? rawAttr.trim() : ''
+      if (attr) values.add(attr)
+    }
+  }
+
+  collectAttributes(form.value.messages)
+  for (const flow of flows.value) {
+    collectAttributes(flow?.messages ?? [])
+  }
+
+  return Array.from(values).map((value) => ({
+    value,
+    label: value,
+  }))
+})
+const variableTokenOptions = computed(() => {
+  const values = new Set<string>(['displayName'])
+
+  const collectAttributes = (messages: any[]) => {
+    for (const msg of (messages ?? [])) {
+      const rawAttr = msg?.type === 'userInput' ? msg?.attribute : ''
+      const attr = typeof rawAttr === 'string' ? rawAttr.trim() : ''
+      if (attr) values.add(attr)
+    }
+  }
+
+  collectAttributes(form.value.messages)
+  for (const flow of flows.value) {
+    collectAttributes(flow?.messages ?? [])
+  }
+
+  return Array.from(values).map((value) => ({
+    value,
+    label: BUILTIN_VARIABLE_LABELS[value] ?? value,
+    token: `{{${value}}}`,
+  }))
+})
+
+function insertVariableToken(target: Record<string, any>, key: string, token: string) {
+  const current = typeof target[key] === 'string' ? target[key] : ''
+  target[key] = `${current}${token}`
+}
 
 // ── Badge helpers ─────────────────────────────────────
 const MSG_META: Record<string, { label: string; badge: string }> = {
@@ -450,6 +729,7 @@ const MSG_META: Record<string, { label: string; badge: string }> = {
   carousel:      { label: '🎠 輪播訊息', badge: 'badge-green'  },
   imageCarousel: { label: '🖼️ 圖片輪播', badge: 'badge-gray'  },
   quickReply:    { label: '⚡ 快速回覆', badge: 'badge-purple' },
+  userInput:     { label: '✍️ 用戶輸入卡片', badge: 'badge-red' },
 }
 
 function msgTypeLabel(type: string) {
@@ -520,15 +800,27 @@ function addMessage(type: string) {
       columns: [newImageCarouselColumn()],
     })
   } else if (type === 'quickReply') {
-    const existingIndex = form.value.messages.findIndex(m => m.type === 'quickReply')
+    const existingIndex = form.value.messages.findIndex(m => m.type === 'quickReply' || m.type === 'userInput')
     if (existingIndex > -1) {
-      showToast('只能加入一個快速回覆區塊', 'error')
+      showToast('每個流程只能有一張「快速回覆」或「用戶輸入卡片」', 'error')
       return
     }
     form.value.messages.push({
       type: 'quickReply',
       text: '',
       quickReplies: [newQuickReplyAction()]
+    })
+  } else if (type === 'userInput') {
+    const existingIndex = form.value.messages.findIndex(m => m.type === 'quickReply' || m.type === 'userInput')
+    if (existingIndex > -1) {
+      showToast('每個流程只能有一張「快速回覆」或「用戶輸入卡片」', 'error')
+      return
+    }
+    form.value.messages.push({
+      type: 'userInput',
+      text: '',
+      attribute: '',
+      moduleId: ''
     })
   }
 }
@@ -777,14 +1069,6 @@ async function deleteFlow() {
   }
 }
 
-// ── Helpers ───────────────────────────────────────────
-let toastId = 0
-function showToast(msg: string, type: 'success' | 'error') {
-  const id = ++toastId
-  toasts.value.push({ id, msg, type })
-  setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id) }, 3500)
-}
-
 function normalizeMessages(messages: any[]) {
   return (messages ?? []).map((msg) => {
     if (msg.type === 'quickReply') {
@@ -792,6 +1076,15 @@ function normalizeMessages(messages: any[]) {
         ...msg,
         text: msg.text || '',
         quickReplies: Array.isArray(msg.quickReplies) && msg.quickReplies.length > 0 ? msg.quickReplies : [newQuickReplyAction()]
+      }
+    }
+
+    if (msg.type === 'userInput') {
+      return {
+        ...msg,
+        text: msg.text || '',
+        attribute: msg.attribute || '',
+        moduleId: msg.moduleId || '',
       }
     }
     
@@ -811,6 +1104,16 @@ function normalizeMessages(messages: any[]) {
 }
 
 function validateMessages(messages: any[]): string | null {
+  const qrCount = messages.filter((m: any) => m.type === 'quickReply').length
+  const uiCount = messages.filter((m: any) => m.type === 'userInput').length
+  
+  if (qrCount > 1) return '快速回覆模組：每個流程只能有一個'
+  if (uiCount > 1) return '用戶輸入卡片：每個流程只能有一張'
+  if (qrCount > 0 && uiCount > 0) return '不能同時設定「快速回覆」與「用戶輸入卡片」'
+
+  const lastMsg = messages[messages.length - 1]
+  if (uiCount > 0 && lastMsg?.type !== 'userInput') return '用戶輸入卡片必須放在所有訊息的最結尾'
+
   for (const msg of messages ?? []) {
     // text message optional buttons, but if a button exists it must be complete
     if (msg?.type === 'text' && Array.isArray(msg.buttons)) {
@@ -834,6 +1137,14 @@ function validateMessages(messages: any[]): string | null {
           if (qr.action.type === 'module' && !qr.action?.moduleId) return '快速回覆：請選擇要觸發的機器人模組'
         }
       }
+    }
+
+    if (msg?.type === 'userInput') {
+      if (!msg.text?.trim()) return '用戶輸入卡片：請輸入你的問題'
+      if (msg.attribute?.trim() && !/^[A-Za-z][A-Za-z0-9_]{0,49}$/.test(msg.attribute.trim())) {
+        return '用戶輸入卡片：儲存屬性名稱格式錯誤，請使用英文字母開頭，且只能包含英數與底線'
+      }
+      if (!msg.moduleId) return '用戶輸入卡片：請選擇等待回覆後要觸發的下一個模組'
     }
 
     // carousel buttons are required by design and must be complete

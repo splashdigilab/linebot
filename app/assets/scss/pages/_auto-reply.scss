@@ -171,6 +171,15 @@
   color: var(--text-muted);
 }
 
+.ar-modules-loading {
+  padding: 1rem;
+  text-align: center;
+}
+
+.ar-status-switch {
+  --el-switch-on-color: var(--color-success);
+}
+
 .link {
   color: var(--color-primary, var(--color-line));
   text-decoration: underline;

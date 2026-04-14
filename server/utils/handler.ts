@@ -40,27 +40,61 @@ interface UserDoc {
   displayName: string
   pictureUrl: string
   createdAt: FirebaseFirestore.FieldValue
+  activeInput?: {
+    moduleId: string
+    attribute?: string
+    expiresAt: number
+  } | null
+  attributes?: Record<string, string>
+}
+
+function renderWithAttributes(value: string, attributes: Record<string, string>): string {
+  if (!value || !value.includes('{{')) return value
+  return value.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, key: string) => {
+    return attributes[key] ?? ''
+  })
+}
+
+function buildAttributeContext(userData: UserDoc | null): Record<string, string> {
+  const context: Record<string, string> = { ...(userData?.attributes ?? {}) }
+  if (userData?.displayName) {
+    context.displayName = userData.displayName
+  }
+  return context
 }
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-async function ensureUser(userId: string): Promise<void> {
-  if (userCheckedCache.has(userId)) return
-
+async function ensureUser(userId: string): Promise<UserDoc | null> {
   const db = getDb()
   const ref = db.collection('users').doc(userId)
   const snap = await ref.get()
   
   if (!snap.exists) {
     const profile = await getUserProfile(userId)
-    await ref.set({
+    const newDoc: UserDoc = {
       displayName: profile?.displayName ?? userId,
       pictureUrl: profile?.pictureUrl ?? '',
       createdAt: FieldValue.serverTimestamp(),
-    } satisfies UserDoc)
+    }
+    await ref.set(newDoc)
+    return newDoc
   }
-  // Record that we've checked this user, so we don't query Firestore again in this instance
-  userCheckedCache.add(userId)
+  return snap.data() as UserDoc
+}
+
+async function dispatchPostReplyActions(userId: string, messages: any[]) {
+  const userInputMsg = messages.find((m: any) => m.type === 'userInput')
+  if (userInputMsg && userInputMsg.moduleId) {
+    const db = getDb()
+    await db.collection('users').doc(userId).update({
+      activeInput: {
+        moduleId: userInputMsg.moduleId,
+        attribute: userInputMsg.attribute || null,
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
+      }
+    })
+  }
 }
 
 async function matchFlow(trigger: string): Promise<FlowDoc | null> {
@@ -117,25 +151,38 @@ async function matchFlow(trigger: string): Promise<FlowDoc | null> {
 
 // ── Main Event Handlers ───────────────────────────────────────────
 
-function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
+function buildLineMessages(dbMessages: any[], attributes: Record<string, string> = {}): messagingApi.Message[] {
   if (!dbMessages) return []
   return dbMessages.flatMap((msg) => {
     // ── Text with buttons → Buttons Template ──
     if (msg.type === 'text' && msg.buttons && msg.buttons.length > 0) {
+      const renderedText = renderWithAttributes(msg.text || '', attributes)
       return [{
         type: 'template',
-        altText: msg.text.slice(0, 400),
+        altText: renderedText.slice(0, 400),
         template: {
           type: 'buttons',
-          text: (msg.text || '無內容').slice(0, 160),
+          text: (renderedText || '無內容').slice(0, 160),
           actions: msg.buttons.slice(0, 4).map((b: any) => {
             if (b.type === 'uri') {
-              return { type: 'uri', label: (b.label || '開啟連結').slice(0, 20), uri: b.uri || 'https://google.com' }
+              return {
+                type: 'uri',
+                label: renderWithAttributes(b.label || '開啟連結', attributes).slice(0, 20),
+                uri: renderWithAttributes(b.uri || 'https://google.com', attributes)
+              }
             }
             if (b.type === 'module') {
-              return { type: 'postback', label: (b.label || '觸發模組').slice(0, 20), data: `triggerModule=${b.moduleId}` }
+              return {
+                type: 'postback',
+                label: renderWithAttributes(b.label || '觸發模組', attributes).slice(0, 20),
+                data: `triggerModule=${b.moduleId}`
+              }
             }
-            return { type: 'message', label: (b.label || '點擊傳送').slice(0, 20), text: (b.text || b.label || '點擊傳送').slice(0, 300) }
+            return {
+              type: 'message',
+              label: renderWithAttributes(b.label || '點擊傳送', attributes).slice(0, 20),
+              text: renderWithAttributes(b.text || b.label || '點擊傳送', attributes).slice(0, 300)
+            }
           }),
         },
       } as messagingApi.TemplateMessage]
@@ -157,28 +204,28 @@ function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
         if (action?.type === 'uri') {
           return {
             type: 'uri',
-            label: (action.label || '　').slice(0, 20),
-            uri: action.uri || 'https://google.com',
+            label: renderWithAttributes(action.label || '　', attributes).slice(0, 20),
+            uri: renderWithAttributes(action.uri || 'https://google.com', attributes),
           }
         }
         if (action?.type === 'module') {
           return {
             type: 'postback',
-            label: (action.label || '觸發模組').slice(0, 20),
+            label: renderWithAttributes(action.label || '觸發模組', attributes).slice(0, 20),
             data: `triggerModule=${action.moduleId}`
           }
         }
         return {
           type: 'message',
-          label: (action?.label || '　').slice(0, 20),
-          text: (action?.text || action?.label || '　').slice(0, 300),
+          label: renderWithAttributes(action?.label || '　', attributes).slice(0, 20),
+          text: renderWithAttributes(action?.text || action?.label || '　', attributes).slice(0, 300),
         }
       }
 
       const rawColumns = (msg.columns ?? []).map((col: any) => ({
         thumbnailImageUrl: col.thumbnailImageUrl || undefined,
-        title: (col.title || '').slice(0, 80) || undefined,
-        text: (col.text || '　').slice(0, 300),
+        title: renderWithAttributes(col.title || '', attributes).slice(0, 80) || undefined,
+        text: renderWithAttributes(col.text || '　', attributes).slice(0, 300),
         actions: (col.actions ?? []).slice(0, 3).map(normalizeCarouselAction),
       }))
 
@@ -194,7 +241,7 @@ function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
       if (!columns.length) return []
       return [{
         type: 'template',
-        altText: (msg.altText || '輪播訊息').slice(0, 400),
+        altText: renderWithAttributes(msg.altText || '輪播訊息', attributes).slice(0, 400),
         template: { type: 'carousel', columns },
       } as messagingApi.TemplateMessage]
     }
@@ -207,11 +254,23 @@ function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
           const actionType = col.action?.type
           let action: any
           if (actionType === 'uri') {
-            action = { type: 'uri', label: (col.action.label || '開啟').slice(0, 20), uri: col.action.uri || 'https://google.com' }
+            action = {
+              type: 'uri',
+              label: renderWithAttributes(col.action.label || '開啟', attributes).slice(0, 20),
+              uri: renderWithAttributes(col.action.uri || 'https://google.com', attributes)
+            }
           } else if (actionType === 'module') {
-            action = { type: 'postback', label: (col.action.label || '觸發模組').slice(0, 20), data: `triggerModule=${col.action.moduleId}` }
+            action = {
+              type: 'postback',
+              label: renderWithAttributes(col.action.label || '觸發模組', attributes).slice(0, 20),
+              data: `triggerModule=${col.action.moduleId}`
+            }
           } else if (actionType === 'message') {
-            action = { type: 'message', label: (col.action.label || '傳送').slice(0, 20), text: (col.action.text || '').slice(0, 300) }
+            action = {
+              type: 'message',
+              label: renderWithAttributes(col.action.label || '傳送', attributes).slice(0, 20),
+              text: renderWithAttributes(col.action.text || '', attributes).slice(0, 300)
+            }
           } else {
             // LINE API requires an action for image_carousel. If 'none', use a silent postback without label.
             action = { type: 'postback', data: 'ignore' }
@@ -221,7 +280,7 @@ function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
       if (!columns.length) return []
       return [{
         type: 'template',
-        altText: (msg.altText || '圖片輪播').slice(0, 400),
+        altText: renderWithAttributes(msg.altText || '圖片輪播', attributes).slice(0, 400),
         template: { type: 'image_carousel', columns },
       } as messagingApi.TemplateMessage]
     }
@@ -232,11 +291,23 @@ function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
         let action: any
         const actionType = qr.action?.type
         if (actionType === 'uri') {
-          action = { type: 'uri', label: (qr.action.label || '開啟').slice(0, 20), uri: qr.action.uri || 'https://google.com' }
+          action = {
+            type: 'uri',
+            label: renderWithAttributes(qr.action.label || '開啟', attributes).slice(0, 20),
+            uri: renderWithAttributes(qr.action.uri || 'https://google.com', attributes)
+          }
         } else if (actionType === 'module') {
-          action = { type: 'postback', label: (qr.action.label || '觸發模組').slice(0, 20), data: `triggerModule=${qr.action.moduleId}` }
+          action = {
+            type: 'postback',
+            label: renderWithAttributes(qr.action.label || '觸發模組', attributes).slice(0, 20),
+            data: `triggerModule=${qr.action.moduleId}`
+          }
         } else {
-          action = { type: 'message', label: (qr.action.label || '傳送').slice(0, 20), text: (qr.action.text || qr.action.label || '傳送').slice(0, 300) }
+          action = {
+            type: 'message',
+            label: renderWithAttributes(qr.action.label || '傳送', attributes).slice(0, 20),
+            text: renderWithAttributes(qr.action.text || qr.action.label || '傳送', attributes).slice(0, 300)
+          }
         }
         
         return {
@@ -248,8 +319,23 @@ function buildLineMessages(dbMessages: any[]): messagingApi.Message[] {
       
       return [{
         type: 'text',
-        text: (msg.text || '快速回覆').slice(0, 5000),
+        text: renderWithAttributes(msg.text || '快速回覆', attributes).slice(0, 5000),
         quickReply: items.length > 0 ? { items } : undefined
+      } as messagingApi.TextMessage]
+    }
+
+    // ── User Input ──
+    if (msg.type === 'userInput') {
+      return [{
+        type: 'text',
+        text: renderWithAttributes(msg.text || '請輸入內容：', attributes).slice(0, 5000)
+      } as messagingApi.TextMessage]
+    }
+
+    if (msg.type === 'text') {
+      return [{
+        ...msg,
+        text: renderWithAttributes(msg.text || '', attributes).slice(0, 5000)
       } as messagingApi.TextMessage]
     }
 
@@ -264,20 +350,53 @@ export async function handleMessageEvent(event: webhook.MessageEvent): Promise<v
   const userId = event.source?.userId
   if (!userId) return
 
-  // Run ensureUser concurrently so we don't block the reply process
-  const ensureUserTask = ensureUser(userId).catch(e => console.error('[ensureUser] Error:', e))
-
   // Auto reply: match keyword flows
   if (event.message.type === 'text') {
     const textContent = (event.message as webhook.TextMessageContent).text
-    const flow = await matchFlow(textContent)
-    if (flow && event.replyToken) {
-      await replyMessage(event.replyToken, buildLineMessages(flow.messages))
+    
+    // Check user activeInput state and fetch context synchronously
+    const userData = await ensureUser(userId)
+    const userAttributes = buildAttributeContext(userData)
+    let handledByInput = false
+    
+    if (userData && userData.activeInput && userData.activeInput.expiresAt > Date.now()) {
+      const { moduleId, attribute } = userData.activeInput
+      const db = getDb()
+      const updates: any = { activeInput: FieldValue.delete() }
+      if (attribute) {
+        updates[`attributes.${attribute}`] = textContent
+        userAttributes[attribute] = textContent
+      }
+      await db.collection('users').doc(userId).update(updates)
+      
+      const cacheKey = `flow:${moduleId}`
+      let flow = getCached(flowDocCache, cacheKey)
+      if (!flow) {
+        const modSnap = await db.collection('flows').doc(moduleId).get()
+        if (modSnap.exists && modSnap.data()?.isActive) {
+          flow = modSnap.data() as FlowDoc
+          setCache(flowDocCache, cacheKey, flow)
+        }
+      }
+      
+      if (flow && event.replyToken) {
+        await replyMessage(event.replyToken, buildLineMessages(flow.messages, userAttributes))
+        await dispatchPostReplyActions(userId, flow.messages)
+      }
+      handledByInput = true
     }
-  }
 
-  // Await the background task before returning
-  await ensureUserTask
+    if (!handledByInput) {
+      const flow = await matchFlow(textContent)
+      if (flow && event.replyToken) {
+        await replyMessage(event.replyToken, buildLineMessages(flow.messages, userAttributes))
+        await dispatchPostReplyActions(userId, flow.messages)
+      }
+    }
+  } else {
+    // For non-text events, just ensure the user exists asynchronously if we want to log it
+    ensureUser(userId).catch(e => console.error('[ensureUser] Error:', e))
+  }
 }
 
 export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise<void> {
@@ -285,8 +404,11 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
   const userId = event.source?.userId
   if (!userId) return
 
-  // Run ensureUser concurrently so we don't block the reply process
-  const ensureUserTask = ensureUser(userId).catch(e => console.error('[ensureUser] Error:', e))
+  // Fetch user synchronously if needed, but for postback usually background is fine unless updating state
+  const userDataTask = ensureUser(userId).catch(e => {
+    console.error('[ensureUser] Error:', e)
+    return null
+  })
 
   const data = event.postback.data
 
@@ -302,7 +424,7 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
       // 若伺服器再重複打一次 link API 反而會造成選單「閃屏重新載入」一次。
       // 所以此處直接 return 略過即可。
       console.log('[switchMenu] Handled by native richmenuswitch instantly, skipping redundant link API.')
-      await ensureUserTask
+      await userDataTask
       return
     }
 
@@ -323,7 +445,7 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
     } else {
       console.warn('[switchMenu] doc not found or missing richMenuId')
     }
-    await ensureUserTask
+    await userDataTask
     return // Stop further processing
   }
   // Handle direct module trigger
@@ -348,21 +470,25 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
 
     if (flow) {
       if (event.replyToken) {
-        await replyMessage(event.replyToken, buildLineMessages(flow.messages))
+        const userAttributes = buildAttributeContext(await userDataTask)
+        await replyMessage(event.replyToken, buildLineMessages(flow.messages, userAttributes))
+        await dispatchPostReplyActions(userId, flow.messages)
       }
     } else {
       console.warn('[webhook] triggerModule target not found or inactive:', moduleId)
     }
-    await ensureUserTask
+    await userDataTask
     return
   }
 
   // Fallback: Match legacy postback data to an auto-reply keyword (if any)
   const flow = await matchFlow(data)
   if (flow && event.replyToken) {
-    await replyMessage(event.replyToken, buildLineMessages(flow.messages))
+    const userAttributes = buildAttributeContext(await userDataTask)
+    await replyMessage(event.replyToken, buildLineMessages(flow.messages, userAttributes))
+    await dispatchPostReplyActions(userId, flow.messages)
   }
 
-  await ensureUserTask
+  await userDataTask
 }
 

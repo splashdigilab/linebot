@@ -37,8 +37,8 @@
     </el-row>
 
     <!-- Quick actions -->
-    <el-card style="margin-top: 1.5rem;">
-      <h3 style="font-size:1rem;font-weight:700;margin-bottom:1rem;">快速操作</h3>
+    <el-card class="admin-mt-lg">
+      <h3 class="admin-section-title">快速操作</h3>
       <el-row :gutter="20">
         <el-col :span="8">
           <NuxtLink to="/admin/richmenu" class="quick-action">

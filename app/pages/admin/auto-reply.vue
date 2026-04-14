@@ -26,7 +26,7 @@
         >
           <div class="split-list-name">{{ rule.name || rule.keyword || '(未命名)' }}</div>
           <div class="split-list-meta">
-            <span class="badge" :class="rule.isActive ? 'badge-green' : 'badge-gray'" style="font-size:0.6rem;">
+            <span class="badge admin-badge-xs" :class="rule.isActive ? 'badge-green' : 'badge-gray'">
               {{ rule.isActive ? '啟用' : '停用' }}
             </span>
             <span class="text-xs text-muted truncate">→ {{ getModuleName(rule.moduleId) }}</span>
@@ -45,22 +45,22 @@
 
     <!-- ── Editor Header ── -->
     <template #editor-header>
-      <div style="flex: 1;">
-        <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.25rem;">
+      <div class="admin-flex-1">
+        <div class="admin-title-row">
           <span v-if="isCreating" class="split-editor-title">新增規則:</span>
           <el-input
             v-model="form.name"
             size="large"
-            style="max-width: 400px;"
+            class="admin-title-input"
             placeholder="請輸入規則名稱..."
             @keydown.enter.prevent="submitForm"
           />
         </div>
-        <p class="text-sm text-muted" style="margin-top:0.25rem; padding-left: 0.5rem;">
+        <p class="text-sm text-muted admin-subtext">
           為這個自動回覆規則命名，方便後續管理
         </p>
       </div>
-      <div class="flex gap-2" style="align-items: center;">
+      <div class="flex gap-2 admin-header-actions">
         <el-button v-if="!isCreating && selectedRule" type="danger" @click="deleteRule">
           🗑️ 刪除
         </el-button>
@@ -77,12 +77,12 @@
         <!-- Status section -->
         <div class="ar-section">
           <div class="ar-section-title">📍 狀態</div>
-          <p class="ar-section-hint" style="margin-bottom: 0.5rem;">停用的規則將不會被觸發。</p>
+          <p class="ar-section-hint admin-area-row-gap">停用的規則將不會被觸發。</p>
           <el-switch
             v-model="form.isActive"
             active-text="啟用中"
             inactive-text="已停用"
-            style="--el-switch-on-color: var(--color-success);"
+            class="ar-status-switch"
           />
         </div>
 
@@ -101,7 +101,7 @@
         <div class="ar-section">
           <div class="ar-section-title">🤖 指定回覆模組</div>
           <p class="ar-section-hint">觸發後，系統將自動發送下方所選模組中的所有訊息。</p>
-          <div v-if="modulesLoading" style="padding:1rem;text-align:center;">
+          <div v-if="modulesLoading" class="ar-modules-loading">
             <div class="spinner" />
           </div>
           <div v-else-if="!modules.length" class="ar-no-modules">
@@ -120,7 +120,7 @@
                 <div class="module-option-name">{{ mod.name }}</div>
                 <div class="module-option-meta">{{ mod.messages?.length ?? 0 }} 則訊息</div>
               </div>
-              <span class="badge" :class="mod.isActive ? 'badge-green' : 'badge-gray'" style="font-size:0.6rem; margin-left:auto;">
+              <span class="badge admin-badge-xs admin-badge-right" :class="mod.isActive ? 'badge-green' : 'badge-gray'">
                 {{ mod.isActive ? '啟用' : '停用' }}
               </span>
             </button>
@@ -130,13 +130,7 @@
     </template>
   </AdminSplitLayout>
 
-  <!-- Toast -->
-  <div class="toast-bar">
-    <div v-for="t in toasts" :key="t.id" class="toast" :class="t.type">
-      <span>{{ t.type === 'success' ? '✅' : '❌' }}</span>
-      <span>{{ t.msg }}</span>
-    </div>
-  </div>
+  <AdminToastStack :toasts="toasts" />
 </template>
 
 
@@ -151,7 +145,7 @@ const modulesLoading = ref(true)
 const saving = ref(false)
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
-const toasts = ref<{ id: number; msg: string; type: 'success' | 'error' }[]>([])
+const { toasts, showToast } = useAdminToast()
 
 const defaultForm = () => ({
   name: '',
@@ -263,11 +257,5 @@ function getModuleName(moduleId: string) {
   return modules.value.find(m => m.id === moduleId)?.name ?? '未選擇模組'
 }
 
-let toastId = 0
-function showToast(msg: string, type: 'success' | 'error') {
-  const id = ++toastId
-  toasts.value.push({ id, msg, type })
-  setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id) }, 3500)
-}
 </script>
 

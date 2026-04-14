@@ -9,6 +9,88 @@
   border-color: var(--color-primary);
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
+
+.rm-list-card-body {
+  padding: 0;
+}
+
+.rm-thumb-image {
+  height: 60px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+}
+
+.rm-thumb-fallback {
+  height: 60px;
+  width: 60px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+}
+
+.rm-name {
+  font-weight: 600;
+}
+
+.rm-name-meta {
+  font-weight: 400;
+  margin-top: 0.2rem;
+}
+
+.rm-upload-zone-create {
+  min-height: 120px;
+  padding: 1.5rem;
+}
+
+.rm-upload-badge {
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.rm-upload-icon {
+  font-size: 1.75rem;
+  margin-bottom: 0.25rem;
+}
+
+.rm-upload-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.rm-upload-hint {
+  margin-top: 0.25rem;
+}
+
+.rm-area-editor {
+  margin-bottom: 1rem;
+}
+
+.rm-area-editor-top {
+  margin-bottom: 0.75rem;
+}
+
+.rm-area-editor-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.rm-area-card {
+  margin-bottom: 0.75rem;
+}
+
+.rm-area-card :deep(.el-card__body) {
+  padding: 1rem;
+}
+
+.rm-area-tag {
+  color: #fff;
+  border: none;
+}
+
 .upload-zone {
   border: 2px dashed var(--border);
   border-radius: var(--radius-md);

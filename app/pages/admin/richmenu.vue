@@ -26,25 +26,25 @@
     </el-card>
 
     <!-- Menu List -->
-    <el-card v-else shadow="hover" body-style="padding: 0;">
-      <el-table :data="sortedMenus" style="width: 100%" @row-click="openEditModal" row-class-name="cursor-pointer">
+    <el-card v-else shadow="hover" body-class="rm-list-card-body">
+      <el-table :data="sortedMenus" class="admin-w-full" @row-click="openEditModal" row-class-name="cursor-pointer">
         <el-table-column label="預覽圖片" width="120">
           <template #default="{ row }">
             <el-image
               v-if="row.imageUrl"
               :src="row.imageUrl"
               fit="contain"
-              style="height: 60px; border-radius: var(--radius-sm); background: var(--bg-elevated);"
+              class="rm-thumb-image"
             />
-            <div v-else style="height: 60px; width: 60px; background: var(--bg-elevated); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; font-size: 1.5rem;">
+            <div v-else class="rm-thumb-fallback">
               🖼️
             </div>
           </template>
         </el-table-column>
         <el-table-column label="選單名稱">
           <template #default="{ row }">
-            <div style="font-weight: 600;">{{ row.name }}</div>
-            <div class="text-xs text-muted" style="font-weight: 400; margin-top: 0.2rem;">{{ row.areas?.length ?? 0 }} 個區塊</div>
+            <div class="rm-name">{{ row.name }}</div>
+            <div class="text-xs text-muted rm-name-meta">{{ row.areas?.length ?? 0 }} 個區塊</div>
           </template>
         </el-table-column>
         <el-table-column label="狀態">
@@ -75,38 +75,37 @@
         <!-- Create Image Upload Zone -->
         <el-form-item :label="`1. 上傳選單背景圖 (${editingId ? '選填，若不上傳則自動沿用舊圖' : '必要'})`">
           <div
-            class="upload-zone"
+            class="upload-zone rm-upload-zone-create"
             :class="{ dragging: isCreateDragging }"
             @dragleave="isCreateDragging = false"
             @dragover.prevent="isCreateDragging = true"
             @drop.prevent="onCreateDrop"
             @click="triggerCreateFile"
-            style="min-height: 120px; padding: 1.5rem;"
           >
-            <input ref="createFileInput" type="file" :accept="IMAGE_ACCEPT_ATTR" style="display:none;" @change="onCreateFileSelect" />
-            <div v-if="form.previewUrl" style="text-align:center;">
-              <div class="badge badge-green" style="margin-bottom:0.5rem;font-size:0.875rem;">✅ 圖片已上傳 ({{ form.width }} × {{ form.height }})</div>
+            <input ref="createFileInput" type="file" :accept="IMAGE_ACCEPT_ATTR" class="admin-hidden-input" @change="onCreateFileSelect" />
+            <div v-if="form.previewUrl" class="admin-text-center">
+              <div class="badge badge-green rm-upload-badge">✅ 圖片已上傳 ({{ form.width }} × {{ form.height }})</div>
               <p class="text-xs text-muted">點擊或拖放到此處可重新上傳</p>
             </div>
-            <div v-else style="text-align:center;color:var(--text-muted);">
-              <div style="font-size:1.75rem;margin-bottom:0.25rem;">🖼️</div>
-              <p style="font-size:0.875rem;font-weight:600;">拖放圖片或點擊選擇</p>
-              <p class="text-xs text-muted" style="margin-top:0.25rem;">JPG / PNG · 最大 500KB (建議 2500x1686 或 2500x843)</p>
+            <div v-else class="admin-text-center admin-muted-icon">
+              <div class="rm-upload-icon">🖼️</div>
+              <p class="rm-upload-title">拖放圖片或點擊選擇</p>
+              <p class="text-xs text-muted rm-upload-hint">JPG / PNG · 最大 500KB (建議 2500x1686 或 2500x843)</p>
             </div>
           </div>
         </el-form-item>
 
         <el-form-item label="預設顯示">
-          <el-select v-model="form.selected" style="width: 100%">
+          <el-select v-model="form.selected" class="admin-w-full">
             <el-option :value="true" label="是" />
             <el-option :value="false" label="否" />
           </el-select>
         </el-form-item>
 
         <!-- Areas Editor (only visible if image uploaded) -->
-        <div v-if="form.previewUrl" style="margin-bottom:1rem;">
-          <div class="flex items-center justify-between" style="margin-bottom:0.75rem;">
-            <label style="font-size:0.8rem;font-weight:600;color:var(--text-secondary);">
+        <div v-if="form.previewUrl" class="rm-area-editor">
+          <div class="flex items-center justify-between rm-area-editor-top">
+            <label class="rm-area-editor-label">
               2. 區塊設定（{{ form.areas.length }} 個）
             </label>
             <el-button size="small" @click="addArea">➕ 新增區塊</el-button>
@@ -175,14 +174,13 @@
             v-for="(area, i) in form.areas"
             :key="i"
             shadow="never"
-            style="margin-bottom:0.75rem;"
-            body-style="padding: 1rem;"
+            class="rm-area-card"
           >
             <template #header>
-              <div style="display: flex; justify-content: space-between; align-items: center;">
+              <div class="admin-card-header-row">
                 <el-tag
                   :color="areaColors[i % areaColors.length]"
-                  style="color: #fff; border: none;"
+                  class="rm-area-tag"
                 >
                   區塊 {{ i + 1 }}
                 </el-tag>
@@ -190,34 +188,34 @@
               </div>
             </template>
 
-            <el-row :gutter="10" style="margin-bottom: 0.5rem;">
+            <el-row :gutter="10" class="admin-area-row-gap">
               <el-col :span="12">
-                <el-form-item label="X" style="margin-bottom: 0;">
-                  <el-input-number v-model="area.bounds.x" :min="0" :controls="false" style="width: 100%;" @change="clampArea(area)" />
+                <el-form-item label="X" class="admin-form-item-compact">
+                  <el-input-number v-model="area.bounds.x" :min="0" :controls="false" class="admin-w-full" @change="clampArea(area)" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
-                <el-form-item label="Y" style="margin-bottom: 0;">
-                  <el-input-number v-model="area.bounds.y" :min="0" :controls="false" style="width: 100%;" @change="clampArea(area)" />
+                <el-form-item label="Y" class="admin-form-item-compact">
+                  <el-input-number v-model="area.bounds.y" :min="0" :controls="false" class="admin-w-full" @change="clampArea(area)" />
                 </el-form-item>
               </el-col>
             </el-row>
             <el-row :gutter="10">
               <el-col :span="12">
-                <el-form-item label="Width" style="margin-bottom: 0;">
-                  <el-input-number v-model="area.bounds.width" :min="0" :controls="false" style="width: 100%;" @change="clampArea(area)" />
+                <el-form-item label="Width" class="admin-form-item-compact">
+                  <el-input-number v-model="area.bounds.width" :min="0" :controls="false" class="admin-w-full" @change="clampArea(area)" />
                 </el-form-item>
               </el-col>
               <el-col :span="12">
-                <el-form-item label="Height" style="margin-bottom: 0;">
-                  <el-input-number v-model="area.bounds.height" :min="0" :controls="false" style="width: 100%;" @change="clampArea(area)" />
+                <el-form-item label="Height" class="admin-form-item-compact">
+                  <el-input-number v-model="area.bounds.height" :min="0" :controls="false" class="admin-w-full" @change="clampArea(area)" />
                 </el-form-item>
               </el-col>
             </el-row>
 
             <!-- Action -->
-            <el-form-item label="動作類型" style="margin-top: 0.75rem; margin-bottom: 0.5rem;">
-              <el-select v-model="area.action.type" style="width: 100%;" @change="onActionTypeChange(area)">
+            <el-form-item label="動作類型" class="admin-action-type-field">
+              <el-select v-model="area.action.type" class="admin-w-full" @change="onActionTypeChange(area)">
                 <el-option value="message" label="message（代發文字）" />
                 <el-option value="uri" label="uri（開啟網址）" />
                 <el-option value="postback" label="postback（觸發機器人模組）" />
@@ -225,19 +223,19 @@
               </el-select>
             </el-form-item>
 
-            <el-form-item v-if="area.action.type === 'message'" label="文字內容" style="margin-bottom: 0;">
+            <el-form-item v-if="area.action.type === 'message'" label="文字內容" class="admin-form-item-compact">
               <el-input v-model="area.action.text" placeholder="輸入代發文字" />
             </el-form-item>
-            <el-form-item v-if="area.action.type === 'uri'" label="網址" style="margin-bottom: 0;">
+            <el-form-item v-if="area.action.type === 'uri'" label="網址" class="admin-form-item-compact">
               <el-input v-model="area.action.uri" placeholder="https://..." />
             </el-form-item>
-            <el-form-item v-if="area.action.type === 'postback'" label="選擇目標模組" style="margin-bottom: 0;">
-              <el-select v-model="area.action.data" placeholder="請選擇要觸發的機器人模組..." style="width: 100%;">
+            <el-form-item v-if="area.action.type === 'postback'" label="選擇目標模組" class="admin-form-item-compact">
+              <el-select v-model="area.action.data" placeholder="請選擇要觸發的機器人模組..." class="admin-w-full">
                 <el-option v-for="mod in modules" :key="mod.id" :value="`triggerModule=${mod.id}`" :label="mod.name" />
               </el-select>
             </el-form-item>
-            <el-form-item v-if="area.action.type === 'switch'" label="選擇目標 Rich Menu" style="margin-bottom: 0;">
-              <el-select v-model="area.action.data" placeholder="請選擇要切換的選單..." style="width: 100%;">
+            <el-form-item v-if="area.action.type === 'switch'" label="選擇目標 Rich Menu" class="admin-form-item-compact">
+              <el-select v-model="area.action.data" placeholder="請選擇要切換的選單..." class="admin-w-full">
                 <template v-for="m in menus" :key="m.id">
                   <el-option v-if="m.id !== editingId" :value="`switchMenu=${m.id}`" :label="m.name" />
                 </template>
@@ -245,7 +243,7 @@
               <!-- Warn if current selection points to a deleted menu -->
               <div
                 v-if="area.action.data && area.action.data !== '' && !menus.find(m => m.id !== editingId && `switchMenu=${m.id}` === area.action.data)"
-                style="color:var(--color-error);font-size:0.75rem;margin-top:0.35rem;"
+                class="admin-warning-inline"
               >
                 ⚠️ 所選的目標選單已不存在，請重新選擇
               </div>
@@ -260,7 +258,7 @@
 
       <template #footer>
         <span class="dialog-footer">
-          <el-button v-if="editingId" type="danger" style="float: left;" @click="confirmDeleteFromModal">刪除</el-button>
+          <el-button v-if="editingId" type="danger" class="admin-float-left" @click="confirmDeleteFromModal">刪除</el-button>
           <el-button @click="showCreate = false">取消</el-button>
           <el-button type="primary" :loading="creating" @click="submitCreate">
             🚀 部署到 LINE
@@ -269,15 +267,7 @@
       </template>
     </el-dialog>
 
-
-
-    <!-- Toast -->
-    <div class="toast-bar">
-      <div v-for="t in toasts" :key="t.id" class="toast" :class="t.type">
-        <span>{{ t.type === 'success' ? '✅' : '❌' }}</span>
-        <span>{{ t.msg }}</span>
-      </div>
-    </div>
+    <AdminToastStack :toasts="toasts" />
   </div>
 </template>
 
@@ -295,7 +285,7 @@ const menus = ref<any[]>([])
 const loading = ref(true)
 const showCreate = ref(false)
 const creating = ref(false)
-const toasts = ref<{ id: number; msg: string; type: 'success' | 'error' }[]>([])
+const { toasts, showToast } = useAdminToast()
 
 const sortedMenus = computed(() => {
   return [...menus.value].sort((a, b) => {
@@ -842,14 +832,6 @@ async function confirmDeleteFromModal() {
   catch {
     showToast('刪除失敗', 'error')
   }
-}
-
-// ── Toast ─────────────────────────────────────────────────────
-let toastId = 0
-function showToast(msg: string, type: 'success' | 'error') {
-  const id = ++toastId
-  toasts.value.push({ id, msg, type })
-  setTimeout(() => { toasts.value = toasts.value.filter(t => t.id !== id) }, 3500)
 }
 
 // ── Helpers ───────────────────────────────────────────────────

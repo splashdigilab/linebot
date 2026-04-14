@@ -23,6 +23,7 @@
 @use "./components/loading";
 
 /* ── Page Splitting ───────────────────────────────────────── */
+@use "./admin/shared";
 @use "./pages/dashboard";
 @use "./pages/richmenu";
 @use "./pages/flow";
