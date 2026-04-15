@@ -2,14 +2,9 @@
   <div class="message-card">
     <div class="message-card-header">
       <div class="card-header-main">
-        <span
-          class="drag-handle"
-          draggable="true"
-          @dragstart="$emit('dragstart', $event)"
-          @dragend="$emit('dragend')"
-        >
-          ⠿
-        </span>
+        <slot name="drag-handle">
+          <span class="drag-handle" draggable="true">⠿</span>
+        </slot>
         <span class="badge" :class="badgeClass">{{ badgeLabel }}</span>
       </div>
       <el-button
@@ -40,8 +35,6 @@ withDefaults(
 )
 
 defineEmits<{
-  dragstart: [event: DragEvent]
-  dragend: []
   remove: []
 }>()
 </script>

@@ -34,6 +34,17 @@
           </div>
         </el-card>
       </el-col>
+      <el-col :span="8">
+        <el-card shadow="hover" class="stat-card-el">
+          <div class="stat-card-el-inner">
+            <div class="stat-icon green">📰</div>
+            <div>
+              <div class="stat-label">圖文訊息</div>
+              <div class="stat-value">{{ stats.richMessages }}</div>
+            </div>
+          </div>
+        </el-card>
+      </el-col>
     </el-row>
 
     <!-- Quick actions -->
@@ -52,6 +63,12 @@
             <span>對話流程管理</span>
           </NuxtLink>
         </el-col>
+        <el-col :span="8">
+          <NuxtLink to="/admin/rich-message" class="quick-action">
+            <span class="quick-icon">📰</span>
+            <span>圖文訊息管理</span>
+          </NuxtLink>
+        </el-col>
       </el-row>
     </el-card>
   </div>
@@ -66,16 +83,18 @@ useHead({
 
 const { user } = useAuth()
 
-const stats = ref({ richmenus: 0, flows: 0 })
+const stats = ref({ richmenus: 0, flows: 0, richMessages: 0 })
 
 async function loadStats() {
-  const [menus, flows] = await Promise.all([
+  const [menus, flows, richMessages] = await Promise.all([
     $fetch<any[]>('/api/richmenu/list').catch(() => []),
     $fetch<any[]>('/api/flow/list').catch(() => []),
+    $fetch<any[]>('/api/rich-message/list').catch(() => []),
   ])
   stats.value = {
     richmenus: menus.length,
     flows: flows.length,
+    richMessages: richMessages.length,
   }
 }
 

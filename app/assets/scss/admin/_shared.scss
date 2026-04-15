@@ -52,17 +52,13 @@
   align-items: center;
 }
 
-.admin-area-row-gap {
-  margin-bottom: 0.5rem;
-}
-
 .admin-form-item-compact {
   margin-bottom: 0;
 }
 
 .admin-action-type-field {
-  margin-top: 0.75rem;
-  margin-bottom: 0.5rem;
+  margin-top: 0;
+  margin-bottom: 0;
 }
 
 .admin-warning-inline {
@@ -79,8 +75,326 @@
   margin-top: 1.5rem;
 }
 
+.admin-inline-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.admin-btn-compact {
+  min-height: 28px;
+  padding: 0.25rem 0.6rem;
+}
+
+.admin-upload-simple {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.75rem;
+}
+
+.admin-upload-status {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.admin-upload-hint {
+  margin: 0;
+  width: 100%;
+}
+
 .admin-section-title {
   font-size: 1rem;
   font-weight: 700;
-  margin-bottom: 1rem;
+  margin-bottom: var(--space-section-heading-gap);
+}
+
+/* 面板內區塊標題：一律放在表單／控制項上方 */
+.admin-panel-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  margin: 0 0 var(--space-section-heading-gap);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.admin-panel-title--sentence {
+  text-transform: none;
+  letter-spacing: normal;
+  font-size: 1rem;
+  color: var(--text-primary);
+}
+
+.admin-panel-title--tight {
+  margin-bottom: 0;
+}
+
+/* 垂直堆疊的多個面板／區塊（統一區塊間距） */
+.admin-panel-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-form-stack-gap);
+}
+
+.admin-section-card {
+  width: min(780px, 100%);
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: var(--space-panel-padding);
+}
+
+.admin-area-editor-flat {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+/* 畫布與區塊卡列表：只使用 gap，不再用 margin-bottom 疊加 */
+.admin-area-editor-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-form-stack-gap);
+}
+
+.admin-area-editor-stack > .canvas-wrap {
+  margin-bottom: 0;
+}
+
+.admin-action-card-stack {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 0.75rem;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding-bottom: 0.35rem;
+}
+
+.admin-action-card {
+  margin-bottom: 0;
+  min-height: 0;
+}
+
+.admin-action-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-form-field-gap);
+  min-width: 0;
+  padding: 0;
+}
+
+/* 座標區：僅 grid gap；清掉 Element Plus form-item 預設 margin，避免與 gap 疊加 */
+.admin-action-bounds {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-form-field-gap);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* 區塊卡內巢狀 el-form：欄位 margin 見 components/_forms.scss；此處僅收緊 label–輸入距離 */
+.admin-action-card .admin-form-nested .el-form-item--label-top .el-form-item__label {
+  margin-bottom: 0.35rem !important;
+  line-height: 1.2;
+}
+
+/* 動作區外殼：分隔線與 split；欄位節奏交給內層 .admin-form-nested */
+.admin-action-panel {
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+/* 有座標時：先留空再畫線再留空，分隔「數據」與「動作」（線不黏區塊頂／底） */
+.admin-action-panel--split {
+  margin-top: var(--space-form-field-gap);
+  padding-top: var(--space-form-field-gap);
+  border-top: 1px dashed var(--border);
+}
+
+.admin-number-input {
+  width: 100%;
+}
+
+.admin-action-card .admin-form-item-compact .el-form-item__content {
+  width: 100%;
+}
+
+.admin-action-card .admin-form-item-compact .el-input-number,
+.admin-action-card .admin-form-item-compact .el-input,
+.admin-action-card .admin-form-item-compact .el-input__wrapper,
+.admin-action-card .admin-form-item-compact .el-input__inner {
+  width: 100%;
+}
+
+.admin-number-input .el-input__wrapper {
+  border-radius: var(--radius-sm);
+}
+
+.admin-action-card .admin-form-item-compact .el-form-item__label,
+.admin-action-card .admin-action-type-field .el-form-item__label {
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.rm-area-tag {
+  color: #fff;
+  border: none;
+}
+
+.rm-area-idx {
+  width: 22px;
+  height: 22px;
+  font-size: 0.72rem;
+}
+
+.admin-action-add-card {
+  min-height: 120px;
+  width: 72px;
+}
+
+.admin-alert {
+  margin-top: 0.75rem;
+  border: 1px solid;
+  border-radius: var(--radius-sm);
+  padding: 0.75rem 0.9rem;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.admin-alert ul {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.admin-alert--warn {
+  background: #f8efc7;
+  border-color: #eddc93;
+  color: #5f4c16;
+}
+
+.admin-action-stack {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.admin-canvas-wrap {
+  width: min(560px, 100%);
+}
+
+.admin-layout-row {
+  margin-top: 0.5rem;
+  display: flex;
+  gap: 0.6rem;
+  overflow-x: auto;
+  padding-bottom: 0.25rem;
+}
+
+.admin-layout-picker--flat {
+  width: 100%;
+}
+
+.admin-layout-item {
+  min-width: 74px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  padding: 0.28rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.admin-layout-item:hover {
+  border-color: var(--color-line);
+  background: var(--color-line-glow);
+}
+
+.admin-layout-item.active {
+  border-color: var(--color-line);
+  box-shadow: 0 0 0 2px rgba(6, 199, 85, 0.12);
+  background: var(--bg-hover);
+}
+
+.admin-layout-name {
+  font-size: 0.62rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.admin-layout-preview {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border: 1px solid #8bb6ff;
+  border-radius: var(--radius-sm);
+  background: #fff;
+  display: grid;
+  gap: 1px;
+}
+
+.admin-layout-cell {
+  border: 1px solid #8bb6ff;
+}
+
+.preview-custom,
+.preview-single {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr;
+}
+
+.preview-splitV {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr;
+}
+
+.preview-splitH {
+  grid-template-columns: 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.preview-grid4 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.preview-tripleH {
+  grid-template-columns: 1fr;
+  grid-template-rows: repeat(3, 1fr);
+}
+
+.preview-mix3 {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.preview-mix3 .admin-layout-cell:nth-child(1) {
+  grid-column: 1 / span 2;
+}
+
+.preview-grid6 {
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
+}
+
+@media (max-width: 980px) {
+  .admin-section-card {
+    width: 100%;
+  }
+
+  .admin-canvas-wrap {
+    width: 100%;
+  }
 }

@@ -83,3 +83,30 @@
   border-top: 1px solid var(--border);
   margin-top: auto;
 }
+
+.sidebar-footer-user {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.sidebar-footer-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--bg-hover);
+  display: grid;
+  place-items: center;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+
+.sidebar-footer-user-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-footer-email {
+  max-width: 140px;
+}

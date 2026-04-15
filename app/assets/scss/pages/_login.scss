@@ -1,0 +1,126 @@
+/* ── 登入頁（layout: false，類名皆掛在 .login-page 下避免汙染）──── */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-base);
+  position: relative;
+  overflow: hidden;
+}
+
+.login-page .bg-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  pointer-events: none;
+}
+
+.login-page .bg-glow-1 {
+  width: 400px;
+  height: 400px;
+  top: -100px;
+  left: -100px;
+  background: rgba(6, 199, 85, 0.08);
+}
+
+.login-page .bg-glow-2 {
+  width: 300px;
+  height: 300px;
+  bottom: -80px;
+  right: -80px;
+  background: rgba(59, 130, 246, 0.06);
+}
+
+.login-page .login-card {
+  position: relative;
+  z-index: 1;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  padding: 3rem 2.5rem;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  box-shadow: var(--shadow-lg);
+}
+
+.login-page .login-logo {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.login-page .logo-circle {
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, var(--color-line), var(--color-line-dark));
+  border-radius: var(--radius-lg);
+  display: grid;
+  place-items: center;
+  font-size: 1.8rem;
+  box-shadow: var(--shadow-glow);
+}
+
+.login-page .login-logo h1 {
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.login-page .login-logo p {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.login-page .login-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-md);
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--color-error);
+}
+
+.login-page .btn-google {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.85rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--t-fast);
+}
+
+.login-page .btn-google:hover {
+  background: var(--bg-hover);
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.login-page .btn-google:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-page .btn-google .spinner {
+  border-color: #ddd;
+  border-top-color: #333;
+}
+
+.login-page .login-hint {
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}

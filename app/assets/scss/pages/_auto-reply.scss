@@ -138,22 +138,14 @@
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1.75rem;
+  gap: var(--space-form-stack-gap);
 }
 
 /* ── Sections ── */
 .ar-section {
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
-}
-
-.ar-section-title {
-  font-size: 0.8rem;
-  font-weight: 700;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  gap: var(--space-form-field-gap);
 }
 
 .ar-section-hint {

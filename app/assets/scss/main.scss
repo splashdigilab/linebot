@@ -21,12 +21,16 @@
 @use "./components/toasts";
 @use "./components/empty-state";
 @use "./components/loading";
+@use "./components/area-editor";
+@use "./components/flow-upload-zone";
 
 /* ── Page Splitting ───────────────────────────────────────── */
 @use "./admin/shared";
 @use "./pages/dashboard";
 @use "./pages/richmenu";
+@use "./pages/rich-message";
 @use "./pages/flow";
 @use "./pages/auto-reply";
+@use "./pages/login";
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');

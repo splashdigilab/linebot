@@ -3,6 +3,7 @@ import type { messagingApi } from '@line/bot-sdk'
 import { getDb } from './firebase'
 import { replyMessage, getUserProfile, linkRichMenuIdToUser } from './line'
 import { FieldValue } from 'firebase-admin/firestore'
+import { decodeTriggerModule, encodeTriggerModule } from '~~/shared/action-schema'
 
 // ── In-Memory Caching to Reduce DB Latency ──────────────────────────
 const userCheckedCache = new Set<string>()
@@ -12,6 +13,7 @@ interface CacheEntry<T> {
   expires: number
 }
 const flowDocCache = new Map<string, CacheEntry<FlowDoc | null>>()
+const richMessageCache = new Map<string, CacheEntry<any | null>>()
 
 // Cache lifetime in milliseconds (increased to 60s for better hit rate)
 const CACHE_TTL_MS = 60 * 1000
@@ -104,14 +106,12 @@ async function matchFlow(trigger: string): Promise<FlowDoc | null> {
 
   const db = getDb()
 
-  // Execute all potential lookups concurrently to reduce latency
-  const [autoReplySnap, legacySnap, legacyStrSnap] = await Promise.all([
-    db.collection('autoReplies').where('keyword', '==', trigger).where('isActive', '==', true).limit(1).get(),
-    db.collection('flows').where('triggers', 'array-contains', trigger).where('isActive', '==', true).limit(1).get(),
-    db.collection('flows').where('trigger', '==', trigger).where('isActive', '==', true).limit(1).get()
-  ])
+  const autoReplySnap = await db.collection('autoReplies')
+    .where('keyword', '==', trigger)
+    .where('isActive', '==', true)
+    .limit(1)
+    .get()
 
-  // 1: Match against autoReplies collection
   if (!autoReplySnap.empty) {
     const rule = autoReplySnap.docs[0].data()
     // try to get from cache first
@@ -131,22 +131,66 @@ async function matchFlow(trigger: string): Promise<FlowDoc | null> {
     }
   }
 
-  // 2: Legacy fallback (array form)
-  if (!legacySnap.empty) {
-    const result = legacySnap.docs[0].data() as FlowDoc
-    setCache(flowDocCache, cacheKey, result)
-    return result
-  }
-
-  // 3: Legacy fallback (string form)
-  if (!legacyStrSnap.empty) {
-    const result = legacyStrSnap.docs[0].data() as FlowDoc
-    setCache(flowDocCache, cacheKey, result)
-    return result
-  }
-
   setCache(flowDocCache, cacheKey, null)
   return null
+}
+
+function buildRichMessageSnapshot(item: any) {
+  const actions = Array.isArray(item?.actions)
+    ? item.actions
+    : Array.isArray(item?.buttons)
+      ? item.buttons
+      : []
+  return {
+    layoutId: item?.layoutId || 'custom',
+    transparentBackground: Boolean(item?.transparentBackground),
+    altText: item?.altText || '',
+    heroImageUrl: item?.heroImageUrl || '',
+    actions: actions.map((action: any, index: number) => ({
+      slot: action?.slot || String.fromCharCode(65 + index),
+      type: action?.type === 'message' || action?.type === 'module' ? action.type : 'uri',
+      uri: action?.uri || '',
+      text: action?.text || '',
+      moduleId: action?.moduleId || '',
+    })),
+  }
+}
+
+async function loadRichMessageSnapshot(id: string): Promise<any | null> {
+  if (!id) return null
+  const cacheKey = `richMessage:${id}`
+  const cached = getCached(richMessageCache, cacheKey)
+  if (cached !== undefined) return cached
+
+  const db = getDb()
+  const snap = await db.collection('richMessages').doc(id).get()
+  if (!snap.exists) {
+    setCache(richMessageCache, cacheKey, null)
+    return null
+  }
+  const payload = buildRichMessageSnapshot(snap.data())
+  setCache(richMessageCache, cacheKey, payload)
+  return payload
+}
+
+async function hydrateRichMessageRefs(messages: any[]): Promise<any[]> {
+  if (!Array.isArray(messages) || messages.length === 0) return []
+  const hydrated = [...messages]
+  const ids = Array.from(new Set(hydrated
+    .filter((msg: any) => msg?.type === 'richMessageRef' && msg?.richMessageId)
+    .map((msg: any) => String(msg.richMessageId))))
+  if (ids.length === 0) return hydrated
+
+  const snapshots = await Promise.all(ids.map((id) => loadRichMessageSnapshot(id)))
+  const snapshotMap = new Map<string, any | null>()
+  ids.forEach((id, index) => snapshotMap.set(id, snapshots[index] ?? null))
+
+  return hydrated.map((msg: any) => {
+    if (msg?.type !== 'richMessageRef') return msg
+    const latest = msg?.richMessageId ? snapshotMap.get(String(msg.richMessageId)) : null
+    if (latest) return { ...msg, payload: latest }
+    return msg
+  })
 }
 
 // ── Main Event Handlers ───────────────────────────────────────────
@@ -175,7 +219,7 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
               return {
                 type: 'postback',
                 label: renderWithAttributes(b.label || '觸發模組', attributes).slice(0, 20),
-                data: `triggerModule=${b.moduleId}`
+                data: encodeTriggerModule(b.moduleId)
               }
             }
             return {
@@ -212,7 +256,7 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
           return {
             type: 'postback',
             label: renderWithAttributes(action.label || '觸發模組', attributes).slice(0, 20),
-            data: `triggerModule=${action.moduleId}`
+            data: encodeTriggerModule(action.moduleId)
           }
         }
         return {
@@ -263,7 +307,7 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
             action = {
               type: 'postback',
               label: renderWithAttributes(col.action.label || '觸發模組', attributes).slice(0, 20),
-              data: `triggerModule=${col.action.moduleId}`
+              data: encodeTriggerModule(col.action.moduleId)
             }
           } else if (actionType === 'message') {
             action = {
@@ -285,6 +329,187 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
       } as messagingApi.TemplateMessage]
     }
 
+    // ── Rich Message Inline (Flex) ──
+    if (msg.type === 'richMessage') {
+      if (!msg.altText) return []
+      if (!msg.heroImageUrl) return []
+      const transparentBackground = Boolean(msg.transparentBackground)
+      const normalizedActions = Array.isArray(msg.actions) ? msg.actions : []
+
+      const footerContents = normalizedActions
+        .filter((action: any) => action?.type)
+        .map((action: any, index: number) => {
+          const slot = action?.slot || String.fromCharCode(65 + index)
+          if (action.type === 'uri') {
+            return {
+              type: 'button',
+              style: 'secondary',
+              height: 'sm',
+              action: {
+                type: 'uri',
+                label: slot,
+                uri: renderWithAttributes(action.uri || 'https://google.com', attributes),
+              },
+            }
+          }
+          if (action.type === 'module') {
+            return {
+              type: 'button',
+              style: 'secondary',
+              height: 'sm',
+              action: {
+                type: 'postback',
+                label: slot,
+                data: encodeTriggerModule(action.moduleId),
+              },
+            }
+          }
+          return {
+            type: 'button',
+            style: 'secondary',
+            height: 'sm',
+            action: {
+              type: 'message',
+              label: slot,
+              text: renderWithAttributes(action.text || slot, attributes).slice(0, 300),
+            },
+          }
+        })
+
+      return [{
+        type: 'flex',
+        altText: renderWithAttributes(msg.altText, attributes).slice(0, 400),
+        contents: {
+          type: 'bubble',
+          ...(transparentBackground ? {} : {
+            hero: {
+              type: 'image',
+              url: renderWithAttributes(msg.heroImageUrl, attributes),
+              size: 'full',
+              aspectRatio: '1:1',
+              aspectMode: 'cover',
+            },
+          }),
+          body: {
+            type: 'box',
+            layout: 'vertical',
+            spacing: 'sm',
+            contents: [{
+              type: 'text',
+              text: renderWithAttributes(msg.altText, attributes).slice(0, 400),
+              size: 'sm',
+              color: '#666666',
+              wrap: true,
+            }],
+          },
+          ...(footerContents.length > 0 ? {
+            footer: {
+              type: 'box',
+              layout: 'vertical',
+              spacing: 'sm',
+              contents: footerContents.slice(0, 6),
+            },
+          } : {}),
+        },
+      } as messagingApi.FlexMessage]
+    }
+
+    // ── Rich Message Reference (Flex) ──
+    if (msg.type === 'richMessageRef') {
+      const payload = msg.payload
+      if (!payload?.altText) return []
+      const transparentBackground = Boolean(payload?.transparentBackground)
+      if (!transparentBackground && !payload?.heroImageUrl) return []
+      const normalizedActions = Array.isArray(payload?.actions)
+        ? payload.actions
+        : Array.isArray(payload?.buttons)
+          ? payload.buttons.map((btn: any, index: number) => ({
+              slot: String.fromCharCode(65 + index),
+              type: btn?.type === 'message' || btn?.type === 'module' ? btn.type : 'uri',
+              uri: btn?.uri || '',
+              text: btn?.text || '',
+              moduleId: btn?.moduleId || '',
+            }))
+          : []
+
+      const footerContents = normalizedActions
+        .filter((action: any) => action?.type)
+        .map((action: any, index: number) => {
+          const slot = action?.slot || String.fromCharCode(65 + index)
+          if (action.type === 'uri') {
+            return {
+              type: 'button',
+              style: 'secondary',
+              height: 'sm',
+              action: {
+                type: 'uri',
+                label: slot,
+                uri: renderWithAttributes(action.uri || 'https://google.com', attributes),
+              },
+            }
+          }
+          if (action.type === 'module') {
+            return {
+              type: 'button',
+              style: 'secondary',
+              height: 'sm',
+              action: {
+                type: 'postback',
+                label: slot,
+                data: encodeTriggerModule(action.moduleId),
+              },
+            }
+          }
+          return {
+            type: 'button',
+            style: 'secondary',
+            height: 'sm',
+            action: {
+              type: 'message',
+              label: slot,
+              text: renderWithAttributes(action.text || slot, attributes).slice(0, 300),
+            },
+          }
+        })
+
+      return [{
+        type: 'flex',
+        altText: renderWithAttributes(payload.altText, attributes).slice(0, 400),
+        contents: {
+          type: 'bubble',
+          ...(transparentBackground ? {} : {
+            hero: {
+              type: 'image',
+              url: renderWithAttributes(payload.heroImageUrl, attributes),
+              size: 'full',
+              aspectRatio: '1:1',
+              aspectMode: 'cover',
+            },
+          }),
+          body: {
+            type: 'box',
+            layout: 'vertical',
+            spacing: 'sm',
+            contents: [{
+              type: 'text',
+              text: renderWithAttributes(payload.altText, attributes).slice(0, 400),
+              size: 'sm',
+              color: '#666666',
+              wrap: true,
+            }],
+          },
+          ...(footerContents.length > 0 ? {
+            footer: {
+              type: 'box',
+              layout: 'vertical',
+              spacing: 'sm',
+              contents: footerContents.slice(0, 6),
+            },
+          } : {}),
+        },
+      } as messagingApi.FlexMessage]
+    }
+
     // ── Quick Reply ──
     if (msg.type === 'quickReply') {
       const items = (msg.quickReplies || []).slice(0, 13).map((qr: any) => {
@@ -300,7 +525,7 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
           action = {
             type: 'postback',
             label: renderWithAttributes(qr.action.label || '觸發模組', attributes).slice(0, 20),
-            data: `triggerModule=${qr.action.moduleId}`
+            data: encodeTriggerModule(qr.action.moduleId)
           }
         } else {
           action = {
@@ -380,7 +605,8 @@ export async function handleMessageEvent(event: webhook.MessageEvent): Promise<v
       }
       
       if (flow && event.replyToken) {
-        await replyMessage(event.replyToken, buildLineMessages(flow.messages, userAttributes))
+        const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
+        await replyMessage(event.replyToken, buildLineMessages(hydratedMessages, userAttributes))
         await dispatchPostReplyActions(userId, flow.messages)
       }
       handledByInput = true
@@ -389,7 +615,8 @@ export async function handleMessageEvent(event: webhook.MessageEvent): Promise<v
     if (!handledByInput) {
       const flow = await matchFlow(textContent)
       if (flow && event.replyToken) {
-        await replyMessage(event.replyToken, buildLineMessages(flow.messages, userAttributes))
+        const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
+        await replyMessage(event.replyToken, buildLineMessages(hydratedMessages, userAttributes))
         await dispatchPostReplyActions(userId, flow.messages)
       }
     }
@@ -449,8 +676,9 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
     return // Stop further processing
   }
   // Handle direct module trigger
-  if (data.startsWith('triggerModule=')) {
-    const moduleId = data.replace('triggerModule=', '')
+  const directModuleId = decodeTriggerModule(data)
+  if (directModuleId) {
+    const moduleId = directModuleId
     const cacheKey = `flow:${moduleId}`
     
     let flow: FlowDoc | null = undefined
@@ -471,7 +699,8 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
     if (flow) {
       if (event.replyToken) {
         const userAttributes = buildAttributeContext(await userDataTask)
-        await replyMessage(event.replyToken, buildLineMessages(flow.messages, userAttributes))
+        const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
+        await replyMessage(event.replyToken, buildLineMessages(hydratedMessages, userAttributes))
         await dispatchPostReplyActions(userId, flow.messages)
       }
     } else {
@@ -485,7 +714,8 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
   const flow = await matchFlow(data)
   if (flow && event.replyToken) {
     const userAttributes = buildAttributeContext(await userDataTask)
-    await replyMessage(event.replyToken, buildLineMessages(flow.messages, userAttributes))
+    const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
+    await replyMessage(event.replyToken, buildLineMessages(hydratedMessages, userAttributes))
     await dispatchPostReplyActions(userId, flow.messages)
   }
 

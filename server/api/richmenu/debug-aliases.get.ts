@@ -10,7 +10,7 @@ export default defineEventHandler(async () => {
 
   for (const doc of snap.docs) {
     const data = doc.data()
-    const aliasId = data.aliasId ?? `menu-${doc.id}`
+    const aliasId = data.aliasId ?? `rm${doc.id.replace(/-/g, '').slice(0, 28)}`
 
     let lineStatus: any = null
     try {

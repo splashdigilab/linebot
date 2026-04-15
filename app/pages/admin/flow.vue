@@ -42,6 +42,7 @@
     <!-- ── Editor Header ── -->
     <template #editor-header>
       <div class="admin-flex-1">
+        <p class="fuz-section-label section-label-tight">模組名稱</p>
         <div class="admin-title-row">
           <span v-if="isCreating" class="split-editor-title">新增模組:</span>
           <el-input
@@ -52,7 +53,7 @@
           />
         </div>
         <p class="text-sm text-muted admin-subtext">
-          共 {{ form.messages.length }} 則回覆訊息
+          共 {{ form.messages.length }} 則回覆訊息；關鍵字觸發請到「自動回覆」設定
         </p>
       </div>
       <div class="flex gap-1">
@@ -71,11 +72,12 @@
       <div class="flow-editor-messages">
         <!-- Sticky header -->
         <div class="fem-header">
-          <span class="config-section-title section-label-tight">💬 回覆訊息</span>
+          <span class="admin-panel-title admin-panel-title--tight">💬 回覆訊息</span>
           <div class="msg-type-btns">
             <el-button size="small" @click="addMessage('text')">＋ 文字</el-button>
             <el-button size="small" @click="addMessage('image')">＋ 圖片</el-button>
             <el-button size="small" @click="addMessage('video')">＋ 影片</el-button>
+            <el-button size="small" @click="addMessage('richMessage')">＋ 圖文訊息</el-button>
             <el-button size="small" @click="addMessage('carousel')">＋ 輪播</el-button>
             <el-button size="small" @click="addMessage('imageCarousel')">＋ 圖片輪播</el-button>
             <el-button size="small" @click="addMessage('quickReply')">＋ 快速回覆</el-button>
@@ -91,87 +93,58 @@
           </div>
 
           <!-- Message Cards + Carousel Blocks -->
-          <template v-for="(msg, i) in form.messages" :key="i">
+          <template v-for="(msg, i) in form.messages" :key="getMessageRenderKey(msg, i)">
 
             <!-- ── Normal card: text / image / video ── -->
-            <FlowMessageCardShell
-              v-if="msg.type === 'text' || msg.type === 'image' || msg.type === 'video'"
-              :badge-label="msgTypeLabel(msg.type)"
-              :badge-class="msgBadgeClass(msg.type)"
-              :class="{ dragging: dragIndex === i, 'drag-over': dragOverIndex === i && dragIndex !== i }"
+            <!-- Outer native div is the drop target; FlowMessageCardShell is drag source only -->
+            <div
+              v-if="msg.type === 'text' || msg.type === 'image' || msg.type === 'video' || msg.type === 'richMessageRef'"
               @dragover.prevent="onDragOver($event, i)"
               @dragenter.prevent
               @dragleave="onDragLeave"
               @drop="onDrop($event, i)"
+            >
+            <FlowMessageCardShell
+              :badge-label="msgTypeLabel(msg.type)"
+              :badge-class="msgBadgeClass(msg.type)"
+              :class="{ dragging: dragIndex === i, 'drag-over': dragOverIndex === i && dragIndex !== i }"
               @dragstart="onDragStart($event, i)"
               @dragend="onDragEnd"
               @remove="removeMessage(i)"
             >
               <!-- Text -->
               <div v-if="msg.type === 'text'" class="message-bubble-wrap">
-                <div class="flow-textarea-wrapper">
+                <p class="fuz-section-label section-label-tight">回覆文字</p>
+                <div class="flow-textarea-wrapper flow-textarea-wrapper--var-inset">
                   <el-input v-model="msg.text" type="textarea" :rows="3" placeholder="輸入回覆文字..." :maxlength="msg.buttons && msg.buttons.length > 0 ? 160 : 5000" show-word-limit />
-                </div>
-                <div class="var-picker-row">
-                  <el-dropdown trigger="click" @command="(token) => insertVariableToken(msg, 'text', String(token))">
-                    <el-button size="small" text class="var-picker-btn">插入變數</el-button>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
-                          {{ opt.label }}
-                        </el-dropdown-item>
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
+                  <FlowVariableInset
+                    :options="variableTokenOptions"
+                    @pick="(token) => insertVariableToken(msg, 'text', String(token))"
+                  />
                 </div>
                 <div v-if="msg.buttons && msg.buttons.length" class="carousel-actions">
-                  <div v-for="(btn, bIdx) in msg.buttons" :key="bIdx" class="carousel-action-row">
-                    <div class="carousel-action-row-top">
-                      <span class="carousel-action-index">按鈕 {{ Number(bIdx) + 1 }}</span>
-                      <el-button
-                        link
-                        type="danger"
-                        size="small"
-                        @click="removeButton(msg, Number(bIdx))"
-                      >
-                        ✕
-                      </el-button>
-                    </div>
-                    <el-select v-model="btn.type" size="small" class="control-full">
-                      <el-option value="uri" label="開網址" />
-                      <el-option value="message" label="傳文字" />
-                      <el-option value="module" label="觸發模組" />
-                    </el-select>
-                    <el-input v-model="btn.label" placeholder="按鈕文字" maxlength="20" size="small" />
-                    <div class="var-picker-row">
-                      <el-dropdown trigger="click" @command="(token) => insertVariableToken(btn, 'label', String(token))">
-                        <el-button size="small" text class="var-picker-btn">插入變數</el-button>
-                        <template #dropdown>
-                          <el-dropdown-menu>
-                            <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
-                              {{ opt.label }}
-                            </el-dropdown-item>
-                          </el-dropdown-menu>
-                        </template>
-                      </el-dropdown>
-                    </div>
-                    <el-select v-if="btn.type === 'module'" v-model="btn.moduleId" placeholder="選擇機器人模組" size="small" class="control-full">
-                      <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
-                    </el-select>
-                    <el-input v-else-if="btn.type === 'uri'" v-model="btn.uri" placeholder="https://..." size="small" />
-                    <el-input v-else v-model="btn.text" placeholder="傳送文字" size="small" />
-                    <div v-if="btn.type === 'message'" class="var-picker-row">
-                      <el-dropdown trigger="click" @command="(token) => insertVariableToken(btn, 'text', String(token))">
-                        <el-button size="small" text class="var-picker-btn">插入變數</el-button>
-                        <template #dropdown>
-                          <el-dropdown-menu>
-                            <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
-                              {{ opt.label }}
-                            </el-dropdown-item>
-                          </el-dropdown-menu>
-                        </template>
-                      </el-dropdown>
-                    </div>
+                  <div v-for="(btn, bIdx) in msg.buttons" :key="bIdx">
+                    <FlowActionEditor
+                      :action="btn"
+                      :type-options="standardActionTypeOptions"
+                      :module-options="flows"
+                      :variable-options="variableTokenOptions"
+                      :header-label="`按鈕 ${Number(bIdx) + 1}`"
+                      label-placeholder="按鈕文字"
+                      text-title="傳送文字"
+                      text-placeholder="傳送文字"
+                    >
+                      <template #top-extra>
+                        <el-button
+                          link
+                          type="danger"
+                          size="small"
+                          @click="removeButton(msg, Number(bIdx))"
+                        >
+                          ✕
+                        </el-button>
+                      </template>
+                    </FlowActionEditor>
                   </div>
                 </div>
                 <el-button v-if="!msg.buttons || msg.buttons.length < 4" plain size="small" class="control-dashed-add" @click="addButton(msg)">
@@ -181,6 +154,7 @@
 
               <!-- Image -->
               <div v-else-if="msg.type === 'image'" class="message-image-wrap">
+                <p class="fuz-section-label section-label-tight">圖片</p>
                 <FlowUploadZone v-model="msg.originalContentUrl" type="image" label="點擊上傳圖片" @update:model-value="(v) => { msg.previewImageUrl = v }" />
               </div>
 
@@ -188,9 +162,108 @@
               <div v-else-if="msg.type === 'video'" class="message-video-wrap">
                 <p class="fuz-section-label">預覽圖片 <span class="text-muted">(長寬大小與影片一樣)</span></p>
                 <FlowUploadZone v-model="msg.previewImageUrl" type="image" label="點擊上傳預覽圖" hint="建議與影片同尺寸" />
-                <p class="fuz-section-label section-gap-top">影片檔案 <span class="text-muted">(大小不可超過 5 MB)</span></p>
+                <p class="fuz-section-label">影片檔案 <span class="text-muted">(大小不可超過 5 MB)</span></p>
+                <FlowUploadZone v-model="msg.originalContentUrl" type="video" label="點擊上傳影片" hint="須符合 LINE 影片規範" />
+              </div>
+
+              <!-- Rich Message Reference -->
+              <div v-else-if="msg.type === 'richMessageRef'" class="message-bubble-wrap flow-rich-ref">
+                <p class="fuz-section-label section-label-tight">引用圖文訊息</p>
+                <el-select
+                  v-model="msg.richMessageId"
+                  size="small"
+                  class="control-full"
+                  filterable
+                  placeholder="選擇已建立的圖文訊息"
+                  @change="onRichMessageRefChange(msg)"
+                >
+                  <el-option
+                    v-for="item in richMessages"
+                    :key="item.id"
+                    :value="item.id"
+                    :label="item.name"
+                  />
+                </el-select>
+                <p class="fuz-hint-text section-label-tight">
+                  圖文訊息需先在「圖文訊息管理」建立，這裡僅做引用。
+                </p>
+                <div v-if="richMessageRefPreview(msg)" class="carousel-action-row">
+                  <div class="carousel-action-row-top">
+                    <span class="carousel-action-index">預覽資訊</span>
+                  </div>
+                  <div class="text-sm">版型：{{ richMessageLayoutLabel(richMessageRefPreview(msg)?.layoutId || 'custom') }}</div>
+                  <div class="text-xs text-muted">{{ richMessageRefPreview(msg)?.altText || '（未設定提醒文字）' }}</div>
+                  <div class="text-xs text-muted">動作：{{ Array.isArray(richMessageRefPreview(msg)?.actions) ? richMessageRefPreview(msg)?.actions.length : 0 }} 個</div>
+                </div>
               </div>
             </FlowMessageCardShell>
+            </div>
+
+            <!-- ── Rich Message (inline) block ── -->
+            <div
+              v-else-if="msg.type === 'richMessage'"
+              class="carousel-block"
+              :class="{ dragging: dragIndex === i, 'drag-over': dragOverIndex === i && dragIndex !== i }"
+              @dragover.prevent="onDragOver($event, i)"
+              @dragenter.prevent
+              @dragleave="onDragLeave"
+              @drop="onDrop($event, i)"
+            >
+              <!-- Config card -->
+              <FlowMessageCardShell
+                :badge-label="msgTypeLabel(msg.type)"
+                :badge-class="msgBadgeClass(msg.type)"
+                @dragstart="onDragStart($event, i)"
+                @dragend="onDragEnd"
+                @remove="removeMessage(i)"
+              >
+                <div class="card-section-stack">
+                  <p class="fuz-section-label section-label-tight">提醒文字 <span class="text-muted">(最多 400 字)</span></p>
+                  <el-input
+                    v-model="msg.altText"
+                    placeholder="提醒文字（最多 400 字）"
+                    maxlength="400"
+                    show-word-limit
+                  />
+                  <p class="fuz-section-label section-label-tight">保留 PNG 透明區域</p>
+                  <div class="flow-rich-toggle-row">
+                    <el-switch v-model="msg.transparentBackground" />
+                    <span class="text-sm text-muted">開啟後保留透明像素</span>
+                  </div>
+                  <p class="fuz-section-label section-label-tight">背景圖片</p>
+                  <FlowUploadZone
+                    v-model="msg.heroImageUrl"
+                    type="image"
+                    appearance="simple"
+                    hint="JPG / PNG · 最大 500KB（建議 1040x1040）"
+                  />
+                  <AdminLayoutPresetPicker
+                    flat
+                    title="圖文樣式"
+                    :layouts="RICH_LAYOUT_PRESETS"
+                    :selected-id="msg.layoutId"
+                    @select="(layoutId) => selectInlineRichMessageLayout(msg, String(layoutId))"
+                  />
+                  <FlowRichMessageAreas
+                    v-if="String(msg.heroImageUrl || '').trim()"
+                    :msg="msg"
+                    :module-options="flows"
+                    :show-canvas="true"
+                    :show-action-cards="false"
+                    :show-header="false"
+                    :flat="true"
+                  />
+                </div>
+              </FlowMessageCardShell>
+              <FlowRichMessageAreas
+                v-if="String(msg.heroImageUrl || '').trim()"
+                :msg="msg"
+                :module-options="flows"
+                :show-canvas="false"
+                :show-action-cards="true"
+                :flat="true"
+              />
+            </div>
 
             <!-- ── Quick Reply block (Carousel layout) ── -->
             <div
@@ -213,8 +286,8 @@
                 <!-- Text input for the bubble! -->
                 <div class="carousel-alt-wrap card-section-stack">
                   <p class="fuz-section-label section-label-tight">搭配的文字內容 <span class="text-muted">(必需輸入)</span></p>
-                  <div class="flow-textarea-wrapper">
-                    <el-input
+                  <div class="flow-textarea-wrapper flow-textarea-wrapper--var-inset">
+                  <el-input
                       v-model="msg.text"
                       type="textarea"
                       :rows="2"
@@ -222,19 +295,11 @@
                       maxlength="5000"
                       show-word-limit
                     />
-                  </div>
-                  <div class="var-picker-row">
-                    <el-dropdown trigger="click" @command="(token) => insertVariableToken(msg, 'text', String(token))">
-                      <el-button size="small" text class="var-picker-btn">插入變數</el-button>
-                      <template #dropdown>
-                        <el-dropdown-menu>
-                          <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
-                            {{ opt.label }}
-                          </el-dropdown-item>
-                        </el-dropdown-menu>
-                      </template>
-                    </el-dropdown>
-                  </div>
+                  <FlowVariableInset
+                    :options="variableTokenOptions"
+                    @pick="(token) => insertVariableToken(msg, 'text', String(token))"
+                  />
+                </div>
                 </div>
               </FlowMessageCardShell>
 
@@ -244,10 +309,10 @@
                   v-for="(qr, qi) in msg.quickReplies" :key="qi"
                   class="carousel-sub-card"
                   :class="{ 'col-dragging': qrDragMsgIndex === i && qrDragIndex === qi, 'col-drag-over': qrDragMsgIndex === i && qrDragOverIndex === qi && qrDragIndex !== qi }"
-                  @dragover.prevent.stop="onQrDragOver($event, i, qi)"
-                  @dragenter.prevent.stop
-                  @dragleave.stop="onQrDragLeave"
-                  @drop.stop="onQrDrop($event, i, qi)"
+                  @dragover.prevent="onQrDragOver($event, i, qi)"
+                  @dragenter.prevent
+                  @dragleave="onQrDragLeave"
+                  @drop="onQrDrop($event, i, qi)"
                 >
                   <div class="carousel-card-top">
                     <div class="flex gap-1 items-center">
@@ -258,47 +323,15 @@
                   </div>
                   <div class="carousel-sub-body carousel-sub-body-top-gap">
                     <!-- Action Config -->
-                    <div class="carousel-actions">
-                      <div class="carousel-action-row">
-                        <div class="carousel-action-row-top">
-                          <span class="carousel-action-index">按鈕動作</span>
-                        </div>
-                        <el-select v-model="qr.action.type" size="small" class="control-full">
-                          <el-option value="message" label="傳送文字" />
-                          <el-option value="uri" label="開啟網址" />
-                          <el-option value="module" label="觸發模組" />
-                        </el-select>
-                        <el-input v-model="qr.action.label" placeholder="按鈕名稱 (必填，限 20 字)" maxlength="20" size="small" show-word-limit />
-                        <div class="var-picker-row">
-                          <el-dropdown trigger="click" @command="(token) => insertVariableToken(qr.action, 'label', String(token))">
-                            <el-button size="small" text class="var-picker-btn">插入變數</el-button>
-                            <template #dropdown>
-                              <el-dropdown-menu>
-                                <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
-                                  {{ opt.label }}
-                                </el-dropdown-item>
-                              </el-dropdown-menu>
-                            </template>
-                          </el-dropdown>
-                        </div>
-                        <el-select v-if="qr.action.type === 'module'" v-model="qr.action.moduleId" placeholder="選擇機器人模組" size="small" class="control-full">
-                          <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
-                        </el-select>
-                        <el-input v-else-if="qr.action.type === 'message'" v-model="qr.action.text" placeholder="回覆文字" size="small" />
-                        <div v-if="qr.action.type === 'message'" class="var-picker-row">
-                          <el-dropdown trigger="click" @command="(token) => insertVariableToken(qr.action, 'text', String(token))">
-                            <el-button size="small" text class="var-picker-btn">插入變數</el-button>
-                            <template #dropdown>
-                              <el-dropdown-menu>
-                                <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
-                                  {{ opt.label }}
-                                </el-dropdown-item>
-                              </el-dropdown-menu>
-                            </template>
-                          </el-dropdown>
-                        </div>
-                        <el-input v-else-if="qr.action.type === 'uri'" v-model="qr.action.uri" placeholder="https://..." size="small" />
-                      </div>
+                      <div class="carousel-actions">
+                      <FlowActionEditor
+                        :action="qr.action"
+                        :type-options="quickReplyActionTypeOptions"
+                        :module-options="flows"
+                        :variable-options="variableTokenOptions"
+                        header-label="按鈕動作"
+                        :label-show-word-limit="true"
+                      />
                     </div>
                   </div>
                 </div>
@@ -311,16 +344,19 @@
             </div>
 
             <!-- ── User Input block ── -->
-            <FlowMessageCardShell
+            <!-- Outer native div is the drop target; FlowMessageCardShell is drag source only -->
+            <div
               v-else-if="msg.type === 'userInput'"
-              class="user-input-card"
-              :badge-label="msgTypeLabel(msg.type)"
-              :badge-class="msgBadgeClass(msg.type)"
-              :class="{ dragging: dragIndex === i, 'drag-over': dragOverIndex === i && dragIndex !== i }"
               @dragover.prevent="onDragOver($event, i)"
               @dragenter.prevent
               @dragleave="onDragLeave"
               @drop="onDrop($event, i)"
+            >
+            <FlowMessageCardShell
+              class="user-input-card"
+              :badge-label="msgTypeLabel(msg.type)"
+              :badge-class="msgBadgeClass(msg.type)"
+              :class="{ dragging: dragIndex === i, 'drag-over': dragOverIndex === i && dragIndex !== i }"
               @dragstart="onDragStart($event, i)"
               @dragend="onDragEnd"
               @remove="removeMessage(i)"
@@ -328,8 +364,8 @@
               <div class="message-bubble-wrap user-input-content">
                 <div class="ui-field">
                   <p class="fuz-section-label section-label-tight">向用戶提問 <span class="text-muted">(必填)</span></p>
-                  <div class="flow-textarea-wrapper">
-                    <el-input
+                  <div class="flow-textarea-wrapper flow-textarea-wrapper--var-inset flow-textarea-wrapper--no-resize">
+                  <el-input
                       v-model="msg.text"
                       type="textarea"
                       :rows="3"
@@ -338,19 +374,11 @@
                       show-word-limit
                       resize="none"
                     />
-                  </div>
-                  <div class="var-picker-row">
-                    <el-dropdown trigger="click" @command="(token) => insertVariableToken(msg, 'text', String(token))">
-                      <el-button size="small" text class="var-picker-btn">插入變數</el-button>
-                      <template #dropdown>
-                        <el-dropdown-menu>
-                          <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
-                            {{ opt.label }}
-                          </el-dropdown-item>
-                        </el-dropdown-menu>
-                      </template>
-                    </el-dropdown>
-                  </div>
+                  <FlowVariableInset
+                    :options="variableTokenOptions"
+                    @pick="(token) => insertVariableToken(msg, 'text', String(token))"
+                  />
+                </div>
                 </div>
 
                 <div class="ui-settings">
@@ -388,6 +416,7 @@
                 </div>
               </div>
             </FlowMessageCardShell>
+            </div>
 
             <!-- ── Carousel block (flat stretch, but parent config is a standard card) ── -->
             <div
@@ -409,23 +438,18 @@
               >
                 <!-- Alt Text body (reusing standard padding) -->
                 <div class="carousel-alt-wrap card-section-stack">
-                  <el-input
-                    v-model="msg.altText"
-                    :placeholder="msg.type === 'imageCarousel' ? '訊息提醒文字（最多 400 字）' : '訊息提醒文字（不支援 Flex 時顯示，最多 400 字）'"
-                    maxlength="400"
-                    show-word-limit
-                  />
-                  <div class="var-picker-row">
-                    <el-dropdown trigger="click" @command="(token) => insertVariableToken(msg, 'altText', String(token))">
-                      <el-button size="small" text class="var-picker-btn">插入變數</el-button>
-                      <template #dropdown>
-                        <el-dropdown-menu>
-                          <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
-                            {{ opt.label }}
-                          </el-dropdown-item>
-                        </el-dropdown-menu>
-                      </template>
-                    </el-dropdown>
+                  <p class="fuz-section-label section-label-tight">訊息提醒文字 <span class="text-muted">(最多 400 字)</span></p>
+                  <div class="flow-input-inset-wrap control-full">
+                    <el-input
+                      v-model="msg.altText"
+                      :placeholder="msg.type === 'imageCarousel' ? '訊息提醒文字（最多 400 字）' : '訊息提醒文字（不支援 Flex 時顯示，最多 400 字）'"
+                      maxlength="400"
+                      show-word-limit
+                    />
+                    <FlowVariableInset
+                      :options="variableTokenOptions"
+                      @pick="(token) => insertVariableToken(msg, 'altText', String(token))"
+                    />
                   </div>
                   <p v-if="msg.type === 'imageCarousel'" class="fuz-hint-text section-label-tight">
                     圖片長度不可超過寬度的 3 倍，小於 500 KB，建議每張比例相同
@@ -442,10 +466,10 @@
                     v-for="(col, ci) in msg.columns" :key="ci"
                     class="carousel-sub-card"
                     :class="{ 'col-dragging': colDragMsgIndex === i && colDragIndex === ci, 'col-drag-over': colDragMsgIndex === i && colDragOverIndex === ci && colDragIndex !== ci }"
-                    @dragover.prevent.stop="onColDragOver($event, i, ci)"
-                    @dragenter.prevent.stop
-                    @dragleave.stop="onColDragLeave"
-                    @drop.stop="onColDrop($event, i, ci)"
+                    @dragover.prevent="onColDragOver($event, i, ci)"
+                    @dragenter.prevent
+                    @dragleave="onColDragLeave"
+                    @drop="onColDrop($event, i, ci)"
                   >
                     <div class="carousel-card-top">
                       <div class="flex gap-1 items-center">
@@ -456,83 +480,48 @@
                     </div>
                     <div class="carousel-sub-body">
                       <FlowUploadZone v-model="col.thumbnailImageUrl" type="image" label="上傳縮圖" preview-height="140px" />
-                      <el-input v-model="col.title" class="control-top-gap" placeholder="標題（必填，最多 80 字）" maxlength="80" show-word-limit />
-                      <div class="var-picker-row">
-                        <el-dropdown trigger="click" @command="(token) => insertVariableToken(col, 'title', String(token))">
-                          <el-button size="small" text class="var-picker-btn">插入變數</el-button>
-                          <template #dropdown>
-                            <el-dropdown-menu>
-                              <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
-                                {{ opt.label }}
-                              </el-dropdown-item>
-                            </el-dropdown-menu>
-                          </template>
-                        </el-dropdown>
-                      </div>
-                      <div class="flow-textarea-wrapper control-top-gap">
-                        <el-input v-model="col.text" type="textarea" :rows="2" placeholder="副標題或內容（最多 300 字）" maxlength="300" show-word-limit />
-                      </div>
-                      <div class="var-picker-row">
-                        <el-dropdown trigger="click" @command="(token) => insertVariableToken(col, 'text', String(token))">
-                          <el-button size="small" text class="var-picker-btn">插入變數</el-button>
-                          <template #dropdown>
-                            <el-dropdown-menu>
-                              <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
-                                {{ opt.label }}
-                              </el-dropdown-item>
-                            </el-dropdown-menu>
-                          </template>
-                        </el-dropdown>
-                      </div>
+                      <p class="fuz-section-label section-label-tight control-top-gap">標題 <span class="text-muted">(必填，最多 80 字)</span></p>
+                      <div class="flow-input-inset-wrap flow-input-inset-wrap--sm control-full">
+                      <el-input v-model="col.title" placeholder="標題（必填，最多 80 字）" maxlength="80" show-word-limit />
+                      <FlowVariableInset
+                        size="sm"
+                        :options="variableTokenOptions"
+                        @pick="(token) => insertVariableToken(col, 'title', String(token))"
+                      />
+                    </div>
+                      <p class="fuz-section-label section-label-tight control-top-gap">內容 <span class="text-muted">(最多 300 字)</span></p>
+                      <div class="flow-textarea-wrapper flow-textarea-wrapper--var-inset">
+                  <el-input v-model="col.text" type="textarea" :rows="2" placeholder="副標題或內容（最多 300 字）" maxlength="300" show-word-limit />
+                  <FlowVariableInset
+                    :options="variableTokenOptions"
+                    @pick="(token) => insertVariableToken(col, 'text', String(token))"
+                  />
+                </div>
                       <div v-if="col.actions?.length" class="carousel-actions">
-                        <div v-for="(act, ai) in col.actions" :key="ai" class="carousel-action-row">
-                          <div class="carousel-action-row-top">
-                            <span class="carousel-action-index">按鈕 {{ Number(ai) + 1 }}</span>
-                            <el-button
-                              link
-                              type="danger"
-                              size="small"
-                              :disabled="col.actions.length <= 1"
-                              @click="removeCarouselAction(col, Number(ai))"
-                            >
-                              ✕
-                            </el-button>
-                          </div>
-                          <el-select v-model="act.type" size="small" class="control-full">
-                            <el-option value="uri" label="開網址" />
-                            <el-option value="message" label="傳文字" />
-                            <el-option value="module" label="觸發模組" />
-                          </el-select>
-                          <el-input v-model="act.label" placeholder="按鈕文字" maxlength="20" size="small" />
-                          <div class="var-picker-row">
-                            <el-dropdown trigger="click" @command="(token) => insertVariableToken(act, 'label', String(token))">
-                              <el-button size="small" text class="var-picker-btn">插入變數</el-button>
-                              <template #dropdown>
-                                <el-dropdown-menu>
-                                  <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
-                                    {{ opt.label }}
-                                  </el-dropdown-item>
-                                </el-dropdown-menu>
-                              </template>
-                            </el-dropdown>
-                          </div>
-                          <el-select v-if="act.type === 'module'" v-model="act.moduleId" placeholder="選擇機器人模組" size="small" class="control-full">
-                            <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
-                          </el-select>
-                          <el-input v-else-if="act.type==='uri'" v-model="act.uri" placeholder="https://..." size="small" />
-                          <el-input v-else v-model="act.text" placeholder="傳送文字" size="small" />
-                          <div v-if="act.type === 'message'" class="var-picker-row">
-                            <el-dropdown trigger="click" @command="(token) => insertVariableToken(act, 'text', String(token))">
-                              <el-button size="small" text class="var-picker-btn">插入變數</el-button>
-                              <template #dropdown>
-                                <el-dropdown-menu>
-                                  <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
-                                    {{ opt.label }}
-                                  </el-dropdown-item>
-                                </el-dropdown-menu>
-                              </template>
-                            </el-dropdown>
-                          </div>
+                        <div v-for="(act, ai) in col.actions" :key="ai">
+                          <FlowActionEditor
+                            :action="act"
+                            :type-options="standardActionTypeOptions"
+                            :module-options="flows"
+                            :variable-options="variableTokenOptions"
+                            :header-label="`按鈕 ${Number(ai) + 1}`"
+                            :field-size="'default'"
+                            label-placeholder="按鈕文字"
+                            text-title="傳送文字"
+                            text-placeholder="傳送文字"
+                          >
+                            <template #top-extra>
+                              <el-button
+                                link
+                                type="danger"
+                                size="small"
+                                :disabled="col.actions.length <= 1"
+                                @click="removeCarouselAction(col, Number(ai))"
+                              >
+                                ✕
+                              </el-button>
+                            </template>
+                          </FlowActionEditor>
                         </div>
                       </div>
                       <el-button v-if="!col.actions || col.actions.length < 3" plain size="small" class="control-dashed-add" @click="addCarouselAction(col)">⊕ 新增按鈕</el-button>
@@ -546,10 +535,10 @@
                     v-for="(col, ci) in msg.columns" :key="ci"
                     class="carousel-sub-card"
                     :class="{ 'col-dragging': colDragMsgIndex === i && colDragIndex === ci, 'col-drag-over': colDragMsgIndex === i && colDragOverIndex === ci && colDragIndex !== ci }"
-                    @dragover.prevent.stop="onColDragOver($event, i, ci)"
-                    @dragenter.prevent.stop
-                    @dragleave.stop="onColDragLeave"
-                    @drop.stop="onColDrop($event, i, ci)"
+                    @dragover.prevent="onColDragOver($event, i, ci)"
+                    @dragenter.prevent
+                    @dragleave="onColDragLeave"
+                    @drop="onColDrop($event, i, ci)"
                   >
                     <div class="carousel-card-top">
                       <div class="flex gap-1 items-center">
@@ -561,53 +550,18 @@
                     <div class="carousel-sub-body">
                       <FlowUploadZone v-model="col.imageUrl" type="image" label="上傳" preview-height="160px" />
                       <div class="carousel-actions carousel-actions-top-gap">
-                        <div class="carousel-action-row">
-                          <div class="carousel-action-row-top">
-                            <span class="carousel-action-index">圖片動作</span>
-                          </div>
-                          <el-select v-model="col.action.type" size="small" class="control-full">
-                            <el-option value="none" label="未有行動" />
-                            <el-option value="uri" label="開啟網址" />
-                            <el-option value="message" label="傳送文字" />
-                            <el-option value="module" label="觸發模組" />
-                          </el-select>
-                          <el-input
-                            v-if="col.action.type !== 'none'"
-                            v-model="col.action.label"
-                            placeholder="按鈕文字 (必填)"
-                            maxlength="20"
-                            size="small"
-                          />
-                          <div v-if="col.action.type !== 'none'" class="var-picker-row">
-                            <el-dropdown trigger="click" @command="(token) => insertVariableToken(col.action, 'label', String(token))">
-                              <el-button size="small" text class="var-picker-btn">插入變數</el-button>
-                              <template #dropdown>
-                                <el-dropdown-menu>
-                                  <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
-                                    {{ opt.label }}
-                                  </el-dropdown-item>
-                                </el-dropdown-menu>
-                              </template>
-                            </el-dropdown>
-                          </div>
-                          <el-select v-if="col.action.type === 'module'" v-model="col.action.moduleId" placeholder="選擇機器人模組" size="small" class="control-full">
-                            <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
-                          </el-select>
-                          <el-input v-else-if="col.action.type==='uri'" v-model="col.action.uri" placeholder="https://..." size="small" />
-                          <el-input v-else-if="col.action.type==='message'" v-model="col.action.text" placeholder="點擊後傳送的文字" size="small" />
-                          <div v-if="col.action.type==='message'" class="var-picker-row">
-                            <el-dropdown trigger="click" @command="(token) => insertVariableToken(col.action, 'text', String(token))">
-                              <el-button size="small" text class="var-picker-btn">插入變數</el-button>
-                              <template #dropdown>
-                                <el-dropdown-menu>
-                                  <el-dropdown-item v-for="opt in variableTokenOptions" :key="opt.value" :command="opt.token">
-                                    {{ opt.label }}
-                                  </el-dropdown-item>
-                                </el-dropdown-menu>
-                              </template>
-                            </el-dropdown>
-                          </div>
-                        </div>
+                        <FlowActionEditor
+                          :action="col.action"
+                          :type-options="imageCarouselActionTypeOptions"
+                          :module-options="flows"
+                          :variable-options="variableTokenOptions"
+                          header-label="圖片動作"
+                          :field-size="'default'"
+                          :hide-fields-when-none="true"
+                          label-placeholder="按鈕文字 (必填)"
+                          text-title="傳送文字"
+                          text-placeholder="點擊後傳送的文字"
+                        />
                       </div>
                     </div>
                   </div>
@@ -637,10 +591,26 @@
 
 
 <script setup lang="ts">
+import {
+  SLOT_LABELS as ACTION_SLOT_LABELS,
+  validateUnifiedAction,
+} from '~~/shared/action-schema'
+import {
+  RICH_LAYOUT_PRESETS,
+  type RichLayoutId,
+} from '~~/shared/rich-layout-presets'
+import {
+  createRichMessageActions,
+  normalizeRichMessageActions,
+  richMessageEditorActionsOverlap,
+  RICH_MESSAGE_MIN_BOUNDS,
+} from '~~/shared/rich-message-editor-helpers'
+
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 // ── State ─────────────────────────────────────────────
 const flows = ref<any[]>([])
+const richMessages = ref<any[]>([])
 const loading = ref(true)
 const saving = ref(false)
 const selectedId = ref<string | null>(null)
@@ -661,6 +631,29 @@ const qrDragMsgIndex = ref<number | null>(null)
 const qrDragIndex = ref<number | null>(null)
 const qrDragOverIndex = ref<number | null>(null)
 
+const messageRenderKeys = new WeakMap<object, string>()
+let messageRenderKeySeq = 0
+
+function getMessageRenderKey(msg: any, index: number) {
+  if (msg && typeof msg === 'object') {
+    const target = msg as object
+    let key = messageRenderKeys.get(target)
+    if (!key) {
+      key = `msg-${messageRenderKeySeq++}`
+      messageRenderKeys.set(target, key)
+    }
+    return key
+  }
+  return `msg-fallback-${index}`
+}
+
+function resolveDraggedIndex(e: DragEvent, fallback: number | null) {
+  if (fallback !== null) return fallback
+  const raw = e.dataTransfer?.getData('text/plain')
+  if (!raw) return null
+  const parsed = Number.parseInt(raw, 10)
+  return Number.isInteger(parsed) ? parsed : null
+}
 
 const defaultForm = () => ({
   name: '',
@@ -726,11 +719,32 @@ const MSG_META: Record<string, { label: string; badge: string }> = {
   text:          { label: '📝 文字訊息',  badge: 'badge-blue'   },
   image:         { label: '🖼️ 圖片訊息', badge: 'badge-orange' },
   video:         { label: '🎬 影片訊息', badge: 'badge-gray'   },
+  richMessage:   { label: '📰 圖文訊息', badge: 'badge-green'  },
+  richMessageRef:{ label: '📰 圖文訊息(舊)', badge: 'badge-green'  },
   carousel:      { label: '🎠 輪播訊息', badge: 'badge-green'  },
   imageCarousel: { label: '🖼️ 圖片輪播', badge: 'badge-gray'  },
   quickReply:    { label: '⚡ 快速回覆', badge: 'badge-purple' },
   userInput:     { label: '✍️ 用戶輸入卡片', badge: 'badge-red' },
 }
+
+const standardActionTypeOptions = [
+  { value: 'uri', label: '開網址' },
+  { value: 'message', label: '傳文字' },
+  { value: 'module', label: '觸發模組' },
+]
+
+const quickReplyActionTypeOptions = [
+  { value: 'message', label: '傳送文字' },
+  { value: 'uri', label: '開啟網址' },
+  { value: 'module', label: '觸發模組' },
+]
+
+const imageCarouselActionTypeOptions = [
+  { value: 'none', label: '未有行動' },
+  { value: 'uri', label: '開啟網址' },
+  { value: 'message', label: '傳送文字' },
+  { value: 'module', label: '觸發模組' },
+]
 
 function msgTypeLabel(type: string) {
   return MSG_META[type]?.label ?? type
@@ -750,7 +764,15 @@ async function loadFlows() {
   flows.value = await $fetch<any[]>('/api/flow/list').catch(() => [])
   loading.value = false
 }
-onMounted(loadFlows)
+async function loadRichMessages() {
+  const list = await $fetch<any[]>('/api/rich-message/list').catch(() => [])
+  richMessages.value = (list ?? []).map((item) => normalizeRichMessageItem(item))
+  form.value.messages = normalizeMessages(form.value.messages)
+}
+
+onMounted(async () => {
+  await Promise.all([loadFlows(), loadRichMessages()])
+})
 
 // ── Select / Create ───────────────────────────────────
 function selectFlow(flow: any) {
@@ -787,6 +809,21 @@ function addMessage(type: string) {
     form.value.messages.push({ type: 'image', originalContentUrl: '', previewImageUrl: '' })
   } else if (type === 'video') {
     form.value.messages.push({ type: 'video', originalContentUrl: '', previewImageUrl: '' })
+  } else if (type === 'richMessage') {
+    form.value.messages.push({
+      type: 'richMessage',
+      altText: '',
+      transparentBackground: false,
+      heroImageUrl: '',
+      layoutId: 'single' as RichLayoutId,
+      actions: createRichMessageActions('single'),
+    })
+  } else if (type === 'richMessageRef') {
+    form.value.messages.push({
+      type: 'richMessageRef',
+      richMessageId: '',
+      richMessageName: '',
+    })
   } else if (type === 'carousel') {
     form.value.messages.push({
       type: 'carousel',
@@ -850,6 +887,76 @@ function newQuickReplyAction() {
   return { imageUrl: '', action: { type: 'message', label: '', text: '' } }
 }
 
+function normalizeRichMessageItem(item: any) {
+  const layoutId = typeof item?.layoutId === 'string' ? item.layoutId : 'custom'
+  const actions = Array.isArray(item?.actions)
+    ? item.actions
+    : Array.isArray(item?.buttons)
+      ? item.buttons.map((btn: any, index: number) => ({
+          slot: ACTION_SLOT_LABELS[index] || String.fromCharCode(65 + index),
+          type: btn?.type === 'message' || btn?.type === 'module' ? btn.type : 'uri',
+          uri: btn?.uri || '',
+          text: btn?.text || '',
+          moduleId: btn?.moduleId || '',
+        }))
+      : []
+  return {
+    id: item?.id || '',
+    name: item?.name || '',
+    layoutId,
+    transparentBackground: Boolean(item?.transparentBackground),
+    altText: item?.altText || '',
+    heroImageUrl: item?.heroImageUrl || '',
+    actions: actions.map((action: any, idx: number) => ({
+      slot: action?.slot || ACTION_SLOT_LABELS[idx] || String.fromCharCode(65 + idx),
+      type: action?.type === 'message' || action?.type === 'module' ? action.type : 'uri',
+      uri: action?.uri || '',
+      text: action?.text || '',
+      moduleId: action?.moduleId || '',
+    })),
+  }
+}
+
+function richMessageLayoutLabel(layoutId: string) {
+  const labels: Record<string, string> = {
+    custom: '自訂',
+    single: '滿版',
+    splitV: '左右',
+    splitH: '上下',
+    grid4: '四宮格',
+    tripleH: '三橫列',
+    mix3: '上1下2',
+    grid6: '六宮格',
+  }
+  return labels[layoutId] || '自訂'
+}
+
+function syncRichMessagePayload(msg: any) {
+  const selected = richMessages.value.find(item => item.id === msg.richMessageId)
+  if (!selected) {
+    msg.richMessageName = ''
+    return
+  }
+  msg.richMessageName = selected.name || ''
+}
+
+function onRichMessageRefChange(msg: any) {
+  syncRichMessagePayload(msg)
+}
+
+function selectInlineRichMessageLayout(msg: any, layoutId: string) {
+  const nextLayout = layoutId as RichLayoutId
+  if (msg.layoutId === nextLayout) return
+  msg.layoutId = nextLayout
+  msg.actions = normalizeRichMessageActions(nextLayout, msg.actions || [])
+}
+
+function richMessageRefPreview(msg: any) {
+  const selected = richMessages.value.find(item => item.id === msg?.richMessageId)
+  if (selected) return selected
+  return msg?.payload ? normalizeRichMessageItem(msg.payload) : null
+}
+
 function addCarouselColumn(msg: any) {
   if (msg.columns.length < 10) msg.columns.push(newCarouselColumn())
 }
@@ -900,21 +1007,20 @@ function removeQuickReply(msg: any, qi: number) {
 
 // ── Drag and Drop ─────────────────────────────────────
 function onDragStart(e: DragEvent, i: number) {
-  dragIndex.value = i
+  // dataTransfer must be set synchronously inside dragstart
   if (e.dataTransfer) {
     e.dataTransfer.effectAllowed = 'move'
     e.dataTransfer.dropEffect = 'move'
     e.dataTransfer.setData('text/plain', i.toString())
   }
-  setTimeout(() => {}, 0)
-}
-
-function onDragOver(_e: DragEvent, i: number) {
-  dragOverIndex.value = i
-}
-
-function onDragLeave() {
-  dragOverIndex.value = null
+  // Delay the Vue reactive update that adds `dragging` class (with CSS transform).
+  // Setting dragIndex.value synchronously triggers a Vue re-render which applies
+  // transform: scale(0.98) to .carousel-block (align-self:stretch + overflow-x:auto).
+  // Chrome detects this layout change mid-dragstart and cancels the drag operation.
+  // Deferring to rAF ensures Chrome commits the drag before any DOM mutation occurs.
+  requestAnimationFrame(() => {
+    dragIndex.value = i
+  })
 }
 
 function onDragEnd() {
@@ -922,8 +1028,21 @@ function onDragEnd() {
   dragOverIndex.value = null
 }
 
+function onDragOver(_e: DragEvent, i: number) {
+  if (dragIndex.value !== null) {
+    dragOverIndex.value = i
+  }
+}
+
+
+function onDragLeave() {
+  dragOverIndex.value = null
+}
+
 function onDrop(e: DragEvent, dropIndex: number) {
-  const fromIndex = dragIndex.value
+  e.preventDefault()
+  if (dragIndex.value === null) return
+  const fromIndex = resolveDraggedIndex(e, dragIndex.value)
   if (fromIndex !== null && fromIndex !== dropIndex) {
     const item = form.value.messages.splice(fromIndex, 1)[0]
     form.value.messages.splice(dropIndex, 0, item)
@@ -961,8 +1080,11 @@ function onColDragEnd() {
 }
 
 function onColDrop(e: DragEvent, msgIndex: number, dropIndex: number) {
-  if (colDragMsgIndex.value === msgIndex && colDragIndex.value !== null && colDragIndex.value !== dropIndex) {
-    const fromIndex = colDragIndex.value
+  e.preventDefault()
+  if (colDragMsgIndex.value === null) return  // card-level drag: let event bubble to carousel-block
+  e.stopPropagation()
+  const fromIndex = resolveDraggedIndex(e, colDragIndex.value)
+  if (colDragMsgIndex.value === msgIndex && fromIndex !== null && fromIndex !== dropIndex) {
     const columns = form.value.messages[msgIndex].columns
     const item = columns.splice(fromIndex, 1)[0]
     columns.splice(dropIndex, 0, item)
@@ -1001,8 +1123,11 @@ function onQrDragEnd() {
 }
 
 function onQrDrop(e: DragEvent, msgIndex: number, dropIndex: number) {
-  if (qrDragMsgIndex.value === msgIndex && qrDragIndex.value !== null && qrDragIndex.value !== dropIndex) {
-    const fromIndex = qrDragIndex.value
+  e.preventDefault()
+  if (qrDragMsgIndex.value === null) return  // card-level drag: let event bubble to outer block
+  e.stopPropagation()
+  const fromIndex = resolveDraggedIndex(e, qrDragIndex.value)
+  if (qrDragMsgIndex.value === msgIndex && fromIndex !== null && fromIndex !== dropIndex) {
     const qrArray = form.value.messages[msgIndex].quickReplies
     const item = qrArray.splice(fromIndex, 1)[0]
     qrArray.splice(dropIndex, 0, item)
@@ -1087,6 +1212,36 @@ function normalizeMessages(messages: any[]) {
         moduleId: msg.moduleId || '',
       }
     }
+
+    if (msg.type === 'richMessage') {
+      const rawLayout = (msg.layoutId as string) || 'single'
+      const layoutId = RICH_LAYOUT_PRESETS.some((p) => p.id === rawLayout)
+        ? (rawLayout as RichLayoutId)
+        : 'single'
+      return {
+        ...msg,
+        altText: msg.altText || '',
+        transparentBackground: Boolean(msg.transparentBackground),
+        heroImageUrl: msg.heroImageUrl || '',
+        layoutId,
+        actions: normalizeRichMessageActions(
+          layoutId,
+          Array.isArray(msg.actions) && msg.actions.length > 0
+            ? msg.actions
+            : createRichMessageActions(layoutId),
+        ),
+      }
+    }
+
+    if (msg.type === 'richMessageRef') {
+      const selected = richMessages.value.find(item => item.id === msg.richMessageId)
+      const { payload: _legacyPayload, ...rest } = msg || {}
+      return {
+        ...rest,
+        richMessageId: msg.richMessageId || '',
+        richMessageName: msg.richMessageName || selected?.name || '',
+      }
+    }
     
     if (msg.type !== 'carousel') return msg
 
@@ -1145,6 +1300,55 @@ function validateMessages(messages: any[]): string | null {
         return '用戶輸入卡片：儲存屬性名稱格式錯誤，請使用英文字母開頭，且只能包含英數與底線'
       }
       if (!msg.moduleId) return '用戶輸入卡片：請選擇等待回覆後要觸發的下一個模組'
+    }
+
+    if (msg?.type === 'richMessage') {
+      if (!msg.altText?.trim()) return '圖文訊息：請輸入提醒文字（Alt Text）'
+      if (!msg.heroImageUrl) return '圖文訊息：請上傳背景圖片'
+      if (!Array.isArray(msg.actions) || msg.actions.length < 1) return '圖文訊息：尚未設定任何動作區塊'
+      if (msg.layoutId === 'custom') {
+        if (richMessageEditorActionsOverlap(msg.actions)) {
+          return '圖文訊息：自訂區域有重疊，請調整後再儲存'
+        }
+        for (const action of msg.actions) {
+          const bounds = action.bounds
+          if (!bounds) return `圖文訊息：區塊 ${action.slot} 缺少自訂區域範圍`
+          if (bounds.width < RICH_MESSAGE_MIN_BOUNDS || bounds.height < RICH_MESSAGE_MIN_BOUNDS) {
+            return `圖文訊息：區塊 ${action.slot} 區域尺寸過小`
+          }
+        }
+      }
+      for (const action of msg.actions) {
+        const error = validateUnifiedAction({
+          slot: action.slot || '',
+          type: action.type === 'message' || action.type === 'module' ? action.type : 'uri',
+          uri: action.uri || '',
+          text: action.text || '',
+          moduleId: action.moduleId || '',
+        })
+        if (error) return `圖文訊息：區塊 ${action.slot} ${error}`
+      }
+    }
+
+    if (msg?.type === 'richMessageRef') {
+      if (!msg.richMessageId) return '圖文訊息：請選擇已建立的圖文訊息'
+      const selected = richMessages.value.find((item) => item.id === msg.richMessageId)
+      if (!selected) return '圖文訊息：找不到引用內容，請重新選擇'
+      if (!selected.altText) {
+        return '圖文訊息：引用內容不完整，請到圖文訊息管理補齊'
+      }
+      if (!selected.transparentBackground && !selected.heroImageUrl) return '圖文訊息：缺少背景圖片'
+      if (!Array.isArray(selected.actions) || selected.actions.length < 1) return '圖文訊息：尚未定義任何動作'
+      for (const action of selected.actions) {
+        const error = validateUnifiedAction({
+          slot: action.slot || '',
+          type: action.type === 'message' || action.type === 'module' ? action.type : 'uri',
+          uri: action.uri || '',
+          text: action.text || '',
+          moduleId: action.moduleId || '',
+        })
+        if (error) return `圖文訊息：區塊 ${action.slot} ${error}`
+      }
     }
 
     // carousel buttons are required by design and must be complete

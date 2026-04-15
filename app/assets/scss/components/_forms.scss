@@ -2,3 +2,81 @@
 .form-group { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1rem; }
 .form-group label { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+/*
+ * 後台所有「標題在上」表單：Element Plus .el-form-item--small 含 margin-bottom:18px，
+ * 與 flex/grid 的 gap 疊加。統一 margin:0，垂直節奏只由父層 gap 或子層 grid gap 控制。
+ */
+.split-editor .el-form.el-form--label-top .el-form-item,
+.main-content .el-form.el-form--label-top .el-form-item,
+.el-dialog .el-form.el-form--label-top .el-form-item,
+.el-dialog__body .el-form.el-form--label-top .el-form-item {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+.split-editor .el-form.el-form--label-top,
+.main-content .el-form.el-form--label-top,
+.el-dialog .el-form.el-form--label-top,
+.el-dialog__body .el-form.el-form--label-top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-form-field-gap);
+}
+
+/* 圖文等：外層 el-form 直接子節點可能是 div 區塊，仍讓巢狀 el-form-item 套用上面 margin:0 */
+.admin-form-vertical.el-form--label-top {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-form-stack-gap);
+}
+
+.admin-form-vertical.el-form--label-top .el-form-item {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* 區塊卡內巢狀表單（座標／動作）：欄位間只用 gap */
+.admin-form-nested.el-form--label-top {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-form-field-gap);
+}
+
+.admin-form-nested.el-form--label-top .el-form-item {
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/*
+ * 全站統一 input/select 尺寸：
+ * 若歷史程式仍使用 size="small"，視覺上仍比照 default 尺寸，避免頁面大小不一致。
+ */
+.split-editor .el-input--small .el-input__wrapper,
+.main-content .el-input--small .el-input__wrapper,
+.el-dialog .el-input--small .el-input__wrapper,
+.el-dialog__body .el-input--small .el-input__wrapper,
+.split-editor .el-select--small .el-select__wrapper,
+.main-content .el-select--small .el-select__wrapper,
+.el-dialog .el-select--small .el-select__wrapper,
+.el-dialog__body .el-select--small .el-select__wrapper,
+.split-editor .el-input-number--small .el-input__wrapper,
+.main-content .el-input-number--small .el-input__wrapper,
+.el-dialog .el-input-number--small .el-input__wrapper,
+.el-dialog__body .el-input-number--small .el-input__wrapper {
+  min-height: 32px;
+}
+
+.split-editor .el-input--small .el-input__inner,
+.main-content .el-input--small .el-input__inner,
+.el-dialog .el-input--small .el-input__inner,
+.el-dialog__body .el-input--small .el-input__inner,
+.split-editor .el-select__input.is-small,
+.main-content .el-select__input.is-small,
+.el-dialog .el-select__input.is-small,
+.el-dialog__body .el-select__input.is-small {
+  font-size: 14px;
+}

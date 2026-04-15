@@ -10,10 +10,6 @@
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
-.rm-list-card-body {
-  padding: 0;
-}
-
 .rm-thumb-image {
   height: 60px;
   border-radius: var(--radius-sm);
@@ -60,144 +56,62 @@
   font-weight: 600;
 }
 
-.rm-upload-hint {
+.rm-area-editor {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-form-stack-gap);
+}
+
+.rm-editor-body {
+  padding: 1.25rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-form-stack-gap);
+}
+
+.rm-config-card {
+  width: 100%;
+  max-width: 100%;
+}
+
+.rm-config-card :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.rm-config-card :deep(.card-section-stack) {
+  gap: 0.75rem;
+}
+
+.rm-layout-in-card {
   margin-top: 0.25rem;
 }
 
-.rm-area-editor {
-  margin-bottom: 1rem;
+.rm-layout-hint {
+  margin: 0.35rem 0 0;
 }
 
 .rm-area-editor-top {
-  margin-bottom: 0.75rem;
+  margin-bottom: var(--space-section-heading-gap);
 }
 
-.rm-area-editor-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.rm-area-card {
-  margin-bottom: 0.75rem;
-}
-
-.rm-area-card :deep(.el-card__body) {
-  padding: 1rem;
-}
-
-.rm-area-tag {
-  color: #fff;
-  border: none;
-}
-
-.upload-zone {
-  border: 2px dashed var(--border);
-  border-radius: var(--radius-md);
-  padding: 2rem;
-  cursor: pointer;
-  transition: border-color var(--t-fast);
-  min-height: 140px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.upload-zone:hover, .upload-zone.dragging {
-  border-color: var(--color-line);
-  background: var(--color-line-glow);
-}
-
-/* ── Canvas area blocks ── */
-.canvas-area {
-  position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid rgba(255,255,255,0.4);
-  cursor: grab;
-  transition: border-color 0.15s;
-  box-sizing: border-box;
-}
-.canvas-area:hover,
-.canvas-area.area-active {
-  border-color: #fff;
-  box-shadow: 0 0 0 2px rgba(255,255,255,0.3);
-  z-index: 10;
-}
-.canvas-area.area-active { cursor: grabbing; }
-
-.area-label {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: #fff;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
-  pointer-events: none;
-}
-
-/* ── Resize handles ── */
-.rh {
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  background: #fff;
-  border: 2px solid rgba(0,0,0,0.4);
-  border-radius: 2px;
-  z-index: 20;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-.canvas-area:hover .rh,
-.canvas-area.area-active .rh { opacity: 1; }
-
-/* Corners */
-.rh.nw { top: -5px;  left: -5px;  cursor: nw-resize; }
-.rh.ne { top: -5px;  right: -5px; cursor: ne-resize; }
-.rh.se { bottom: -5px; right: -5px; cursor: se-resize; }
-.rh.sw { bottom: -5px; left: -5px;  cursor: sw-resize; }
-
-/* Edges */
-.rh.n  { top: -5px;  left: 50%; transform: translateX(-50%); cursor: n-resize; }
-.rh.s  { bottom: -5px; left: 50%; transform: translateX(-50%); cursor: s-resize; }
-.rh.e  { right: -5px; top: 50%; transform: translateY(-50%); cursor: e-resize; }
-.rh.w  { left: -5px;  top: 50%; transform: translateY(-50%); cursor: w-resize; }
-
-/* ── Overlap warning ── */
-.canvas-area.area-overlap {
-  border-color: #ff4d4d !important;
-  box-shadow: 0 0 0 2px rgba(255, 77, 77, 0.4) !important;
-  animation: pulse-overlap 1s ease-in-out infinite alternate;
-}
-@keyframes pulse-overlap {
-  from { box-shadow: 0 0 0 2px rgba(255, 77, 77, 0.3); }
-  to   { box-shadow: 0 0 0 4px rgba(255, 77, 77, 0.6); }
-}
-
-/* ── Snap guide lines ── */
-.guide-line {
-  position: absolute;
-  pointer-events: none;
-  z-index: 30;
-  background: #00d4ff;
-  box-shadow: 0 0 4px rgba(0, 212, 255, 0.8);
-  animation: guide-in 0.08s ease-out;
-}
-.guide-line.v {
-  top: -4px;
-  bottom: -4px;
-  width: 1px;
-  transform: translateX(-50%);
-}
-.guide-line.h {
-  left: -4px;
-  right: -4px;
-  height: 1px;
-  transform: translateY(-50%);
-}
-@keyframes guide-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+.rm-section-card {
+  width: 100%;
 }
 
 .table-row:hover {
   background: var(--bg-hover);
+}
+
+@media (max-width: 980px) {
+  .rm-thumb-image,
+  .rm-thumb-fallback {
+    height: 48px;
+    width: 48px;
+  }
+
+  .rm-area-card .admin-action-bounds {
+    grid-template-columns: 1fr;
+  }
 }

@@ -1,291 +1,227 @@
 <template>
-  <div>
-    <div class="page-header">
-      <div>
-        <h1>Rich Menu 設定</h1>
-        <p>建立並部署 LINE Rich Menu</p>
+  <AdminSplitLayout :is-empty="!selectedMenu && !isCreating">
+    <template #sidebar-header>
+      <span class="split-sidebar-title">🗂️ Rich Menu</span>
+      <el-button type="primary" size="small" @click="openCreate">➕ 新增</el-button>
+    </template>
+
+    <template #sidebar-list>
+      <div v-if="loading" class="split-sidebar-loading">
+        <div class="spinner" />
       </div>
-      <el-button type="primary" @click="openCreateModal">
-        ➕ 新增 Rich Menu
-      </el-button>
-    </div>
-
-    <!-- Loading -->
-    <div v-if="loading" class="loading-overlay">
-      <div class="spinner" />
-    </div>
-
-    <!-- Empty -->
-    <el-card v-else-if="!menus.length">
-      <div class="empty-state">
-        <span class="empty-icon">🗂️</span>
-        <h3>尚無 Rich Menu</h3>
-        <p>點擊右上角「新增 Rich Menu」開始建立您的第一個選單</p>
-        <el-button type="primary" @click="openCreateModal">建立選單</el-button>
+      <div v-else-if="!menus.length" class="split-sidebar-empty">
+        <span>尚無 Rich Menu</span>
+        <el-button size="small" type="primary" plain @click="openCreate">立即建立</el-button>
       </div>
-    </el-card>
+      <div v-else class="split-list">
+        <button
+          v-for="menu in sortedMenus"
+          :key="menu.id"
+          class="split-list-item"
+          :class="{ active: selectedId === menu.id }"
+          @click="selectMenu(menu)"
+        >
+          <div class="split-list-name">{{ menu.name }}</div>
+          <div class="split-list-meta">
+            <span class="text-xs text-muted">{{ menu.areas?.length ?? 0 }} 個區塊</span>
+            <el-tag v-if="menu.isDefault" size="small" type="success" effect="light">⭐ 預設</el-tag>
+          </div>
+        </button>
+      </div>
+    </template>
 
-    <!-- Menu List -->
-    <el-card v-else shadow="hover" body-class="rm-list-card-body">
-      <el-table :data="sortedMenus" class="admin-w-full" @row-click="openEditModal" row-class-name="cursor-pointer">
-        <el-table-column label="預覽圖片" width="120">
-          <template #default="{ row }">
-            <el-image
-              v-if="row.imageUrl"
-              :src="row.imageUrl"
-              fit="contain"
-              class="rm-thumb-image"
-            />
-            <div v-else class="rm-thumb-fallback">
-              🖼️
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column label="選單名稱">
-          <template #default="{ row }">
-            <div class="rm-name">{{ row.name }}</div>
-            <div class="text-xs text-muted rm-name-meta">{{ row.areas?.length ?? 0 }} 個區塊</div>
-          </template>
-        </el-table-column>
-        <el-table-column label="狀態">
-          <template #default="{ row }">
-            <el-tag v-if="row.isDefault" type="success" effect="light">⭐ 預設選單</el-tag>
-            <span v-else class="text-muted text-sm">一般選單</span>
-          </template>
-        </el-table-column>
-      </el-table>
-    </el-card>
+    <template #editor-empty>
+      <span class="empty-icon">🗂️</span>
+      <h3>選擇一個 Rich Menu 開始編輯</h3>
+      <p>或點擊左側「➕ 新增」建立新的 Rich Menu</p>
+      <el-button type="primary" @click="openCreate">建立 Rich Menu</el-button>
+    </template>
 
-    <!-- ── Create Modal ── -->
-    <el-dialog
-      v-model="showCreate"
-      :title="editingId ? '編輯 Rich Menu' : '新增 Rich Menu'"
-      width="700px"
-      :before-close="closeCreateModal"
-    >
-      <el-form label-position="top" @submit.prevent>
-        <el-form-item label="選單名稱">
-          <el-input v-model="form.name" placeholder="例：主選單" />
-        </el-form-item>
+    <template #editor-header>
+      <div class="admin-flex-1">
+        <div class="admin-title-row">
+          <span v-if="isCreating" class="split-editor-title">新增 Rich Menu:</span>
+          <el-input
+            v-model="form.name"
+            size="large"
+            class="admin-title-input"
+            placeholder="請輸入選單名稱..."
+          />
+        </div>
+        <p class="text-sm text-muted admin-subtext">
+          版型：{{ form.layoutId }} · 區塊 {{ form.areas.length }} 個
+        </p>
+      </div>
+      <div class="flex gap-1">
+        <el-button v-if="!isCreating && selectedMenu" type="danger" @click="deleteMenu">
+          🗑️ 刪除
+        </el-button>
+        <el-button @click="cancelEdit">取消</el-button>
+        <el-button type="primary" :loading="creating" @click="submitForm">
+          {{ isCreating ? '建立 Rich Menu' : '儲存變更' }}
+        </el-button>
+      </div>
+    </template>
 
-        <el-form-item label="Chat Bar 文字">
-          <el-input v-model="form.chatBarText" placeholder="選單" />
-        </el-form-item>
-
-        <!-- Create Image Upload Zone -->
-        <el-form-item :label="`1. 上傳選單背景圖 (${editingId ? '選填，若不上傳則自動沿用舊圖' : '必要'})`">
-          <div
-            class="upload-zone rm-upload-zone-create"
-            :class="{ dragging: isCreateDragging }"
-            @dragleave="isCreateDragging = false"
-            @dragover.prevent="isCreateDragging = true"
-            @drop.prevent="onCreateDrop"
-            @click="triggerCreateFile"
-          >
-            <input ref="createFileInput" type="file" :accept="IMAGE_ACCEPT_ATTR" class="admin-hidden-input" @change="onCreateFileSelect" />
-            <div v-if="form.previewUrl" class="admin-text-center">
-              <div class="badge badge-green rm-upload-badge">✅ 圖片已上傳 ({{ form.width }} × {{ form.height }})</div>
-              <p class="text-xs text-muted">點擊或拖放到此處可重新上傳</p>
-            </div>
-            <div v-else class="admin-text-center admin-muted-icon">
-              <div class="rm-upload-icon">🖼️</div>
-              <p class="rm-upload-title">拖放圖片或點擊選擇</p>
-              <p class="text-xs text-muted rm-upload-hint">JPG / PNG · 最大 500KB (建議 2500x1686 或 2500x843)</p>
+    <template #editor-body>
+      <el-form label-position="top" class="admin-form-vertical rm-editor-body" @submit.prevent>
+        <div class="message-card rm-config-card">
+          <div class="message-card-header">
+            <div class="card-header-main">
+              <span class="badge badge-green">🖼️ 選單設定</span>
             </div>
           </div>
-        </el-form-item>
+          <div class="card-section-stack">
+            <el-form-item label="Chat Bar 文字" class="admin-form-item-compact">
+              <el-input v-model="form.chatBarText" placeholder="選單" />
+            </el-form-item>
 
-        <el-form-item label="預設顯示">
-          <el-select v-model="form.selected" class="admin-w-full">
-            <el-option :value="true" label="是" />
-            <el-option :value="false" label="否" />
-          </el-select>
-        </el-form-item>
+            <el-form-item label="啟用" class="admin-form-item-compact">
+              <div class="admin-inline-control">
+                <el-switch v-model="form.selected" />
+                <span class="text-xs text-muted">{{ form.selected ? '啟用中' : '停用中' }}</span>
+              </div>
+            </el-form-item>
+
+            <el-form-item label="設為預設選單" class="admin-form-item-compact">
+              <div class="admin-inline-control">
+                <el-switch v-model="form.setAsDefault" />
+                <span class="text-xs text-muted">{{ form.setAsDefault ? '新加入好友預設顯示此選單' : '不設為預設選單' }}</span>
+              </div>
+            </el-form-item>
+
+            <el-form-item :label="`1. 上傳選單背景圖 (${isCreating ? '必要' : '選填，若不上傳則自動沿用舊圖'})`">
+              <FlowUploadZone
+                v-model="form.previewUrl"
+                type="image"
+                appearance="simple"
+                upload-mode="local"
+                hint="JPG / PNG · 最大 500KB（建議 2500x1686 或 2500x843）"
+                @file-selected="onRichMenuImageSelected"
+              />
+            </el-form-item>
+
+            <div class="rm-layout-in-card">
+              <AdminLayoutPresetPicker
+                flat
+                title="圖文樣式"
+                :layouts="richMenuLayoutPresets"
+                :selected-id="form.layoutId"
+                @select="onSelectRichMenuLayout"
+              />
+              <p v-if="!form.previewUrl" class="text-xs text-muted rm-layout-hint">
+                可先選版型，實際區塊設定會在上傳背景圖後顯示。
+              </p>
+            </div>
+
+            <AdminAreaEditorSection
+              v-if="form.previewUrl"
+              :areas="form.areas"
+              section-label="區塊預覽"
+              :flat="true"
+              :show-canvas="true"
+              :show-action-cards="false"
+              :show-header="false"
+              :show-add-button="false"
+              :allow-remove="false"
+              :show-bounds="false"
+              :min-bounds-size="0"
+              :base-width="Number(form.width) || 2500"
+              :base-height="Number(form.height) || 843"
+              :area-colors="areaColors"
+              :drag-area-index="dragState?.areaIndex ?? null"
+              :overlap-set="overlapSet"
+              :guide-lines="guideLines"
+              :canvas-style="richMenuCanvasStyle"
+              :set-canvas-ref="setRichMenuCanvasRef"
+              @start-drag="startDrag"
+              @start-resize="startResize"
+              @clamp="clampAreaByIndex"
+            />
+          </div>
+        </div>
 
         <!-- Areas Editor (only visible if image uploaded) -->
         <div v-if="form.previewUrl" class="rm-area-editor">
-          <div class="flex items-center justify-between rm-area-editor-top">
-            <label class="rm-area-editor-label">
-              2. 區塊設定（{{ form.areas.length }} 個）
-            </label>
-            <el-button size="small" @click="addArea">➕ 新增區塊</el-button>
-          </div>
 
-          <!-- Visual canvas (drag + resize) -->
-          <div
-            ref="canvasRef"
-            class="canvas-wrap"
-            :style="{
-              width: '100%',
-              paddingBottom: `${(Number(form.height) / Number(form.width)) * 100}%`,
-              position: 'relative',
-              background: `url(${form.previewUrl}) center/cover no-repeat`,
-              backgroundColor: 'var(--bg-elevated)',
-              borderRadius: 'var(--radius-md)',
-              border: '1px solid var(--border)',
-              marginBottom: '1rem',
-              overflow: 'hidden',
-              userSelect: dragState ? 'none' : 'auto',
-              cursor: dragState?.type === 'move' ? 'grabbing' : 'default',
-            }"
+          <AdminAreaEditorSection
+            :areas="form.areas"
+            section-label="2. 區塊設定"
+            :flat="true"
+            :show-canvas="false"
+            :show-action-cards="true"
+            :show-header="false"
+            :show-add-button="form.layoutId === 'custom'"
+            :allow-remove="form.layoutId === 'custom'"
+            :show-bounds="form.layoutId === 'custom'"
+            :min-bounds-size="0"
+            :base-width="Number(form.width) || 2500"
+            :base-height="Number(form.height) || 843"
+            :area-colors="areaColors"
+            :drag-area-index="dragState?.areaIndex ?? null"
+            :overlap-set="overlapSet"
+            :guide-lines="guideLines"
+              :canvas-style="{}"
+            :set-canvas-ref="setRichMenuCanvasRef"
+            @add="addArea"
+            @remove="removeArea"
+            @start-drag="startDrag"
+            @start-resize="startResize"
+            @clamp="clampAreaByIndex"
           >
-            <div
-              v-for="(area, i) in form.areas"
-              :key="i"
-              class="canvas-area"
-              :class="{
-                'area-active': dragState?.areaIndex === i,
-                'area-overlap': overlapSet.has(i),
-              }"
-              :style="{
-                left: `${(area.bounds.x / Number(form.width)) * 100}%`,
-                top: `${(area.bounds.y / Number(form.height)) * 100}%`,
-                width: `${(area.bounds.width / Number(form.width)) * 100}%`,
-                height: `${(area.bounds.height / Number(form.height)) * 100}%`,
-                background: areaColors[i % areaColors.length],
-              }"
-              @mousedown.prevent="startDrag($event, i)"
-            >
-              <span class="area-label">{{ i + 1 }}</span>
-              <!-- 8 resize handles -->
-              <div class="rh nw" @mousedown.stop.prevent="startResize($event, i, 'nw')" />
-              <div class="rh n"  @mousedown.stop.prevent="startResize($event, i, 'n')" />
-              <div class="rh ne" @mousedown.stop.prevent="startResize($event, i, 'ne')" />
-              <div class="rh e"  @mousedown.stop.prevent="startResize($event, i, 'e')" />
-              <div class="rh se" @mousedown.stop.prevent="startResize($event, i, 'se')" />
-              <div class="rh s"  @mousedown.stop.prevent="startResize($event, i, 's')" />
-              <div class="rh sw" @mousedown.stop.prevent="startResize($event, i, 'sw')" />
-              <div class="rh w"  @mousedown.stop.prevent="startResize($event, i, 'w')" />
-            </div>
-
-            <!-- Guide lines -->
-            <div
-              v-for="(gl, gi) in guideLines"
-              :key="`gl-${gi}`"
-              class="guide-line"
-              :class="gl.type"
-              :style="gl.type === 'v'
-                ? { left: `${(gl.pos / Number(form.width)) * 100}%` }
-                : { top: `${(gl.pos / Number(form.height)) * 100}%` }"
-            />
-          </div>
-
-          <el-card
-            v-for="(area, i) in form.areas"
-            :key="i"
-            shadow="never"
-            class="rm-area-card"
-          >
-            <template #header>
-              <div class="admin-card-header-row">
-                <el-tag
-                  :color="areaColors[i % areaColors.length]"
-                  class="rm-area-tag"
-                >
-                  區塊 {{ i + 1 }}
-                </el-tag>
-                <el-button link type="danger" @click="removeArea(i)">✕ 移除</el-button>
-              </div>
+            <template #action-fields="{ area }">
+              <AdminAreaActionEditor
+                :model-value="area.action"
+                :module-options="modules"
+                :menu-options="menus"
+                :allow-switch="true"
+                :exclude-menu-id="selectedId"
+                @update:model-value="(next) => { area.action = next }"
+              />
             </template>
-
-            <el-row :gutter="10" class="admin-area-row-gap">
-              <el-col :span="12">
-                <el-form-item label="X" class="admin-form-item-compact">
-                  <el-input-number v-model="area.bounds.x" :min="0" :controls="false" class="admin-w-full" @change="clampArea(area)" />
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="Y" class="admin-form-item-compact">
-                  <el-input-number v-model="area.bounds.y" :min="0" :controls="false" class="admin-w-full" @change="clampArea(area)" />
-                </el-form-item>
-              </el-col>
-            </el-row>
-            <el-row :gutter="10">
-              <el-col :span="12">
-                <el-form-item label="Width" class="admin-form-item-compact">
-                  <el-input-number v-model="area.bounds.width" :min="0" :controls="false" class="admin-w-full" @change="clampArea(area)" />
-                </el-form-item>
-              </el-col>
-              <el-col :span="12">
-                <el-form-item label="Height" class="admin-form-item-compact">
-                  <el-input-number v-model="area.bounds.height" :min="0" :controls="false" class="admin-w-full" @change="clampArea(area)" />
-                </el-form-item>
-              </el-col>
-            </el-row>
-
-            <!-- Action -->
-            <el-form-item label="動作類型" class="admin-action-type-field">
-              <el-select v-model="area.action.type" class="admin-w-full" @change="onActionTypeChange(area)">
-                <el-option value="message" label="message（代發文字）" />
-                <el-option value="uri" label="uri（開啟網址）" />
-                <el-option value="postback" label="postback（觸發機器人模組）" />
-                <el-option value="switch" label="switch（切換選單）" />
-              </el-select>
-            </el-form-item>
-
-            <el-form-item v-if="area.action.type === 'message'" label="文字內容" class="admin-form-item-compact">
-              <el-input v-model="area.action.text" placeholder="輸入代發文字" />
-            </el-form-item>
-            <el-form-item v-if="area.action.type === 'uri'" label="網址" class="admin-form-item-compact">
-              <el-input v-model="area.action.uri" placeholder="https://..." />
-            </el-form-item>
-            <el-form-item v-if="area.action.type === 'postback'" label="選擇目標模組" class="admin-form-item-compact">
-              <el-select v-model="area.action.data" placeholder="請選擇要觸發的機器人模組..." class="admin-w-full">
-                <el-option v-for="mod in modules" :key="mod.id" :value="`triggerModule=${mod.id}`" :label="mod.name" />
-              </el-select>
-            </el-form-item>
-            <el-form-item v-if="area.action.type === 'switch'" label="選擇目標 Rich Menu" class="admin-form-item-compact">
-              <el-select v-model="area.action.data" placeholder="請選擇要切換的選單..." class="admin-w-full">
-                <template v-for="m in menus" :key="m.id">
-                  <el-option v-if="m.id !== editingId" :value="`switchMenu=${m.id}`" :label="m.name" />
-                </template>
-              </el-select>
-              <!-- Warn if current selection points to a deleted menu -->
-              <div
-                v-if="area.action.data && area.action.data !== '' && !menus.find(m => m.id !== editingId && `switchMenu=${m.id}` === area.action.data)"
-                class="admin-warning-inline"
-              >
-                ⚠️ 所選的目標選單已不存在，請重新選擇
-              </div>
-            </el-form-item>
-          </el-card>
+          </AdminAreaEditorSection>
         </div>
-
-        <el-form-item v-if="form.previewUrl">
-          <el-checkbox v-model="form.setAsDefault">設為預設選單</el-checkbox>
-        </el-form-item>
       </el-form>
+    </template>
+  </AdminSplitLayout>
 
-      <template #footer>
-        <span class="dialog-footer">
-          <el-button v-if="editingId" type="danger" class="admin-float-left" @click="confirmDeleteFromModal">刪除</el-button>
-          <el-button @click="showCreate = false">取消</el-button>
-          <el-button type="primary" :loading="creating" @click="submitCreate">
-            🚀 部署到 LINE
-          </el-button>
-        </span>
-      </template>
-    </el-dialog>
-
-    <AdminToastStack :toasts="toasts" />
-  </div>
+  <AdminToastStack :toasts="toasts" />
 </template>
 
 <script setup lang="ts">
 import {
-  IMAGE_ACCEPT_ATTR,
   IMAGE_MAX_BYTES,
-  IMAGE_MIME_TYPES,
 } from '~~/shared/upload-rules'
+import {
+  decodeTriggerModule,
+  encodeTriggerModule,
+  validateUnifiedAction,
+} from '~~/shared/action-schema'
+import {
+  RICH_LAYOUT_PRESETS,
+  createPresetBounds,
+  type RichLayoutId,
+} from '~~/shared/rich-layout-presets'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
+
+type LocalSelectedFile = {
+  file: File
+  dataUrl: string
+  objectUrl: string
+  contentType: string
+  width?: number
+  height?: number
+}
 
 // ── Data ──────────────────────────────────────────────────────
 const menus = ref<any[]>([])
 const loading = ref(true)
-const showCreate = ref(false)
+const selectedId = ref<string | null>(null)
+const isCreating = ref(false)
 const creating = ref(false)
 const { toasts, showToast } = useAdminToast()
+const selectedMenu = computed(() => menus.value.find((menu) => menu.id === selectedId.value) ?? null)
 
 const sortedMenus = computed(() => {
   return [...menus.value].sort((a, b) => {
@@ -298,39 +234,6 @@ const sortedMenus = computed(() => {
 // ── Canvas drag / resize ──────────────────────────────────────
 const canvasRef = ref<HTMLElement | null>(null)
 
-interface DragState {
-  type: 'move' | 'resize'
-  areaIndex: number
-  handle: string
-  startClientX: number
-  startClientY: number
-  startBounds: { x: number; y: number; width: number; height: number }
-}
-const dragState = ref<DragState | null>(null)
-
-// Guide lines shown during drag
-const guideLines = ref<Array<{ type: 'h' | 'v'; pos: number }>>([])
-
-// Detect overlapping areas (reactive)
-const overlapSet = computed(() => {
-  const result = new Set<number>()
-  const areas = form.value.areas
-  for (let i = 0; i < areas.length; i++) {
-    for (let j = i + 1; j < areas.length; j++) {
-      const a = areas[i].bounds
-      const b = areas[j].bounds
-      const overlapping = !(
-        a.x + a.width <= b.x ||
-        a.x >= b.x + b.width ||
-        a.y + a.height <= b.y ||
-        a.y >= b.y + b.height
-      )
-      if (overlapping) { result.add(i); result.add(j) }
-    }
-  }
-  return result
-})
-
 const areaColors = [
   'rgba(6,199,85,0.6)',
   'rgba(59,130,246,0.6)',
@@ -340,40 +243,10 @@ const areaColors = [
   'rgba(236,72,153,0.6)',
 ]
 
-// ── Snap helpers ──────────────────────────────────────────────
-const SNAP_PX = 8 // threshold in screen pixels
-
-function getSnapXs(excludeIdx: number, W: number): number[] {
-  const pts = [0, W / 2, W]
-  form.value.areas.forEach((a, i) => {
-    if (i === excludeIdx) return
-    pts.push(a.bounds.x, a.bounds.x + a.bounds.width)
-  })
-  return pts
-}
-
-function getSnapYs(excludeIdx: number, H: number): number[] {
-  const pts = [0, H / 2, H]
-  form.value.areas.forEach((a, i) => {
-    if (i === excludeIdx) return
-    pts.push(a.bounds.y, a.bounds.y + a.bounds.height)
-  })
-  return pts
-}
-
-/** Try snapping `val` to nearest point within threshold. Returns {snapped value, snap point, delta}. */
-function trySnap(val: number, pts: number[], thresh: number): { val: number; pt: number | null; delta: number } {
-  let best = { val, pt: null as number | null, delta: Infinity }
-  for (const p of pts) {
-    const d = Math.abs(val - p)
-    if (d < thresh && d < best.delta) best = { val: p, pt: p, delta: d }
-  }
-  return best
-}
-
 const defaultForm = () => ({
   name: '',
   chatBarText: '選單',
+  layoutId: 'custom' as RichLayoutId,
   width: 0,
   height: 0,
   imageBase64: '',
@@ -384,8 +257,103 @@ const defaultForm = () => ({
   areas: [] as any[],
 })
 const form = ref(defaultForm())
+const richMenuAreas = computed(() => form.value.areas as any[])
+
+const {
+  dragState,
+  guideLines,
+  overlapSet,
+  clampArea: clampAreaByIndex,
+  clampAllAreas: clampAllAreasByEditor,
+  startDrag: startAreaDrag,
+  startResize: startAreaResize,
+  stopDrag,
+  bindWindowListeners,
+  unbindWindowListeners,
+} = useAreaEditor<any>({
+  areas: richMenuAreas,
+  canvasRef,
+  canvasWidth: () => Number(form.value.width) || 2500,
+  canvasHeight: () => Number(form.value.height) || 843,
+  minSize: 80,
+  snapPx: 8,
+  enableSnap: true,
+  getBounds: (area) => area.bounds,
+  setBounds: (area, bounds) => {
+    area.bounds = bounds
+  },
+})
+
+const richMenuCanvasStyle = computed(() => {
+  const ratio = (Number(form.value.height) / Number(form.value.width)) * 100
+  const url = form.value.previewUrl
+  const d = dragState.value
+  return {
+    paddingBottom: `${Number.isFinite(ratio) ? ratio : 0}%`,
+    ...(url ? { backgroundImage: `url(${url})` } : {}),
+    userSelect: d ? 'none' : 'auto',
+    cursor: d?.type === 'move' ? 'grabbing' : 'default',
+  }
+})
+
+function setRichMenuCanvasRef(el: HTMLElement | null) {
+  canvasRef.value = el
+}
 
 const modules = ref<any[]>([])
+const richMenuLayoutPresets = RICH_LAYOUT_PRESETS
+const fixedLayoutIds = richMenuLayoutPresets
+  .map((layout) => layout.id)
+  .filter((id): id is Exclude<RichLayoutId, 'custom'> => id !== 'custom')
+
+function getMenuWidth() {
+  return Number(form.value.width) || 2500
+}
+
+function getMenuHeight() {
+  return Number(form.value.height) || 843
+}
+
+function detectLayoutByAreas(areas: any[], width: number, height: number): RichLayoutId {
+  if (!Array.isArray(areas) || areas.length === 0) return 'custom'
+  const tolerance = 3
+  for (const layoutId of fixedLayoutIds) {
+    const preset = createPresetBounds(layoutId, width, height)
+    if (preset.length !== areas.length) continue
+    const matched = preset.every((expected, idx) => {
+      const actual = areas[idx]?.bounds
+      if (!actual) return false
+      return Math.abs((actual.x ?? 0) - expected.x) <= tolerance
+        && Math.abs((actual.y ?? 0) - expected.y) <= tolerance
+        && Math.abs((actual.width ?? 0) - expected.width) <= tolerance
+        && Math.abs((actual.height ?? 0) - expected.height) <= tolerance
+    })
+    if (matched) return layoutId
+  }
+  return 'custom'
+}
+
+function applyRichMenuLayout(layoutId: RichLayoutId) {
+  form.value.layoutId = layoutId
+  if (layoutId === 'custom') {
+    if (form.value.areas.length === 0) addArea()
+    return
+  }
+  const width = getMenuWidth()
+  const height = getMenuHeight()
+  const boundsList = createPresetBounds(layoutId, width, height)
+  const nextAreas = boundsList.map((bounds, index) => ({
+    bounds,
+    action: form.value.areas[index]?.action
+      ? { ...form.value.areas[index].action }
+      : { type: 'module', moduleId: '' },
+  }))
+  form.value.areas = nextAreas
+}
+
+function onSelectRichMenuLayout(layoutId: string) {
+  applyRichMenuLayout(layoutId as RichLayoutId)
+}
 
 // ── Fetch ─────────────────────────────────────────────────────
 async function loadMenus() {
@@ -403,317 +371,192 @@ async function loadMenus() {
   }
   loading.value = false
 }
-onMounted(loadMenus)
+onMounted(() => {
+  loadMenus()
+  bindWindowListeners()
+})
+onBeforeUnmount(() => {
+  unbindWindowListeners()
+})
 
-// ── Create ────────────────────────────────────────────────────
-const isCreateDragging = ref(false)
-const createFileInput = ref<HTMLInputElement | null>(null)
-const editingId = ref<string | null>(null)
+// ── Select / Create ───────────────────────────────────────────
 const originalFormString = ref('')
-function openCreateModal() {
-  editingId.value = null
-  form.value = defaultForm()
-  originalFormString.value = JSON.stringify(form.value)
-  showCreate.value = true
+function hasUnsavedChanges() {
+  return originalFormString.value !== '' && JSON.stringify(form.value) !== originalFormString.value
 }
 
-function openEditModal(menu: any) {
-  editingId.value = menu.id
-  form.value = {
+function confirmDiscardChanges() {
+  if (!hasUnsavedChanges()) return true
+  return window.confirm('您有未儲存的變更，離開將會遺失目前編輯內容，確定繼續嗎？')
+}
+
+function openCreate() {
+  if (!confirmDiscardChanges()) return
+  selectedId.value = null
+  isCreating.value = true
+  form.value = defaultForm()
+  originalFormString.value = JSON.stringify(form.value)
+}
+
+function buildFormFromMenu(menu: any) {
+  const normalizedAreas = JSON.parse(JSON.stringify(menu.areas || [])).map((a: any) => {
+    const data = String(a?.action?.data || '')
+    // Restore switch menu state from legacy postback format
+    if (a.action.type === 'postback' && data.startsWith('switchMenu=')) {
+      return { ...a, action: { type: 'switch', data: a.action.data } }
+    }
+    if (a.action.type === 'postback' && decodeTriggerModule(data)) {
+      return { ...a, action: { type: 'module', moduleId: decodeTriggerModule(data) } }
+    }
+    if (a.action.type === 'postback') {
+      return { ...a, action: { type: 'module', moduleId: '' } }
+    }
+    // Restore from native richmenuswitch: look up target menu by aliasId
+    if (a.action.type === 'richmenuswitch') {
+      const richMenuAliasId: string = a.action.richMenuAliasId ?? ''
+      const targetMenu = menus.value.find(m => m.aliasId === richMenuAliasId)
+      const targetFirestoreId = targetMenu?.id ?? ''
+      return { ...a, action: { type: 'switch', data: `switchMenu=${targetFirestoreId}` } }
+    }
+    return a
+  })
+  const width = menu.size?.width || 2500
+  const height = menu.size?.height || 843
+  return {
     name: menu.name || '',
     chatBarText: menu.chatBarText || '選單',
-    width: menu.size?.width || 2500,
-    height: menu.size?.height || 843,
+    layoutId: detectLayoutByAreas(normalizedAreas, width, height),
+    width,
+    height,
     imageBase64: '',
     contentType: '',
     previewUrl: menu.imageUrl || '',
-    selected: true,
+    selected: typeof menu.selected === 'boolean' ? menu.selected : true,
     setAsDefault: menu.isDefault || false,
-    areas: JSON.parse(JSON.stringify(menu.areas || [])).map((a: any) => {
-      // Restore switch menu state from legacy postback format
-      if (a.action.type === 'postback' && a.action.data?.startsWith('switchMenu=')) {
-        return { ...a, action: { type: 'switch', data: a.action.data } }
-      }
-      // Restore from native richmenuswitch: look up target menu by aliasId
-      if (a.action.type === 'richmenuswitch') {
-        const richMenuAliasId: string = a.action.richMenuAliasId ?? ''
-        // Find the target menu in our list whose aliasId matches
-        const targetMenu = menus.value.find(m => m.aliasId === richMenuAliasId)
-        const targetFirestoreId = targetMenu?.id ?? ''
-        return { ...a, action: { type: 'switch', data: `switchMenu=${targetFirestoreId}` } }
-      }
-      return a
-    })
+    areas: normalizedAreas,
   }
+}
+
+function selectMenu(menu: any) {
+  if (!confirmDiscardChanges()) return
+  selectedId.value = menu.id
+  isCreating.value = false
+  form.value = buildFormFromMenu(menu)
   originalFormString.value = JSON.stringify(form.value)
-  showCreate.value = true
 }
 
-function closeCreateModal() {
-  if (JSON.stringify(form.value) !== originalFormString.value) {
-    if (!window.confirm('您有未儲存的變更，關閉將會遺失所有進度，確定要關閉嗎？')) {
-      return
-    }
+function cancelEdit() {
+  if (!confirmDiscardChanges()) return
+  if (selectedMenu.value) {
+    const current = selectedMenu.value
+    selectedId.value = current.id
+    isCreating.value = false
+    form.value = buildFormFromMenu(current)
+    originalFormString.value = JSON.stringify(form.value)
+    return
   }
-  showCreate.value = false
+  isCreating.value = false
+  selectedId.value = null
+  form.value = defaultForm()
+  originalFormString.value = JSON.stringify(form.value)
 }
 
-function triggerCreateFile() { createFileInput.value?.click() }
+async function onRichMenuImageSelected(payload: LocalSelectedFile) {
+  if (payload.file.size > IMAGE_MAX_BYTES) {
+    showToast('圖片不能超過 500KB', 'error')
+    return
+  }
+  const W = Number(payload.width || 0)
+  const H = Number(payload.height || 0)
+  if (!W || !H) {
+    showToast('圖片處理失敗，請重試', 'error')
+    return
+  }
+  if (W < 800 || W > 2500 || H < 250 || (W / H) < 1.45) {
+    showToast(`尺寸不符規範 (W:800~2500, H>=250, W/H>=1.45)。目前：${W}x${H}`, 'error')
+    return
+  }
 
-function handleCreateFile(file: File) {
-  if (file.size > IMAGE_MAX_BYTES) return showToast('圖片不能超過 500KB', 'error')
-  if (!IMAGE_MIME_TYPES.includes(file.type)) return showToast('僅支援 JPG / PNG 格式', 'error')
-  
+  form.value.width = W
+  form.value.height = H
+  form.value.previewUrl = payload.objectUrl
+  applyRichMenuLayout(form.value.layoutId)
+
   const img = new Image()
-  const pUrl = URL.createObjectURL(file)
-  
   img.onload = () => {
-    const W = img.naturalWidth
-    const H = img.naturalHeight
-    
-    // LINE check
-    if (W < 800 || W > 2500 || H < 250 || (W / H) < 1.45) {
-      return showToast(`尺寸不符規範 (W:800~2500, H>=250, W/H>=1.45)。目前：${W}x${H}`, 'error')
-    }
-    
-    form.value.width = W
-    form.value.height = H
-    form.value.previewUrl = pUrl
-    // LINE Rich Menu 只支援 JPEG/PNG，將可上傳格式一律轉為 PNG 再送出
     const canvas = document.createElement('canvas')
     canvas.width = W
     canvas.height = H
     const ctx = canvas.getContext('2d')
-    if (!ctx) return showToast('圖片處理失敗，請重試', 'error')
+    if (!ctx) {
+      showToast('圖片處理失敗，請重試', 'error')
+      return
+    }
     ctx.drawImage(img, 0, 0)
     const pngDataUrl = canvas.toDataURL('image/png')
     form.value.contentType = 'image/png'
     form.value.imageBase64 = pngDataUrl.split(',')[1] ?? ''
   }
-  img.src = pUrl
-}
-
-function onCreateFileSelect(e: Event) {
-  const f = (e.target as HTMLInputElement).files?.[0]
-  if (f) handleCreateFile(f)
-}
-function onCreateDrop(e: DragEvent) {
-  isCreateDragging.value = false
-  const f = e.dataTransfer?.files?.[0]
-  if (f) handleCreateFile(f)
+  img.onerror = () => {
+    showToast('圖片處理失敗，請重試', 'error')
+  }
+  img.src = payload.dataUrl
 }
 
 function addArea() {
+  if (form.value.layoutId !== 'custom') {
+    showToast('預設版型不可手動新增，請切換為「自訂區域」', 'error')
+    return
+  }
+  if (form.value.areas.length >= 6) {
+    showToast('區塊最多 6 個', 'error')
+    return
+  }
   const W = Number(form.value.width) || 2500
   const H = Number(form.value.height) || 843
   form.value.areas.push({
     bounds: { x: 0, y: 0, width: Math.floor(W / 3), height: H },
-    action: { type: 'postback', data: `action=area${form.value.areas.length + 1}` },
+    action: { type: 'module', moduleId: '' },
   })
 }
 
 function removeArea(i: number) {
+  if (form.value.layoutId !== 'custom') {
+    showToast('預設版型不可手動移除，請切換為「自訂區域」', 'error')
+    return
+  }
+  if (form.value.areas.length <= 1) {
+    showToast('至少需保留 1 個區塊', 'error')
+    return
+  }
   form.value.areas.splice(i, 1)
-}
-
-function clampArea(area: any) {
-  const W = Number(form.value.width) || 2500
-  const H = Number(form.value.height) || 843
-  
-  // 底部防呆限制大小
-  if (area.bounds.width < 10) area.bounds.width = 10
-  if (area.bounds.height < 10) area.bounds.height = 10
-  if (area.bounds.width > W) area.bounds.width = W
-  if (area.bounds.height > H) area.bounds.height = H
-
-  // 修復 xy
-  if (area.bounds.x < 0) area.bounds.x = 0
-  if (area.bounds.y < 0) area.bounds.y = 0
-  if (area.bounds.x + area.bounds.width > W) area.bounds.x = W - area.bounds.width
-  if (area.bounds.y + area.bounds.height > H) area.bounds.y = H - area.bounds.height
-
-  // 確保四捨五入
-  area.bounds.x = Math.round(area.bounds.x)
-  area.bounds.y = Math.round(area.bounds.y)
-  area.bounds.width = Math.round(area.bounds.width)
-  area.bounds.height = Math.round(area.bounds.height)
 }
 
 function clampAllAreas() {
   if (form.value.width < 100) form.value.width = 100
   if (form.value.height < 100) form.value.height = 100
-  form.value.areas.forEach(clampArea)
-}
-
-function attachDocListeners() {
-  document.addEventListener('mousemove', onMouseMove)
-  document.addEventListener('mouseup', stopDrag)
-}
-function detachDocListeners() {
-  document.removeEventListener('mousemove', onMouseMove)
-  document.removeEventListener('mouseup', stopDrag)
+  clampAllAreasByEditor()
 }
 
 function startDrag(e: MouseEvent, index: number) {
   e.preventDefault()
-  const area = form.value.areas[index]
-  dragState.value = {
-    type: 'move',
-    areaIndex: index,
-    handle: '',
-    startClientX: e.clientX,
-    startClientY: e.clientY,
-    startBounds: { ...area.bounds },
-  }
-  attachDocListeners()
+  startAreaDrag(e, index)
 }
 
 function startResize(e: MouseEvent, index: number, handle: string) {
   e.preventDefault()
-  const area = form.value.areas[index]
-  dragState.value = {
-    type: 'resize',
-    areaIndex: index,
-    handle,
-    startClientX: e.clientX,
-    startClientY: e.clientY,
-    startBounds: { ...area.bounds },
-  }
-  attachDocListeners()
+  startAreaResize(e, index, handle)
 }
 
-function onMouseMove(e: MouseEvent) {
-  if (!dragState.value || !canvasRef.value) return
+// Clean up listeners if editor leaves selection
+watch([isCreating, selectedId], ([creatingNow, currentId]) => {
+  if (!creatingNow && !currentId) stopDrag()
+})
 
-  const canvas = canvasRef.value
-  const rect = canvas.getBoundingClientRect()
-  const W = Number(form.value.width)
-  const H = Number(form.value.height)
-  // Actual rendered height (padding-bottom trick means rect.height includes padding)
-  const canvasHeight = rect.width * (H / W)
-  const scaleX = W / rect.width
-  const scaleY = H / canvasHeight
-
-  const dx = (e.clientX - dragState.value.startClientX) * scaleX
-  const dy = (e.clientY - dragState.value.startClientY) * scaleY
-
-  const { areaIndex, type, handle, startBounds } = dragState.value
-  const area = form.value.areas[areaIndex]
-  const MIN = 80
-
-  // Snap thresholds in canvas units (convert from screen px)
-  const threshX = SNAP_PX * scaleX
-  const threshY = SNAP_PX * scaleY
-  const snapXs = getSnapXs(areaIndex, W)
-  const snapYs = getSnapYs(areaIndex, H)
-
-  const newGuides: Array<{ type: 'h' | 'v'; pos: number }> = []
-
-  if (type === 'move') {
-    const bw = startBounds.width
-    const bh = startBounds.height
-    let newX = Math.max(0, Math.min(W - bw, startBounds.x + dx))
-    let newY = Math.max(0, Math.min(H - bh, startBounds.y + dy))
-
-    // Snap X: try left edge, right edge, then center of block
-    const leftSnap   = trySnap(newX,        snapXs, threshX)
-    const rightSnap  = trySnap(newX + bw,   snapXs, threshX)
-    const cxSnap     = trySnap(newX + bw/2, [W/2],  threshX)
-    if (leftSnap.pt !== null && leftSnap.delta <= rightSnap.delta) {
-      newX = leftSnap.val
-      newGuides.push({ type: 'v', pos: leftSnap.pt })
-    } else if (rightSnap.pt !== null) {
-      newX = rightSnap.val - bw
-      newGuides.push({ type: 'v', pos: rightSnap.pt })
-    } else if (cxSnap.pt !== null) {
-      newX = cxSnap.val - bw / 2
-      newGuides.push({ type: 'v', pos: cxSnap.pt })
-    }
-
-    // Snap Y: try top edge, bottom edge, then center of block
-    const topSnap    = trySnap(newY,        snapYs, threshY)
-    const bottomSnap = trySnap(newY + bh,   snapYs, threshY)
-    const cySnap     = trySnap(newY + bh/2, [H/2],  threshY)
-    if (topSnap.pt !== null && topSnap.delta <= bottomSnap.delta) {
-      newY = topSnap.val
-      newGuides.push({ type: 'h', pos: topSnap.pt })
-    } else if (bottomSnap.pt !== null) {
-      newY = bottomSnap.val - bh
-      newGuides.push({ type: 'h', pos: bottomSnap.pt })
-    } else if (cySnap.pt !== null) {
-      newY = cySnap.val - bh / 2
-      newGuides.push({ type: 'h', pos: cySnap.pt })
-    }
-
-    area.bounds.x = Math.round(newX)
-    area.bounds.y = Math.round(newY)
-  }
-  else {
-    let { x, y, width, height } = startBounds
-
-    if (handle.includes('e')) {
-      let rEdge = startBounds.x + startBounds.width + dx
-      const s = trySnap(rEdge, snapXs, threshX)
-      if (s.pt !== null) { rEdge = s.val; newGuides.push({ type: 'v', pos: s.pt }) }
-      width = Math.max(MIN, rEdge - x)
-    }
-    if (handle.includes('s')) {
-      let bEdge = startBounds.y + startBounds.height + dy
-      const s = trySnap(bEdge, snapYs, threshY)
-      if (s.pt !== null) { bEdge = s.val; newGuides.push({ type: 'h', pos: s.pt }) }
-      height = Math.max(MIN, bEdge - y)
-    }
-    if (handle.includes('w')) {
-      let lEdge = startBounds.x + dx
-      const s = trySnap(lEdge, snapXs, threshX)
-      if (s.pt !== null) { lEdge = s.val; newGuides.push({ type: 'v', pos: s.pt }) }
-      width = Math.max(MIN, startBounds.x + startBounds.width - lEdge)
-      x = startBounds.x + startBounds.width - width
-    }
-    if (handle.includes('n')) {
-      let tEdge = startBounds.y + dy
-      const s = trySnap(tEdge, snapYs, threshY)
-      if (s.pt !== null) { tEdge = s.val; newGuides.push({ type: 'h', pos: s.pt }) }
-      height = Math.max(MIN, startBounds.y + startBounds.height - tEdge)
-      y = startBounds.y + startBounds.height - height
-    }
-
-    // Clamp to canvas bounds
-    x = Math.max(0, x)
-    y = Math.max(0, y)
-    width  = Math.min(W - x, width)
-    height = Math.min(H - y, height)
-
-    area.bounds.x      = Math.round(x)
-    area.bounds.y      = Math.round(y)
-    area.bounds.width  = Math.round(width)
-    area.bounds.height = Math.round(height)
-  }
-
-  guideLines.value = newGuides
-}
-
-function stopDrag() {
-  dragState.value = null
-  guideLines.value = []
-  detachDocListeners()
-}
-
-// Clean up listeners if modal closes mid-drag
-watch(() => showCreate.value, (v) => { if (!v) stopDrag() })
-
-function onActionTypeChange(area: any) {
-  const t = area.action.type
-  area.action = { type: t }
-  if (t === 'message') area.action.text = ''
-  if (t === 'uri') area.action.uri = ''
-  if (t === 'postback') area.action.data = ''
-  if (t === 'switch') area.action.data = ''
-}
-
-async function submitCreate() {
+async function submitForm() {
   if (!form.value.previewUrl) return showToast('請先上傳圖片', 'error')
   if (!form.value.name || !form.value.areas.length) return showToast('請填寫名稱並新增至少一個區塊', 'error')
+  if (form.value.areas.length > 6) return showToast('區塊最多 6 個', 'error')
   if (overlapSet.value.size > 0) return showToast('區塊有重疊，請調整後再部署', 'error')
 
   // 硬性檢查邊界
@@ -729,9 +572,28 @@ async function submitCreate() {
     return showToast('發現超出邊界的區塊，已自動為您修正！請重新確認後再送出', 'error')
   }
 
+  for (const [index, area] of form.value.areas.entries()) {
+    const actionType = area?.action?.type
+    if (actionType === 'switch') {
+      if (!area?.action?.data) return showToast(`區塊 ${index + 1}：請選擇要切換的選單`, 'error')
+      continue
+    }
+    const err = validateUnifiedAction({
+      slot: String(index + 1),
+      type: actionType === 'message' || actionType === 'module' ? actionType : 'uri',
+      uri: area?.action?.uri || '',
+      text: area?.action?.text || '',
+      moduleId: area?.action?.moduleId || '',
+    })
+    if (err) return showToast(`區塊 ${index + 1}：${err}`, 'error')
+  }
+
   // Pre-process areas: transform "switch" to LINE's native richmenuswitch action
   // Look up the target menu's aliasId from the menus list (more reliable than string derivation)
   const apiAreas = form.value.areas.map(a => {
+    if (a.action.type === 'module') {
+      return { ...a, action: { type: 'postback', data: encodeTriggerModule(a.action.moduleId) } }
+    }
     if (a.action.type === 'switch' || a.action.type === 'richmenuswitch') {
       const targetFirestoreId = (a.action.data ?? '').replace('switchMenu=', '')
       const targetMenu = menus.value.find(m => m.id === targetFirestoreId)
@@ -747,11 +609,12 @@ async function submitCreate() {
   })
 
   creating.value = true
+  let createdFirestoreId = ''
   try {
 
-    if (editingId.value) {
+    if (!isCreating.value && selectedId.value) {
       // Edit Flow
-      await $fetch(`/api/richmenu/${editingId.value}`, {
+      await $fetch(`/api/richmenu/${selectedId.value}`, {
         method: 'PUT',
         body: {
           name: form.value.name,
@@ -767,7 +630,7 @@ async function submitCreate() {
       showToast('Rich Menu 已成功更新 ✅', 'success')
     } else {
       // Create Flow
-      const docResponse = await $fetch('/api/richmenu/create', {
+      const docResponse = await $fetch<any>('/api/richmenu/create', {
         method: 'POST',
         body: {
           name: form.value.name,
@@ -778,6 +641,7 @@ async function submitCreate() {
           setAsDefault: form.value.setAsDefault,
         },
       })
+      createdFirestoreId = String(docResponse?.id || '')
       
       await $fetch('/api/richmenu/upload', {
         method: 'POST',
@@ -791,8 +655,15 @@ async function submitCreate() {
       showToast('Rich Menu 已成功建立與部署 ✅', 'success')
     }
 
-    showCreate.value = false
     await loadMenus()
+    if (isCreating.value) {
+      isCreating.value = false
+      const latest = menus.value.find((menu) => menu.id === createdFirestoreId) ?? menus.value[0]
+      if (latest) selectMenu(latest)
+    } else if (selectedId.value) {
+      const next = menus.value.find((menu) => menu.id === selectedId.value)
+      if (next) selectMenu(next)
+    }
   }
   catch (e: any) {
     showToast(e?.data?.statusMessage ?? e?.message ?? '建立失敗', 'error')
@@ -819,14 +690,17 @@ async function setAsDefault(menu: any) {
 }
 
 // ── Delete ────────────────────────────────────────────────────
-async function confirmDeleteFromModal() {
-  if (!editingId.value) return
+async function deleteMenu() {
+  if (!selectedId.value) return
   const menuName = form.value.name
   if (!confirm(`確定刪除「${menuName}」？此動作無法復原。`)) return
   try {
-    await $fetch(`/api/richmenu/${editingId.value}`, { method: 'DELETE' })
+    await $fetch(`/api/richmenu/${selectedId.value}`, { method: 'DELETE' })
     showToast('已刪除', 'success')
-    showCreate.value = false
+    selectedId.value = null
+    isCreating.value = false
+    form.value = defaultForm()
+    originalFormString.value = JSON.stringify(form.value)
     await loadMenus()
   }
   catch {

@@ -24,18 +24,12 @@
       </nav>
 
       <div class="sidebar-footer">
-        <div class="flex items-center gap-1" style="margin-bottom:0.75rem;">
-          <div
-            style="
-              width:32px;height:32px;border-radius:50%;
-              background:var(--bg-hover);display:grid;
-              place-items:center;font-size:0.9rem;flex-shrink:0;
-            "
-          >
+        <div class="sidebar-footer-user">
+          <div class="sidebar-footer-avatar">
             👤
           </div>
-          <div style="flex:1;min-width:0;">
-            <div class="truncate text-sm font-bold" style="max-width:140px;">
+          <div class="sidebar-footer-user-meta">
+            <div class="sidebar-footer-email truncate text-sm font-bold">
               {{ user?.email ?? '管理員' }}
             </div>
             <div class="text-xs text-muted">Admin</div>

@@ -46,6 +46,7 @@
     <!-- ── Editor Header ── -->
     <template #editor-header>
       <div class="admin-flex-1">
+        <p class="fuz-section-label section-label-tight">規則名稱</p>
         <div class="admin-title-row">
           <span v-if="isCreating" class="split-editor-title">新增規則:</span>
           <el-input
@@ -76,8 +77,8 @@
       <div class="ar-editor-body">
         <!-- Status section -->
         <div class="ar-section">
-          <div class="ar-section-title">📍 狀態</div>
-          <p class="ar-section-hint admin-area-row-gap">停用的規則將不會被觸發。</p>
+          <div class="admin-panel-title">📍 狀態</div>
+          <p class="ar-section-hint">停用的規則將不會被觸發。</p>
           <el-switch
             v-model="form.isActive"
             active-text="啟用中"
@@ -88,7 +89,7 @@
 
         <!-- Keyword section -->
         <div class="ar-section">
-          <div class="ar-section-title">⚡ 觸發關鍵字</div>
+          <div class="admin-panel-title">⚡ 觸發關鍵字</div>
           <p class="ar-section-hint">當使用者傳送的訊息<b>完全符合</b>此關鍵字時觸發（不區分大小寫）。</p>
           <el-input
             v-model="form.keyword"
@@ -99,7 +100,7 @@
 
         <!-- Module picker -->
         <div class="ar-section">
-          <div class="ar-section-title">🤖 指定回覆模組</div>
+          <div class="admin-panel-title">🤖 指定回覆模組</div>
           <p class="ar-section-hint">觸發後，系統將自動發送下方所選模組中的所有訊息。</p>
           <div v-if="modulesLoading" class="ar-modules-loading">
             <div class="spinner" />
