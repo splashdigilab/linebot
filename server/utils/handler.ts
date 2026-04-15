@@ -333,10 +333,9 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
     if (msg.type === 'richMessage') {
       if (!msg.altText) return []
       if (!msg.heroImageUrl) return []
-      const transparentBackground = Boolean(msg.transparentBackground)
       const normalizedActions = Array.isArray(msg.actions) ? msg.actions : []
 
-      const footerContents = normalizedActions
+      const headerContents = normalizedActions
         .filter((action: any) => action?.type)
         .map((action: any, index: number) => {
           const slot = action?.slot || String.fromCharCode(65 + index)
@@ -381,35 +380,21 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
         altText: renderWithAttributes(msg.altText, attributes).slice(0, 400),
         contents: {
           type: 'bubble',
-          ...(transparentBackground ? {} : {
-            hero: {
-              type: 'image',
-              url: renderWithAttributes(msg.heroImageUrl, attributes),
-              size: 'full',
-              aspectRatio: '1:1',
-              aspectMode: 'cover',
-            },
-          }),
-          body: {
-            type: 'box',
-            layout: 'vertical',
-            spacing: 'sm',
-            contents: [{
-              type: 'text',
-              text: renderWithAttributes(msg.altText, attributes).slice(0, 400),
-              size: 'sm',
-              color: '#666666',
-              wrap: true,
-            }],
-          },
-          ...(footerContents.length > 0 ? {
-            footer: {
+          ...(headerContents.length > 0 ? {
+            header: {
               type: 'box',
               layout: 'vertical',
               spacing: 'sm',
-              contents: footerContents.slice(0, 6),
+              contents: headerContents.slice(0, 6),
             },
           } : {}),
+          hero: {
+            type: 'image',
+            url: renderWithAttributes(msg.heroImageUrl, attributes),
+            size: 'full',
+            aspectRatio: '1:1',
+            aspectMode: 'cover',
+          },
         },
       } as messagingApi.FlexMessage]
     }
@@ -418,8 +403,7 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
     if (msg.type === 'richMessageRef') {
       const payload = msg.payload
       if (!payload?.altText) return []
-      const transparentBackground = Boolean(payload?.transparentBackground)
-      if (!transparentBackground && !payload?.heroImageUrl) return []
+      if (!payload?.heroImageUrl) return []
       const normalizedActions = Array.isArray(payload?.actions)
         ? payload.actions
         : Array.isArray(payload?.buttons)
@@ -432,7 +416,7 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
             }))
           : []
 
-      const footerContents = normalizedActions
+      const headerContents = normalizedActions
         .filter((action: any) => action?.type)
         .map((action: any, index: number) => {
           const slot = action?.slot || String.fromCharCode(65 + index)
@@ -477,35 +461,21 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
         altText: renderWithAttributes(payload.altText, attributes).slice(0, 400),
         contents: {
           type: 'bubble',
-          ...(transparentBackground ? {} : {
-            hero: {
-              type: 'image',
-              url: renderWithAttributes(payload.heroImageUrl, attributes),
-              size: 'full',
-              aspectRatio: '1:1',
-              aspectMode: 'cover',
-            },
-          }),
-          body: {
-            type: 'box',
-            layout: 'vertical',
-            spacing: 'sm',
-            contents: [{
-              type: 'text',
-              text: renderWithAttributes(payload.altText, attributes).slice(0, 400),
-              size: 'sm',
-              color: '#666666',
-              wrap: true,
-            }],
-          },
-          ...(footerContents.length > 0 ? {
-            footer: {
+          ...(headerContents.length > 0 ? {
+            header: {
               type: 'box',
               layout: 'vertical',
               spacing: 'sm',
-              contents: footerContents.slice(0, 6),
+              contents: headerContents.slice(0, 6),
             },
           } : {}),
+          hero: {
+            type: 'image',
+            url: renderWithAttributes(payload.heroImageUrl, attributes),
+            size: 'full',
+            aspectRatio: '1:1',
+            aspectMode: 'cover',
+          },
         },
       } as messagingApi.FlexMessage]
     }
