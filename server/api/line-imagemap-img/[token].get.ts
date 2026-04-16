@@ -1,10 +1,11 @@
 import { verifyImagemapImageToken } from '../../utils/line-imagemap-image-token'
+import { respondImagemapImage } from '../../utils/line-imagemap-image-response'
 
 /**
  * 保底相容路由：/api/line-imagemap-img/{token}
  * 若部分客戶端未附 size 也能正常轉址。
  */
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
   const secret = config.lineChannelSecret
   if (!secret) {
@@ -17,5 +18,5 @@ export default defineEventHandler((event) => {
     throw createError({ statusCode: 403, statusMessage: 'Invalid or expired token' })
   }
 
-  return sendRedirect(event, imageUrl, 302)
+  return await respondImagemapImage(event, imageUrl)
 })

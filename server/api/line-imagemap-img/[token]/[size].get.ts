@@ -1,10 +1,11 @@
 import { verifyImagemapImageToken } from '../../../utils/line-imagemap-image-token'
+import { respondImagemapImage } from '../../../utils/line-imagemap-image-response'
 
 /**
  * LINE Imagemap 標準路由：/api/line-imagemap-img/{token}/{size}
  * 例如 /.../abc123/1040，驗簽後 302 轉址到實際 PNG/JPG。
  */
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
   const secret = config.lineChannelSecret
   if (!secret) {
@@ -24,5 +25,5 @@ export default defineEventHandler((event) => {
     console.warn('[line-imagemap-img] unexpected size segment:', sizeRaw)
   }
 
-  return sendRedirect(event, imageUrl, 302)
+  return await respondImagemapImage(event, imageUrl)
 })

@@ -1,4 +1,5 @@
 import { verifyImagemapImageToken } from '../utils/line-imagemap-image-token'
+import { respondImagemapImage } from '../utils/line-imagemap-image-response'
 
 function normalizeSize(raw: string): string {
   // 兼容 LINE 可能送來的 `1040`、`/1040`、`1040x1040` 形式，抓第一段數字即可
@@ -9,7 +10,7 @@ function normalizeSize(raw: string): string {
  * 舊版 query 形式相容路由：/api/line-imagemap-img?token=...&z=1040
  * 驗簽後 302 轉到實際圖檔，讓聊天室內可保留 PNG 透明（Flex 會把透明當白底）。
  */
-export default defineEventHandler((event) => {
+export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
   const secret = config.lineChannelSecret
   if (!secret) {
@@ -29,5 +30,5 @@ export default defineEventHandler((event) => {
     console.warn('[line-imagemap-img] unexpected z query:', zRaw)
   }
 
-  return sendRedirect(event, url, 302)
+  return await respondImagemapImage(event, url)
 })
