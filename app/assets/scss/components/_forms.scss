@@ -1,4 +1,6 @@
 /* ── Form ────────────────────────────────────────────────────── */
+$admin-field-label-gap: 0.375rem;
+
 .form-group { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 1rem; }
 .form-group label { font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
@@ -49,6 +51,57 @@
 .admin-form-nested.el-form--label-top .el-form-item {
   margin-top: 0 !important;
   margin-bottom: 0 !important;
+}
+
+/*
+ * 統一欄位標題樣式：
+ * - 自訂欄位標籤請使用 AdminFieldLabel（.admin-field-label）
+ * - Element Plus 表單標籤沿用 el-form-item label（.el-form-item__label）
+ */
+.admin-field-label,
+.split-editor .el-form.el-form--label-top .el-form-item__label,
+.main-content .el-form.el-form--label-top .el-form-item__label,
+.el-dialog .el-form.el-form--label-top .el-form-item__label,
+.el-dialog__body .el-form.el-form--label-top .el-form-item__label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.2;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-field-label--tight,
+.section-label-tight {
+  margin-bottom: 0;
+}
+
+.admin-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.split-editor .el-form.el-form--label-top .el-form-item,
+.main-content .el-form.el-form--label-top .el-form-item,
+.el-dialog .el-form.el-form--label-top .el-form-item,
+.el-dialog__body .el-form.el-form--label-top .el-form-item {
+  display: flex;
+  flex-direction: column;
+  gap: $admin-field-label-gap;
+}
+
+.admin-field-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-form-field-gap);
+}
+
+/* 全域隱藏 Element Plus 字數計數，統一改由欄位標題標示上限 */
+.el-input__count,
+.el-textarea .el-input__count,
+.el-input__count-inner {
+  display: none !important;
 }
 
 /*

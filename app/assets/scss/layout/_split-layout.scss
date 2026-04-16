@@ -99,6 +99,36 @@
   color: var(--text-muted);
 }
 
+.split-list-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.2;
+  border: 1px solid transparent;
+}
+
+.split-list-chip.is-success {
+  background: rgba(6, 199, 85, 0.12);
+  border-color: rgba(6, 199, 85, 0.28);
+  color: #0f7a43;
+}
+
+.split-list-chip.is-neutral {
+  background: rgba(0, 0, 0, 0.08);
+  border-color: rgba(0, 0, 0, 0.12);
+  color: var(--text-secondary);
+}
+
+.split-list-meta-text {
+  min-width: 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+
 .split-editor {
   flex: 1;
   min-width: 0;

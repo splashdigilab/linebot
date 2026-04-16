@@ -1,9 +1,9 @@
 <template>
   <div :class="['rm-section-card', flat ? 'admin-area-editor-flat' : 'admin-section-card']">
     <div v-if="showHeader" class="flex items-center justify-between rm-area-editor-top">
-      <h3 class="admin-panel-title admin-panel-title--sentence admin-panel-title--tight">
+      <AdminPanelTitle tag="h3" tight>
         {{ sectionLabel }}（{{ areas.length }} 個）
-      </h3>
+      </AdminPanelTitle>
     </div>
 
     <div class="admin-area-editor-stack">

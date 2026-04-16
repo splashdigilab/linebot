@@ -6,7 +6,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.35rem;
 }
 
 .admin-title-input {
@@ -14,8 +14,8 @@
 }
 
 .admin-subtext {
-  margin-top: 0.25rem;
-  padding-left: 0.5rem;
+  margin-top: 0;
+  line-height: 1.45;
 }
 
 .admin-header-actions {
@@ -106,28 +106,21 @@
 .admin-section-title {
   font-size: 1rem;
   font-weight: 700;
-  margin-bottom: var(--space-section-heading-gap);
+  margin: 0;
 }
 
 /* 面板內區塊標題：一律放在表單／控制項上方 */
 .admin-panel-title {
   font-size: 0.8rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-secondary);
-  margin: 0 0 var(--space-section-heading-gap);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.admin-panel-title--sentence {
+  margin: 0;
   text-transform: none;
   letter-spacing: normal;
-  font-size: 1rem;
-  color: var(--text-primary);
 }
 
 .admin-panel-title--tight {
-  margin-bottom: 0;
+  margin: 0;
 }
 
 /* 垂直堆疊的多個面板／區塊（統一區塊間距） */
@@ -199,12 +192,6 @@
   padding: 0;
 }
 
-/* 區塊卡內巢狀 el-form：欄位 margin 見 components/_forms.scss；此處僅收緊 label–輸入距離 */
-.admin-action-card .admin-form-nested .el-form-item--label-top .el-form-item__label {
-  margin-bottom: 0.35rem !important;
-  line-height: 1.2;
-}
-
 /* 動作區外殼：分隔線與 split；欄位節奏交給內層 .admin-form-nested */
 .admin-action-panel {
   margin: 0;
@@ -236,13 +223,6 @@
 
 .admin-number-input .el-input__wrapper {
   border-radius: var(--radius-sm);
-}
-
-.admin-action-card .admin-form-item-compact .el-form-item__label,
-.admin-action-card .admin-action-type-field .el-form-item__label {
-  color: var(--text-secondary);
-  font-size: 0.78rem;
-  line-height: 1.2;
 }
 
 .rm-area-tag {
@@ -293,7 +273,7 @@
 }
 
 .admin-layout-row {
-  margin-top: 0.5rem;
+  margin-top: 0;
   display: flex;
   gap: 0.6rem;
   overflow-x: auto;
@@ -302,6 +282,12 @@
 
 .admin-layout-picker--flat {
   width: 100%;
+}
+
+.admin-layout-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-section-heading-gap);
 }
 
 .admin-layout-item {

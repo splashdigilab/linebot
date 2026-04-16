@@ -4,6 +4,11 @@ import { getDb } from './firebase'
 import { replyMessage, getUserProfile, linkRichMenuIdToUser } from './line'
 import { FieldValue } from 'firebase-admin/firestore'
 import { decodeTriggerModule, encodeTriggerModule } from '~~/shared/action-schema'
+import {
+  matchAutoReplyText,
+  normalizeAutoReplyRule,
+  type AutoReplyRuleShape,
+} from '~~/shared/auto-reply-rule'
 import { RICH_LAYOUT_PRESETS } from '~~/shared/rich-layout-presets'
 import { normalizeRichMessageActions } from '~~/shared/rich-message-editor-helpers'
 import { createImagemapImageToken } from './line-imagemap-image-token'
@@ -17,6 +22,7 @@ interface CacheEntry<T> {
 }
 const flowDocCache = new Map<string, CacheEntry<FlowDoc | null>>()
 const richMessageCache = new Map<string, CacheEntry<any | null>>()
+const autoReplyRuleCache = new Map<string, CacheEntry<AutoReplyRuleShape[]>>()
 
 // Cache lifetime in milliseconds (increased to 60s for better hit rate)
 const CACHE_TTL_MS = 60 * 1000
@@ -102,45 +108,79 @@ async function dispatchPostReplyActions(userId: string, messages: any[]) {
   }
 }
 
-async function matchFlow(trigger: string): Promise<FlowDoc | null> {
-  const cacheKey = `trigger:${trigger}`
-  const cachedFlow = getCached(flowDocCache, cacheKey)
-  if (cachedFlow !== undefined) return cachedFlow
+async function getFlowByModuleId(moduleId: string): Promise<FlowDoc | null> {
+  const id = String(moduleId || '').trim()
+  if (!id) return null
+  const cacheKey = `flow:${id}`
+  const cached = getCached(flowDocCache, cacheKey)
+  if (cached !== undefined) return cached
 
   const db = getDb()
+  const snap = await db.collection('flows').doc(id).get()
+  const flow = (snap.exists && snap.data()?.isActive) ? (snap.data() as FlowDoc) : null
+  setCache(flowDocCache, cacheKey, flow)
+  return flow
+}
 
-  const autoReplySnap = await db.collection('autoReplies')
-    .where('keyword', '==', trigger)
+async function loadActiveAutoReplyRules(): Promise<AutoReplyRuleShape[]> {
+  const cacheKey = 'active:autoReplies'
+  const cached = getCached(autoReplyRuleCache, cacheKey)
+  if (cached !== undefined) return cached
+
+  const db = getDb()
+  const snap = await db.collection('autoReplies')
     .where('isActive', '==', true)
-    .limit(1)
+    .orderBy('createdAt', 'desc')
     .get()
 
-  if (!autoReplySnap.empty) {
-    const firstRuleDoc = autoReplySnap.docs[0]
-    if (!firstRuleDoc) {
-      setCache(flowDocCache, cacheKey, null)
-      return null
-    }
-    const rule = firstRuleDoc.data()
-    // try to get from cache first
-    const moduleCacheKey = `flow:${rule.moduleId}`
-    let moduleFlow = getCached(flowDocCache, moduleCacheKey)
-    if (moduleFlow) {
-      setCache(flowDocCache, cacheKey, moduleFlow)
-      return moduleFlow
-    }
+  const rules = snap.docs
+    .map((doc) => normalizeAutoReplyRule({ id: doc.id, ...doc.data() }))
+    .filter((rule) => rule.isActive)
+  setCache(autoReplyRuleCache, cacheKey, rules)
+  return rules
+}
 
-    const moduleSnap = await db.collection('flows').doc(rule.moduleId).get()
-    if (moduleSnap.exists && moduleSnap.data()?.isActive) {
-      const result = moduleSnap.data() as FlowDoc
-      setCache(flowDocCache, moduleCacheKey, result)
-      setCache(flowDocCache, cacheKey, result)
-      return result
-    }
+async function matchAutoReplyRule(
+  inputText: string,
+  options: { allowAnyText: boolean } = { allowAnyText: true },
+): Promise<AutoReplyRuleShape | null> {
+  const rules = await loadActiveAutoReplyRules()
+  for (const rule of rules) {
+    if (!options.allowAnyText && rule.matchType === 'anyText') continue
+    if (matchAutoReplyText(rule, inputText)) return rule
+  }
+  return null
+}
+
+function buildAutoReplyActionMessages(
+  action: AutoReplyRuleShape['action'],
+  attributes: Record<string, string>,
+): messagingApi.Message[] {
+  if (action.type === 'message') {
+    return [{
+      type: 'text',
+      text: renderWithAttributes(action.text || '', attributes).slice(0, 5000),
+    } as messagingApi.TextMessage]
   }
 
-  setCache(flowDocCache, cacheKey, null)
-  return null
+  if (action.type === 'uri') {
+    const targetUrl = renderWithAttributes(action.uri || '', attributes)
+    return [{
+      type: 'template',
+      altText: '開啟網址',
+      template: {
+        type: 'buttons',
+        text: '請點擊下方連結',
+        actions: [{
+          type: 'uri',
+          label: '開啟網址',
+          uri: targetUrl,
+        }],
+      },
+    } as messagingApi.TemplateMessage]
+  }
+
+  return []
 }
 
 function buildRichMessageSnapshot(item: any) {
@@ -701,15 +741,7 @@ export async function handleMessageEvent(
       }
       await db.collection('users').doc(userId).update(updates)
       
-      const cacheKey = `flow:${moduleId}`
-      let flow = getCached(flowDocCache, cacheKey)
-      if (!flow) {
-        const modSnap = await db.collection('flows').doc(moduleId).get()
-        if (modSnap.exists && modSnap.data()?.isActive) {
-          flow = modSnap.data() as FlowDoc
-          setCache(flowDocCache, cacheKey, flow)
-        }
-      }
+      const flow = await getFlowByModuleId(moduleId)
       
       if (flow && event.replyToken) {
         const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
@@ -723,14 +755,24 @@ export async function handleMessageEvent(
     }
 
     if (!handledByInput) {
-      const flow = await matchFlow(textContent)
-      if (flow && event.replyToken) {
-        const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-        await replyMessage(
-          event.replyToken,
-          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || ''),
-        )
-        await dispatchPostReplyActions(userId, flow.messages)
+      const rule = await matchAutoReplyRule(textContent)
+      if (rule && event.replyToken) {
+        if (rule.action.type === 'module') {
+          const flow = await getFlowByModuleId(rule.action.moduleId)
+          if (flow) {
+            const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
+            await replyMessage(
+              event.replyToken,
+              buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || ''),
+            )
+            await dispatchPostReplyActions(userId, flow.messages)
+          }
+        } else {
+          const actionMessages = buildAutoReplyActionMessages(rule.action, userAttributes)
+          if (actionMessages.length > 0) {
+            await replyMessage(event.replyToken, actionMessages)
+          }
+        }
       }
     }
   } else {
@@ -795,22 +837,7 @@ export async function handlePostbackEvent(
   const directModuleId = decodeTriggerModule(data)
   if (directModuleId) {
     const moduleId = directModuleId
-    const cacheKey = `flow:${moduleId}`
-    
-    let flow: FlowDoc | null = null
-    const cachedFlow = getCached(flowDocCache, cacheKey)
-    if (cachedFlow !== undefined) {
-      flow = cachedFlow
-    } else {
-      const db = getDb()
-      const modSnap = await db.collection('flows').doc(moduleId).get()
-      if (modSnap.exists && modSnap.data()?.isActive) {
-        flow = modSnap.data() as FlowDoc
-      } else {
-        flow = null
-      }
-      setCache(flowDocCache, cacheKey, flow)
-    }
+    const flow = await getFlowByModuleId(moduleId)
 
     if (flow) {
       if (event.replyToken) {
@@ -830,15 +857,25 @@ export async function handlePostbackEvent(
   }
 
   // Fallback: Match legacy postback data to an auto-reply keyword (if any)
-  const flow = await matchFlow(data)
-  if (flow && event.replyToken) {
+  const rule = await matchAutoReplyRule(data, { allowAnyText: false })
+  if (rule && event.replyToken) {
     const userAttributes = buildAttributeContext(await userDataTask)
-    const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-    await replyMessage(
-      event.replyToken,
-      buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || ''),
-    )
-    await dispatchPostReplyActions(userId, flow.messages)
+    if (rule.action.type === 'module') {
+      const flow = await getFlowByModuleId(rule.action.moduleId)
+      if (flow) {
+        const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
+        await replyMessage(
+          event.replyToken,
+          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || ''),
+        )
+        await dispatchPostReplyActions(userId, flow.messages)
+      }
+    } else {
+      const actionMessages = buildAutoReplyActionMessages(rule.action, userAttributes)
+      if (actionMessages.length > 0) {
+        await replyMessage(event.replyToken, actionMessages)
+      }
+    }
   }
 
   await userDataTask

@@ -1,0 +1,16 @@
+---
+description: Enforce consistent admin field, title, and spacing patterns
+alwaysApply: true
+---
+
+# Admin Form And Spacing Governance
+
+- For admin/frontend form UI, use only two patterns:
+  1. Standard fields use `el-form-item`.
+  2. Custom/composed fields use `AdminFieldLabel` with `.admin-field-group`.
+- Keep `title + control + hint` in the same group. Do not split label and content into separate sibling blocks.
+- Multiple field groups must be stacked with parent `gap` containers such as `.admin-field-stack`, `.card-section-stack`, or form wrappers. Do not add field-level spacing patches with `margin-top` or `margin-bottom`.
+- `AdminPanelTitle` and `AdminFieldLabel` must not own layout spacing. Parent containers should control vertical rhythm with `gap`.
+- Put static styling only in `app/assets/scss/**`. Do not add `<style>` blocks or static inline style for spacing.
+- Hide Element Plus count UI and show max-length guidance in the field title instead of relying on visible input counters.
+- When touching existing admin UI, refactor nearby inconsistent spacing/title patterns to match these rules instead of adding another variation.

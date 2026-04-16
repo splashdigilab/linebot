@@ -14,19 +14,16 @@
         <el-button size="small" type="primary" plain @click="openCreate">立即建立</el-button>
       </div>
       <div v-else class="split-list">
-        <button
+        <AdminSplitListItem
           v-for="menu in sortedMenus"
           :key="menu.id"
-          class="split-list-item"
-          :class="{ active: selectedId === menu.id }"
-          @click="selectMenu(menu)"
-        >
-          <div class="split-list-name">{{ menu.name }}</div>
-          <div class="split-list-meta">
-            <span class="text-xs text-muted">{{ menu.areas?.length ?? 0 }} 個區塊</span>
-            <el-tag v-if="menu.isDefault" size="small" type="success" effect="light">⭐ 預設</el-tag>
-          </div>
-        </button>
+          :title="menu.name"
+          :active="selectedId === menu.id"
+          :chip-text="menu.isDefault ? '預設' : ''"
+          chip-tone="success"
+          :meta-text="`${menu.areas?.length ?? 0} 個區塊`"
+          @select="selectMenu(menu)"
+        />
       </div>
     </template>
 
@@ -38,21 +35,15 @@
     </template>
 
     <template #editor-header>
-      <div class="admin-flex-1">
-        <div class="admin-title-row">
-          <span v-if="isCreating" class="split-editor-title">新增 Rich Menu:</span>
-          <el-input
-            v-model="form.name"
-            size="large"
-            class="admin-title-input"
-            placeholder="請輸入選單名稱..."
-          />
-        </div>
-        <p class="text-sm text-muted admin-subtext">
-          版型：{{ form.layoutId }} · 區塊 {{ form.areas.length }} 個
-        </p>
-      </div>
-      <div class="flex gap-1">
+      <AdminEditorHeaderTitle
+        v-model="form.name"
+        field-label="選單名稱"
+        create-prefix="新增 Rich Menu:"
+        placeholder="請輸入選單名稱..."
+        :caption="`版型：${form.layoutId} · 區塊 ${form.areas.length} 個`"
+        :is-creating="isCreating"
+      />
+      <div class="flex gap-1 admin-header-actions">
         <el-button v-if="!isCreating && selectedMenu" type="danger" @click="deleteMenu">
           🗑️ 刪除
         </el-button>
@@ -72,25 +63,29 @@
             </div>
           </div>
           <div class="card-section-stack">
-            <el-form-item label="Chat Bar 文字" class="admin-form-item-compact">
+            <div class="admin-field-group">
+              <AdminFieldLabel text="Chat Bar 文字" tight />
               <el-input v-model="form.chatBarText" placeholder="選單" />
-            </el-form-item>
+            </div>
 
-            <el-form-item label="啟用" class="admin-form-item-compact">
+            <div class="admin-field-group">
+              <AdminFieldLabel text="啟用" tight />
               <div class="admin-inline-control">
                 <el-switch v-model="form.selected" />
                 <span class="text-xs text-muted">{{ form.selected ? '啟用中' : '停用中' }}</span>
               </div>
-            </el-form-item>
+            </div>
 
-            <el-form-item label="設為預設選單" class="admin-form-item-compact">
+            <div class="admin-field-group">
+              <AdminFieldLabel text="設為預設選單" tight />
               <div class="admin-inline-control">
                 <el-switch v-model="form.setAsDefault" />
                 <span class="text-xs text-muted">{{ form.setAsDefault ? '新加入好友預設顯示此選單' : '不設為預設選單' }}</span>
               </div>
-            </el-form-item>
+            </div>
 
-            <el-form-item :label="`1. 上傳選單背景圖 (${isCreating ? '必要' : '選填，若不上傳則自動沿用舊圖'})`">
+            <div class="admin-field-group">
+              <AdminFieldLabel :text="`1. 上傳選單背景圖 (${isCreating ? '必要' : '選填，若不上傳則自動沿用舊圖'})`" tight />
               <FlowUploadZone
                 v-model="form.previewUrl"
                 type="image"
@@ -99,9 +94,9 @@
                 hint="JPG / PNG · 最大 500KB（建議 2500x1686 或 2500x843）"
                 @file-selected="onRichMenuImageSelected"
               />
-            </el-form-item>
+            </div>
 
-            <div class="rm-layout-in-card">
+            <div class="rm-layout-in-card admin-field-group">
               <AdminLayoutPresetPicker
                 flat
                 title="圖文樣式"

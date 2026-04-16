@@ -38,15 +38,6 @@
   margin-top: 0;
 }
 
-.rmsg-config-card :deep(.admin-layout-row) {
-  margin-top: 0.35rem;
-}
-
-.rmsg-config-card :deep(.admin-panel-title--sentence) {
-  font-size: 0.8rem;
-  color: var(--text-secondary);
-}
-
 .rmsg-config-card :deep(.el-input),
 .rmsg-config-card :deep(.el-input__wrapper) {
   width: 100%;

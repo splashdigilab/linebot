@@ -16,18 +16,14 @@
         <el-button size="small" type="primary" plain @click="openCreate">立即建立</el-button>
       </div>
       <div v-else class="split-list">
-        <button
+        <AdminSplitListItem
           v-for="flow in flows"
           :key="flow.id"
-          class="split-list-item"
-          :class="{ active: selectedId === flow.id }"
-          @click="selectFlow(flow)"
-        >
-          <div class="split-list-name">{{ flow.name }}</div>
-          <div class="split-list-meta">
-            <span class="text-xs text-muted">{{ flow.messages?.length ?? 0 }} 則訊息</span>
-          </div>
-        </button>
+          :title="flow.name"
+          :active="selectedId === flow.id"
+          :meta-text="`${flow.messages?.length ?? 0} 則訊息`"
+          @select="selectFlow(flow)"
+        />
       </div>
     </template>
 
@@ -41,22 +37,15 @@
 
     <!-- ── Editor Header ── -->
     <template #editor-header>
-      <div class="admin-flex-1">
-        <p class="fuz-section-label section-label-tight">模組名稱</p>
-        <div class="admin-title-row">
-          <span v-if="isCreating" class="split-editor-title">新增模組:</span>
-          <el-input
-            v-model="form.name"
-            size="large"
-            class="admin-title-input"
-            placeholder="請輸入模組名稱..."
-          />
-        </div>
-        <p class="text-sm text-muted admin-subtext">
-          共 {{ form.messages.length }} 則回覆訊息；關鍵字觸發請到「自動回覆」設定
-        </p>
-      </div>
-      <div class="flex gap-1">
+      <AdminEditorHeaderTitle
+        v-model="form.name"
+        field-label="模組名稱"
+        create-prefix="新增模組:"
+        placeholder="請輸入模組名稱..."
+        :caption="`共 ${form.messages.length} 則回覆訊息；關鍵字觸發請到「自動回覆」設定`"
+        :is-creating="isCreating"
+      />
+      <div class="flex gap-1 admin-header-actions">
         <el-button v-if="!isCreating && selectedFlow" type="danger" @click="deleteFlow">
           🗑️ 刪除
         </el-button>
@@ -72,7 +61,7 @@
       <div class="flow-editor-messages">
         <!-- Sticky header -->
         <div class="fem-header">
-          <span class="admin-panel-title admin-panel-title--tight">💬 回覆訊息</span>
+          <AdminPanelTitle tag="span" text="💬 回覆訊息" tight />
           <div class="msg-type-btns">
             <el-button size="small" @click="addMessage('text')">＋ 文字</el-button>
             <el-button size="small" @click="addMessage('image')">＋ 圖片</el-button>
@@ -114,13 +103,17 @@
             >
               <!-- Text -->
               <div v-if="msg.type === 'text'" class="message-bubble-wrap">
-                <p class="fuz-section-label section-label-tight">回覆文字</p>
-                <div class="flow-textarea-wrapper flow-textarea-wrapper--var-inset">
-                  <el-input v-model="msg.text" type="textarea" :rows="3" placeholder="輸入回覆文字..." :maxlength="msg.buttons && msg.buttons.length > 0 ? 160 : 5000" show-word-limit />
-                  <FlowVariableInset
-                    :options="variableTokenOptions"
-                    @pick="(token) => insertVariableToken(msg, 'text', String(token))"
-                  />
+                <div class="admin-field-group">
+                  <AdminFieldLabel tight>
+                    回覆文字 <span class="text-muted">(最多 5000 字；若有按鈕最多 160 字)</span>
+                  </AdminFieldLabel>
+                  <div class="flow-textarea-wrapper flow-textarea-wrapper--var-inset">
+                    <el-input v-model="msg.text" type="textarea" :rows="3" placeholder="輸入回覆文字..." :maxlength="msg.buttons && msg.buttons.length > 0 ? 160 : 5000" />
+                    <FlowVariableInset
+                      :options="variableTokenOptions"
+                      @pick="(token) => insertVariableToken(msg, 'text', String(token))"
+                    />
+                  </div>
                 </div>
                 <div v-if="msg.buttons && msg.buttons.length" class="carousel-actions">
                   <div v-for="(btn, bIdx) in msg.buttons" :key="bIdx">
@@ -154,39 +147,51 @@
 
               <!-- Image -->
               <div v-else-if="msg.type === 'image'" class="message-image-wrap">
-                <p class="fuz-section-label section-label-tight">圖片</p>
-                <FlowUploadZone v-model="msg.originalContentUrl" type="image" label="點擊上傳圖片" @update:model-value="(v) => { msg.previewImageUrl = v }" />
+                <div class="admin-field-group">
+                  <AdminFieldLabel text="圖片" tight />
+                  <FlowUploadZone v-model="msg.originalContentUrl" type="image" label="點擊上傳圖片" @update:model-value="(v) => { msg.previewImageUrl = v }" />
+                </div>
               </div>
 
               <!-- Video -->
               <div v-else-if="msg.type === 'video'" class="message-video-wrap">
-                <p class="fuz-section-label">預覽圖片 <span class="text-muted">(長寬大小與影片一樣)</span></p>
-                <FlowUploadZone v-model="msg.previewImageUrl" type="image" label="點擊上傳預覽圖" hint="建議與影片同尺寸" />
-                <p class="fuz-section-label">影片檔案 <span class="text-muted">(大小不可超過 5 MB)</span></p>
-                <FlowUploadZone v-model="msg.originalContentUrl" type="video" label="點擊上傳影片" hint="須符合 LINE 影片規範" />
+                <div class="admin-field-group">
+                  <AdminFieldLabel>
+                    預覽圖片 <span class="text-muted">(長寬大小與影片一樣)</span>
+                  </AdminFieldLabel>
+                  <FlowUploadZone v-model="msg.previewImageUrl" type="image" label="點擊上傳預覽圖" hint="建議與影片同尺寸" />
+                </div>
+                <div class="admin-field-group">
+                  <AdminFieldLabel>
+                    影片檔案 <span class="text-muted">(大小不可超過 5 MB)</span>
+                  </AdminFieldLabel>
+                  <FlowUploadZone v-model="msg.originalContentUrl" type="video" label="點擊上傳影片" hint="須符合 LINE 影片規範" />
+                </div>
               </div>
 
               <!-- Rich Message Reference -->
               <div v-else-if="msg.type === 'richMessageRef'" class="message-bubble-wrap flow-rich-ref">
-                <p class="fuz-section-label section-label-tight">引用圖文訊息</p>
-                <el-select
-                  v-model="msg.richMessageId"
-                  size="small"
-                  class="control-full"
-                  filterable
-                  placeholder="選擇已建立的圖文訊息"
-                  @change="onRichMessageRefChange(msg)"
-                >
-                  <el-option
-                    v-for="item in richMessages"
-                    :key="item.id"
-                    :value="item.id"
-                    :label="item.name"
-                  />
-                </el-select>
-                <p class="fuz-hint-text section-label-tight">
+                <div class="admin-field-group">
+                  <AdminFieldLabel text="引用圖文訊息" tight />
+                  <el-select
+                    v-model="msg.richMessageId"
+                    size="small"
+                    class="control-full"
+                    filterable
+                    placeholder="選擇已建立的圖文訊息"
+                    @change="onRichMessageRefChange(msg)"
+                  >
+                    <el-option
+                      v-for="item in richMessages"
+                      :key="item.id"
+                      :value="item.id"
+                      :label="item.name"
+                    />
+                  </el-select>
+                </div>
+                <div class="text-xs text-muted">
                   圖文訊息需先在「圖文訊息管理」建立，這裡僅做引用。
-                </p>
+                </div>
                 <div v-if="richMessageRefPreview(msg)" class="carousel-action-row">
                   <div class="carousel-action-row-top">
                     <span class="carousel-action-index">預覽資訊</span>
@@ -218,25 +223,32 @@
                 @remove="removeMessage(i)"
               >
                 <div class="card-section-stack">
-                  <p class="fuz-section-label section-label-tight">提醒文字 <span class="text-muted">(最多 400 字)</span></p>
-                  <el-input
-                    v-model="msg.altText"
-                    placeholder="提醒文字（最多 400 字）"
-                    maxlength="400"
-                    show-word-limit
-                  />
-                  <p class="fuz-section-label section-label-tight">保留 PNG 透明區域</p>
-                  <div class="flow-rich-toggle-row">
-                    <el-switch v-model="msg.transparentBackground" />
-                    <span class="text-sm text-muted">開啟後保留透明像素</span>
+                  <div class="admin-field-group">
+                    <AdminFieldLabel tight>
+                      提醒文字 <span class="text-muted">(最多 400 字)</span>
+                    </AdminFieldLabel>
+                    <el-input
+                      v-model="msg.altText"
+                      placeholder="提醒文字（最多 400 字）"
+                      maxlength="400"
+                    />
                   </div>
-                  <p class="fuz-section-label section-label-tight">背景圖片</p>
-                  <FlowUploadZone
-                    v-model="msg.heroImageUrl"
-                    type="image"
-                    appearance="simple"
-                    hint="JPG / PNG · 最大 500KB（建議 1040x1040）"
-                  />
+                  <div class="admin-field-group">
+                    <AdminFieldLabel text="保留 PNG 透明區域" tight />
+                    <div class="flow-rich-toggle-row">
+                      <el-switch v-model="msg.transparentBackground" />
+                      <span class="text-sm text-muted">開啟後保留透明像素</span>
+                    </div>
+                  </div>
+                  <div class="admin-field-group">
+                    <AdminFieldLabel text="背景圖片" tight />
+                    <FlowUploadZone
+                      v-model="msg.heroImageUrl"
+                      type="image"
+                      appearance="simple"
+                      hint="JPG / PNG · 最大 500KB（建議 1040x1040）"
+                    />
+                  </div>
                   <AdminLayoutPresetPicker
                     flat
                     title="圖文樣式"
@@ -285,21 +297,24 @@
               >
                 <!-- Text input for the bubble! -->
                 <div class="carousel-alt-wrap card-section-stack">
-                  <p class="fuz-section-label section-label-tight">搭配的文字內容 <span class="text-muted">(必需輸入)</span></p>
-                  <div class="flow-textarea-wrapper flow-textarea-wrapper--var-inset">
-                  <el-input
-                      v-model="msg.text"
-                      type="textarea"
-                      :rows="2"
-                      placeholder="請輸入主要回覆文字..."
-                      maxlength="5000"
-                      show-word-limit
-                    />
-                  <FlowVariableInset
-                    :options="variableTokenOptions"
-                    @pick="(token) => insertVariableToken(msg, 'text', String(token))"
-                  />
-                </div>
+                  <div class="admin-field-group">
+                    <AdminFieldLabel tight>
+                      搭配的文字內容 <span class="text-muted">(必需輸入，最多 5000 字)</span>
+                    </AdminFieldLabel>
+                    <div class="flow-textarea-wrapper flow-textarea-wrapper--var-inset">
+                      <el-input
+                        v-model="msg.text"
+                        type="textarea"
+                        :rows="2"
+                        placeholder="請輸入主要回覆文字..."
+                        maxlength="5000"
+                      />
+                      <FlowVariableInset
+                        :options="variableTokenOptions"
+                        @pick="(token) => insertVariableToken(msg, 'text', String(token))"
+                      />
+                    </div>
+                  </div>
                 </div>
               </FlowMessageCardShell>
 
@@ -330,7 +345,7 @@
                         :module-options="flows"
                         :variable-options="variableTokenOptions"
                         header-label="按鈕動作"
-                        :label-show-word-limit="true"
+                        label-title="按鈕顯示文字（最多 20 字）"
                       />
                     </div>
                   </div>
@@ -362,28 +377,31 @@
               @remove="removeMessage(i)"
             >
               <div class="message-bubble-wrap user-input-content">
-                <div class="ui-field">
-                  <p class="fuz-section-label section-label-tight">向用戶提問 <span class="text-muted">(必填)</span></p>
+                <div class="ui-field admin-field-group">
+                  <AdminFieldLabel tight>
+                    向用戶提問 <span class="text-muted">(必填，最多 500 字)</span>
+                  </AdminFieldLabel>
                   <div class="flow-textarea-wrapper flow-textarea-wrapper--var-inset flow-textarea-wrapper--no-resize">
-                  <el-input
+                    <el-input
                       v-model="msg.text"
                       type="textarea"
                       :rows="3"
                       placeholder="請輸入你的問題 (必需輸入)"
                       maxlength="500"
-                      show-word-limit
                       resize="none"
                     />
-                  <FlowVariableInset
-                    :options="variableTokenOptions"
-                    @pick="(token) => insertVariableToken(msg, 'text', String(token))"
-                  />
-                </div>
+                    <FlowVariableInset
+                      :options="variableTokenOptions"
+                      @pick="(token) => insertVariableToken(msg, 'text', String(token))"
+                    />
+                  </div>
                 </div>
 
                 <div class="ui-settings">
-                  <div class="ui-field">
-                    <div class="ui-label">儲存屬性名稱 <span class="text-muted">(選填)</span></div>
+                  <div class="ui-field admin-field-group">
+                    <AdminFieldLabel tight>
+                      儲存屬性名稱 <span class="text-muted">(選填)</span>
+                    </AdminFieldLabel>
                     <el-select
                       v-model="msg.attribute"
                       size="small"
@@ -403,8 +421,10 @@
                     </el-select>
                   </div>
                   
-                  <div class="ui-field">
-                    <div class="ui-label">收到回覆後，觸發下一個模組 <span class="text-muted">(必填)</span></div>
+                  <div class="ui-field admin-field-group">
+                    <AdminFieldLabel tight>
+                      收到回覆後，觸發下一個模組 <span class="text-muted">(必填)</span>
+                    </AdminFieldLabel>
                     <el-select v-model="msg.moduleId" placeholder="選擇機器人模組" size="small" class="control-full">
                       <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
                     </el-select>
@@ -438,22 +458,25 @@
               >
                 <!-- Alt Text body (reusing standard padding) -->
                 <div class="carousel-alt-wrap card-section-stack">
-                  <p class="fuz-section-label section-label-tight">訊息提醒文字 <span class="text-muted">(最多 400 字)</span></p>
-                  <div class="flow-input-inset-wrap control-full">
-                    <el-input
-                      v-model="msg.altText"
-                      :placeholder="msg.type === 'imageCarousel' ? '訊息提醒文字（最多 400 字）' : '訊息提醒文字（不支援 Flex 時顯示，最多 400 字）'"
-                      maxlength="400"
-                      show-word-limit
-                    />
-                    <FlowVariableInset
-                      :options="variableTokenOptions"
-                      @pick="(token) => insertVariableToken(msg, 'altText', String(token))"
-                    />
+                  <div class="admin-field-group">
+                    <AdminFieldLabel tight>
+                      訊息提醒文字 <span class="text-muted">(最多 400 字)</span>
+                    </AdminFieldLabel>
+                    <div class="flow-input-inset-wrap control-full">
+                      <el-input
+                        v-model="msg.altText"
+                        :placeholder="msg.type === 'imageCarousel' ? '訊息提醒文字（最多 400 字）' : '訊息提醒文字（不支援 Flex 時顯示，最多 400 字）'"
+                        maxlength="400"
+                      />
+                      <FlowVariableInset
+                        :options="variableTokenOptions"
+                        @pick="(token) => insertVariableToken(msg, 'altText', String(token))"
+                      />
+                    </div>
                   </div>
-                  <p v-if="msg.type === 'imageCarousel'" class="fuz-hint-text section-label-tight">
+                  <div v-if="msg.type === 'imageCarousel'" class="text-xs text-muted">
                     圖片長度不可超過寬度的 3 倍，小於 500 KB，建議每張比例相同
-                  </p>
+                  </div>
                 </div>
               </FlowMessageCardShell>
 
@@ -478,25 +501,33 @@
                       </div>
                       <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(ci, 1)">✕</el-button>
                     </div>
-                    <div class="carousel-sub-body">
+                    <div class="carousel-sub-body admin-field-stack">
                       <FlowUploadZone v-model="col.thumbnailImageUrl" type="image" label="上傳縮圖" preview-height="140px" />
-                      <p class="fuz-section-label section-label-tight control-top-gap">標題 <span class="text-muted">(必填，最多 80 字)</span></p>
-                      <div class="flow-input-inset-wrap flow-input-inset-wrap--sm control-full">
-                      <el-input v-model="col.title" placeholder="標題（必填，最多 80 字）" maxlength="80" show-word-limit />
-                      <FlowVariableInset
-                        size="sm"
-                        :options="variableTokenOptions"
-                        @pick="(token) => insertVariableToken(col, 'title', String(token))"
-                      />
-                    </div>
-                      <p class="fuz-section-label section-label-tight control-top-gap">內容 <span class="text-muted">(最多 300 字)</span></p>
-                      <div class="flow-textarea-wrapper flow-textarea-wrapper--var-inset">
-                  <el-input v-model="col.text" type="textarea" :rows="2" placeholder="副標題或內容（最多 300 字）" maxlength="300" show-word-limit />
-                  <FlowVariableInset
-                    :options="variableTokenOptions"
-                    @pick="(token) => insertVariableToken(col, 'text', String(token))"
-                  />
-                </div>
+                      <div class="admin-field-group">
+                        <AdminFieldLabel tight>
+                          標題 <span class="text-muted">(必填，最多 80 字)</span>
+                        </AdminFieldLabel>
+                        <div class="flow-input-inset-wrap flow-input-inset-wrap--sm control-full">
+                          <el-input v-model="col.title" placeholder="標題（必填，最多 80 字）" maxlength="80" />
+                          <FlowVariableInset
+                            size="sm"
+                            :options="variableTokenOptions"
+                            @pick="(token) => insertVariableToken(col, 'title', String(token))"
+                          />
+                        </div>
+                      </div>
+                      <div class="admin-field-group">
+                        <AdminFieldLabel tight>
+                          內容 <span class="text-muted">(最多 300 字)</span>
+                        </AdminFieldLabel>
+                        <div class="flow-textarea-wrapper flow-textarea-wrapper--var-inset">
+                          <el-input v-model="col.text" type="textarea" :rows="2" placeholder="副標題或內容（最多 300 字）" maxlength="300" />
+                          <FlowVariableInset
+                            :options="variableTokenOptions"
+                            @pick="(token) => insertVariableToken(col, 'text', String(token))"
+                          />
+                        </div>
+                      </div>
                       <div v-if="col.actions?.length" class="carousel-actions">
                         <div v-for="(act, ai) in col.actions" :key="ai">
                           <FlowActionEditor

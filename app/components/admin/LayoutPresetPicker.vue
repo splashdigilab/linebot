@@ -1,6 +1,6 @@
 <template>
   <div :class="wrapperClass">
-    <h3 class="admin-panel-title admin-panel-title--sentence">{{ title }}</h3>
+    <AdminPanelTitle tag="h3" :text="title" />
     <div class="admin-layout-row">
       <button
         v-for="layout in layouts"

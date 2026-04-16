@@ -5,58 +5,68 @@
         <span class="carousel-action-index">區塊動作</span>
       </div>
 
-      <p class="fuz-section-label section-label-tight">動作類型</p>
-      <el-select
-        v-model="action.type"
-        class="admin-w-full control-full"
-        @change="onTypeChange"
-      >
-        <el-option value="uri" label="開啟網址" />
-        <el-option value="message" label="傳送文字" />
-        <el-option value="module" label="觸發機器人模組" />
-        <el-option v-if="allowSwitch" value="switch" label="切換選單" />
-      </el-select>
+      <div class="admin-field-group">
+        <AdminFieldLabel text="動作類型" tight />
+        <el-select
+          v-model="action.type"
+          class="admin-w-full control-full"
+          @change="onTypeChange"
+        >
+          <el-option value="uri" label="開啟網址" />
+          <el-option value="message" label="傳送文字" />
+          <el-option value="module" label="觸發機器人模組" />
+          <el-option v-if="allowSwitch" value="switch" label="切換選單" />
+        </el-select>
+      </div>
 
       <template v-if="action.type === 'uri'">
-        <p class="fuz-section-label section-label-tight">網址</p>
-        <el-input v-model="action.uri" placeholder="https://..." />
+        <div class="admin-field-group">
+          <AdminFieldLabel text="網址" tight />
+          <el-input v-model="action.uri" placeholder="https://..." />
+        </div>
       </template>
 
       <template v-if="action.type === 'message'">
-        <p class="fuz-section-label section-label-tight">回覆文字</p>
-        <el-input v-model="action.text" placeholder="輸入代發文字" />
+        <div class="admin-field-group">
+          <AdminFieldLabel text="回覆文字" tight />
+          <el-input v-model="action.text" placeholder="輸入代發文字" />
+        </div>
       </template>
 
       <template v-if="action.type === 'module'">
-        <p class="fuz-section-label section-label-tight">{{ moduleLabel }}</p>
-        <el-select
-          v-model="action.moduleId"
-          class="admin-w-full control-full"
-          :placeholder="modulePlaceholder"
-        >
-          <el-option
-            v-for="mod in moduleOptions"
-            :key="mod.id"
-            :value="mod.id"
-            :label="mod.name"
-          />
-        </el-select>
+        <div class="admin-field-group">
+          <AdminFieldLabel :text="moduleLabel" tight />
+          <el-select
+            v-model="action.moduleId"
+            class="admin-w-full control-full"
+            :placeholder="modulePlaceholder"
+          >
+            <el-option
+              v-for="mod in moduleOptions"
+              :key="mod.id"
+              :value="mod.id"
+              :label="mod.name"
+            />
+          </el-select>
+        </div>
       </template>
 
       <template v-if="allowSwitch && action.type === 'switch'">
-        <p class="fuz-section-label section-label-tight">{{ switchLabel }}</p>
-        <el-select
-          v-model="action.data"
-          class="admin-w-full control-full"
-          :placeholder="switchPlaceholder"
-        >
-          <el-option
-            v-for="menu in availableMenuOptions"
-            :key="menu.id"
-            :value="`${menuValuePrefix}${menu.id}`"
-            :label="menu.name"
-          />
-        </el-select>
+        <div class="admin-field-group">
+          <AdminFieldLabel :text="switchLabel" tight />
+          <el-select
+            v-model="action.data"
+            class="admin-w-full control-full"
+            :placeholder="switchPlaceholder"
+          >
+            <el-option
+              v-for="menu in availableMenuOptions"
+              :key="menu.id"
+              :value="`${menuValuePrefix}${menu.id}`"
+              :label="menu.name"
+            />
+          </el-select>
+        </div>
         <div
           v-if="action.data && hasInvalidSwitchTarget"
           class="admin-warning-inline"

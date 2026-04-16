@@ -256,10 +256,6 @@
   gap: 0.65rem;
 }
 
-.section-label-tight {
-  margin-bottom: 0;
-}
-
 .cards-scroll-top-gap {
   margin-top: 0.25rem;
 }
@@ -270,10 +266,6 @@
 
 .control-full {
   width: 100%;
-}
-
-.control-top-gap {
-  margin-top: 0.5rem;
 }
 
 .control-dashed-add {
@@ -495,13 +487,6 @@
 
 /* ─── Video Specific ────────────────────────────────────── */
 
-.fuz-section-label {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
 .fuz-hint-text {
   font-size: 0.75rem;
   color: #d97706;  /* specific warning orange hue used here */
@@ -624,6 +609,13 @@
   border-radius: var(--radius-sm);
   background: var(--bg-hover, rgba(0,0,0,0.02));
   padding: 0.6rem;
+}
+
+.carousel-action-row--flat {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .carousel-action-row-top {
@@ -808,10 +800,6 @@
 /* ── Rich Message Reference Card ── */
 .flow-rich-ref {
   gap: 0.75rem;
-
-  .carousel-action-row {
-    margin-top: 0.15rem;
-  }
 }
 
 /* ── User Input Card ── */
@@ -830,17 +818,10 @@
     display: flex;
     flex-direction: column;
     gap: 0.65rem;
-
-    .ui-label {
-      font-size: 0.8rem;
-      font-weight: 600;
-      color: var(--text-secondary);
-      margin-bottom: 0;
-    }
   }
 
   .ui-warning-text {
-    margin-top: 0.1rem;
+    margin-top: 0;
     color: var(--color-warning);
     font-size: 0.8rem;
     line-height: 1.5;

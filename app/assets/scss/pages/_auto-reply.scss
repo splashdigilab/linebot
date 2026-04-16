@@ -141,11 +141,9 @@
   gap: var(--space-form-stack-gap);
 }
 
-/* ── Sections ── */
-.ar-section {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-form-field-gap);
+.ar-section-card {
+  width: min(780px, 100%);
+  max-width: 100%;
 }
 
 .ar-section-hint {
@@ -170,6 +168,15 @@
 
 .ar-status-switch {
   --el-switch-on-color: var(--color-success);
+}
+
+.ar-any-text-note {
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 0.6rem 0.7rem;
 }
 
 .link {

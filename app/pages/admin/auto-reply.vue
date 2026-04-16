@@ -17,21 +17,17 @@
         <el-button size="small" type="primary" plain @click="openCreate">立即新增</el-button>
       </div>
       <div v-else class="split-list">
-        <button
+        <AdminSplitListItem
           v-for="rule in rules"
           :key="rule.id"
-          class="split-list-item"
-          :class="{ active: selectedId === rule.id }"
-          @click="selectRule(rule)"
-        >
-          <div class="split-list-name">{{ rule.name || rule.keyword || '(未命名)' }}</div>
-          <div class="split-list-meta">
-            <span class="badge admin-badge-xs" :class="rule.isActive ? 'badge-green' : 'badge-gray'">
-              {{ rule.isActive ? '啟用' : '停用' }}
-            </span>
-            <span class="text-xs text-muted truncate">→ {{ getModuleName(rule.moduleId) }}</span>
-          </div>
-        </button>
+          :title="rule.name || rule.keyword || '(未命名)'"
+          :active="selectedId === rule.id"
+          :chip-text="rule.isActive ? '啟用' : '停用'"
+          :chip-tone="rule.isActive ? 'success' : 'neutral'"
+          :meta-text="getActionSummary(rule)"
+          :meta-truncate="true"
+          @select="selectRule(rule)"
+        />
       </div>
     </template>
 
@@ -45,22 +41,15 @@
 
     <!-- ── Editor Header ── -->
     <template #editor-header>
-      <div class="admin-flex-1">
-        <p class="fuz-section-label section-label-tight">規則名稱</p>
-        <div class="admin-title-row">
-          <span v-if="isCreating" class="split-editor-title">新增規則:</span>
-          <el-input
-            v-model="form.name"
-            size="large"
-            class="admin-title-input"
-            placeholder="請輸入規則名稱..."
-            @keydown.enter.prevent="submitForm"
-          />
-        </div>
-        <p class="text-sm text-muted admin-subtext">
-          為這個自動回覆規則命名，方便後續管理
-        </p>
-      </div>
+      <AdminEditorHeaderTitle
+        v-model="form.name"
+        field-label="規則名稱"
+        create-prefix="新增規則:"
+        placeholder="請輸入規則名稱..."
+        caption="為這個自動回覆規則命名，方便後續管理"
+        :is-creating="isCreating"
+        @enter="submitForm"
+      />
       <div class="flex gap-2 admin-header-actions">
         <el-button v-if="!isCreating && selectedRule" type="danger" @click="deleteRule">
           🗑️ 刪除
@@ -74,57 +63,95 @@
 
     <!-- ── Editor Body ── -->
     <template #editor-body>
-      <div class="ar-editor-body">
+      <div class="ar-editor-body admin-panel-stack">
         <!-- Status section -->
-        <div class="ar-section">
-          <div class="admin-panel-title">📍 狀態</div>
-          <p class="ar-section-hint">停用的規則將不會被觸發。</p>
-          <el-switch
-            v-model="form.isActive"
-            active-text="啟用中"
-            inactive-text="已停用"
-            class="ar-status-switch"
-          />
+        <div class="message-card ar-section-card">
+          <div class="message-card-header">
+            <div class="card-header-main">
+              <span class="badge badge-green">📍 狀態設定</span>
+            </div>
+          </div>
+          <div class="card-section-stack">
+            <p class="ar-section-hint">停用的規則將不會被觸發。</p>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="啟用狀態" tight />
+              <el-switch
+                v-model="form.isActive"
+                active-text="啟用中"
+                inactive-text="已停用"
+                class="ar-status-switch"
+              />
+            </div>
+          </div>
         </div>
 
         <!-- Keyword section -->
-        <div class="ar-section">
-          <div class="admin-panel-title">⚡ 觸發關鍵字</div>
-          <p class="ar-section-hint">當使用者傳送的訊息<b>完全符合</b>此關鍵字時觸發（不區分大小寫）。</p>
-          <el-input
-            v-model="form.keyword"
-            placeholder="例：你好、優惠、查詢商品"
-            @keydown.enter.prevent="submitForm"
-          />
+        <div class="message-card ar-section-card">
+          <div class="message-card-header">
+            <div class="card-header-main">
+              <span class="badge badge-green">⚡ 觸發條件</span>
+            </div>
+          </div>
+          <div class="card-section-stack">
+            <p class="ar-section-hint">設定文字比對方式，可選擇包含任一、包含全部、內容完全一致，或輸入任何內容都觸發。</p>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="比對方式" tight />
+              <el-select v-model="form.matchType" class="control-full">
+                <el-option
+                  v-for="option in triggerModeOptions"
+                  :key="option.value"
+                  :value="option.value"
+                  :label="option.label"
+                />
+              </el-select>
+            </div>
+            <div v-if="form.matchType !== 'anyText'" class="admin-field-group">
+              <AdminFieldLabel text="關鍵字內容" tight />
+              <el-input
+                v-model="form.keyword"
+                :placeholder="keywordPlaceholder"
+                @keydown.enter.prevent="submitForm"
+              />
+            </div>
+            <div v-else class="ar-any-text-note">
+              將於使用者輸入任意文字時觸發。
+            </div>
+          </div>
         </div>
 
-        <!-- Module picker -->
-        <div class="ar-section">
-          <div class="admin-panel-title">🤖 指定回覆模組</div>
-          <p class="ar-section-hint">觸發後，系統將自動發送下方所選模組中的所有訊息。</p>
-          <div v-if="modulesLoading" class="ar-modules-loading">
-            <div class="spinner" />
+        <!-- Action -->
+        <div class="message-card ar-section-card">
+          <div class="message-card-header">
+            <div class="card-header-main">
+              <span class="badge badge-green">🎯 觸發動作設定</span>
+            </div>
           </div>
-          <div v-else-if="!modules.length" class="ar-no-modules">
-            尚無模組。請先前往「<NuxtLink to="/admin/flow" class="link">機器人模組</NuxtLink>」建立。
-          </div>
-          <div v-else class="module-picker">
-            <button
-              v-for="mod in modules"
-              :key="mod.id"
-              class="module-option"
-              :class="{ selected: form.moduleId === mod.id }"
-              @click="form.moduleId = mod.id"
-            >
-              <div class="module-option-check">{{ form.moduleId === mod.id ? '✓' : '' }}</div>
-              <div class="module-option-info">
-                <div class="module-option-name">{{ mod.name }}</div>
-                <div class="module-option-meta">{{ mod.messages?.length ?? 0 }} 則訊息</div>
-              </div>
-              <span class="badge admin-badge-xs admin-badge-right" :class="mod.isActive ? 'badge-green' : 'badge-gray'">
-                {{ mod.isActive ? '啟用' : '停用' }}
-              </span>
-            </button>
+          <div class="card-section-stack">
+            <p class="ar-section-hint">可選擇開啟網址、傳送文字，或觸發機器人模組。</p>
+            <div v-if="modulesLoading" class="ar-modules-loading">
+              <div class="spinner" />
+            </div>
+            <div v-else-if="!modules.length" class="ar-no-modules">
+              尚無模組。請先前往「<NuxtLink to="/admin/flow" class="link">機器人模組</NuxtLink>」建立。
+            </div>
+            <div v-else>
+              <FlowActionEditor
+                :action="form.action"
+                :type-options="autoReplyActionTypeOptions"
+                :module-options="modules"
+                :variable-options="[]"
+                header-label=""
+                flat
+                :show-label-field="false"
+                :show-variable-inset="false"
+                module-title="機器人模組"
+                module-placeholder="請選擇要觸發的模組"
+                text-title="回覆文字"
+                text-placeholder="輸入要回覆給使用者的文字"
+                uri-title="網址"
+                uri-placeholder="https://..."
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -136,6 +163,13 @@
 
 
 <script setup lang="ts">
+import {
+  normalizeAutoReplyAction,
+  normalizeAutoReplyRule,
+  validateAutoReplyRule,
+  type AutoReplyRuleShape,
+} from '~~/shared/auto-reply-rule'
+
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 // ── State ────────────────────────────────────────────────
@@ -151,12 +185,31 @@ const { toasts, showToast } = useAdminToast()
 const defaultForm = () => ({
   name: '',
   keyword: '',
-  moduleId: '',
+  matchType: 'containsAny',
+  action: normalizeAutoReplyAction({ type: 'module', moduleId: '' }),
   isActive: true,
 })
 const form = ref(defaultForm())
 
+const triggerModeOptions = [
+  { value: 'containsAny', label: '包含任一' },
+  { value: 'containsAll', label: '包含全部' },
+  { value: 'exact', label: '內容完全一致' },
+  { value: 'anyText', label: '輸入任何內容' },
+]
+
+const autoReplyActionTypeOptions = [
+  { value: 'uri', label: '開啟網址' },
+  { value: 'message', label: '傳送文字' },
+  { value: 'module', label: '觸發機器人模組' },
+]
+
 const selectedRule = computed(() => rules.value.find(r => r.id === selectedId.value) ?? null)
+const keywordPlaceholder = computed(() => {
+  if (form.value.matchType === 'containsAll') return '例：訂單 取消（可用空白、逗號分隔多關鍵字）'
+  if (form.value.matchType === 'containsAny') return '例：優惠、折扣、促銷（任一命中即觸發）'
+  return '例：你好、優惠、查詢商品'
+})
 
 // ── Load ─────────────────────────────────────────────────
 async function loadRules() {
@@ -180,11 +233,13 @@ onMounted(() => {
 function selectRule(rule: any) {
   isCreating.value = false
   selectedId.value = rule.id
+  const normalized = normalizeAutoReplyRule(rule)
   form.value = {
-    name: rule.name ?? '',
-    keyword: rule.keyword ?? '',
-    moduleId: rule.moduleId ?? '',
-    isActive: rule.isActive ?? true,
+    name: normalized.name,
+    keyword: normalized.keyword,
+    matchType: normalized.matchType,
+    action: normalized.action,
+    isActive: normalized.isActive,
   }
 }
 
@@ -207,16 +262,16 @@ function cancelEdit() {
 
 // ── Save / Delete ─────────────────────────────────────────
 async function submitForm() {
-  if (!form.value.name.trim()) return showToast('請輸入規則名稱', 'error')
-  if (!form.value.keyword.trim()) return showToast('請輸入觸發關鍵字', 'error')
-  if (!form.value.moduleId) return showToast('請選擇一個機器人模組', 'error')
+  const payload: AutoReplyRuleShape = normalizeAutoReplyRule(form.value)
+  const validationError = validateAutoReplyRule(payload)
+  if (validationError) return showToast(validationError, 'error')
 
   saving.value = true
   try {
     if (isCreating.value) {
       const res = await $fetch<any>('/api/auto-reply/create', {
         method: 'POST',
-        body: { name: form.value.name.trim(), keyword: form.value.keyword.trim(), moduleId: form.value.moduleId, isActive: form.value.isActive },
+        body: payload,
       })
       showToast('規則已建立 ✅', 'success')
       await loadRules()
@@ -226,7 +281,7 @@ async function submitForm() {
     } else {
       await $fetch(`/api/auto-reply/${selectedId.value}`, {
         method: 'PUT',
-        body: { name: form.value.name.trim(), keyword: form.value.keyword.trim(), moduleId: form.value.moduleId, isActive: form.value.isActive },
+        body: payload,
       })
       showToast('規則已更新 ✅', 'success')
       await loadRules()
@@ -254,8 +309,15 @@ async function deleteRule() {
 }
 
 // ── Helpers ───────────────────────────────────────────────
-function getModuleName(moduleId: string) {
-  return modules.value.find(m => m.id === moduleId)?.name ?? '未選擇模組'
+function getActionSummary(rule: any) {
+  const normalized = normalizeAutoReplyRule(rule)
+  if (normalized.action.type === 'module') {
+    return modules.value.find(m => m.id === normalized.action.moduleId)?.name ?? '未選擇模組'
+  }
+  if (normalized.action.type === 'uri') {
+    return normalized.action.uri || '開啟網址'
+  }
+  return normalized.action.text || '傳送文字'
 }
 
 </script>

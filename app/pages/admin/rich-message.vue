@@ -14,18 +14,14 @@
         <el-button size="small" type="primary" plain @click="openCreate">立即建立</el-button>
       </div>
       <div v-else class="split-list">
-        <button
+        <AdminSplitListItem
           v-for="item in items"
           :key="item.id"
-          class="split-list-item"
-          :class="{ active: selectedId === item.id }"
-          @click="selectItem(item)"
-        >
-          <div class="split-list-name">{{ item.name }}</div>
-          <div class="split-list-meta">
-            <span class="text-xs text-muted">{{ layoutLabel(item.layoutId) }} · {{ item.actions?.length ?? 0 }} 個區塊</span>
-          </div>
-        </button>
+          :title="item.name"
+          :active="selectedId === item.id"
+          :meta-text="`${layoutLabel(item.layoutId)} · ${item.actions?.length ?? 0} 個區塊`"
+          @select="selectItem(item)"
+        />
       </div>
     </template>
 
@@ -37,21 +33,15 @@
     </template>
 
     <template #editor-header>
-      <div class="admin-flex-1">
-        <div class="admin-title-row">
-          <span v-if="isCreating" class="split-editor-title">新增圖文訊息:</span>
-          <el-input
-            v-model="form.name"
-            size="large"
-            class="admin-title-input"
-            placeholder="請輸入圖文訊息名稱..."
-          />
-        </div>
-        <p class="text-sm text-muted admin-subtext">
-          選擇後可在機器人模組中直接引用
-        </p>
-      </div>
-      <div class="flex gap-1">
+      <AdminEditorHeaderTitle
+        v-model="form.name"
+        field-label="圖文訊息名稱"
+        create-prefix="新增圖文訊息:"
+        placeholder="請輸入圖文訊息名稱..."
+        caption="選擇後可在機器人模組中直接引用"
+        :is-creating="isCreating"
+      />
+      <div class="flex gap-1 admin-header-actions">
         <el-button v-if="!isCreating && selectedItem" type="danger" @click="deleteItem">🗑️ 刪除</el-button>
         <el-button @click="cancelEdit">取消</el-button>
         <el-button type="primary" :loading="saving" @click="submitForm">
@@ -71,26 +61,32 @@
               </div>
             </div>
             <div class="card-section-stack">
-              <p class="fuz-section-label section-label-tight">背景圖片</p>
-              <FlowUploadZone
-                v-model="form.heroImageUrl"
-                type="image"
-                appearance="simple"
-                :hint="imageUploadHint"
-              />
-
-              <div class="admin-inline-control rmsg-toggle-row">
-                <el-switch v-model="form.transparentBackground" />
-                <span>保留 PNG 透明區域</span>
+              <div class="admin-field-group">
+                <AdminFieldLabel text="背景圖片" tight />
+                <FlowUploadZone
+                  v-model="form.heroImageUrl"
+                  type="image"
+                  appearance="simple"
+                  :hint="imageUploadHint"
+                />
               </div>
 
-              <p class="fuz-section-label section-label-tight">聊天列表預覽文字（Alt Text）</p>
-              <el-input
-                v-model="form.altText"
-                placeholder="必填，最多 400 字"
-                maxlength="400"
-                show-word-limit
-              />
+              <div class="admin-field-group">
+                <AdminFieldLabel text="保留 PNG 透明區域" tight />
+                <div class="admin-inline-control rmsg-toggle-row">
+                  <el-switch v-model="form.transparentBackground" />
+                  <span>開啟後保留透明像素</span>
+                </div>
+              </div>
+
+              <div class="admin-field-group">
+                <AdminFieldLabel text="聊天列表預覽文字（Alt Text，最多 400 字）" tight />
+                <el-input
+                  v-model="form.altText"
+                  placeholder="必填，最多 400 字"
+                  maxlength="400"
+                />
+              </div>
 
               <AdminLayoutPresetPicker
                 flat
