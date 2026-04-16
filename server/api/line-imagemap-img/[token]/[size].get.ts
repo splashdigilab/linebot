@@ -17,10 +17,11 @@ export default defineEventHandler((event) => {
     throw createError({ statusCode: 403, statusMessage: 'Invalid or expired token' })
   }
 
-  const size = String(getRouterParam(event, 'size') || '').replace(/\D/g, '')
-  const allowedWidths = new Set(['1040', '700', '460', '300', '240'])
-  if (size && !allowedWidths.has(size)) {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid size' })
+  // 桌機/手機 LINE 可能帶不同尺寸格式（例如 1040、1040x1040、/1040），此路由僅驗證 token，不限制尺寸值
+  const sizeRaw = String(getRouterParam(event, 'size') || '').trim()
+  const size = (sizeRaw.match(/(\d{2,5})/)?.[1]) || ''
+  if (sizeRaw && !size) {
+    console.warn('[line-imagemap-img] unexpected size segment:', sizeRaw)
   }
 
   return sendRedirect(event, imageUrl, 302)

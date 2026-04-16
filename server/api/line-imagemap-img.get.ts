@@ -1,9 +1,8 @@
 import { verifyImagemapImageToken } from '../utils/line-imagemap-image-token'
 
 function normalizeSize(raw: string): string {
-  // 兼容 LINE 可能送來的 `1040` 或 `/1040` 形式
-  const digits = String(raw || '').replace(/\D/g, '')
-  return digits
+  // 兼容 LINE 可能送來的 `1040`、`/1040`、`1040x1040` 形式，抓第一段數字即可
+  return String(raw || '').match(/(\d{2,5})/)?.[1] || ''
 }
 
 /**
@@ -24,10 +23,10 @@ export default defineEventHandler((event) => {
     throw createError({ statusCode: 403, statusMessage: 'Invalid or expired token' })
   }
 
-  const z = normalizeSize(String(q.z ?? ''))
-  const allowedWidths = new Set(['1040', '700', '460', '300', '240'])
-  if (z && !allowedWidths.has(z)) {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid size' })
+  const zRaw = String(q.z ?? '')
+  const z = normalizeSize(zRaw)
+  if (zRaw && !z) {
+    console.warn('[line-imagemap-img] unexpected z query:', zRaw)
   }
 
   return sendRedirect(event, url, 302)
