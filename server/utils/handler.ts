@@ -6,6 +6,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { decodeTriggerModule, encodeTriggerModule } from '~~/shared/action-schema'
 import { RICH_LAYOUT_PRESETS } from '~~/shared/rich-layout-presets'
 import { normalizeRichMessageActions } from '~~/shared/rich-message-editor-helpers'
+import { createImagemapImageToken } from './line-imagemap-image-token'
 
 // ── In-Memory Caching to Reduce DB Latency ──────────────────────────
 const userCheckedCache = new Set<string>()
@@ -203,6 +204,106 @@ function resolveRichMessageLayoutId(raw: unknown): string {
   return RICH_LAYOUT_PRESETS.some((p) => p.id === id) ? id : 'single'
 }
 
+function resolveLineImagemapPublicBase(): string {
+  try {
+    const c = useRuntimeConfig()
+    const raw = String((c as { lineImagemapBaseUrl?: string }).lineImagemapBaseUrl || '').trim()
+    if (raw) return raw.replace(/\/$/, '')
+  }
+  catch {
+    /* useRuntimeConfig 在非 Nitro 內容下可能不可用 */
+  }
+  return String(process.env.LINE_IMAGEMAP_BASE_URL || '').trim().replace(/\/$/, '')
+}
+
+function clampImagemapArea(bounds: { x: number; y: number; width: number; height: number }) {
+  const max = RICH_MESSAGE_LINE_CANVAS
+  const x = Math.max(0, Math.min(max, Math.floor(Number(bounds.x) || 0)))
+  const y = Math.max(0, Math.min(max, Math.floor(Number(bounds.y) || 0)))
+  const w = Math.max(1, Math.min(max - x, Math.floor(Number(bounds.width) || 0)))
+  const h = Math.max(1, Math.min(max - y, Math.floor(Number(bounds.height) || 0)))
+  return { x, y, width: w, height: h }
+}
+
+/**
+ * 圖文訊息：預設 Flex（可 postback 觸發模組）。
+ * 「保留 PNG 透明」且僅 uri/message 區塊時改送 Imagemap（全螢幕預覽也較能維持透明）；需設定 lineImagemapBaseUrl。
+ * 若有「觸發模組」區塊則只能用 Flex，底圖需為 image 設透明底色才不易出現白底。
+ */
+function buildRichMessageLineMessage(input: {
+  altText: string
+  heroImageUrl: string
+  layoutId: unknown
+  actions: any[]
+  attributes: Record<string, string>
+  transparentBackground: boolean
+}): messagingApi.Message {
+  const layoutId = resolveRichMessageLayoutId(input.layoutId)
+  const normalized = normalizeRichMessageActions(layoutId, input.actions)
+  const hasModule = normalized.some((a: any) => a?.type === 'module')
+  const publicBase = resolveLineImagemapPublicBase()
+  let channelSecret = ''
+  try {
+    channelSecret = String(useRuntimeConfig().lineChannelSecret || '')
+  }
+  catch {
+    channelSecret = String(process.env.LINE_CHANNEL_SECRET || '')
+  }
+
+  const tryImagemap =
+    Boolean(input.transparentBackground)
+    && !hasModule
+    && Boolean(publicBase && channelSecret)
+    && normalized.some((a: any) => a?.type)
+
+  if (tryImagemap) {
+    const renderedUrl = renderWithAttributes(input.heroImageUrl, input.attributes)
+    const token = createImagemapImageToken(renderedUrl, channelSecret)
+    const baseUrl = `${publicBase}/api/line-imagemap-img?token=${encodeURIComponent(token)}&z=`
+    if (baseUrl.length <= 1900) {
+      const actions = normalized
+        .filter((a: any) => a?.type === 'uri' || a?.type === 'message')
+        .map((a: any) => {
+          const b = a.bounds
+          if (!b) return null
+          const area = clampImagemapArea(b)
+          if (a.type === 'uri') {
+            return {
+              type: 'uri',
+              linkUri: renderWithAttributes(a.uri || 'https://google.com', input.attributes),
+              area,
+            }
+          }
+          return {
+            type: 'message',
+            text: renderWithAttributes(a.text || a.slot || ' ', input.attributes).slice(0, 300),
+            area,
+          }
+        })
+        .filter(Boolean)
+
+      if (actions.length > 0) {
+        return {
+          type: 'imagemap',
+          baseUrl,
+          altText: renderWithAttributes(input.altText, input.attributes).slice(0, 400),
+          baseSize: { width: RICH_MESSAGE_LINE_CANVAS, height: RICH_MESSAGE_LINE_CANVAS },
+          actions,
+        } as messagingApi.Message
+      }
+    }
+  }
+
+  return buildRichMessageFlexMessage({
+    altText: input.altText,
+    heroImageUrl: input.heroImageUrl,
+    layoutId: input.layoutId,
+    actions: input.actions,
+    attributes: input.attributes,
+    transparentBackground: input.transparentBackground,
+  })
+}
+
 /** Flex：底圖 + 依編輯器座標疊透明點擊區（類似圖文選單），可保留 postback 觸發模組 */
 function buildRichMessageFlexMessage(input: {
   altText: string
@@ -210,12 +311,14 @@ function buildRichMessageFlexMessage(input: {
   layoutId: unknown
   actions: any[]
   attributes: Record<string, string>
+  transparentBackground?: boolean
 }): messagingApi.FlexMessage {
   const layoutId = resolveRichMessageLayoutId(input.layoutId)
   const normalized = normalizeRichMessageActions(layoutId, input.actions)
   const imageUrl = renderWithAttributes(input.heroImageUrl, input.attributes)
   const c = RICH_MESSAGE_LINE_CANVAS
   const pct = (px: number) => `${(px / c) * 100}%`
+  const transparent = Boolean(input.transparentBackground)
 
   const overlayBoxes = normalized
     .filter((action: any) => action?.type)
@@ -253,33 +356,46 @@ function buildRichMessageFlexMessage(input: {
         width: pct(b.width),
         height: pct(b.height),
         action: flexAction,
+        ...(transparent ? { backgroundColor: '#00000000' } : {}),
         contents: [{ type: 'filler', flex: 1 }],
       }
     })
     .filter(Boolean)
+
+  const bodyBox: Record<string, unknown> = {
+    type: 'box',
+    layout: 'vertical',
+    position: 'relative',
+    paddingAll: '0px',
+    ...(transparent ? { backgroundColor: '#00000000' } : {}),
+    contents: [
+      {
+        type: 'image',
+        url: imageUrl,
+        size: 'full',
+        aspectRatio: '1:1',
+        aspectMode: 'cover',
+        gravity: 'center',
+        // Flex 圖片預設會在 PNG 透明處疊白底；設為全透明才會透出聊天室背景（與 Imagemap 行為較接近）
+        ...(transparent ? { backgroundColor: '#00000000' } : {}),
+      },
+      ...overlayBoxes,
+    ],
+  }
 
   return {
     type: 'flex',
     altText: renderWithAttributes(input.altText, input.attributes).slice(0, 400),
     contents: {
       type: 'bubble',
-      body: {
-        type: 'box',
-        layout: 'vertical',
-        position: 'relative',
-        paddingAll: '0px',
-        contents: [
-          {
-            type: 'image',
-            url: imageUrl,
-            size: 'full',
-            aspectRatio: '1:1',
-            aspectMode: 'cover',
-            gravity: 'center',
-          },
-          ...overlayBoxes,
-        ],
-      },
+      ...(transparent
+        ? {
+            styles: {
+              body: { backgroundColor: '#00000000' },
+            },
+          }
+        : {}),
+      body: bodyBox,
     },
   } as messagingApi.FlexMessage
 }
@@ -426,12 +542,13 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
       if (!msg.heroImageUrl) return []
       const actions = Array.isArray(msg.actions) ? msg.actions : []
       return [
-        buildRichMessageFlexMessage({
+        buildRichMessageLineMessage({
           altText: msg.altText,
           heroImageUrl: msg.heroImageUrl,
           layoutId: msg.layoutId,
           actions,
           attributes,
+          transparentBackground: Boolean(msg.transparentBackground),
         }),
       ]
     }
@@ -453,12 +570,13 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
             }))
           : []
       return [
-        buildRichMessageFlexMessage({
+        buildRichMessageLineMessage({
           altText: payload.altText,
           heroImageUrl: payload.heroImageUrl,
           layoutId: payload.layoutId,
           actions,
           attributes,
+          transparentBackground: Boolean(payload.transparentBackground),
         }),
       ]
     }
