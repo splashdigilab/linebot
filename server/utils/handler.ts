@@ -116,7 +116,12 @@ async function matchFlow(trigger: string): Promise<FlowDoc | null> {
     .get()
 
   if (!autoReplySnap.empty) {
-    const rule = autoReplySnap.docs[0].data()
+    const firstRuleDoc = autoReplySnap.docs[0]
+    if (!firstRuleDoc) {
+      setCache(flowDocCache, cacheKey, null)
+      return null
+    }
+    const rule = firstRuleDoc.data()
     // try to get from cache first
     const moduleCacheKey = `flow:${rule.moduleId}`
     let moduleFlow = getCached(flowDocCache, moduleCacheKey)
@@ -204,16 +209,37 @@ function resolveRichMessageLayoutId(raw: unknown): string {
   return RICH_LAYOUT_PRESETS.some((p) => p.id === id) ? id : 'single'
 }
 
-function resolveLineImagemapPublicBase(): string {
+function normalizePublicBase(raw: string): string {
+  const cleaned = String(raw || '').trim().replace(/\/$/, '')
+  if (!cleaned) return ''
+  if (!/^https?:\/\//i.test(cleaned)) return ''
+  return cleaned
+}
+
+function resolveLineImagemapPublicBase(fallbackOrigin = ''): string {
   try {
     const c = useRuntimeConfig()
-    const raw = String((c as { lineImagemapBaseUrl?: string }).lineImagemapBaseUrl || '').trim()
-    if (raw) return raw.replace(/\/$/, '')
+    const configured = normalizePublicBase(String((c as { lineImagemapBaseUrl?: string }).lineImagemapBaseUrl || ''))
+    if (configured) return configured
   }
   catch {
     /* useRuntimeConfig 在非 Nitro 內容下可能不可用 */
   }
-  return String(process.env.LINE_IMAGEMAP_BASE_URL || '').trim().replace(/\/$/, '')
+
+  const envCandidates = [
+    process.env.LINE_IMAGEMAP_BASE_URL,
+    process.env.APP_BASE_URL,
+    process.env.SITE_URL,
+    process.env.DEPLOY_PRIME_URL,
+    process.env.DEPLOY_URL,
+    process.env.URL,
+  ]
+  for (const value of envCandidates) {
+    const normalized = normalizePublicBase(String(value || ''))
+    if (normalized) return normalized
+  }
+
+  return normalizePublicBase(fallbackOrigin)
 }
 
 function clampImagemapArea(bounds: { x: number; y: number; width: number; height: number }) {
@@ -237,11 +263,12 @@ function buildRichMessageLineMessage(input: {
   actions: any[]
   attributes: Record<string, string>
   transparentBackground: boolean
+  publicBaseOverride?: string
 }): messagingApi.Message {
   const layoutId = resolveRichMessageLayoutId(input.layoutId)
   const normalized = normalizeRichMessageActions(layoutId, input.actions)
   const hasModule = normalized.some((a: any) => a?.type === 'module')
-  const publicBase = resolveLineImagemapPublicBase()
+  const publicBase = resolveLineImagemapPublicBase(input.publicBaseOverride || '')
   let channelSecret = ''
   try {
     channelSecret = String(useRuntimeConfig().lineChannelSecret || '')
@@ -402,7 +429,11 @@ function buildRichMessageFlexMessage(input: {
 
 // ── Main Event Handlers ───────────────────────────────────────────
 
-function buildLineMessages(dbMessages: any[], attributes: Record<string, string> = {}): messagingApi.Message[] {
+function buildLineMessages(
+  dbMessages: any[],
+  attributes: Record<string, string> = {},
+  publicBaseOverride = '',
+): messagingApi.Message[] {
   if (!dbMessages) return []
   return dbMessages.flatMap((msg) => {
     // ── Text with buttons → Buttons Template ──
@@ -549,6 +580,7 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
           actions,
           attributes,
           transparentBackground: Boolean(msg.transparentBackground),
+          publicBaseOverride,
         }),
       ]
     }
@@ -577,6 +609,7 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
           actions,
           attributes,
           transparentBackground: Boolean(payload.transparentBackground),
+          publicBaseOverride,
         }),
       ]
     }
@@ -642,7 +675,10 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
 }
 
 
-export async function handleMessageEvent(event: webhook.MessageEvent): Promise<void> {
+export async function handleMessageEvent(
+  event: webhook.MessageEvent,
+  options: { requestOrigin?: string } = {},
+): Promise<void> {
   const userId = event.source?.userId
   if (!userId) return
 
@@ -677,7 +713,10 @@ export async function handleMessageEvent(event: webhook.MessageEvent): Promise<v
       
       if (flow && event.replyToken) {
         const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-        await replyMessage(event.replyToken, buildLineMessages(hydratedMessages, userAttributes))
+        await replyMessage(
+          event.replyToken,
+          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || ''),
+        )
         await dispatchPostReplyActions(userId, flow.messages)
       }
       handledByInput = true
@@ -687,7 +726,10 @@ export async function handleMessageEvent(event: webhook.MessageEvent): Promise<v
       const flow = await matchFlow(textContent)
       if (flow && event.replyToken) {
         const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-        await replyMessage(event.replyToken, buildLineMessages(hydratedMessages, userAttributes))
+        await replyMessage(
+          event.replyToken,
+          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || ''),
+        )
         await dispatchPostReplyActions(userId, flow.messages)
       }
     }
@@ -697,7 +739,10 @@ export async function handleMessageEvent(event: webhook.MessageEvent): Promise<v
   }
 }
 
-export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise<void> {
+export async function handlePostbackEvent(
+  event: webhook.PostbackEvent,
+  options: { requestOrigin?: string } = {},
+): Promise<void> {
   console.log('[handlePostbackEvent] event received:', JSON.stringify(event).slice(0, 300))
   const userId = event.source?.userId
   if (!userId) return
@@ -752,7 +797,7 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
     const moduleId = directModuleId
     const cacheKey = `flow:${moduleId}`
     
-    let flow: FlowDoc | null = undefined
+    let flow: FlowDoc | null = null
     const cachedFlow = getCached(flowDocCache, cacheKey)
     if (cachedFlow !== undefined) {
       flow = cachedFlow
@@ -771,7 +816,10 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
       if (event.replyToken) {
         const userAttributes = buildAttributeContext(await userDataTask)
         const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-        await replyMessage(event.replyToken, buildLineMessages(hydratedMessages, userAttributes))
+        await replyMessage(
+          event.replyToken,
+          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || ''),
+        )
         await dispatchPostReplyActions(userId, flow.messages)
       }
     } else {
@@ -786,7 +834,10 @@ export async function handlePostbackEvent(event: webhook.PostbackEvent): Promise
   if (flow && event.replyToken) {
     const userAttributes = buildAttributeContext(await userDataTask)
     const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-    await replyMessage(event.replyToken, buildLineMessages(hydratedMessages, userAttributes))
+    await replyMessage(
+      event.replyToken,
+      buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || ''),
+    )
     await dispatchPostReplyActions(userId, flow.messages)
   }
 
