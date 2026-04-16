@@ -4,6 +4,8 @@ import { getDb } from './firebase'
 import { replyMessage, getUserProfile, linkRichMenuIdToUser } from './line'
 import { FieldValue } from 'firebase-admin/firestore'
 import { decodeTriggerModule, encodeTriggerModule } from '~~/shared/action-schema'
+import { RICH_LAYOUT_PRESETS } from '~~/shared/rich-layout-presets'
+import { normalizeRichMessageActions } from '~~/shared/rich-message-editor-helpers'
 
 // ── In-Memory Caching to Reduce DB Latency ──────────────────────────
 const userCheckedCache = new Set<string>()
@@ -152,6 +154,7 @@ function buildRichMessageSnapshot(item: any) {
       uri: action?.uri || '',
       text: action?.text || '',
       moduleId: action?.moduleId || '',
+      ...(action?.bounds && typeof action.bounds === 'object' ? { bounds: action.bounds } : {}),
     })),
   }
 }
@@ -191,6 +194,94 @@ async function hydrateRichMessageRefs(messages: any[]): Promise<any[]> {
     if (latest) return { ...msg, payload: latest }
     return msg
   })
+}
+
+const RICH_MESSAGE_LINE_CANVAS = 1040
+
+function resolveRichMessageLayoutId(raw: unknown): string {
+  const id = typeof raw === 'string' && raw.trim() ? raw.trim() : 'single'
+  return RICH_LAYOUT_PRESETS.some((p) => p.id === id) ? id : 'single'
+}
+
+/** Flex：底圖 + 依編輯器座標疊透明點擊區（類似圖文選單），可保留 postback 觸發模組 */
+function buildRichMessageFlexMessage(input: {
+  altText: string
+  heroImageUrl: string
+  layoutId: unknown
+  actions: any[]
+  attributes: Record<string, string>
+}): messagingApi.FlexMessage {
+  const layoutId = resolveRichMessageLayoutId(input.layoutId)
+  const normalized = normalizeRichMessageActions(layoutId, input.actions)
+  const imageUrl = renderWithAttributes(input.heroImageUrl, input.attributes)
+  const c = RICH_MESSAGE_LINE_CANVAS
+  const pct = (px: number) => `${(px / c) * 100}%`
+
+  const overlayBoxes = normalized
+    .filter((action: any) => action?.type)
+    .map((action: any) => {
+      const b = action.bounds
+      if (!b) return null
+      let flexAction: Record<string, unknown>
+      if (action.type === 'uri') {
+        flexAction = {
+          type: 'uri',
+          label: ' ',
+          uri: renderWithAttributes(action.uri || 'https://google.com', input.attributes),
+        }
+      }
+      else if (action.type === 'module') {
+        flexAction = {
+          type: 'postback',
+          label: ' ',
+          data: encodeTriggerModule(action.moduleId || ''),
+        }
+      }
+      else {
+        flexAction = {
+          type: 'message',
+          label: ' ',
+          text: renderWithAttributes(action.text || action.slot || ' ', input.attributes).slice(0, 300),
+        }
+      }
+      return {
+        type: 'box',
+        layout: 'vertical',
+        position: 'absolute',
+        offsetTop: pct(b.y),
+        offsetStart: pct(b.x),
+        width: pct(b.width),
+        height: pct(b.height),
+        action: flexAction,
+        contents: [{ type: 'filler', flex: 1 }],
+      }
+    })
+    .filter(Boolean)
+
+  return {
+    type: 'flex',
+    altText: renderWithAttributes(input.altText, input.attributes).slice(0, 400),
+    contents: {
+      type: 'bubble',
+      body: {
+        type: 'box',
+        layout: 'vertical',
+        position: 'relative',
+        paddingAll: '0px',
+        contents: [
+          {
+            type: 'image',
+            url: imageUrl,
+            size: 'full',
+            aspectRatio: '1:1',
+            aspectMode: 'cover',
+            gravity: 'center',
+          },
+          ...overlayBoxes,
+        ],
+      },
+    },
+  } as messagingApi.FlexMessage
 }
 
 // ── Main Event Handlers ───────────────────────────────────────────
@@ -329,82 +420,28 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
       } as messagingApi.TemplateMessage]
     }
 
-    // ── Rich Message Inline (Flex) ──
+    // ── Rich Message Inline（底圖 + 疊在圖上的點擊區，類似圖文選單）──
     if (msg.type === 'richMessage') {
       if (!msg.altText) return []
       if (!msg.heroImageUrl) return []
-      const normalizedActions = Array.isArray(msg.actions) ? msg.actions : []
-
-      const headerContents = normalizedActions
-        .filter((action: any) => action?.type)
-        .map((action: any, index: number) => {
-          const slot = action?.slot || String.fromCharCode(65 + index)
-          if (action.type === 'uri') {
-            return {
-              type: 'button',
-              style: 'secondary',
-              height: 'sm',
-              action: {
-                type: 'uri',
-                label: slot,
-                uri: renderWithAttributes(action.uri || 'https://google.com', attributes),
-              },
-            }
-          }
-          if (action.type === 'module') {
-            return {
-              type: 'button',
-              style: 'secondary',
-              height: 'sm',
-              action: {
-                type: 'postback',
-                label: slot,
-                data: encodeTriggerModule(action.moduleId),
-              },
-            }
-          }
-          return {
-            type: 'button',
-            style: 'secondary',
-            height: 'sm',
-            action: {
-              type: 'message',
-              label: slot,
-              text: renderWithAttributes(action.text || slot, attributes).slice(0, 300),
-            },
-          }
-        })
-
-      return [{
-        type: 'flex',
-        altText: renderWithAttributes(msg.altText, attributes).slice(0, 400),
-        contents: {
-          type: 'bubble',
-          ...(headerContents.length > 0 ? {
-            header: {
-              type: 'box',
-              layout: 'vertical',
-              spacing: 'sm',
-              contents: headerContents.slice(0, 6),
-            },
-          } : {}),
-          hero: {
-            type: 'image',
-            url: renderWithAttributes(msg.heroImageUrl, attributes),
-            size: 'full',
-            aspectRatio: '1:1',
-            aspectMode: 'cover',
-          },
-        },
-      } as messagingApi.FlexMessage]
+      const actions = Array.isArray(msg.actions) ? msg.actions : []
+      return [
+        buildRichMessageFlexMessage({
+          altText: msg.altText,
+          heroImageUrl: msg.heroImageUrl,
+          layoutId: msg.layoutId,
+          actions,
+          attributes,
+        }),
+      ]
     }
 
-    // ── Rich Message Reference (Flex) ──
+    // ── Rich Message Reference（同上）──
     if (msg.type === 'richMessageRef') {
       const payload = msg.payload
       if (!payload?.altText) return []
       if (!payload?.heroImageUrl) return []
-      const normalizedActions = Array.isArray(payload?.actions)
+      const actions = Array.isArray(payload?.actions)
         ? payload.actions
         : Array.isArray(payload?.buttons)
           ? payload.buttons.map((btn: any, index: number) => ({
@@ -415,69 +452,15 @@ function buildLineMessages(dbMessages: any[], attributes: Record<string, string>
               moduleId: btn?.moduleId || '',
             }))
           : []
-
-      const headerContents = normalizedActions
-        .filter((action: any) => action?.type)
-        .map((action: any, index: number) => {
-          const slot = action?.slot || String.fromCharCode(65 + index)
-          if (action.type === 'uri') {
-            return {
-              type: 'button',
-              style: 'secondary',
-              height: 'sm',
-              action: {
-                type: 'uri',
-                label: slot,
-                uri: renderWithAttributes(action.uri || 'https://google.com', attributes),
-              },
-            }
-          }
-          if (action.type === 'module') {
-            return {
-              type: 'button',
-              style: 'secondary',
-              height: 'sm',
-              action: {
-                type: 'postback',
-                label: slot,
-                data: encodeTriggerModule(action.moduleId),
-              },
-            }
-          }
-          return {
-            type: 'button',
-            style: 'secondary',
-            height: 'sm',
-            action: {
-              type: 'message',
-              label: slot,
-              text: renderWithAttributes(action.text || slot, attributes).slice(0, 300),
-            },
-          }
-        })
-
-      return [{
-        type: 'flex',
-        altText: renderWithAttributes(payload.altText, attributes).slice(0, 400),
-        contents: {
-          type: 'bubble',
-          ...(headerContents.length > 0 ? {
-            header: {
-              type: 'box',
-              layout: 'vertical',
-              spacing: 'sm',
-              contents: headerContents.slice(0, 6),
-            },
-          } : {}),
-          hero: {
-            type: 'image',
-            url: renderWithAttributes(payload.heroImageUrl, attributes),
-            size: 'full',
-            aspectRatio: '1:1',
-            aspectMode: 'cover',
-          },
-        },
-      } as messagingApi.FlexMessage]
+      return [
+        buildRichMessageFlexMessage({
+          altText: payload.altText,
+          heroImageUrl: payload.heroImageUrl,
+          layoutId: payload.layoutId,
+          actions,
+          attributes,
+        }),
+      ]
     }
 
     // ── Quick Reply ──
