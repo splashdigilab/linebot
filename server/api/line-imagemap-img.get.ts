@@ -1,7 +1,13 @@
 import { verifyImagemapImageToken } from '../utils/line-imagemap-image-token'
 
+function normalizeSize(raw: string): string {
+  // 兼容 LINE 可能送來的 `1040` 或 `/1040` 形式
+  const digits = String(raw || '').replace(/\D/g, '')
+  return digits
+}
+
 /**
- * LINE Imagemap 會請求 baseUrl + 寬度（例如 …&z=1040）。
+ * 舊版 query 形式相容路由：/api/line-imagemap-img?token=...&z=1040
  * 驗簽後 302 轉到實際圖檔，讓聊天室內可保留 PNG 透明（Flex 會把透明當白底）。
  */
 export default defineEventHandler((event) => {
@@ -18,7 +24,7 @@ export default defineEventHandler((event) => {
     throw createError({ statusCode: 403, statusMessage: 'Invalid or expired token' })
   }
 
-  const z = String(q.z ?? '')
+  const z = normalizeSize(String(q.z ?? ''))
   const allowedWidths = new Set(['1040', '700', '460', '300', '240'])
   if (z && !allowedWidths.has(z)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid size' })

@@ -286,7 +286,7 @@ function buildRichMessageLineMessage(input: {
   if (tryImagemap) {
     const renderedUrl = renderWithAttributes(input.heroImageUrl, input.attributes)
     const token = createImagemapImageToken(renderedUrl, channelSecret)
-    const baseUrl = `${publicBase}/api/line-imagemap-img?token=${encodeURIComponent(token)}&z=`
+    const baseUrl = `${publicBase}/api/line-imagemap-img/${encodeURIComponent(token)}`
     if (baseUrl.length <= 1900) {
       const actions = normalized
         .filter((a: any) => a?.type === 'uri' || a?.type === 'message')
