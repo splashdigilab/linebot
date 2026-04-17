@@ -480,11 +480,13 @@ function buildRichMessageLineMessage(input: {
   const tryImagemap =
     Boolean(input.transparentBackground)
     && !hasModule
-    && !hasTaggedMessage
     && Boolean(publicBase && channelSecret)
     && normalized.some((a: any) => a?.type)
 
   if (tryImagemap) {
+    if (hasTaggedMessage) {
+      console.warn('[richMessage] transparent mode uses imagemap, message tagging will be ignored in this delivery')
+    }
     const renderedUrl = renderWithAttributes(input.heroImageUrl, input.attributes)
     const token = createImagemapImageToken(renderedUrl, channelSecret)
     const baseUrl = `${publicBase}/api/line-imagemap-img/${encodeURIComponent(token)}`
