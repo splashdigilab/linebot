@@ -10,6 +10,7 @@
         <el-select
           v-model="action.type"
           class="admin-w-full control-full"
+          :disabled="disabled"
           @change="onTypeChange"
         >
           <el-option value="uri" label="開啟網址" />
@@ -22,14 +23,14 @@
       <template v-if="action.type === 'uri'">
         <div class="admin-field-group">
           <AdminFieldLabel text="網址" tight />
-          <el-input v-model="action.uri" placeholder="https://..." />
+          <el-input v-model="action.uri" placeholder="https://..." :disabled="disabled" />
         </div>
       </template>
 
       <template v-if="action.type === 'message'">
         <div class="admin-field-group">
           <AdminFieldLabel text="回覆文字" tight />
-          <el-input v-model="action.text" placeholder="輸入代發文字" />
+          <el-input v-model="action.text" placeholder="輸入代發文字" :disabled="disabled" />
         </div>
       </template>
 
@@ -40,6 +41,7 @@
             v-model="action.moduleId"
             class="admin-w-full control-full"
             :placeholder="modulePlaceholder"
+            :disabled="disabled"
           >
             <el-option
               v-for="mod in moduleOptions"
@@ -58,6 +60,7 @@
             v-model="action.data"
             class="admin-w-full control-full"
             :placeholder="switchPlaceholder"
+            :disabled="disabled"
           >
             <el-option
               v-for="menu in availableMenuOptions"
@@ -106,6 +109,8 @@ const props = withDefaults(defineProps<{
   switchLabel?: string
   switchPlaceholder?: string
   errorMessage?: string
+  /** 唯讀（例如已發送推播僅檢視） */
+  disabled?: boolean
 }>(), {
   menuOptions: () => [],
   allowSwitch: false,
@@ -116,6 +121,7 @@ const props = withDefaults(defineProps<{
   switchLabel: '選擇目標 Rich Menu',
   switchPlaceholder: '請選擇要切換的選單...',
   errorMessage: '',
+  disabled: false,
 })
 
 const emit = defineEmits<{
@@ -135,6 +141,7 @@ const hasInvalidSwitchTarget = computed(() => {
 })
 
 function onTypeChange() {
+  if (props.disabled) return
   const nextType = action.value?.type || 'uri'
   emit('update:modelValue', {
     ...action.value,

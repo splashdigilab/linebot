@@ -1,0 +1,127 @@
+/* ═══════════════════════════════════════════════════════════════
+   推播編輯（split 右側；覆寫 flow 的 message-card 寬度）
+═══════════════════════════════════════════════════════════════ */
+
+/* 表單本體（外層 padding 由 .ar-editor-body） */
+.bc-editor-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-form-stack-gap);
+  width: 100%;
+  min-width: 0;
+}
+
+.bc-section-card.message-card {
+  width: 100%;
+  max-width: 100%;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+/* 統計 */
+.bc-stats-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.75rem;
+
+  @media (max-width: 960px) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  @media (max-width: 520px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.bc-stat-box {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.75rem;
+  text-align: center;
+}
+
+.bc-stat-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.bc-stat-value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-top: 0.25rem;
+}
+
+.bc-ctr-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* 驗證 dialog（補強小螢幕） */
+.bc-dialog-validate.el-dialog {
+  max-width: calc(100vw - 2rem);
+}
+
+.bc-validate-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  color: var(--text-muted);
+}
+
+.bc-validate-ok {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.bc-preview-ids {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.bc-preview-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.bc-preview-list li {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.bc-snapshot-info {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+}
+
+.bc-click-hint {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.bc-click-hint__code {
+  font-size: 0.78em;
+}
+
+.bc-insight-warn {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  margin: 0;
+}

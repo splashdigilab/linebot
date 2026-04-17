@@ -1,0 +1,193 @@
+/* ═══════════════════════════════════════════════════════════════
+   標籤管理頁（版型對齊 auto-reply / flow：message-card + card-section-stack）
+═══════════════════════════════════════════════════════════════ */
+
+/* 覆寫 flow 內 message-card 固定 380px：在 split-editor 內橫向撐滿 */
+.tags-page-card.message-card {
+  width: 100%;
+  max-width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.tags-page-card .card-section-stack {
+  flex: 1;
+  min-height: 0;
+}
+
+.tags-toolbar {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: var(--space-form-field-gap);
+}
+
+.tags-toolbar__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+.tags-toolbar__field--search {
+  flex: 0 0 220px;
+}
+
+.tags-toolbar__field--category {
+  flex: 0 0 150px;
+}
+
+.tags-toolbar__field--status {
+  flex: 0 0 120px;
+}
+
+.tags-count {
+  font-size: 0.8rem;
+  margin-left: auto;
+  align-self: center;
+}
+
+.tags-loading,
+.tags-empty {
+  padding: 2.5rem;
+  text-align: center;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.tags-table {
+  width: 100%;
+}
+
+.tags-table__th--swatch {
+  width: 36px;
+}
+
+.tags-table__th--actions {
+  width: 120px;
+}
+
+.td-name {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.td-code {
+  font-family: monospace;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.td-time {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.td-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+/* 動態色：僅設定 CSS 變數，視覺在 SCSS */
+.tag-color-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--dot-bg, #6b7280);
+}
+
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.tag-chip--tinted {
+  --tag-accent: #6b7280;
+  color: var(--tag-accent);
+  border: 1px solid color-mix(in srgb, var(--tag-accent) 38%, transparent);
+  background: color-mix(in srgb, var(--tag-accent) 14%, transparent);
+}
+
+@supports not (background: color-mix(in srgb, red 50%, blue)) {
+  .tag-chip--tinted {
+    background: var(--bg-elevated);
+    border-color: var(--border);
+  }
+}
+
+.tag-chip-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.65rem;
+  color: inherit;
+  opacity: 0.6;
+  padding: 0;
+  line-height: 1;
+
+  &:hover { opacity: 1; }
+}
+
+.tag-chip-more {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding: 0.1rem 0.3rem;
+}
+
+.tags-color-row {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.tags-color-swatch {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.1s;
+  background: var(--swatch-bg, #6b7280);
+
+  &:hover { transform: scale(1.15); }
+
+  &.active {
+    border-color: var(--text-primary);
+    transform: scale(1.15);
+  }
+}
+
+.tags-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.tags-dialog-select {
+  width: 100%;
+}
+
+.tags-option-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.tags-option-row__label {
+  margin-left: 0;
+}

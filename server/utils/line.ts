@@ -1,8 +1,16 @@
 import * as line from '@line/bot-sdk'
+import { HTTPFetchError } from '@line/bot-sdk'
 import { createHmac, timingSafeEqual } from 'crypto'
+
+function lineMulticastErrorDetail(err: unknown): string {
+  if (err instanceof HTTPFetchError && err.body) return `${err.message} | ${err.body}`
+  if (err instanceof Error) return err.message
+  return String(err)
+}
 
 let _client: line.messagingApi.MessagingApiClient
 let _blobClient: line.messagingApi.MessagingApiBlobClient
+let _insightClient: line.insight.InsightClient | null = null
 
 function getClient() {
   if (!_client) {
@@ -22,6 +30,17 @@ function getBlobClient() {
     })
   }
   return _blobClient
+}
+
+/** LINE Insight（開封／官方互動統計） */
+export function getInsightClient(): line.insight.InsightClient {
+  if (!_insightClient) {
+    const config = useRuntimeConfig()
+    _insightClient = new line.insight.InsightClient({
+      channelAccessToken: config.lineChannelAccessToken,
+    })
+  }
+  return _insightClient
 }
 
 /** Verify x-line-signature header */
@@ -74,6 +93,72 @@ export async function setDefaultRichMenu(richMenuId: string) {
 /** Delete a Rich Menu from LINE */
 export async function deleteLineRichMenu(richMenuId: string) {
   return getClient().deleteRichMenu(richMenuId)
+}
+
+export type MulticastOptions = {
+  /** LINE 彙總單位（最多 1 個），用於查詢開封／官方網址點擊統計 */
+  customAggregationUnits?: string[]
+}
+
+/**
+ * Multicast messages to multiple LINE userIds.
+ * LINE API 限制單次最多 500 人，此函式自動分批處理。
+ */
+export async function multicastMessage(
+  userIds: string[],
+  messages: line.messagingApi.Message[],
+  options?: MulticastOptions,
+): Promise<{ successCount: number; failedIds: string[]; lineAggregationApplied: boolean }> {
+  const BATCH_SIZE = 500
+  let successCount = 0
+  const failedIds: string[] = []
+  const units = options?.customAggregationUnits?.length
+    ? [options.customAggregationUnits[0]]
+    : undefined
+  /** 僅當所有批次皆以 customAggregationUnits 成功送出時為 true（任一批改走無彙總重試則 false） */
+  let lineAggregationApplied = Boolean(units?.length)
+
+  for (let i = 0; i < userIds.length; i += BATCH_SIZE) {
+    const batch = userIds.slice(i, i + BATCH_SIZE)
+    const sendWithUnits = Boolean(units?.length && lineAggregationApplied)
+    try {
+      await getClient().multicast(
+        sendWithUnits
+          ? { to: batch, messages, customAggregationUnits: units! }
+          : { to: batch, messages },
+      )
+      successCount += batch.length
+    }
+    catch (err) {
+      if (sendWithUnits && units) {
+        console.warn(
+          `[multicastMessage] batch ${i}~${i + batch.length - 1} 帶 customAggregationUnits 失敗，改為不帶彙總重試：`,
+          lineMulticastErrorDetail(err),
+        )
+        lineAggregationApplied = false
+        try {
+          await getClient().multicast({ to: batch, messages })
+          successCount += batch.length
+        }
+        catch (err2) {
+          console.error(
+            `[multicastMessage] batch ${i}~${i + batch.length - 1} failed:`,
+            lineMulticastErrorDetail(err2),
+          )
+          failedIds.push(...batch)
+        }
+      }
+      else {
+        console.error(
+          `[multicastMessage] batch ${i}~${i + batch.length - 1} failed:`,
+          lineMulticastErrorDetail(err),
+        )
+        failedIds.push(...batch)
+      }
+    }
+  }
+
+  return { successCount, failedIds, lineAggregationApplied }
 }
 
 /** Get user profile */

@@ -1,0 +1,108 @@
+import { getDb } from '~~/server/utils/firebase'
+import { fetchBroadcastLineInsight } from '~~/server/utils/broadcast-line-insight'
+import type { BroadcastDoc } from '~~/shared/types/tag-broadcast'
+
+function firestoreTimeToDate(v: unknown): Date | null {
+  if (v == null) return null
+  if (v instanceof Date) return Number.isNaN(v.getTime()) ? null : v
+  if (typeof (v as { toDate?: () => Date }).toDate === 'function') {
+    try {
+      const d = (v as { toDate: () => Date }).toDate()
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? d : null
+    }
+    catch {
+      return null
+    }
+  }
+  const o = v as { seconds?: number; _seconds?: number }
+  const sec = typeof o.seconds === 'number' ? o.seconds : typeof o._seconds === 'number' ? o._seconds : NaN
+  if (!Number.isNaN(sec)) return new Date(sec * 1000)
+  return null
+}
+
+/**
+ * GET /api/broadcast/:id/report
+ * 取得推播成效報表
+ *
+ * - linkClickCount：經 /api/r 追蹤連結的點擊（自家 log）
+ * - lineUniqueImpression：LINE 聚合「開封」人數（可能為 null，小樣本隱私）
+ * - lineUniqueClick：LINE 聚合「訊息內網址點擊」人數（與自架追蹤不同）
+ */
+export default defineEventHandler(async (event) => {
+  const id = getRouterParam(event, 'id')
+  if (!id) throw createError({ statusCode: 400, statusMessage: 'id is required' })
+
+  const db = getDb()
+  const snap = await db.collection('broadcasts').doc(id).get()
+  if (!snap.exists) throw createError({ statusCode: 404, statusMessage: 'Broadcast not found' })
+
+  const data = snap.data() as BroadcastDoc
+
+  const clickSnap = await db.collection('broadcastClickLogs')
+    .where('campaignId', '==', id)
+    .get()
+
+  const clicksByLinkKey: Record<string, number> = {}
+  for (const doc of clickSnap.docs) {
+    const linkKey = doc.data().linkKey as string
+    clicksByLinkKey[linkKey] = (clicksByLinkKey[linkKey] ?? 0) + 1
+  }
+
+  const linkClickCount = clickSnap.size
+  const linkCtr = data.sentCount > 0 ? linkClickCount / data.sentCount : 0
+
+  const startedAt = firestoreTimeToDate(data.startedAt as unknown)
+  const completedAt = firestoreTimeToDate(data.completedAt as unknown)
+
+  const shouldFetchLine = ['completed', 'failed'].includes(data.status)
+  /** 曾改走無彙總 multicast 時為 false，LINE 不會有該 unit 的 insight */
+  const skipLineInsight = data.lineInsightAggregationApplied === false
+  const line = shouldFetchLine
+    ? (skipLineInsight
+        ? {
+            lineUniqueImpression: null as number | null,
+            lineUniqueClick: null as number | null,
+            lineInsightError: 'LINE_AGGREGATION_SKIPPED',
+          }
+        : await fetchBroadcastLineInsight(
+            id,
+            data.lineAggregationUnit ?? null,
+            startedAt,
+            completedAt,
+          ))
+    : { lineUniqueImpression: null as number | null, lineUniqueClick: null as number | null }
+
+  const openRate = line.lineUniqueImpression != null && data.sentCount > 0
+    ? line.lineUniqueImpression / data.sentCount
+    : null
+
+  return {
+    campaignId: id,
+    name: data.name,
+    status: data.status,
+    totalCount: data.totalCount,
+    sentCount: data.sentCount,
+    failedCount: data.failedCount,
+    skippedCount: data.skippedCount,
+    /** 自架追蹤連結（/api/r）點擊次數 */
+    linkClickCount,
+    /** 與 linkClickCount 相同，保留相容 */
+    clickCount: linkClickCount,
+    /** 自架連結 CTR */
+    ctr: Math.round(linkCtr * 10000) / 10000,
+    /** LINE 開封人數（uniqueImpression），聚合非即時、小樣本可能為 null */
+    lineUniqueImpression: line.lineUniqueImpression,
+    /** LINE 官方統計之訊息內網址點擊人數（與 linkClickCount 分開） */
+    lineUniqueClick: line.lineUniqueClick,
+    lineInsightError: line.lineInsightError,
+    openRate: openRate != null ? Math.round(openRate * 10000) / 10000 : null,
+    clicksByLinkKey,
+    startedAt: data.startedAt,
+    completedAt: data.completedAt,
+    lineAggregationUnit: data.lineAggregationUnit ?? null,
+    lineInsightAggregationApplied:
+      typeof data.lineInsightAggregationApplied === 'boolean'
+        ? data.lineInsightAggregationApplied
+        : (data.lineAggregationUnit ? true : null),
+  }
+})

@@ -1,0 +1,234 @@
+import type { Timestamp, FieldValue } from 'firebase-admin/firestore'
+
+// ═══════════════════════════════════════════════════════════════════
+//  Collection: tags
+//  Doc ID: uuid
+// ═══════════════════════════════════════════════════════════════════
+
+export type TagStatus = 'active' | 'inactive'
+
+/**
+ * member_status  – 例如 vip、new_friend、blocked_risk
+ * interest       – 例如 interest_food、interest_travel
+ * behavior       – 例如 buyer、cart_abandon、clicked_promo
+ * activity       – 例如 event_2025q2、campaign_mothersday
+ * custom         – 自訂標籤，無法歸類到以上
+ */
+export type TagCategory = 'member_status' | 'interest' | 'behavior' | 'activity' | 'custom'
+
+export interface TagDoc {
+  /** 唯一識別碼，英文小寫加底線，程式內部使用。例如 interest_food */
+  code: string
+  /** 顯示名稱，給後台營運人員看 */
+  name: string
+  category: TagCategory
+  /** hex 色碼，用於後台顯示標籤色塊 */
+  color: string
+  description: string
+  status: TagStatus
+  createdBy: string
+  createdAt: Timestamp | FieldValue
+  updatedAt: Timestamp | FieldValue
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Collection: userTags
+//  Doc ID: `${userId}_${tagId}`（確保唯一，避免重複貼標）
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * manual  – 後台手動操作
+ * import  – CSV 匯入
+ * rule    – 自動化規則觸發（Phase 3）
+ * system  – 系統事件觸發，例如加入好友、完成購買
+ */
+export type UserTagSourceType = 'manual' | 'import' | 'rule' | 'system'
+
+export interface UserTagDoc {
+  userId: string
+  tagId: string
+  sourceType: UserTagSourceType
+  /** 對應來源的參考 ID，例如批次任務 ID、規則 ID */
+  sourceRefId: string | null
+  /** 操作者的 uid（system 事件時為 null） */
+  createdBy: string | null
+  createdAt: Timestamp | FieldValue
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Collection: tagLogs
+//  Doc ID: uuid
+//  用途：稽核、問題追查，不做刪除
+// ═══════════════════════════════════════════════════════════════════
+
+export type TagOpAction = 'add' | 'remove'
+
+export interface TagLogDoc {
+  action: TagOpAction
+  userId: string
+  tagId: string
+  sourceType: UserTagSourceType
+  sourceRefId: string | null
+  operatorId: string | null
+  createdAt: Timestamp | FieldValue
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Collection: audiences
+//  Doc ID: uuid
+// ═══════════════════════════════════════════════════════════════════
+
+export type AudienceType = 'dynamic' | 'static'
+
+export interface AudienceCondition {
+  /**
+   * includeAny  – 包含任一標籤（OR）
+   * includeAll  – 包含所有標籤（AND）
+   * excludeAny  – 排除任一標籤
+   */
+  type: 'includeAny' | 'includeAll' | 'excludeAny'
+  tagIds: string[]
+}
+
+export interface AudienceFilter {
+  conditions: AudienceCondition[]
+  /** ISO 8601 日期字串，限制加入好友時間 */
+  joinedAfter: string | null
+  joinedBefore: string | null
+  /** null = 不限制 */
+  isBlocked: boolean | null
+}
+
+export interface AudienceDoc {
+  name: string
+  description: string
+  audienceType: AudienceType
+  filter: AudienceFilter
+  estimatedCount: number
+  lastCalculatedAt: Timestamp | null
+  createdBy: string
+  createdAt: Timestamp | FieldValue
+  updatedAt: Timestamp | FieldValue
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Collection: broadcasts
+//  Doc ID: uuid
+// ═══════════════════════════════════════════════════════════════════
+
+export type BroadcastStatus =
+  | 'draft'
+  | 'scheduled'
+  | 'processing'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+
+export type BroadcastChannel = 'line'
+
+export type BroadcastAudienceSourceType = 'all' | 'tags' | 'audience' | 'import'
+
+export interface BroadcastAudienceSource {
+  type: BroadcastAudienceSourceType
+  /** type === 'tags' 時使用 */
+  tagIds?: string[]
+  /** type === 'audience' 時使用 */
+  audienceId?: string
+  /** type === 'import' 時使用（LINE userId 陣列） */
+  importedUserIds?: string[]
+}
+
+export interface BroadcastDoc {
+  name: string
+  status: BroadcastStatus
+  channel: BroadcastChannel
+  audienceSource: BroadcastAudienceSource
+  /**
+   * 發送當下的受眾快照，保留歷史可追查
+   * resolvedUserIds 在點擊「發送」時才寫入
+   */
+  audienceSnapshot: {
+    filter: AudienceFilter | null
+    resolvedUserIds: string[]
+    estimatedCount: number
+  }
+  /** LINE messagingApi.Message[] 快照 */
+  messages: any[]
+  /**
+   * 發送 multicast 時帶入的 LINE customAggregationUnits[0]，
+   * 用於 insight 查詢開封（uniqueImpression）與 LINE 官方網址點擊（uniqueClick）
+   */
+  lineAggregationUnit?: string | null
+  /**
+   * 發送時是否成功帶上 LINE customAggregationUnits。
+   * false 時無法以 Insight 查開封數（可能曾 400 改為無彙總重試）。
+   */
+  lineInsightAggregationApplied?: boolean | null
+  scheduleAt: Timestamp | null
+  startedAt: Timestamp | null
+  completedAt: Timestamp | null
+  /** 統計欄位，發送過程即時更新 */
+  totalCount: number
+  sentCount: number
+  failedCount: number
+  skippedCount: number
+  createdBy: string
+  createdAt: Timestamp | FieldValue
+  updatedAt: Timestamp | FieldValue
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Sub-collection: broadcasts/{campaignId}/deliveries
+//  Doc ID: uuid
+// ═══════════════════════════════════════════════════════════════════
+
+export type DeliveryStatus = 'pending' | 'sent' | 'failed' | 'skipped'
+
+export interface BroadcastDeliveryDoc {
+  campaignId: string
+  /** Firestore users 集合的 doc ID（同 LINE userId） */
+  userId: string
+  deliveryStatus: DeliveryStatus
+  failureReason: string | null
+  sentAt: Timestamp | null
+  createdAt: Timestamp | FieldValue
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Collection: broadcastClickLogs
+//  Doc ID: uuid
+// ═══════════════════════════════════════════════════════════════════
+
+export interface BroadcastClickLogDoc {
+  campaignId: string
+  /** 對應 broadcasts/{id}/deliveries 的 doc ID */
+  deliveryId: string | null
+  userId: string | null
+  /** 對應按鈕或連結的識別 key，例如 btn_0, btn_1 */
+  linkKey: string
+  targetUrl: string
+  clickedAt: Timestamp | FieldValue
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Collection: automationRules  （Phase 3 預留）
+//  Doc ID: uuid
+// ═══════════════════════════════════════════════════════════════════
+
+export type RuleTriggerType = 'follow' | 'click' | 'schedule' | 'purchase'
+export type RuleActionType = 'add_tag' | 'remove_tag' | 'send_broadcast'
+export type RuleStatus = 'active' | 'inactive'
+
+export interface AutomationRuleDoc {
+  name: string
+  triggerType: RuleTriggerType
+  /** 觸發條件（依 triggerType 有不同欄位） */
+  triggerConfig: Record<string, any>
+  actionType: RuleActionType
+  /** 動作設定（依 actionType 有不同欄位） */
+  actionConfig: Record<string, any>
+  status: RuleStatus
+  createdBy: string
+  createdAt: Timestamp | FieldValue
+  updatedAt: Timestamp | FieldValue
+}

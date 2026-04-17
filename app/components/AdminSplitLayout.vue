@@ -1,7 +1,7 @@
 <template>
-  <div class="split-layout">
+  <div class="split-layout" :class="{ 'split-layout--solo': solo }">
     <!-- ── Left Sidebar ─────────────────────────────── -->
-    <aside class="split-sidebar">
+    <aside v-if="!solo" class="split-sidebar">
       <div class="split-sidebar-header">
         <slot name="sidebar-header" />
       </div>
@@ -35,6 +35,11 @@
 
 <script setup>
 defineProps({
+  /** 隱藏左側欄，右側編輯區全寬（標籤／會員等列表頁與 split-editor 視覺一致） */
+  solo: {
+    type: Boolean,
+    default: false,
+  },
   isEmpty: {
     type: Boolean,
     default: false,

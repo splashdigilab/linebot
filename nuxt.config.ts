@@ -39,6 +39,8 @@ export default defineNuxtConfig({
     lineChannelSecret: process.env.LINE_CHANNEL_SECRET ?? '',
     /** 公開 HTTPS 原點（無尾斜線），供 Imagemap 透明圖轉址；未設時「保留透明」仍走 Flex（透明會變白底） */
     lineImagemapBaseUrl: process.env.LINE_IMAGEMAP_BASE_URL ?? '',
+    /** 推播點擊追蹤：與 Nitro 對外網址相同原點（無尾斜線）。未設時發送不包裝 /api/r，點擊數不會增加 */
+    clickTrackingBaseUrl: process.env.CLICK_TRACKING_BASE_URL ?? process.env.LINE_IMAGEMAP_BASE_URL ?? '',
     firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? '',
     firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL ?? '',
     firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY ?? '',

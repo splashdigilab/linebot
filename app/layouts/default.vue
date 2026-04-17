@@ -57,5 +57,8 @@ const navItems = [
   { to: '/admin/richmenu', icon: '🗂️', label: 'Rich Menu' },
   { to: '/admin/flow', icon: '🤖', label: '機器人模組' },
   { to: '/admin/auto-reply', icon: '⚡', label: '自動回覆' },
+  { to: '/admin/tags', icon: '🏷️', label: '標籤管理' },
+  { to: '/admin/users', icon: '👥', label: '會員' },
+  { to: '/admin/broadcasts', icon: '📣', label: '推播' },
 ]
 </script>

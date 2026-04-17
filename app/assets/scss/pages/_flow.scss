@@ -235,7 +235,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 0.65rem 0.85rem;
-  background: var(--bg-elevated);
+  background: var(--bg-hover);
   border-bottom: 1px solid var(--border);
 }
 
@@ -531,7 +531,7 @@
   justify-content: space-between;
   padding: 0.5rem 0.65rem;
   border-bottom: 1px solid var(--border);
-  background: var(--bg-hover);
+  background: var(--bg-elevated);
 }
 
 .carousel-card-idx {
