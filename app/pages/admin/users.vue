@@ -7,6 +7,9 @@
         caption="管理 LINE 好友，查看與操作會員標籤"
       />
       <div class="flex gap-1 admin-header-actions">
+        <el-button size="small" type="primary" :loading="syncingLine" @click="syncFromLine">
+          從 LINE 同步好友
+        </el-button>
         <el-button size="small" @click="loadData">重新整理</el-button>
       </div>
     </template>
@@ -53,6 +56,10 @@
               </div>
               <span class="tags-count text-muted">共 {{ filteredUsers.length }} 位</span>
             </div>
+            <p class="users-sync-hint text-muted">
+              清單來自資料庫：若只有「曾傳訊／按鈕／加好友後有觸發 Webhook」的帳號，請按上方「從 LINE 同步好友」以拉取官方好友名單（Messaging API
+              <code class="users-sync-hint__code">/v2/bot/followers/ids</code>）。大量好友時會自動分批，可連按數次直到完成。
+            </p>
 
             <div v-if="loading" class="tags-loading">
               <div class="spinner" />
@@ -247,6 +254,7 @@ const userTagDialogVisible = ref(false)
 const dialogUser = ref<any>(null)
 const addTagIds = ref<string[]>([])
 const userTagSaving = ref(false)
+const syncingLine = ref(false)
 
 const filteredUsers = computed(() => {
   let list = [...allUsers.value]
@@ -289,9 +297,63 @@ function toggleSelectAll() {
   }
 }
 
+async function syncFromLine() {
+  if (syncingLine.value) return
+  syncingLine.value = true
+  let offset = 0
+  let totalProcessed = 0
+  let lastRemaining = -1
+  try {
+    for (let round = 0; round < 25; round++) {
+      const res = await $fetch<{
+        ok?: boolean
+        lineFollowerTotal?: number
+        offset?: number
+        processed?: number
+        remaining?: number
+        profileFailures?: number
+        created?: number
+        updated?: number
+        listTruncated?: boolean
+      }>('/api/users/sync-from-line', {
+        method: 'POST',
+        body: { offset, maxFetchProfiles: 400 },
+      })
+      if (!res?.ok) {
+        showToast('LINE 同步回傳異常', 'error')
+        break
+      }
+      totalProcessed += res.processed ?? 0
+      lastRemaining = res.remaining ?? 0
+      offset += res.processed ?? 0
+      if ((res.remaining ?? 0) <= 0) {
+        const extra = (res.profileFailures ?? 0) > 0 ? `（${res.profileFailures} 位頭像／名稱未取得）` : ''
+        showToast(
+          `同步完成：官方好友 ${res.lineFollowerTotal ?? 0} 人，本次寫入 ${totalProcessed} 筆${extra}`,
+          'success',
+        )
+        if (res.listTruncated) showToast('LINE 回傳的好友清單已達上限截斷，請洽開發者調高 maxIds', 'warning')
+        await loadData()
+        return
+      }
+    }
+    if (lastRemaining > 0) {
+      showToast(`已處理 ${totalProcessed} 筆，尚有約 ${lastRemaining} 位未寫入，請再按一次「從 LINE 同步好友」`, 'warning')
+      await loadData()
+    }
+  }
+  catch (e: any) {
+    const msg = String(e?.data?.statusMessage || e?.message || e || '同步失敗')
+    showToast(msg.length > 120 ? `${msg.slice(0, 120)}…` : msg, 'error')
+  }
+  finally {
+    syncingLine.value = false
+  }
+}
+
 async function loadData() {
   const [uOk, tOk] = await Promise.all([
-    loadUsers(),
+    loadUsers({ limit: 500 }),
     loadTagOptions({ status: 'active' }),
   ])
   if (!uOk) showToast('載入會員失敗', 'error')

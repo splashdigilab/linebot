@@ -24,7 +24,7 @@ import { getDb } from '~~/server/utils/firebase'
 export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const tagIdsParam = query.tagIds as string | undefined
-  const limitParam = Math.min(parseInt((query.limit as string) || '200'), 500)
+  const limitParam = Math.min(parseInt((query.limit as string) || '500'), 800)
 
   const db = getDb()
 

@@ -39,6 +39,18 @@
   flex: 0 0 260px;
 }
 
+.users-sync-hint {
+  flex: 1 1 100%;
+  min-width: 0;
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.users-sync-hint__code {
+  font-size: 0.78em;
+}
+
 .users-batch-bar {
   display: flex;
   align-items: center;

@@ -161,6 +161,60 @@ export async function multicastMessage(
   return { successCount, failedIds, lineAggregationApplied }
 }
 
+const LINE_MESSAGING_ORIGIN = 'https://api.line.me/v2'
+
+/**
+ * 取得已加官方帳號為好友的 userId 清單（Messaging API GET /bot/followers/ids，分頁）。
+ * 用於補齊 Firestore users：僅靠訊息／postback 寫入時，不會包含「加好友後從未互動」的帳號。
+ */
+export async function fetchAllFollowerUserIds(options?: {
+  /** 最多收集幾個 userId（避免極大帳號一次佔滿記憶體） */
+  maxIds?: number
+}): Promise<{ userIds: string[]; truncated: boolean }> {
+  const config = useRuntimeConfig()
+  const token = String(config.lineChannelAccessToken || '').trim()
+  if (!token) throw new Error('LINE_CHANNEL_ACCESS_TOKEN is not set')
+
+  const maxIds = Math.min(Math.max(1, options?.maxIds ?? 80_000), 100_000)
+  const all: string[] = []
+  let start: string | undefined
+  let truncated = false
+
+  while (all.length < maxIds) {
+    const url = new URL(`${LINE_MESSAGING_ORIGIN}/bot/followers/ids`)
+    url.searchParams.set('limit', '1000')
+    if (start) url.searchParams.set('start', start)
+
+    const res = await fetch(url.toString(), {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const text = await res.text()
+    if (!res.ok) {
+      throw new Error(`LINE followers/ids ${res.status}: ${text}`)
+    }
+    let data: { userIds?: string[]; next?: string }
+    try {
+      data = JSON.parse(text) as { userIds?: string[]; next?: string }
+    }
+    catch {
+      throw new Error(`LINE followers/ids invalid JSON: ${text.slice(0, 240)}`)
+    }
+
+    const ids = data.userIds ?? []
+    const room = maxIds - all.length
+    if (ids.length > room) {
+      all.push(...ids.slice(0, room))
+      truncated = true
+      break
+    }
+    all.push(...ids)
+    if (!data.next || ids.length === 0) break
+    start = data.next
+  }
+
+  return { userIds: all, truncated }
+}
+
 /** Get user profile */
 export async function getUserProfile(userId: string) {
   try {

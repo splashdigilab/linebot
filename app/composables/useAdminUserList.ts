@@ -10,7 +10,7 @@ export function useAdminUserList() {
     try {
       const search = new URLSearchParams()
       if (query?.tagIds?.length) search.set('tagIds', query.tagIds.join(','))
-      if (query?.limit) search.set('limit', String(query.limit))
+      search.set('limit', String(query?.limit ?? 500))
       const qs = search.toString() ? `?${search.toString()}` : ''
       const res = await $fetch<{ users: any[] }>(`/api/users/list${qs}`)
       users.value = res.users ?? []
