@@ -70,12 +70,6 @@
             />
           </el-select>
         </div>
-        <div
-          v-if="action.data && hasInvalidSwitchTarget"
-          class="admin-warning-inline"
-        >
-          ⚠️ 所選的目標選單已不存在，請重新選擇
-        </div>
       </template>
 
       <template v-if="enableTagging">
@@ -93,7 +87,6 @@
           此動作類型目前不支援貼標。
         </div>
         <div v-if="ensureTaggingState().enabled" class="admin-field-group">
-          <AdminFieldLabel text="命中後加上標籤" tight />
           <el-select
             v-model="ensureTaggingState().addTagIds"
             class="admin-w-full control-full"
@@ -115,9 +108,6 @@
         </div>
       </template>
 
-      <div v-if="errorMessage" class="admin-warning-inline">
-        {{ errorMessage }}
-      </div>
     </div>
   </div>
 </template>
@@ -178,11 +168,6 @@ const availableMenuOptions = computed(() =>
   (props.menuOptions || []).filter((menu) => menu.id !== props.excludeMenuId)
 )
 
-const hasInvalidSwitchTarget = computed(() => {
-  const current = String(action.value?.data || '')
-  if (!current) return false
-  return !availableMenuOptions.value.some((menu) => `${props.menuValuePrefix}${menu.id}` === current)
-})
 const isTaggableAction = computed(() =>
   Array.isArray(props.taggableActionTypes)
   && props.taggableActionTypes.includes(String(action.value?.type || '')),

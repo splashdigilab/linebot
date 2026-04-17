@@ -162,7 +162,6 @@
               />
             </div>
             <div v-if="form.tagging.enabled" class="admin-field-group">
-              <AdminFieldLabel text="命中後加上標籤" tight />
               <div v-if="tagsLoading" class="ar-modules-loading">
                 <div class="spinner" />
               </div>
