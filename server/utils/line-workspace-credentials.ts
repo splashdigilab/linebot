@@ -35,13 +35,15 @@ export async function getLineWorkspaceCredentials(): Promise<ResolvedLineCredent
   let channelSecret = ''
   let defaultLiffId = ''
 
+  let dbToken = ''
+  let dbSecret = ''
   try {
     const db = getDb()
     const snap = await db.collection('workspaces').doc(DEFAULT_LINE_WORKSPACE_ID).get()
     if (snap.exists) {
       const d = snap.data() as LineWorkspaceDoc
-      channelAccessToken = String(d?.channelAccessToken ?? '').trim()
-      channelSecret = String(d?.channelSecret ?? '').trim()
+      dbToken = String(d?.channelAccessToken ?? '').trim()
+      dbSecret = String(d?.channelSecret ?? '').trim()
       defaultLiffId = String(d?.defaultLiffId ?? '').trim()
     }
   }
@@ -49,17 +51,20 @@ export async function getLineWorkspaceCredentials(): Promise<ResolvedLineCredent
     console.warn('[line-workspace] read workspaces/default failed:', e)
   }
 
-  if (!channelAccessToken || !channelSecret) {
-    try {
-      const config = useRuntimeConfig()
-      channelAccessToken = String(config.lineChannelAccessToken || '').trim()
-      channelSecret = String(config.lineChannelSecret || '').trim()
-    }
-    catch {
-      channelAccessToken = String(process.env.LINE_CHANNEL_ACCESS_TOKEN || '').trim()
-      channelSecret = String(process.env.LINE_CHANNEL_SECRET || '').trim()
-    }
+  let envToken = ''
+  let envSecret = ''
+  try {
+    const config = useRuntimeConfig()
+    envToken = String(config.lineChannelAccessToken || '').trim()
+    envSecret = String(config.lineChannelSecret || '').trim()
   }
+  catch {
+    envToken = String(process.env.LINE_CHANNEL_ACCESS_TOKEN || '').trim()
+    envSecret = String(process.env.LINE_CHANNEL_SECRET || '').trim()
+  }
+
+  channelAccessToken = dbToken || envToken
+  channelSecret = dbSecret || envSecret
 
   if (!defaultLiffId) {
     defaultLiffId = String(process.env.LIFF_DEFAULT_ID || '').trim()

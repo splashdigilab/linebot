@@ -1,5 +1,6 @@
 import { initializeApp, cert } from 'firebase-admin/app'
 import type { App } from 'firebase-admin/app'
+import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
 import type { Firestore, CollectionReference, Query, UpdateData } from 'firebase-admin/firestore'
 import { getStorage as getAdminStorage } from 'firebase-admin/storage'
@@ -26,6 +27,11 @@ export function getDb(): Firestore {
   // Ensure app is initialized
   getFirebaseAdmin()
   return getFirestore()
+}
+
+export function getFirebaseAuth() {
+  getFirebaseAdmin()
+  return getAuth()
 }
 
 export function getStorage() {
