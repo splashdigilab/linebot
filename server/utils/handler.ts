@@ -239,7 +239,6 @@ async function loadActiveAutoReplyRules(): Promise<AutoReplyRuleShape[]> {
 
   const db = getDb()
   const snap = await db.collection('autoReplies')
-    .where('isActive', '==', true)
     .orderBy('createdAt', 'desc')
     .get()
 
