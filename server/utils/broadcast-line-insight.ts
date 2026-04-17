@@ -78,6 +78,7 @@ export async function fetchBroadcastLineInsight(
     return { lineUniqueImpression: null, lineUniqueClick: null, lineInsightError: 'no_unit' }
   }
   const { from, to } = broadcastInsightQueryRange(startedAt, completedAt)
+  console.log(`[broadcast-line-insight] unit="${u}" (len=${u.length}) from=${from} to=${to}`)
   try {
     const res = await getInsightClient().getStatisticsPerUnit(u, from, to)
     const imp = pickUniqueImpression(res.overview, res.messages)

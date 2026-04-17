@@ -154,6 +154,8 @@
               成效「開封數」來自 LINE 官方聚合（發送後自動帶彙總單位）。「追蹤連結點擊」僅在使用者經由
               <code class="bc-click-hint__code">/api/r</code>
               開啟 https 目標時累加（需設定
+              <code class="bc-click-hint__code">PUBLIC_BASE_URL</code>，或相容舊名
+              <code class="bc-click-hint__code">LINE_IMAGEMAP_BASE_URL</code>／
               <code class="bc-click-hint__code">CLICK_TRACKING_BASE_URL</code>）。純文字與 postback 不會增加追蹤連結點擊。
             </p>
           </div>

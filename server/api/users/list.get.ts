@@ -45,15 +45,19 @@ export default defineEventHandler(async (event) => {
   // ── Step 2: 取用戶列表 ───────────────────────────────────────────
   const usersSnap = await db.collection('users')
     .orderBy('createdAt', 'desc')
-    .limit(limitParam)
+    .limit(Math.min(limitParam * 3, 1500))
     .get()
 
-  let users = usersSnap.docs.map((d) => ({
-    id: d.id,
-    displayName: d.data().displayName ?? d.id,
-    pictureUrl: d.data().pictureUrl ?? '',
-    createdAt: d.data().createdAt ?? null,
-  }))
+  let users = usersSnap.docs
+    .filter((d) => d.data().isBlocked !== true)
+    .slice(0, limitParam)
+    .map((d) => ({
+      id: d.id,
+      displayName: d.data().displayName ?? d.id,
+      pictureUrl: d.data().pictureUrl ?? '',
+      createdAt: d.data().createdAt ?? null,
+      isBlocked: false,
+    }))
 
   if (filterUserIds !== null) {
     users = users.filter((u) => filterUserIds!.has(u.id))

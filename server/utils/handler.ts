@@ -51,6 +51,9 @@ interface UserDoc {
   displayName: string
   pictureUrl: string
   createdAt: FirebaseFirestore.FieldValue
+  isBlocked?: boolean
+  blockedAt?: FirebaseFirestore.FieldValue | null
+  unblockedAt?: FirebaseFirestore.FieldValue | null
   activeInput?: {
     moduleId: string
     attribute?: string
@@ -80,18 +83,49 @@ async function ensureUser(userId: string): Promise<UserDoc | null> {
   const db = getDb()
   const ref = db.collection('users').doc(userId)
   const snap = await ref.get()
-  
+
   if (!snap.exists) {
     const profile = await getUserProfile(userId)
     const newDoc: UserDoc = {
       displayName: profile?.displayName ?? userId,
       pictureUrl: profile?.pictureUrl ?? '',
       createdAt: FieldValue.serverTimestamp(),
+      isBlocked: false,
     }
     await ref.set(newDoc)
     return newDoc
   }
-  return snap.data() as UserDoc
+
+  const data = snap.data() as UserDoc
+  if (data.isBlocked) {
+    await ref.update({ isBlocked: false, unblockedAt: FieldValue.serverTimestamp() })
+  }
+  return data
+}
+
+export async function handleFollowEvent(userId: string): Promise<void> {
+  try {
+    await ensureUser(userId)
+    console.log('[webhook] follow ensureUser:', userId)
+  }
+  catch (e) {
+    console.error('[webhook] handleFollowEvent error:', e)
+  }
+}
+
+export async function handleUnfollowEvent(userId: string): Promise<void> {
+  try {
+    const db = getDb()
+    const ref = db.collection('users').doc(userId)
+    const snap = await ref.get()
+    if (snap.exists) {
+      await ref.update({ isBlocked: true, blockedAt: FieldValue.serverTimestamp() })
+    }
+    console.log('[webhook] unfollow/block marked:', userId)
+  }
+  catch (e) {
+    console.error('[webhook] handleUnfollowEvent error:', e)
+  }
 }
 
 async function dispatchPostReplyActions(userId: string, messages: any[]) {
@@ -267,7 +301,9 @@ function resolveLineImagemapPublicBase(fallbackOrigin = ''): string {
   }
 
   const envCandidates = [
+    process.env.PUBLIC_BASE_URL,
     process.env.LINE_IMAGEMAP_BASE_URL,
+    process.env.CLICK_TRACKING_BASE_URL,
     process.env.APP_BASE_URL,
     process.env.SITE_URL,
     process.env.DEPLOY_PRIME_URL,

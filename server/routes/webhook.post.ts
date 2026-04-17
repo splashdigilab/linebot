@@ -1,5 +1,5 @@
 import { verifySignature } from '../utils/line'
-import { handleMessageEvent, handlePostbackEvent } from '../utils/handler'
+import { handleMessageEvent, handlePostbackEvent, handleFollowEvent, handleUnfollowEvent } from '../utils/handler'
 import type { webhook } from '@line/bot-sdk'
 
 function resolveRequestOrigin(event: Parameters<typeof getHeader>[0]): string {
@@ -39,6 +39,14 @@ export default defineEventHandler(async (event) => {
       }
       else if (e.type === 'postback') {
         await handlePostbackEvent(e as webhook.PostbackEvent, { requestOrigin })
+      }
+      else if (e.type === 'follow') {
+        const userId = (e as webhook.FollowEvent).source?.userId
+        if (userId) await handleFollowEvent(userId)
+      }
+      else if (e.type === 'unfollow') {
+        const userId = (e as webhook.UnfollowEvent).source?.userId
+        if (userId) await handleUnfollowEvent(userId)
       }
     }
     catch (err) {

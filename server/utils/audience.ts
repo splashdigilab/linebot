@@ -66,7 +66,9 @@ export async function resolveAudienceUserIds(filter: AudienceFilter): Promise<st
   // 若沒有 include 條件，預設取全部用戶（type === 'all' 情況）
   if (candidateIds === null) {
     const snap = await db.collection('users').get()
-    candidateIds = new Set(snap.docs.map((d) => d.id))
+    candidateIds = new Set(
+      snap.docs.filter((d) => d.data().isBlocked !== true).map((d) => d.id),
+    )
   }
 
   // ── Step 2: 排除 excludeAny ────────────────────────────────────────
@@ -80,8 +82,9 @@ export async function resolveAudienceUserIds(filter: AudienceFilter): Promise<st
     }
   }
 
-  // ── Step 3: 依加入時間過濾 ──────────────────────────────────────────
-  if (filter.joinedAfter || filter.joinedBefore) {
+  // ── Step 3: 依加入時間 / 封鎖狀態過濾 ─────────────────────────────
+  const needUserFetch = filter.joinedAfter || filter.joinedBefore || filter.isBlocked !== null
+  if (needUserFetch) {
     const userIds = [...candidateIds]
     const CHUNK = 30
     const filtered: string[] = []
@@ -93,10 +96,16 @@ export async function resolveAudienceUserIds(filter: AudienceFilter): Promise<st
         .get()
 
       for (const doc of snap.docs) {
-        const createdAt = doc.data().createdAt?.toDate?.()
-        if (!createdAt) continue
-        if (filter.joinedAfter && createdAt < new Date(filter.joinedAfter)) continue
-        if (filter.joinedBefore && createdAt > new Date(filter.joinedBefore)) continue
+        const d = doc.data()
+        // isBlocked 過濾（null = 不限制）
+        if (filter.isBlocked === false && d.isBlocked === true) continue
+        if (filter.isBlocked === true && d.isBlocked !== true) continue
+        const createdAt = d.createdAt?.toDate?.()
+        if (filter.joinedAfter || filter.joinedBefore) {
+          if (!createdAt) continue
+          if (filter.joinedAfter && createdAt < new Date(filter.joinedAfter)) continue
+          if (filter.joinedBefore && createdAt > new Date(filter.joinedBefore)) continue
+        }
         filtered.push(doc.id)
       }
     }

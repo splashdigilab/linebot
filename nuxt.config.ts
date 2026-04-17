@@ -1,4 +1,13 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+
+/** 對外 HTTPS 原點（無尾斜線）：圖文 Imagemap、推播 /api/r 點擊追蹤共用。建議只設 PUBLIC_BASE_URL；舊名 LINE_IMAGEMAP_BASE_URL、CLICK_TRACKING_BASE_URL 仍相容。 */
+const appPublicBaseUrl = String(
+  process.env.PUBLIC_BASE_URL
+    || process.env.LINE_IMAGEMAP_BASE_URL
+    || process.env.CLICK_TRACKING_BASE_URL
+    || '',
+).trim()
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -37,10 +46,11 @@ export default defineNuxtConfig({
     // Server-only (private)
     lineChannelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',
     lineChannelSecret: process.env.LINE_CHANNEL_SECRET ?? '',
-    /** 公開 HTTPS 原點（無尾斜線），供 Imagemap 透明圖轉址；未設時「保留透明」仍走 Flex（透明會變白底） */
-    lineImagemapBaseUrl: process.env.LINE_IMAGEMAP_BASE_URL ?? '',
-    /** 推播點擊追蹤：與 Nitro 對外網址相同原點（無尾斜線）。未設時發送不包裝 /api/r，點擊數不會增加 */
-    clickTrackingBaseUrl: process.env.CLICK_TRACKING_BASE_URL ?? process.env.LINE_IMAGEMAP_BASE_URL ?? '',
+    /** 與 clickTrackingBaseUrl 同源，皆來自 PUBLIC_BASE_URL（或舊環境變數 fallback） */
+    lineImagemapBaseUrl: appPublicBaseUrl,
+    clickTrackingBaseUrl: appPublicBaseUrl,
+    /** 排程推播自動觸發保護密鑰；由 Cron Job 帶在 X-Cron-Secret header */
+    cronSecret: process.env.CRON_SECRET ?? '',
     firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? '',
     firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL ?? '',
     firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY ?? '',
