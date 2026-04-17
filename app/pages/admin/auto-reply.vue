@@ -152,6 +152,42 @@
                 uri-placeholder="https://..."
               />
             </div>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="啟用貼標" tight />
+              <el-switch
+                v-model="form.tagging.enabled"
+                active-text="啟用"
+                inactive-text="停用"
+                class="ar-status-switch"
+              />
+            </div>
+            <div v-if="form.tagging.enabled" class="admin-field-group">
+              <AdminFieldLabel text="命中後加上標籤" tight />
+              <div v-if="tagsLoading" class="ar-modules-loading">
+                <div class="spinner" />
+              </div>
+              <div v-else-if="!allTags.length" class="ar-no-modules">
+                尚無標籤，請先前往「<NuxtLink to="/admin/tags" class="link">標籤管理</NuxtLink>」建立。
+              </div>
+              <el-select
+                v-else
+                v-model="form.tagging.addTagIds"
+                multiple
+                collapse-tags
+                collapse-tags-tooltip
+                placeholder="選擇要貼的標籤"
+                class="admin-w-full"
+              >
+                <el-option
+                  v-for="tag in allTags"
+                  :key="tag.id"
+                  :label="tag.name"
+                  :value="tag.id"
+                >
+                  <AdminTagOptionRow :label="tag.name" :color="tag.color" />
+                </el-option>
+              </el-select>
+            </div>
           </div>
         </div>
       </div>
@@ -166,6 +202,7 @@
 import {
   normalizeAutoReplyAction,
   normalizeAutoReplyRule,
+  normalizeAutoReplyTagging,
   validateAutoReplyRule,
   type AutoReplyRuleShape,
 } from '~~/shared/auto-reply-rule'
@@ -181,6 +218,7 @@ const saving = ref(false)
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
 const { toasts, showToast } = useAdminToast()
+const { tags: allTags, loading: tagsLoading, loadTags } = useAdminTagList()
 
 const defaultForm = () => ({
   name: '',
@@ -188,6 +226,7 @@ const defaultForm = () => ({
   matchType: 'containsAny',
   action: normalizeAutoReplyAction({ type: 'module', moduleId: '' }),
   isActive: true,
+  tagging: normalizeAutoReplyTagging(null),
 })
 const form = ref(defaultForm())
 
@@ -227,6 +266,7 @@ async function loadModules() {
 onMounted(() => {
   loadRules()
   loadModules()
+  loadTags({ status: 'active' })
 })
 
 // ── Select / Create ───────────────────────────────────────
@@ -240,6 +280,7 @@ function selectRule(rule: any) {
     matchType: normalized.matchType,
     action: normalized.action,
     isActive: normalized.isActive,
+    tagging: normalized.tagging,
   }
 }
 
@@ -262,9 +303,15 @@ function cancelEdit() {
 
 // ── Save / Delete ─────────────────────────────────────────
 async function submitForm() {
-  const payload: AutoReplyRuleShape = normalizeAutoReplyRule(form.value)
+  const payload: AutoReplyRuleShape = normalizeAutoReplyRule({
+    ...form.value,
+    tagging: form.value.tagging,
+  })
   const validationError = validateAutoReplyRule(payload)
   if (validationError) return showToast(validationError, 'error')
+  if (payload.tagging.enabled && payload.tagging.addTagIds.length === 0) {
+    return showToast('已啟用貼標，請至少選擇一個標籤', 'error')
+  }
 
   saving.value = true
   try {

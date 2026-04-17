@@ -121,6 +121,8 @@
                       :action="btn"
                       :type-options="standardActionTypeOptions"
                       :module-options="flows"
+                      :tag-options="allTags"
+                      :enable-tagging="true"
                       :variable-options="variableTokenOptions"
                       :header-label="`按鈕 ${Number(bIdx) + 1}`"
                       label-placeholder="按鈕文字"
@@ -260,6 +262,8 @@
                     v-if="String(msg.heroImageUrl || '').trim()"
                     :msg="msg"
                     :module-options="flows"
+                    :tag-options="allTags"
+                    :enable-tagging="true"
                     :show-canvas="true"
                     :show-action-cards="false"
                     :show-header="false"
@@ -271,6 +275,8 @@
                 v-if="String(msg.heroImageUrl || '').trim()"
                 :msg="msg"
                 :module-options="flows"
+                :tag-options="allTags"
+                :enable-tagging="true"
                 :show-canvas="false"
                 :show-action-cards="true"
                 :flat="true"
@@ -324,17 +330,17 @@
                   v-for="(qr, qi) in msg.quickReplies" :key="qi"
                   class="carousel-sub-card"
                   :class="{ 'col-dragging': qrDragMsgIndex === i && qrDragIndex === qi, 'col-drag-over': qrDragMsgIndex === i && qrDragOverIndex === qi && qrDragIndex !== qi }"
-                  @dragover.prevent="onQrDragOver($event, i, qi)"
+                  @dragover.prevent="onQrDragOver($event, i, Number(qi))"
                   @dragenter.prevent
                   @dragleave="onQrDragLeave"
-                  @drop="onQrDrop($event, i, qi)"
+                  @drop="onQrDrop($event, i, Number(qi))"
                 >
                   <div class="carousel-card-top">
                     <div class="flex gap-1 items-center">
-                      <span class="drag-handle" draggable="true" @dragstart.stop="onQrDragStart($event, i, qi)" @dragend.stop="onQrDragEnd">⠿</span>
+                      <span class="drag-handle" draggable="true" @dragstart.stop="onQrDragStart($event, i, Number(qi))" @dragend.stop="onQrDragEnd">⠿</span>
                       <span class="carousel-card-idx">{{ Number(qi) + 1 }}</span>
                     </div>
-                    <el-button link type="danger" size="small" @click="removeQuickReply(msg, qi)">✕</el-button>
+                    <el-button link type="danger" size="small" @click="removeQuickReply(msg, Number(qi))">✕</el-button>
                   </div>
                   <div class="carousel-sub-body carousel-sub-body-top-gap">
                     <!-- Action Config -->
@@ -343,6 +349,8 @@
                         :action="qr.action"
                         :type-options="quickReplyActionTypeOptions"
                         :module-options="flows"
+                        :tag-options="allTags"
+                        :enable-tagging="true"
                         :variable-options="variableTokenOptions"
                         header-label="按鈕動作"
                         label-title="按鈕顯示文字（最多 20 字）"
@@ -429,6 +437,35 @@
                       <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
                     </el-select>
                   </div>
+                  <div class="ui-field admin-field-group">
+                    <AdminFieldLabel text="收到回覆後是否貼標" tight />
+                    <el-switch
+                      v-model="msg.tagging.enabled"
+                      active-text="啟用"
+                      inactive-text="停用"
+                      class="ar-status-switch"
+                    />
+                  </div>
+                  <div v-if="msg.tagging.enabled" class="ui-field admin-field-group">
+                    <AdminFieldLabel text="命中後加上標籤" tight />
+                    <el-select
+                      v-model="msg.tagging.addTagIds"
+                      multiple
+                      collapse-tags
+                      collapse-tags-tooltip
+                      placeholder="選擇要貼的標籤"
+                      class="control-full"
+                    >
+                      <el-option
+                        v-for="tag in allTags"
+                        :key="tag.id"
+                        :value="tag.id"
+                        :label="tag.name"
+                      >
+                        <AdminTagOptionRow :label="tag.name" :color="tag.color" />
+                      </el-option>
+                    </el-select>
+                  </div>
                 </div>
 
                 <div class="ui-warning-text">
@@ -489,17 +526,17 @@
                     v-for="(col, ci) in msg.columns" :key="ci"
                     class="carousel-sub-card"
                     :class="{ 'col-dragging': colDragMsgIndex === i && colDragIndex === ci, 'col-drag-over': colDragMsgIndex === i && colDragOverIndex === ci && colDragIndex !== ci }"
-                    @dragover.prevent="onColDragOver($event, i, ci)"
+                    @dragover.prevent="onColDragOver($event, i, Number(ci))"
                     @dragenter.prevent
                     @dragleave="onColDragLeave"
-                    @drop="onColDrop($event, i, ci)"
+                    @drop="onColDrop($event, i, Number(ci))"
                   >
                     <div class="carousel-card-top">
                       <div class="flex gap-1 items-center">
-                        <span class="drag-handle" draggable="true" @dragstart.stop="onColDragStart($event, i, ci)" @dragend.stop="onColDragEnd">⠿</span>
+                        <span class="drag-handle" draggable="true" @dragstart.stop="onColDragStart($event, i, Number(ci))" @dragend.stop="onColDragEnd">⠿</span>
                         <span class="carousel-card-idx">{{ Number(ci) + 1 }}</span>
                       </div>
-                      <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(ci, 1)">✕</el-button>
+                      <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(Number(ci), 1)">✕</el-button>
                     </div>
                     <div class="carousel-sub-body admin-field-stack">
                       <FlowUploadZone v-model="col.thumbnailImageUrl" type="image" label="上傳縮圖" preview-height="140px" />
@@ -534,6 +571,8 @@
                             :action="act"
                             :type-options="standardActionTypeOptions"
                             :module-options="flows"
+                            :tag-options="allTags"
+                            :enable-tagging="true"
                             :variable-options="variableTokenOptions"
                             :header-label="`按鈕 ${Number(ai) + 1}`"
                             :field-size="'default'"
@@ -566,17 +605,17 @@
                     v-for="(col, ci) in msg.columns" :key="ci"
                     class="carousel-sub-card"
                     :class="{ 'col-dragging': colDragMsgIndex === i && colDragIndex === ci, 'col-drag-over': colDragMsgIndex === i && colDragOverIndex === ci && colDragIndex !== ci }"
-                    @dragover.prevent="onColDragOver($event, i, ci)"
+                    @dragover.prevent="onColDragOver($event, i, Number(ci))"
                     @dragenter.prevent
                     @dragleave="onColDragLeave"
-                    @drop="onColDrop($event, i, ci)"
+                    @drop="onColDrop($event, i, Number(ci))"
                   >
                     <div class="carousel-card-top">
                       <div class="flex gap-1 items-center">
-                        <span class="drag-handle" draggable="true" @dragstart.stop="onColDragStart($event, i, ci)" @dragend.stop="onColDragEnd">⠿</span>
+                        <span class="drag-handle" draggable="true" @dragstart.stop="onColDragStart($event, i, Number(ci))" @dragend.stop="onColDragEnd">⠿</span>
                         <span class="carousel-card-idx">{{ Number(ci) + 1 }}</span>
                       </div>
-                      <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(ci, 1)">✕</el-button>
+                      <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(Number(ci), 1)">✕</el-button>
                     </div>
                     <div class="carousel-sub-body">
                       <FlowUploadZone v-model="col.imageUrl" type="image" label="上傳" preview-height="160px" />
@@ -585,6 +624,8 @@
                           :action="col.action"
                           :type-options="imageCarouselActionTypeOptions"
                           :module-options="flows"
+                          :tag-options="allTags"
+                          :enable-tagging="true"
                           :variable-options="variableTokenOptions"
                           header-label="圖片動作"
                           :field-size="'default'"
@@ -647,6 +688,7 @@ const saving = ref(false)
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
 const { toasts, showToast } = useAdminToast()
+const { tags: allTags, loadTags } = useAdminTagList()
 
 // Drag and Drop State
 const dragIndex = ref<number | null>(null)
@@ -802,7 +844,7 @@ async function loadRichMessages() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadFlows(), loadRichMessages()])
+  await Promise.all([loadFlows(), loadRichMessages(), loadTags({ status: 'active' })])
 })
 
 // ── Select / Create ───────────────────────────────────
@@ -888,7 +930,8 @@ function addMessage(type: string) {
       type: 'userInput',
       text: '',
       attribute: '',
-      moduleId: ''
+      moduleId: '',
+      tagging: { enabled: false, addTagIds: [] },
     })
   }
 }
@@ -904,18 +947,18 @@ function newCarouselColumn() {
 }
 
 function newCarouselAction() {
-  return { type: 'uri', label: '', uri: '', text: '' }
+  return { type: 'uri', label: '', uri: '', text: '', moduleId: '', tagging: { enabled: false, addTagIds: [] } }
 }
 
 function newImageCarouselColumn() {
   return {
     imageUrl: '',
-    action: { type: 'none', uri: '', text: '', label: '' },
+    action: { type: 'none', uri: '', text: '', label: '', moduleId: '', tagging: { enabled: false, addTagIds: [] } },
   }
 }
 
 function newQuickReplyAction() {
-  return { imageUrl: '', action: { type: 'message', label: '', text: '' } }
+  return { imageUrl: '', action: { type: 'message', label: '', text: '', moduleId: '', tagging: { enabled: false, addTagIds: [] } } }
 }
 
 function normalizeRichMessageItem(item: any) {
@@ -929,6 +972,10 @@ function normalizeRichMessageItem(item: any) {
           uri: btn?.uri || '',
           text: btn?.text || '',
           moduleId: btn?.moduleId || '',
+          tagging: {
+            enabled: btn?.tagging?.enabled === true,
+            addTagIds: Array.isArray(btn?.tagging?.addTagIds) ? btn.tagging.addTagIds : [],
+          },
         }))
       : []
   return {
@@ -1017,7 +1064,7 @@ function addButton(msg: any) {
     showToast('最多只能新增 4 個按鈕', 'error')
     return
   }
-  msg.buttons.push({ type: 'message', label: '', text: '', uri: '' })
+  msg.buttons.push({ type: 'message', label: '', text: '', uri: '', moduleId: '', tagging: { enabled: false, addTagIds: [] } })
 }
 
 function removeButton(msg: any, bIdx: number) {
@@ -1241,6 +1288,12 @@ function normalizeMessages(messages: any[]) {
         text: msg.text || '',
         attribute: msg.attribute || '',
         moduleId: msg.moduleId || '',
+        tagging: {
+          enabled: msg?.tagging?.enabled === true,
+          addTagIds: Array.isArray(msg?.tagging?.addTagIds)
+            ? msg.tagging.addTagIds.map((v: unknown) => String(v || '').trim()).filter(Boolean)
+            : [],
+        },
       }
     }
 
@@ -1308,6 +1361,9 @@ function validateMessages(messages: any[]): string | null {
         if (btn.type === 'message' && !btn.text) return '文字模組：請輸入按鈕傳送文字'
         if (btn.type === 'uri' && !btn.uri) return '文字模組：請輸入按鈕網址'
         if (btn.type === 'module' && !btn.moduleId) return '文字模組：請選擇要觸發的機器人模組'
+        if (btn?.tagging?.enabled === true && (!Array.isArray(btn?.tagging?.addTagIds) || btn.tagging.addTagIds.length === 0)) {
+          return '文字模組：已啟用貼標，請至少選擇一個標籤'
+        }
       }
     }
 
@@ -1321,6 +1377,9 @@ function validateMessages(messages: any[]): string | null {
           if (qr.action.type === 'message' && !qr.action?.text?.trim()) return '快速回覆：回覆文字不可為空'
           if (qr.action.type === 'uri' && !qr.action?.uri?.trim()) return '快速回覆：網址不可為空'
           if (qr.action.type === 'module' && !qr.action?.moduleId) return '快速回覆：請選擇要觸發的機器人模組'
+          if (qr.action?.tagging?.enabled === true && (!Array.isArray(qr.action?.tagging?.addTagIds) || qr.action.tagging.addTagIds.length === 0)) {
+            return '快速回覆：已啟用貼標，請至少選擇一個標籤'
+          }
         }
       }
     }
@@ -1331,6 +1390,9 @@ function validateMessages(messages: any[]): string | null {
         return '用戶輸入卡片：儲存屬性名稱格式錯誤，請使用英文字母開頭，且只能包含英數與底線'
       }
       if (!msg.moduleId) return '用戶輸入卡片：請選擇等待回覆後要觸發的下一個模組'
+      if (msg?.tagging?.enabled === true && (!Array.isArray(msg?.tagging?.addTagIds) || msg.tagging.addTagIds.length === 0)) {
+        return '用戶輸入卡片：已啟用貼標，請至少選擇一個標籤'
+      }
     }
 
     if (msg?.type === 'richMessage') {
@@ -1356,6 +1418,10 @@ function validateMessages(messages: any[]): string | null {
           uri: action.uri || '',
           text: action.text || '',
           moduleId: action.moduleId || '',
+          tagging: {
+            enabled: action?.tagging?.enabled === true,
+            addTagIds: Array.isArray(action?.tagging?.addTagIds) ? action.tagging.addTagIds : [],
+          },
         })
         if (error) return `圖文訊息：區塊 ${action.slot} ${error}`
       }
@@ -1377,6 +1443,10 @@ function validateMessages(messages: any[]): string | null {
           uri: action.uri || '',
           text: action.text || '',
           moduleId: action.moduleId || '',
+          tagging: {
+            enabled: action?.tagging?.enabled === true,
+            addTagIds: Array.isArray(action?.tagging?.addTagIds) ? action.tagging.addTagIds : [],
+          },
         })
         if (error) return `圖文訊息：區塊 ${action.slot} ${error}`
       }
@@ -1390,6 +1460,9 @@ function validateMessages(messages: any[]): string | null {
           if (action.type === 'uri' && !action?.uri?.trim()) return '輪播按鈕網址為必填'
           if (action.type === 'message' && !action?.text?.trim()) return '輪播按鈕傳送文字為必填'
           if (action.type === 'module' && !action?.moduleId) return '輪播：請選擇要觸發的機器人模組'
+          if (action?.tagging?.enabled === true && (!Array.isArray(action?.tagging?.addTagIds) || action.tagging.addTagIds.length === 0)) {
+            return '輪播：已啟用貼標，請至少選擇一個標籤'
+          }
         }
       }
     }
@@ -1409,6 +1482,9 @@ function validateMessages(messages: any[]): string | null {
         if (action?.type === 'module') {
           if (!action?.label?.trim()) return '圖片輪播按鈕文字為必填'
           if (!action?.moduleId) return '圖片輪播：請選擇要觸發的機器人模組'
+        }
+        if (action?.tagging?.enabled === true && (!Array.isArray(action?.tagging?.addTagIds) || action.tagging.addTagIds.length === 0)) {
+          return '圖片輪播：已啟用貼標，請至少選擇一個標籤'
         }
       }
     }

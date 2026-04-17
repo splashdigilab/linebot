@@ -1,9 +1,15 @@
 import type { webhook } from '@line/bot-sdk'
 import type { messagingApi } from '@line/bot-sdk'
 import { getDb } from './firebase'
-import { replyMessage, getUserProfile, linkRichMenuIdToUser } from './line'
+import { replyMessage, pushMessage, getUserProfile, linkRichMenuIdToUser } from './line'
 import { FieldValue } from 'firebase-admin/firestore'
-import { decodeTriggerModule, encodeTriggerModule } from '~~/shared/action-schema'
+import {
+  encodeTriggerMessage,
+  encodeTriggerModule,
+  parseTriggerMessageData,
+  parseTriggerModuleData,
+  parseSwitchMenuData,
+} from '~~/shared/action-schema'
 import {
   matchAutoReplyText,
   normalizeAutoReplyRule,
@@ -12,6 +18,8 @@ import {
 import { RICH_LAYOUT_PRESETS } from '~~/shared/rich-layout-presets'
 import { normalizeRichMessageActions } from '~~/shared/rich-message-editor-helpers'
 import { createImagemapImageToken } from './line-imagemap-image-token'
+import { createUriTagToken } from './line-action-tag-token'
+import { addTagsToUser } from './tagging'
 
 // ── In-Memory Caching to Reduce DB Latency ──────────────────────────
 const userCheckedCache = new Set<string>()
@@ -57,6 +65,7 @@ interface UserDoc {
   activeInput?: {
     moduleId: string
     attribute?: string
+    tagIds?: string[]
     expiresAt: number
   } | null
   attributes?: Record<string, string>
@@ -107,9 +116,71 @@ export async function handleFollowEvent(userId: string): Promise<void> {
   try {
     await ensureUser(userId)
     console.log('[webhook] follow ensureUser:', userId)
+    await applyPendingClaims(userId)
   }
   catch (e) {
     console.error('[webhook] handleFollowEvent error:', e)
+  }
+}
+
+/**
+ * follow 事件後，查詢此 userId 已綁定（claimed）但尚未套用的 leadClaim，
+ * 依活動快照執行貼標，並選擇性推送機器人模組，最後標記 applied。
+ */
+async function applyPendingClaims(userId: string): Promise<void> {
+  const db = getDb()
+  const now = new Date()
+
+  const snap = await db.collection('leadClaims')
+    .where('lineUserId', '==', userId)
+    .where('status', '==', 'claimed')
+    .get()
+
+  if (snap.empty) return
+
+  for (const doc of snap.docs) {
+    const claim = doc.data()
+
+    // 逾期檢查：已過期則標記後略過
+    const expiresAt = claim.expiresAt instanceof Date
+      ? claim.expiresAt
+      : claim.expiresAt?.toDate?.()
+    if (expiresAt && expiresAt < now) {
+      await doc.ref.update({ status: 'expired' })
+      console.log('[follow] claim expired, skipping:', doc.id)
+      continue
+    }
+
+    // 貼標（冪等，已存在自動略過）
+    if (Array.isArray(claim.tagIds) && claim.tagIds.length > 0) {
+      const result = await addTagsToUser(userId, claim.tagIds, 'system', doc.id)
+      console.log('[follow] tagging result:', result, 'claimId:', doc.id)
+    }
+
+    // 若活動設有自動推送模組，發送 push message
+    if (claim.moduleId) {
+      try {
+        const flow = await getFlowByModuleId(claim.moduleId)
+        if (flow) {
+          const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
+          const lineMessages = buildLineMessages(hydratedMessages, {}, '', userId)
+          if (lineMessages.length > 0) {
+            await pushMessage(userId, lineMessages)
+            await dispatchPostReplyActions(userId, flow.messages)
+          }
+        }
+      }
+      catch (e) {
+        console.error('[follow] pushMessage module failed:', e)
+      }
+    }
+
+    // 標記已完成
+    await doc.ref.update({
+      status: 'applied',
+      appliedAt: FieldValue.serverTimestamp(),
+    })
+    console.log('[follow] claim applied:', doc.id)
   }
 }
 
@@ -132,10 +203,15 @@ async function dispatchPostReplyActions(userId: string, messages: any[]) {
   const userInputMsg = messages.find((m: any) => m.type === 'userInput')
   if (userInputMsg && userInputMsg.moduleId) {
     const db = getDb()
+    const tagging = userInputMsg?.tagging
+    const tagIds = tagging?.enabled && Array.isArray(tagging?.addTagIds)
+      ? tagging.addTagIds.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+      : []
     await db.collection('users').doc(userId).update({
       activeInput: {
         moduleId: userInputMsg.moduleId,
         attribute: userInputMsg.attribute || null,
+        tagIds,
         expiresAt: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
       }
     })
@@ -234,6 +310,10 @@ function buildRichMessageSnapshot(item: any) {
       uri: action?.uri || '',
       text: action?.text || '',
       moduleId: action?.moduleId || '',
+      tagging: {
+        enabled: action?.tagging?.enabled === true,
+        addTagIds: Array.isArray(action?.tagging?.addTagIds) ? action.tagging.addTagIds : [],
+      },
       ...(action?.bounds && typeof action.bounds === 'object' ? { bounds: action.bounds } : {}),
     })),
   }
@@ -318,6 +398,49 @@ function resolveLineImagemapPublicBase(fallbackOrigin = ''): string {
   return normalizePublicBase(fallbackOrigin)
 }
 
+function extractTagIdsFromAction(action: any): string[] {
+  if (!action?.tagging?.enabled) return []
+  if (!Array.isArray(action?.tagging?.addTagIds)) return []
+  return action.tagging.addTagIds
+    .map((item: unknown) => String(item || '').trim())
+    .filter(Boolean)
+}
+
+function resolveLineChannelSecret(): string {
+  try {
+    return String(useRuntimeConfig().lineChannelSecret || '')
+  }
+  catch {
+    return String(process.env.LINE_CHANNEL_SECRET || '')
+  }
+}
+
+function resolveUriWithTagging(input: {
+  uri: string
+  action: any
+  userId: string
+  publicBaseOverride?: string
+}): string {
+  const original = String(input.uri || '').trim()
+  if (!original) return original
+  const tagIds = extractTagIdsFromAction(input.action)
+  if (!tagIds.length) return original
+  if (!input.userId) return original
+  if (!/^https?:\/\//i.test(original)) return original
+
+  const secret = resolveLineChannelSecret()
+  if (!secret) return original
+  const publicBase = resolveLineImagemapPublicBase(input.publicBaseOverride || '')
+  if (!publicBase) return original
+
+  const token = createUriTagToken({
+    targetUrl: original,
+    userId: input.userId,
+    tagIds,
+  }, secret)
+  return `${publicBase}/api/t/${encodeURIComponent(token)}`
+}
+
 function clampImagemapArea(bounds: { x: number; y: number; width: number; height: number }) {
   const max = RICH_MESSAGE_LINE_CANVAS
   const x = Math.max(0, Math.min(max, Math.floor(Number(bounds.x) || 0)))
@@ -340,10 +463,12 @@ function buildRichMessageLineMessage(input: {
   attributes: Record<string, string>
   transparentBackground: boolean
   publicBaseOverride?: string
+  userId: string
 }): messagingApi.Message {
   const layoutId = resolveRichMessageLayoutId(input.layoutId)
   const normalized = normalizeRichMessageActions(layoutId, input.actions)
   const hasModule = normalized.some((a: any) => a?.type === 'module')
+  const hasTaggedMessage = normalized.some((a: any) => a?.type === 'message' && extractTagIdsFromAction(a).length > 0)
   const publicBase = resolveLineImagemapPublicBase(input.publicBaseOverride || '')
   let channelSecret = ''
   try {
@@ -356,6 +481,7 @@ function buildRichMessageLineMessage(input: {
   const tryImagemap =
     Boolean(input.transparentBackground)
     && !hasModule
+    && !hasTaggedMessage
     && Boolean(publicBase && channelSecret)
     && normalized.some((a: any) => a?.type)
 
@@ -373,7 +499,12 @@ function buildRichMessageLineMessage(input: {
           if (a.type === 'uri') {
             return {
               type: 'uri',
-              linkUri: renderWithAttributes(a.uri || 'https://google.com', input.attributes),
+              linkUri: resolveUriWithTagging({
+                uri: renderWithAttributes(a.uri || 'https://google.com', input.attributes),
+                action: a,
+                userId: input.userId,
+                publicBaseOverride: input.publicBaseOverride,
+              }),
               area,
             }
           }
@@ -404,6 +535,8 @@ function buildRichMessageLineMessage(input: {
     actions: input.actions,
     attributes: input.attributes,
     transparentBackground: input.transparentBackground,
+    userId: input.userId,
+    publicBaseOverride: input.publicBaseOverride,
   })
 }
 
@@ -415,6 +548,8 @@ function buildRichMessageFlexMessage(input: {
   actions: any[]
   attributes: Record<string, string>
   transparentBackground?: boolean
+  userId: string
+  publicBaseOverride?: string
 }): messagingApi.FlexMessage {
   const layoutId = resolveRichMessageLayoutId(input.layoutId)
   const normalized = normalizeRichMessageActions(layoutId, input.actions)
@@ -433,22 +568,41 @@ function buildRichMessageFlexMessage(input: {
         flexAction = {
           type: 'uri',
           label: ' ',
-          uri: renderWithAttributes(action.uri || 'https://google.com', input.attributes),
+          uri: resolveUriWithTagging({
+            uri: renderWithAttributes(action.uri || 'https://google.com', input.attributes),
+            action,
+            userId: input.userId,
+            publicBaseOverride: input.publicBaseOverride,
+          }),
         }
       }
       else if (action.type === 'module') {
         flexAction = {
           type: 'postback',
           label: ' ',
-          data: encodeTriggerModule(action.moduleId || ''),
+          data: encodeTriggerModule(
+            action.moduleId || '',
+            action?.tagging?.enabled && Array.isArray(action?.tagging?.addTagIds)
+              ? action.tagging.addTagIds
+              : [],
+          ),
         }
       }
       else {
-        flexAction = {
-          type: 'message',
-          label: ' ',
-          text: renderWithAttributes(action.text || action.slot || ' ', input.attributes).slice(0, 300),
-        }
+        const renderedText = renderWithAttributes(action.text || action.slot || ' ', input.attributes).slice(0, 300)
+        const tagIds = extractTagIdsFromAction(action)
+        flexAction = tagIds.length > 0
+          ? {
+              type: 'postback',
+              label: ' ',
+              data: encodeTriggerMessage(renderedText, tagIds),
+              displayText: renderedText,
+            }
+          : {
+              type: 'message',
+              label: ' ',
+              text: renderedText,
+            }
       }
       return {
         type: 'box',
@@ -509,6 +663,7 @@ function buildLineMessages(
   dbMessages: any[],
   attributes: Record<string, string> = {},
   publicBaseOverride = '',
+  userId = '',
 ): messagingApi.Message[] {
   if (!dbMessages) return []
   return dbMessages.flatMap((msg) => {
@@ -526,20 +681,40 @@ function buildLineMessages(
               return {
                 type: 'uri',
                 label: renderWithAttributes(b.label || '開啟連結', attributes).slice(0, 20),
-                uri: renderWithAttributes(b.uri || 'https://google.com', attributes)
+                uri: resolveUriWithTagging({
+                  uri: renderWithAttributes(b.uri || 'https://google.com', attributes),
+                  action: b,
+                  userId,
+                  publicBaseOverride,
+                }),
               }
             }
             if (b.type === 'module') {
               return {
                 type: 'postback',
                 label: renderWithAttributes(b.label || '觸發模組', attributes).slice(0, 20),
-                data: encodeTriggerModule(b.moduleId)
+                data: encodeTriggerModule(
+                  b.moduleId,
+                  b?.tagging?.enabled && Array.isArray(b?.tagging?.addTagIds)
+                    ? b.tagging.addTagIds
+                    : [],
+                )
+              }
+            }
+            const renderedText = renderWithAttributes(b.text || b.label || '點擊傳送', attributes).slice(0, 300)
+            const tagIds = extractTagIdsFromAction(b)
+            if (tagIds.length > 0) {
+              return {
+                type: 'postback',
+                label: renderWithAttributes(b.label || '點擊傳送', attributes).slice(0, 20),
+                data: encodeTriggerMessage(renderedText, tagIds),
+                displayText: renderedText,
               }
             }
             return {
               type: 'message',
               label: renderWithAttributes(b.label || '點擊傳送', attributes).slice(0, 20),
-              text: renderWithAttributes(b.text || b.label || '點擊傳送', attributes).slice(0, 300)
+              text: renderedText,
             }
           }),
         },
@@ -563,20 +738,40 @@ function buildLineMessages(
           return {
             type: 'uri',
             label: renderWithAttributes(action.label || '　', attributes).slice(0, 20),
-            uri: renderWithAttributes(action.uri || 'https://google.com', attributes),
+            uri: resolveUriWithTagging({
+              uri: renderWithAttributes(action.uri || 'https://google.com', attributes),
+              action,
+              userId,
+              publicBaseOverride,
+            }),
           }
         }
         if (action?.type === 'module') {
           return {
             type: 'postback',
             label: renderWithAttributes(action.label || '觸發模組', attributes).slice(0, 20),
-            data: encodeTriggerModule(action.moduleId)
+            data: encodeTriggerModule(
+              action.moduleId,
+              action?.tagging?.enabled && Array.isArray(action?.tagging?.addTagIds)
+                ? action.tagging.addTagIds
+                : [],
+            )
+          }
+        }
+        const renderedText = renderWithAttributes(action?.text || action?.label || '　', attributes).slice(0, 300)
+        const tagIds = extractTagIdsFromAction(action)
+        if (tagIds.length > 0) {
+          return {
+            type: 'postback',
+            label: renderWithAttributes(action?.label || '　', attributes).slice(0, 20),
+            data: encodeTriggerMessage(renderedText, tagIds),
+            displayText: renderedText,
           }
         }
         return {
           type: 'message',
           label: renderWithAttributes(action?.label || '　', attributes).slice(0, 20),
-          text: renderWithAttributes(action?.text || action?.label || '　', attributes).slice(0, 300),
+          text: renderedText,
         }
       }
 
@@ -615,20 +810,39 @@ function buildLineMessages(
             action = {
               type: 'uri',
               label: renderWithAttributes(col.action.label || '開啟', attributes).slice(0, 20),
-              uri: renderWithAttributes(col.action.uri || 'https://google.com', attributes)
+              uri: resolveUriWithTagging({
+                uri: renderWithAttributes(col.action.uri || 'https://google.com', attributes),
+                action: col.action,
+                userId,
+                publicBaseOverride,
+              }),
             }
           } else if (actionType === 'module') {
             action = {
               type: 'postback',
               label: renderWithAttributes(col.action.label || '觸發模組', attributes).slice(0, 20),
-              data: encodeTriggerModule(col.action.moduleId)
+              data: encodeTriggerModule(
+                col.action.moduleId,
+                col.action?.tagging?.enabled && Array.isArray(col.action?.tagging?.addTagIds)
+                  ? col.action.tagging.addTagIds
+                  : [],
+              )
             }
           } else if (actionType === 'message') {
-            action = {
-              type: 'message',
-              label: renderWithAttributes(col.action.label || '傳送', attributes).slice(0, 20),
-              text: renderWithAttributes(col.action.text || '', attributes).slice(0, 300)
-            }
+            const renderedText = renderWithAttributes(col.action.text || '', attributes).slice(0, 300)
+            const tagIds = extractTagIdsFromAction(col.action)
+            action = tagIds.length > 0
+              ? {
+                  type: 'postback',
+                  label: renderWithAttributes(col.action.label || '傳送', attributes).slice(0, 20),
+                  data: encodeTriggerMessage(renderedText, tagIds),
+                  displayText: renderedText,
+                }
+              : {
+                  type: 'message',
+                  label: renderWithAttributes(col.action.label || '傳送', attributes).slice(0, 20),
+                  text: renderedText,
+                }
           } else {
             // LINE API requires an action for image_carousel. If 'none', use a silent postback without label.
             action = { type: 'postback', data: 'ignore' }
@@ -657,6 +871,7 @@ function buildLineMessages(
           attributes,
           transparentBackground: Boolean(msg.transparentBackground),
           publicBaseOverride,
+          userId,
         }),
       ]
     }
@@ -675,6 +890,10 @@ function buildLineMessages(
               uri: btn?.uri || '',
               text: btn?.text || '',
               moduleId: btn?.moduleId || '',
+              tagging: {
+                enabled: btn?.tagging?.enabled === true,
+                addTagIds: Array.isArray(btn?.tagging?.addTagIds) ? btn.tagging.addTagIds : [],
+              },
             }))
           : []
       return [
@@ -686,6 +905,7 @@ function buildLineMessages(
           attributes,
           transparentBackground: Boolean(payload.transparentBackground),
           publicBaseOverride,
+          userId,
         }),
       ]
     }
@@ -699,20 +919,39 @@ function buildLineMessages(
           action = {
             type: 'uri',
             label: renderWithAttributes(qr.action.label || '開啟', attributes).slice(0, 20),
-            uri: renderWithAttributes(qr.action.uri || 'https://google.com', attributes)
+            uri: resolveUriWithTagging({
+              uri: renderWithAttributes(qr.action.uri || 'https://google.com', attributes),
+              action: qr.action,
+              userId,
+              publicBaseOverride,
+            })
           }
         } else if (actionType === 'module') {
           action = {
             type: 'postback',
             label: renderWithAttributes(qr.action.label || '觸發模組', attributes).slice(0, 20),
-            data: encodeTriggerModule(qr.action.moduleId)
+            data: encodeTriggerModule(
+              qr.action.moduleId,
+              qr.action?.tagging?.enabled && Array.isArray(qr.action?.tagging?.addTagIds)
+                ? qr.action.tagging.addTagIds
+                : [],
+            )
           }
         } else {
-          action = {
-            type: 'message',
-            label: renderWithAttributes(qr.action.label || '傳送', attributes).slice(0, 20),
-            text: renderWithAttributes(qr.action.text || qr.action.label || '傳送', attributes).slice(0, 300)
-          }
+          const renderedText = renderWithAttributes(qr.action.text || qr.action.label || '傳送', attributes).slice(0, 300)
+          const tagIds = extractTagIdsFromAction(qr.action)
+          action = tagIds.length > 0
+            ? {
+                type: 'postback',
+                label: renderWithAttributes(qr.action.label || '傳送', attributes).slice(0, 20),
+                data: encodeTriggerMessage(renderedText, tagIds),
+                displayText: renderedText,
+              }
+            : {
+                type: 'message',
+                label: renderWithAttributes(qr.action.label || '傳送', attributes).slice(0, 20),
+                text: renderedText,
+              }
         }
         
         return {
@@ -761,59 +1000,80 @@ export async function handleMessageEvent(
   // Auto reply: match keyword flows
   if (event.message.type === 'text') {
     const textContent = (event.message as webhook.TextMessageContent).text
-    
-    // Check user activeInput state and fetch context synchronously
-    const userData = await ensureUser(userId)
-    const userAttributes = buildAttributeContext(userData)
-    let handledByInput = false
-    
-    if (userData && userData.activeInput && userData.activeInput.expiresAt > Date.now()) {
-      const { moduleId, attribute } = userData.activeInput
-      const db = getDb()
-      const updates: any = { activeInput: FieldValue.delete() }
-      if (attribute) {
-        updates[`attributes.${attribute}`] = textContent
-        userAttributes[attribute] = textContent
-      }
-      await db.collection('users').doc(userId).update(updates)
-      
-      const flow = await getFlowByModuleId(moduleId)
-      
-      if (flow && event.replyToken) {
-        const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-        await replyMessage(
-          event.replyToken,
-          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || ''),
-        )
-        await dispatchPostReplyActions(userId, flow.messages)
-      }
-      handledByInput = true
+    await handleIncomingText(userId, textContent, event.replyToken, options)
+  } else {
+    // For non-text events, just ensure the user exists asynchronously if we want to log it
+    ensureUser(userId).catch(e => console.error('[ensureUser] Error:', e))
+  }
+}
+
+async function handleIncomingText(
+  userId: string,
+  textContent: string,
+  replyToken: string | undefined,
+  options: { requestOrigin?: string } = {},
+  userDataOverride?: UserDoc | null,
+): Promise<void> {
+  const userData = userDataOverride ?? await ensureUser(userId)
+  const userAttributes = buildAttributeContext(userData)
+  let handledByInput = false
+
+  if (userData && userData.activeInput && userData.activeInput.expiresAt > Date.now()) {
+    const { moduleId, attribute, tagIds } = userData.activeInput
+    const db = getDb()
+    const updates: any = { activeInput: FieldValue.delete() }
+    if (attribute) {
+      updates[`attributes.${attribute}`] = textContent
+      userAttributes[attribute] = textContent
+    }
+    await db.collection('users').doc(userId).update(updates)
+
+    if (Array.isArray(tagIds) && tagIds.length > 0) {
+      await addTagsToUser(userId, tagIds, 'system', `userInput:${moduleId}`)
     }
 
-    if (!handledByInput) {
-      const rule = await matchAutoReplyRule(textContent)
-      if (rule && event.replyToken) {
+    const flow = await getFlowByModuleId(moduleId)
+
+    if (flow && replyToken) {
+      const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
+      await replyMessage(
+        replyToken,
+        buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId),
+      )
+      await dispatchPostReplyActions(userId, flow.messages)
+    }
+    handledByInput = true
+  }
+
+  if (!handledByInput) {
+    const rule = await matchAutoReplyRule(textContent)
+    if (rule) {
+      // 貼標（非阻塞，不影響回覆速度）
+      if (rule.tagging?.enabled && Array.isArray(rule.tagging?.addTagIds) && rule.tagging.addTagIds.length > 0) {
+        addTagsToUser(userId, rule.tagging.addTagIds, 'rule', rule.id ?? null)
+          .catch(e => console.error('[tagging] autoReply tagging failed:', e))
+      }
+
+      if (replyToken) {
         if (rule.action.type === 'module') {
           const flow = await getFlowByModuleId(rule.action.moduleId)
           if (flow) {
             const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
             await replyMessage(
-              event.replyToken,
-              buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || ''),
+              replyToken,
+              buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId),
             )
             await dispatchPostReplyActions(userId, flow.messages)
           }
-        } else {
+        }
+        else {
           const actionMessages = buildAutoReplyActionMessages(rule.action, userAttributes)
           if (actionMessages.length > 0) {
-            await replyMessage(event.replyToken, actionMessages)
+            await replyMessage(replyToken, actionMessages)
           }
         }
       }
     }
-  } else {
-    // For non-text events, just ensure the user exists asynchronously if we want to log it
-    ensureUser(userId).catch(e => console.error('[ensureUser] Error:', e))
   }
 }
 
@@ -833,8 +1093,39 @@ export async function handlePostbackEvent(
 
   const data = event.postback.data
 
+  // Handle tagged message action (postback with displayText)
+  const messageTrigger = parseTriggerMessageData(data)
+  if (messageTrigger.text) {
+    if (messageTrigger.tagIds.length > 0) {
+      try {
+        await addTagsToUser(userId, messageTrigger.tagIds, 'system', 'postback:message')
+      }
+      catch (e) {
+        console.error('[tagging] message postback tagging failed:', e)
+      }
+    }
+    await handleIncomingText(
+      userId,
+      messageTrigger.text,
+      event.replyToken,
+      options,
+      await userDataTask,
+    )
+    await userDataTask
+    return
+  }
+
   // Handle Switch Menu command
-  if (data.startsWith('switchMenu=')) {
+  const switchTrigger = parseSwitchMenuData(data)
+  if (switchTrigger.targetMenuId) {
+    if (switchTrigger.tagIds.length > 0) {
+      try {
+        await addTagsToUser(userId, switchTrigger.tagIds, 'system', `switchMenu:${switchTrigger.targetMenuId}`)
+      }
+      catch (e) {
+        console.error('[tagging] switch menu tagging failed:', e)
+      }
+    }
     // 檢查是否為 LINE 原生瞬間切換（richmenuswitch）觸發的事件
     // @ts-ignore: LINE Node SDK's Event type might not perfectly reflect params yet
     const params = (event.postback as any).params
@@ -850,7 +1141,7 @@ export async function handlePostbackEvent(
     }
 
     // 針對舊版 postback (沒有 aliasId) 的相容性回退處理
-    const targetFirestoreId = data.replace('switchMenu=', '')
+    const targetFirestoreId = switchTrigger.targetMenuId
     console.log('[switchMenu] Fallback to server link API, targetId:', targetFirestoreId, 'userId:', userId)
     const db = getDb()
     const targetDoc = await db.collection('richmenus').doc(targetFirestoreId).get()
@@ -870,9 +1161,17 @@ export async function handlePostbackEvent(
     return // Stop further processing
   }
   // Handle direct module trigger
-  const directModuleId = decodeTriggerModule(data)
-  if (directModuleId) {
-    const moduleId = directModuleId
+  const trigger = parseTriggerModuleData(data)
+  if (trigger.moduleId) {
+    const moduleId = trigger.moduleId
+    if (trigger.tagIds.length > 0) {
+      try {
+        await addTagsToUser(userId, trigger.tagIds, 'system', `postback:${moduleId}`)
+      }
+      catch (e) {
+        console.error('[tagging] module postback tagging failed:', e)
+      }
+    }
     const flow = await getFlowByModuleId(moduleId)
 
     if (flow) {
@@ -881,7 +1180,7 @@ export async function handlePostbackEvent(
         const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
         await replyMessage(
           event.replyToken,
-          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || ''),
+          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId),
         )
         await dispatchPostReplyActions(userId, flow.messages)
       }
@@ -902,7 +1201,7 @@ export async function handlePostbackEvent(
         const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
         await replyMessage(
           event.replyToken,
-          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || ''),
+          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId),
         )
         await dispatchPostReplyActions(userId, flow.messages)
       }

@@ -23,6 +23,10 @@ export type RichMessageEditorAction = {
   uri: string
   text: string
   moduleId: string
+  tagging?: {
+    enabled: boolean
+    addTagIds: string[]
+  }
   bounds?: RichMessageAreaBounds
 }
 
@@ -74,6 +78,7 @@ export function newRichMessageAction(
     uri: '',
     text: '',
     moduleId: '',
+    tagging: { enabled: false, addTagIds: [] },
     ...(withBounds ? { bounds: defaultBoundsByIndex(index) } : {}),
   }
 }
@@ -114,6 +119,12 @@ export function normalizeRichMessageActions(
       uri: source.uri || '',
       text: source.text || '',
       moduleId: source.moduleId || '',
+      tagging: {
+        enabled: source?.tagging?.enabled === true,
+        addTagIds: Array.isArray(source?.tagging?.addTagIds)
+          ? source.tagging.addTagIds.map((v: unknown) => String(v || '').trim()).filter(Boolean)
+          : [],
+      },
       bounds:
         layoutId === 'custom'
           ? clampRichMessageBounds(source.bounds || defaultBoundsByIndex(idx))
@@ -132,6 +143,12 @@ export function serializeRichMessageActionsForApi(
     uri: action.uri,
     text: action.text,
     moduleId: action.moduleId,
+    tagging: {
+      enabled: action?.tagging?.enabled === true,
+      addTagIds: Array.isArray(action?.tagging?.addTagIds)
+        ? action.tagging.addTagIds.map((v: unknown) => String(v || '').trim()).filter(Boolean)
+        : [],
+    },
     ...(layoutId === 'custom' ? { bounds: action.bounds } : {}),
   }))
 }
@@ -140,8 +157,8 @@ export function richMessageEditorActionsOverlap(actions: RichMessageEditorAction
   const list = (actions ?? []).map((a) => a.bounds).filter(Boolean) as RichMessageAreaBounds[]
   for (let i = 0; i < list.length; i++) {
     for (let j = i + 1; j < list.length; j++) {
-      const a = list[i]
-      const b = list[j]
+      const a = list[i]!
+      const b = list[j]!
       const overlapping = !(
         a.x + a.width <= b.x ||
         a.x >= b.x + b.width ||

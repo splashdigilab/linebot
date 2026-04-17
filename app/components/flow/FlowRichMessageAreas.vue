@@ -30,6 +30,8 @@
         <AdminAreaActionEditor
           :model-value="area"
           :module-options="moduleOptions"
+          :tag-options="tagOptions || []"
+          :enable-tagging="Boolean(enableTagging)"
           :error-message="actionError(area) || ''"
           @update:model-value="(next) => Object.assign(area, next)"
         />
@@ -61,6 +63,8 @@ import {
 const props = defineProps<{
   msg: any
   moduleOptions: Array<{ id: string; name: string }>
+  tagOptions?: Array<{ id: string; name: string; color?: string }>
+  enableTagging?: boolean
   flat?: boolean
   showCanvas?: boolean
   showActionCards?: boolean
@@ -171,6 +175,10 @@ function actionError(action: RichMessageEditorAction) {
     uri: action.uri,
     text: action.text,
     moduleId: action.moduleId,
+    tagging: {
+      enabled: action?.tagging?.enabled === true,
+      addTagIds: Array.isArray(action?.tagging?.addTagIds) ? action.tagging.addTagIds : [],
+    },
   })
 }
 

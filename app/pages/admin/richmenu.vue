@@ -168,6 +168,9 @@
               <AdminAreaActionEditor
                 :model-value="area.action"
                 :module-options="modules"
+                :tag-options="allTags"
+                :enable-tagging="true"
+                :taggable-action-types="['module', 'message', 'switch']"
                 :menu-options="menus"
                 :allow-switch="true"
                 :exclude-menu-id="selectedId"
@@ -189,6 +192,11 @@ import {
 } from '~~/shared/upload-rules'
 import {
   decodeTriggerModule,
+  encodeTriggerMessage,
+  encodeSwitchMenu,
+  parseTriggerMessageData,
+  parseTriggerModuleData,
+  parseSwitchMenuData,
   encodeTriggerModule,
   validateUnifiedAction,
 } from '~~/shared/action-schema'
@@ -216,6 +224,7 @@ const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
 const creating = ref(false)
 const { toasts, showToast } = useAdminToast()
+const { tags: allTags, loadTags } = useAdminTagList()
 const selectedMenu = computed(() => menus.value.find((menu) => menu.id === selectedId.value) ?? null)
 
 const sortedMenus = computed(() => {
@@ -341,7 +350,7 @@ function applyRichMenuLayout(layoutId: RichLayoutId) {
     bounds,
     action: form.value.areas[index]?.action
       ? { ...form.value.areas[index].action }
-      : { type: 'module', moduleId: '' },
+      : { type: 'module', moduleId: '', tagging: { enabled: false, addTagIds: [] } },
   }))
   form.value.areas = nextAreas
 }
@@ -354,12 +363,14 @@ function onSelectRichMenuLayout(layoutId: string) {
 async function loadMenus() {
   loading.value = true
   try {
-    const [menusData, modulesData] = await Promise.all([
+    const [menusData, modulesData, tagOk] = await Promise.all([
       $fetch<any[]>('/api/richmenu/list'),
-      $fetch<any[]>('/api/flow/list')
+      $fetch<any[]>('/api/flow/list'),
+      loadTags({ status: 'active' }),
     ])
     menus.value = menusData
     modules.value = modulesData
+    if (!tagOk) showToast('載入標籤失敗', 'error')
   } catch (err) {
     menus.value = []
     modules.value = []
@@ -398,20 +409,68 @@ function buildFormFromMenu(menu: any) {
     const data = String(a?.action?.data || '')
     // Restore switch menu state from legacy postback format
     if (a.action.type === 'postback' && data.startsWith('switchMenu=')) {
-      return { ...a, action: { type: 'switch', data: a.action.data } }
+      const parsed = parseSwitchMenuData(data)
+      const targetMenuId = parsed.targetMenuId || data.replace('switchMenu=', '').split('&')[0]
+      return {
+        ...a,
+        action: {
+          type: 'switch',
+          data: `switchMenu=${targetMenuId}`,
+          tagging: {
+            enabled: parsed.tagIds.length > 0,
+            addTagIds: parsed.tagIds,
+          },
+        },
+      }
     }
     if (a.action.type === 'postback' && decodeTriggerModule(data)) {
-      return { ...a, action: { type: 'module', moduleId: decodeTriggerModule(data) } }
+      const parsed = parseTriggerModuleData(data)
+      return {
+        ...a,
+        action: {
+          type: 'module',
+          moduleId: parsed.moduleId,
+          tagging: {
+            enabled: parsed.tagIds.length > 0,
+            addTagIds: parsed.tagIds,
+          },
+        },
+      }
+    }
+    if (a.action.type === 'postback' && parseTriggerMessageData(data).text) {
+      const parsed = parseTriggerMessageData(data)
+      return {
+        ...a,
+        action: {
+          type: 'message',
+          text: parsed.text,
+          tagging: {
+            enabled: parsed.tagIds.length > 0,
+            addTagIds: parsed.tagIds,
+          },
+        },
+      }
     }
     if (a.action.type === 'postback') {
-      return { ...a, action: { type: 'module', moduleId: '' } }
+      return { ...a, action: { type: 'module', moduleId: '', tagging: { enabled: false, addTagIds: [] } } }
     }
     // Restore from native richmenuswitch: look up target menu by aliasId
     if (a.action.type === 'richmenuswitch') {
       const richMenuAliasId: string = a.action.richMenuAliasId ?? ''
       const targetMenu = menus.value.find(m => m.aliasId === richMenuAliasId)
-      const targetFirestoreId = targetMenu?.id ?? ''
-      return { ...a, action: { type: 'switch', data: `switchMenu=${targetFirestoreId}` } }
+      const parsed = parseSwitchMenuData(String(a.action.data || ''))
+      const targetFirestoreId = targetMenu?.id ?? parsed.targetMenuId ?? ''
+      return {
+        ...a,
+        action: {
+          type: 'switch',
+          data: `switchMenu=${targetFirestoreId}`,
+          tagging: {
+            enabled: parsed.tagIds.length > 0,
+            addTagIds: parsed.tagIds,
+          },
+        },
+      }
     }
     return a
   })
@@ -511,7 +570,7 @@ function addArea() {
   const H = Number(form.value.height) || 843
   form.value.areas.push({
     bounds: { x: 0, y: 0, width: Math.floor(W / 3), height: H },
-    action: { type: 'module', moduleId: '' },
+    action: { type: 'module', moduleId: '', tagging: { enabled: false, addTagIds: [] } },
   })
 }
 
@@ -571,6 +630,9 @@ async function submitForm() {
     const actionType = area?.action?.type
     if (actionType === 'switch') {
       if (!area?.action?.data) return showToast(`區塊 ${index + 1}：請選擇要切換的選單`, 'error')
+      if (area?.action?.tagging?.enabled === true && (!Array.isArray(area?.action?.tagging?.addTagIds) || area.action.tagging.addTagIds.length === 0)) {
+        return showToast(`區塊 ${index + 1}：已啟用貼標，請至少選擇一個標籤`, 'error')
+      }
       continue
     }
     const err = validateUnifiedAction({
@@ -579,6 +641,10 @@ async function submitForm() {
       uri: area?.action?.uri || '',
       text: area?.action?.text || '',
       moduleId: area?.action?.moduleId || '',
+      tagging: {
+        enabled: area?.action?.tagging?.enabled === true,
+        addTagIds: Array.isArray(area?.action?.tagging?.addTagIds) ? area.action.tagging.addTagIds : [],
+      },
     })
     if (err) return showToast(`區塊 ${index + 1}：${err}`, 'error')
   }
@@ -587,10 +653,29 @@ async function submitForm() {
   // Look up the target menu's aliasId from the menus list (more reliable than string derivation)
   const apiAreas = form.value.areas.map(a => {
     if (a.action.type === 'module') {
-      return { ...a, action: { type: 'postback', data: encodeTriggerModule(a.action.moduleId) } }
+      const tagIds = a?.action?.tagging?.enabled
+        ? (Array.isArray(a.action.tagging.addTagIds) ? a.action.tagging.addTagIds : [])
+        : []
+      return { ...a, action: { type: 'postback', data: encodeTriggerModule(a.action.moduleId, tagIds) } }
+    }
+    if (a.action.type === 'message') {
+      const tagIds = a?.action?.tagging?.enabled
+        ? (Array.isArray(a.action.tagging.addTagIds) ? a.action.tagging.addTagIds : [])
+        : []
+      if (tagIds.length > 0) {
+        return {
+          ...a,
+          action: {
+            type: 'postback',
+            data: encodeTriggerMessage(String(a.action.text || ' ').slice(0, 300), tagIds),
+            displayText: String(a.action.text || ' ').slice(0, 300),
+          },
+        }
+      }
     }
     if (a.action.type === 'switch' || a.action.type === 'richmenuswitch') {
-      const targetFirestoreId = (a.action.data ?? '').replace('switchMenu=', '')
+      const switchParsed = parseSwitchMenuData(String(a.action.data || ''))
+      const targetFirestoreId = switchParsed.targetMenuId
       const targetMenu = menus.value.find(m => m.id === targetFirestoreId)
       if (!targetMenu) {
         throw new Error(`切換選單目標「${targetFirestoreId}」已不存在，請重新選擇目標選單再儲存`)
@@ -598,7 +683,17 @@ async function submitForm() {
       if (!targetMenu.aliasId) {
         throw new Error(`目標選單「${targetMenu.name}」尚未建立快速切換別名，請先上傳圖片再試一次`)
       }
-      return { ...a, action: { type: 'richmenuswitch', richMenuAliasId: targetMenu.aliasId, data: `switchMenu=${targetFirestoreId}` } }
+      const tagIds = a?.action?.tagging?.enabled
+        ? (Array.isArray(a.action.tagging.addTagIds) ? a.action.tagging.addTagIds : [])
+        : []
+      return {
+        ...a,
+        action: {
+          type: 'richmenuswitch',
+          richMenuAliasId: targetMenu.aliasId,
+          data: encodeSwitchMenu(targetFirestoreId, tagIds),
+        },
+      }
     }
     return a
   })

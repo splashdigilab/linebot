@@ -78,6 +78,43 @@
         </div>
       </template>
 
+      <template v-if="enableTagging">
+        <div class="admin-field-group">
+          <AdminFieldLabel text="啟用貼標" tight />
+          <el-switch
+            v-model="ensureTaggingState().enabled"
+            active-text="啟用"
+            inactive-text="停用"
+            class="ar-status-switch"
+            :disabled="disabled || !isTaggableAction"
+          />
+        </div>
+        <div v-if="!isTaggableAction" class="text-xs text-muted">
+          此動作類型目前不支援貼標。
+        </div>
+        <div v-if="ensureTaggingState().enabled" class="admin-field-group">
+          <AdminFieldLabel text="命中後加上標籤" tight />
+          <el-select
+            v-model="ensureTaggingState().addTagIds"
+            class="admin-w-full control-full"
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            placeholder="選擇要貼的標籤"
+            :disabled="disabled || !isTaggableAction"
+          >
+            <el-option
+              v-for="tag in tagOptions"
+              :key="tag.id"
+              :value="tag.id"
+              :label="tag.name"
+            >
+              <AdminTagOptionRow :label="tag.name" :color="tag.color" />
+            </el-option>
+          </el-select>
+        </div>
+      </template>
+
       <div v-if="errorMessage" class="admin-warning-inline">
         {{ errorMessage }}
       </div>
@@ -87,6 +124,7 @@
 
 <script setup lang="ts">
 type EditorOption = { id: string; name: string }
+type TagOption = { id: string; name: string; color?: string }
 
 type ActionShape = {
   type?: string
@@ -100,8 +138,11 @@ type ActionShape = {
 const props = withDefaults(defineProps<{
   modelValue: ActionShape
   moduleOptions: EditorOption[]
+  tagOptions?: TagOption[]
+  taggableActionTypes?: string[]
   menuOptions?: EditorOption[]
   allowSwitch?: boolean
+  enableTagging?: boolean
   excludeMenuId?: string | null
   menuValuePrefix?: string
   moduleLabel?: string
@@ -112,8 +153,11 @@ const props = withDefaults(defineProps<{
   /** 唯讀（例如已發送推播僅檢視） */
   disabled?: boolean
 }>(), {
+  tagOptions: () => [],
+  taggableActionTypes: () => ['module', 'message', 'uri'],
   menuOptions: () => [],
   allowSwitch: false,
+  enableTagging: false,
   excludeMenuId: null,
   menuValuePrefix: 'switchMenu=',
   moduleLabel: '選擇目標模組',
@@ -139,6 +183,10 @@ const hasInvalidSwitchTarget = computed(() => {
   if (!current) return false
   return !availableMenuOptions.value.some((menu) => `${props.menuValuePrefix}${menu.id}` === current)
 })
+const isTaggableAction = computed(() =>
+  Array.isArray(props.taggableActionTypes)
+  && props.taggableActionTypes.includes(String(action.value?.type || '')),
+)
 
 function onTypeChange() {
   if (props.disabled) return
@@ -150,6 +198,25 @@ function onTypeChange() {
     text: '',
     moduleId: '',
     data: '',
+    tagging: { enabled: false, addTagIds: [] },
   })
 }
+
+function ensureTaggingState() {
+  if (!action.value.tagging || typeof action.value.tagging !== 'object') {
+    action.value.tagging = { enabled: false, addTagIds: [] }
+  }
+  if (!Array.isArray(action.value.tagging.addTagIds)) {
+    action.value.tagging.addTagIds = []
+  }
+  return action.value.tagging as { enabled: boolean; addTagIds: string[] }
+}
+
+watch(isTaggableAction, (supported) => {
+  if (!supported) {
+    const tagging = ensureTaggingState()
+    tagging.enabled = false
+    tagging.addTagIds = []
+  }
+}, { immediate: true })
 </script>

@@ -78,6 +78,43 @@
         </div>
       </div>
     </template>
+
+    <template v-if="enableTagging && isActionEnabled">
+      <div class="admin-field-group">
+        <AdminFieldLabel text="啟用貼標" tight />
+        <el-switch
+          v-model="ensureTaggingState().enabled"
+          active-text="啟用"
+          inactive-text="停用"
+          class="ar-status-switch"
+          :disabled="!isTaggableAction"
+        />
+      </div>
+      <div v-if="!isTaggableAction" class="text-xs text-muted">
+        此動作類型目前不支援貼標。
+      </div>
+      <div v-if="ensureTaggingState().enabled" class="admin-field-group">
+        <AdminFieldLabel text="命中後加上標籤" tight />
+        <el-select
+          v-model="ensureTaggingState().addTagIds"
+          multiple
+          collapse-tags
+          collapse-tags-tooltip
+          placeholder="選擇要貼的標籤"
+          class="admin-w-full"
+          :disabled="!isTaggableAction"
+        >
+          <el-option
+            v-for="tag in tagOptions"
+            :key="tag.id"
+            :label="tag.name"
+            :value="tag.id"
+          >
+            <AdminTagOptionRow :label="tag.name" :color="tag.color" />
+          </el-option>
+        </el-select>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -98,10 +135,18 @@ type ModuleOption = {
   name: string
 }
 
+type TagOption = {
+  id: string
+  name: string
+  color?: string
+}
+
 const props = withDefaults(defineProps<{
   action: Record<string, any>
   typeOptions: ActionOption[]
   moduleOptions: ModuleOption[]
+  tagOptions?: TagOption[]
+  taggableActionTypes?: string[]
   variableOptions: VariableOption[]
   headerLabel?: string
   typeTitle?: string
@@ -120,11 +165,14 @@ const props = withDefaults(defineProps<{
   flat?: boolean
   showVariableInset?: boolean
   hideFieldsWhenNone?: boolean
+  enableTagging?: boolean
   noneTypeValue?: string
   messageTypeValue?: string
   uriTypeValue?: string
   moduleTypeValue?: string
 }>(), {
+  tagOptions: () => [],
+  taggableActionTypes: () => ['module', 'message', 'uri'],
   headerLabel: '按鈕動作',
   typeTitle: '動作類型',
   showLabelField: true,
@@ -142,6 +190,7 @@ const props = withDefaults(defineProps<{
   flat: false,
   showVariableInset: true,
   hideFieldsWhenNone: false,
+  enableTagging: false,
   noneTypeValue: 'none',
   messageTypeValue: 'message',
   uriTypeValue: 'uri',
@@ -150,6 +199,10 @@ const props = withDefaults(defineProps<{
 
 const isActionEnabled = computed(() =>
   !props.hideFieldsWhenNone || props.action.type !== props.noneTypeValue,
+)
+const isTaggableAction = computed(() =>
+  Array.isArray(props.taggableActionTypes)
+  && props.taggableActionTypes.includes(String(props.action.type || '')),
 )
 
 const insetWrapClass = computed(() =>
@@ -164,4 +217,22 @@ function insertToken(key: 'label' | 'text', token: string) {
   const current = typeof props.action[key] === 'string' ? props.action[key] : ''
   props.action[key] = `${current}${token}`
 }
+
+function ensureTaggingState() {
+  if (!props.action.tagging || typeof props.action.tagging !== 'object') {
+    props.action.tagging = { enabled: false, addTagIds: [] }
+  }
+  if (!Array.isArray(props.action.tagging.addTagIds)) {
+    props.action.tagging.addTagIds = []
+  }
+  return props.action.tagging as { enabled: boolean; addTagIds: string[] }
+}
+
+watch(isTaggableAction, (supported) => {
+  if (!supported) {
+    const tagging = ensureTaggingState()
+    tagging.enabled = false
+    tagging.addTagIds = []
+  }
+}, { immediate: true })
 </script>

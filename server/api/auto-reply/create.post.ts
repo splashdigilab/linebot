@@ -26,6 +26,7 @@ export default defineEventHandler(async (event) => {
     action: body.action,
     moduleId,
     isActive: body.isActive,
+    tagging: body.tagging,
     createdAt: FieldValue.serverTimestamp(),
   })
 
@@ -37,5 +38,6 @@ export default defineEventHandler(async (event) => {
     action: body.action,
     moduleId,
     isActive: body.isActive,
+    tagging: body.tagging,
   }
 })

@@ -21,6 +21,7 @@ export default defineEventHandler(async (event) => {
     action: body.action,
     moduleId,
     isActive: body.isActive,
+    tagging: body.tagging,
   }
 
   await db.collection('autoReplies').doc(id).update(updates)

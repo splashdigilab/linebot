@@ -4,24 +4,172 @@ export type SlotLabel = typeof SLOT_LABELS[number]
 
 export type UnifiedActionType = 'uri' | 'message' | 'module'
 
+export interface ActionTagging {
+  enabled: boolean
+  addTagIds: string[]
+}
+
 export interface UnifiedAction {
   slot: string
   type: UnifiedActionType
   uri: string
   text: string
   moduleId: string
+  tagging: ActionTagging
 }
 
 export const TRIGGER_MODULE_PREFIX = 'triggerModule='
+const TRIGGER_MODULE_TAGS_KEY = 'tags'
+export const TRIGGER_MESSAGE_PREFIX = 'triggerMessage='
+export const SWITCH_MENU_PREFIX = 'switchMenu='
+const SWITCH_MENU_TAGS_KEY = 'tags'
 
-export function encodeTriggerModule(moduleId: string): string {
-  return `${TRIGGER_MODULE_PREFIX}${String(moduleId || '').trim()}`
+function normalizeActionTagging(input: any): ActionTagging {
+  return {
+    enabled: input?.enabled === true,
+    addTagIds: Array.isArray(input?.addTagIds)
+      ? input.addTagIds.map((item: unknown) => String(item || '').trim()).filter(Boolean)
+      : [],
+  }
+}
+
+export function encodeTriggerModule(moduleId: string, tagIds: string[] = []): string {
+  const cleanModuleId = String(moduleId || '').trim()
+  if (!cleanModuleId) return TRIGGER_MODULE_PREFIX
+
+  const cleanTagIds = Array.isArray(tagIds)
+    ? tagIds.map((item) => String(item || '').trim()).filter(Boolean)
+    : []
+
+  if (cleanTagIds.length === 0) {
+    return `${TRIGGER_MODULE_PREFIX}${cleanModuleId}`
+  }
+
+  const encodedTags = encodeURIComponent(cleanTagIds.join(','))
+  return `${TRIGGER_MODULE_PREFIX}${cleanModuleId}&${TRIGGER_MODULE_TAGS_KEY}=${encodedTags}`
+}
+
+export function parseTriggerModuleData(data: string): { moduleId: string; tagIds: string[] } {
+  if (typeof data !== 'string') return { moduleId: '', tagIds: [] }
+  if (!data.startsWith(TRIGGER_MODULE_PREFIX)) return { moduleId: '', tagIds: [] }
+
+  const payload = data.slice(TRIGGER_MODULE_PREFIX.length).trim()
+  if (!payload) return { moduleId: '', tagIds: [] }
+
+  const [modulePart, ...rest] = payload.split('&')
+  let moduleId = ''
+  try {
+    moduleId = decodeURIComponent(modulePart || '').trim()
+  }
+  catch {
+    moduleId = String(modulePart || '').trim()
+  }
+  if (!moduleId) return { moduleId: '', tagIds: [] }
+
+  const params = new URLSearchParams(rest.join('&'))
+  const rawTags = params.get(TRIGGER_MODULE_TAGS_KEY) || ''
+  const tagIds = rawTags
+    .split(',')
+    .map((item) => {
+      try {
+        return decodeURIComponent(item).trim()
+      }
+      catch {
+        return String(item || '').trim()
+      }
+    })
+    .filter(Boolean)
+
+  return { moduleId, tagIds }
 }
 
 export function decodeTriggerModule(data: string): string {
-  if (typeof data !== 'string') return ''
-  if (!data.startsWith(TRIGGER_MODULE_PREFIX)) return ''
-  return data.slice(TRIGGER_MODULE_PREFIX.length).trim()
+  return parseTriggerModuleData(data).moduleId
+}
+
+export function encodeSwitchMenu(targetMenuId: string, tagIds: string[] = []): string {
+  const cleanTargetMenuId = String(targetMenuId || '').trim()
+  if (!cleanTargetMenuId) return SWITCH_MENU_PREFIX
+
+  const cleanTagIds = Array.isArray(tagIds)
+    ? tagIds.map((item) => String(item || '').trim()).filter(Boolean)
+    : []
+
+  if (cleanTagIds.length === 0) {
+    return `${SWITCH_MENU_PREFIX}${cleanTargetMenuId}`
+  }
+
+  const encodedTags = encodeURIComponent(cleanTagIds.join(','))
+  return `${SWITCH_MENU_PREFIX}${cleanTargetMenuId}&${SWITCH_MENU_TAGS_KEY}=${encodedTags}`
+}
+
+export function parseSwitchMenuData(data: string): { targetMenuId: string; tagIds: string[] } {
+  if (typeof data !== 'string') return { targetMenuId: '', tagIds: [] }
+  if (!data.startsWith(SWITCH_MENU_PREFIX)) return { targetMenuId: '', tagIds: [] }
+
+  const payload = data.slice(SWITCH_MENU_PREFIX.length).trim()
+  if (!payload) return { targetMenuId: '', tagIds: [] }
+
+  const [targetPart, ...rest] = payload.split('&')
+  let targetMenuId = ''
+  try {
+    targetMenuId = decodeURIComponent(targetPart || '').trim()
+  }
+  catch {
+    targetMenuId = String(targetPart || '').trim()
+  }
+  if (!targetMenuId) return { targetMenuId: '', tagIds: [] }
+
+  const params = new URLSearchParams(rest.join('&'))
+  const rawTags = params.get(SWITCH_MENU_TAGS_KEY) || ''
+  const tagIds = rawTags
+    .split(',')
+    .map((item) => {
+      try {
+        return decodeURIComponent(item).trim()
+      }
+      catch {
+        return String(item || '').trim()
+      }
+    })
+    .filter(Boolean)
+
+  return { targetMenuId, tagIds }
+}
+
+export function encodeTriggerMessage(text: string, tagIds: string[] = []): string {
+  const payload = {
+    text: String(text || '').slice(0, 300),
+    tagIds: Array.isArray(tagIds)
+      ? tagIds.map((item) => String(item || '').trim()).filter(Boolean)
+      : [],
+  }
+  const body = encodeURIComponent(JSON.stringify(payload))
+  return `${TRIGGER_MESSAGE_PREFIX}${body}`
+}
+
+export function parseTriggerMessageData(data: string): { text: string; tagIds: string[] } {
+  if (typeof data !== 'string' || !data.startsWith(TRIGGER_MESSAGE_PREFIX)) {
+    return { text: '', tagIds: [] }
+  }
+  const encoded = data.slice(TRIGGER_MESSAGE_PREFIX.length).trim()
+  if (!encoded) return { text: '', tagIds: [] }
+
+  try {
+    const raw = JSON.parse(decodeURIComponent(encoded)) as {
+      text?: unknown
+      tagIds?: unknown
+    }
+    return {
+      text: String(raw?.text || '').slice(0, 300),
+      tagIds: Array.isArray(raw?.tagIds)
+        ? raw.tagIds.map((item) => String(item || '').trim()).filter(Boolean)
+        : [],
+    }
+  }
+  catch {
+    return { text: '', tagIds: [] }
+  }
 }
 
 export function normalizeUnifiedAction(input: any, fallbackSlot = 'A'): UnifiedAction {
@@ -33,6 +181,7 @@ export function normalizeUnifiedAction(input: any, fallbackSlot = 'A'): UnifiedA
     uri: String(input?.uri || ''),
     text: String(input?.text || ''),
     moduleId: String(input?.moduleId || ''),
+    tagging: normalizeActionTagging(input?.tagging),
   }
 }
 
@@ -45,5 +194,8 @@ export function validateUnifiedAction(action: UnifiedAction): string | null {
   if (action.type === 'uri' && !action.uri.trim()) return '請輸入網址'
   if (action.type === 'message' && !action.text.trim()) return '請輸入傳送文字'
   if (action.type === 'module' && !action.moduleId.trim()) return '請選擇觸發模組'
+  if (action.tagging.enabled && action.tagging.addTagIds.length === 0) {
+    return '已啟用貼標，請至少選擇一個標籤'
+  }
   return null
 }

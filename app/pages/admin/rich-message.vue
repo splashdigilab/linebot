@@ -125,6 +125,8 @@
                 <AdminAreaActionEditor
                   :model-value="area"
                   :module-options="flows"
+                  :tag-options="allTags"
+                  :enable-tagging="true"
                   :error-message="actionError(area) || ''"
                   @update:model-value="(next) => Object.assign(area, next)"
                 />
@@ -181,6 +183,7 @@ const areaColors = [
 
 const items = ref<any[]>([])
 const flows = ref<any[]>([])
+const { tags: allTags, loadTags } = useAdminTagList()
 const loading = ref(true)
 const saving = ref(false)
 const selectedId = ref<string | null>(null)
@@ -273,6 +276,10 @@ function normalizeItem(item: any) {
         uri: btn?.uri || '',
         text: btn?.text || '',
         moduleId: btn?.moduleId || '',
+        tagging: {
+          enabled: btn?.tagging?.enabled === true,
+          addTagIds: Array.isArray(btn?.tagging?.addTagIds) ? btn.tagging.addTagIds : [],
+        },
       }))
     : []
   const sourceActions = Array.isArray(item?.actions) && item.actions.length > 0 ? item.actions : legacyActions
@@ -291,12 +298,14 @@ function normalizeItem(item: any) {
 
 async function loadItems() {
   loading.value = true
-  const [richMessages, flowList] = await Promise.all([
+  const [richMessages, flowList, tagOk] = await Promise.all([
     $fetch<any[]>('/api/rich-message/list').catch(() => []),
     $fetch<any[]>('/api/flow/list').catch(() => []),
+    loadTags({ status: 'active' }),
   ])
   items.value = (richMessages ?? []).map(normalizeItem)
   flows.value = flowList ?? []
+  if (!tagOk) showToast('載入標籤失敗', 'error')
   loading.value = false
   if (!selectedId.value && originalFormString.value === '') {
     syncOriginalFormState()
@@ -387,6 +396,10 @@ function actionError(action: RichMessageAction) {
     uri: action.uri,
     text: action.text,
     moduleId: action.moduleId,
+    tagging: {
+      enabled: action?.tagging?.enabled === true,
+      addTagIds: Array.isArray(action?.tagging?.addTagIds) ? action.tagging.addTagIds : [],
+    },
   })
 }
 

@@ -8,6 +8,12 @@ export interface AutoReplyAction {
   uri: string
 }
 
+export interface AutoReplyTagging {
+  enabled: boolean
+  /** 命中此規則時要加上的標籤 IDs */
+  addTagIds: string[]
+}
+
 export interface AutoReplyRuleShape {
   id?: string
   name: string
@@ -15,6 +21,7 @@ export interface AutoReplyRuleShape {
   matchType: AutoReplyMatchType
   action: AutoReplyAction
   isActive: boolean
+  tagging: AutoReplyTagging
 }
 
 const AUTO_REPLY_MATCH_TYPES: AutoReplyMatchType[] = ['containsAny', 'containsAll', 'exact', 'anyText']
@@ -47,6 +54,13 @@ export function normalizeAutoReplyAction(
   }
 }
 
+export function normalizeAutoReplyTagging(raw: any): AutoReplyTagging {
+  return {
+    enabled: raw?.enabled === true,
+    addTagIds: Array.isArray(raw?.addTagIds) ? raw.addTagIds.map(String).filter(Boolean) : [],
+  }
+}
+
 export function normalizeAutoReplyRule(rawRule: any): AutoReplyRuleShape {
   const matchType = normalizeMatchType(rawRule?.matchType)
   return {
@@ -56,6 +70,7 @@ export function normalizeAutoReplyRule(rawRule: any): AutoReplyRuleShape {
     matchType,
     action: normalizeAutoReplyAction(rawRule?.action, String(rawRule?.moduleId ?? '')),
     isActive: rawRule?.isActive !== false,
+    tagging: normalizeAutoReplyTagging(rawRule?.tagging),
   }
 }
 
