@@ -1,13 +1,13 @@
 import { verifyImagemapImageToken } from '../../../utils/line-imagemap-image-token'
 import { respondImagemapImage } from '../../../utils/line-imagemap-image-response'
+import { getLineWorkspaceCredentials } from '../../../utils/line-workspace-credentials'
 
 /**
  * LINE Imagemap 標準路由：/api/line-imagemap-img/{token}/{size}
  * 例如 /.../abc123/1040，驗簽後 302 轉址到實際 PNG/JPG。
  */
 export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig(event)
-  const secret = config.lineChannelSecret
+  const { channelSecret: secret } = await getLineWorkspaceCredentials()
   if (!secret) {
     throw createError({ statusCode: 503, statusMessage: 'Missing LINE channel secret' })
   }

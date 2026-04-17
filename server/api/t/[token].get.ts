@@ -1,5 +1,6 @@
 import { verifyUriTagToken } from '~~/server/utils/line-action-tag-token'
 import { addTagsToUser } from '~~/server/utils/tagging'
+import { getLineWorkspaceCredentials } from '~~/server/utils/line-workspace-credentials'
 
 /**
  * GET /api/t/:token
@@ -9,13 +10,7 @@ export default defineEventHandler(async (event) => {
   const token = String(getRouterParam(event, 'token') || '')
   if (!token) return sendRedirect(event, '/', 302)
 
-  let secret = ''
-  try {
-    secret = String(useRuntimeConfig().lineChannelSecret || '')
-  }
-  catch {
-    secret = String(process.env.LINE_CHANNEL_SECRET || '')
-  }
+  const { channelSecret: secret } = await getLineWorkspaceCredentials()
   const parsed = verifyUriTagToken(token, secret)
   if (!parsed) return sendRedirect(event, '/', 302)
 

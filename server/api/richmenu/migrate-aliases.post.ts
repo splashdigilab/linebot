@@ -1,10 +1,11 @@
+import { getLineWorkspaceCredentials } from '~~/server/utils/line-workspace-credentials'
+
 /**
  * POST /api/richmenu/migrate-aliases
  * Uses raw fetch (not SDK) to expose LINE's actual error body.
  */
 export default defineEventHandler(async () => {
-  const config = useRuntimeConfig()
-  const token = config.lineChannelAccessToken
+  const { channelAccessToken: token } = await getLineWorkspaceCredentials()
 
   const db = getDb()
   const snap = await db.collection('richmenus').get()

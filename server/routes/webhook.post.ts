@@ -1,4 +1,4 @@
-import { verifySignature } from '../utils/line'
+import { verifyLineWebhookSignature } from '../utils/line'
 import { handleMessageEvent, handlePostbackEvent, handleFollowEvent, handleUnfollowEvent } from '../utils/handler'
 import type { webhook } from '@line/bot-sdk'
 
@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
   const signature = getHeader(event, 'x-line-signature') ?? ''
   const requestOrigin = resolveRequestOrigin(event)
 
-  if (!body || !verifySignature(body, signature)) {
+  if (!body || !await verifyLineWebhookSignature(body, signature)) {
     throw createError({ statusCode: 401, statusMessage: 'Invalid signature' })
   }
 

@@ -2,6 +2,7 @@ import type { webhook } from '@line/bot-sdk'
 import type { messagingApi } from '@line/bot-sdk'
 import { getDb } from './firebase'
 import { replyMessage, pushMessage, getUserProfile, linkRichMenuIdToUser } from './line'
+import { getLineWorkspaceCredentials } from './line-workspace-credentials'
 import { FieldValue } from 'firebase-admin/firestore'
 import {
   encodeTriggerMessage,
@@ -130,6 +131,7 @@ export async function handleFollowEvent(userId: string): Promise<void> {
 async function applyPendingClaims(userId: string): Promise<void> {
   const db = getDb()
   const now = new Date()
+  const { channelSecret } = await getLineWorkspaceCredentials()
 
   const snap = await db.collection('leadClaims')
     .where('lineUserId', '==', userId)
@@ -163,7 +165,7 @@ async function applyPendingClaims(userId: string): Promise<void> {
         const flow = await getFlowByModuleId(claim.moduleId)
         if (flow) {
           const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-          const lineMessages = buildLineMessages(hydratedMessages, {}, '', userId)
+          const lineMessages = buildLineMessages(hydratedMessages, {}, '', userId, channelSecret)
           if (lineMessages.length > 0) {
             await pushMessage(userId, lineMessages)
             await dispatchPostReplyActions(userId, flow.messages)
@@ -405,20 +407,12 @@ function extractTagIdsFromAction(action: any): string[] {
     .filter(Boolean)
 }
 
-function resolveLineChannelSecret(): string {
-  try {
-    return String(useRuntimeConfig().lineChannelSecret || '')
-  }
-  catch {
-    return String(process.env.LINE_CHANNEL_SECRET || '')
-  }
-}
-
 function resolveUriWithTagging(input: {
   uri: string
   action: any
   userId: string
   publicBaseOverride?: string
+  channelSecret: string
 }): string {
   const original = String(input.uri || '').trim()
   if (!original) return original
@@ -427,7 +421,7 @@ function resolveUriWithTagging(input: {
   if (!input.userId) return original
   if (!/^https?:\/\//i.test(original)) return original
 
-  const secret = resolveLineChannelSecret()
+  const secret = String(input.channelSecret || '').trim()
   if (!secret) return original
   const publicBase = resolveLineImagemapPublicBase(input.publicBaseOverride || '')
   if (!publicBase) return original
@@ -463,19 +457,14 @@ function buildRichMessageLineMessage(input: {
   transparentBackground: boolean
   publicBaseOverride?: string
   userId: string
+  channelSecret: string
 }): messagingApi.Message {
   const layoutId = resolveRichMessageLayoutId(input.layoutId)
   const normalized = normalizeRichMessageActions(layoutId, input.actions)
   const hasModule = normalized.some((a: any) => a?.type === 'module')
   const hasTaggedMessage = normalized.some((a: any) => a?.type === 'message' && extractTagIdsFromAction(a).length > 0)
   const publicBase = resolveLineImagemapPublicBase(input.publicBaseOverride || '')
-  let channelSecret = ''
-  try {
-    channelSecret = String(useRuntimeConfig().lineChannelSecret || '')
-  }
-  catch {
-    channelSecret = String(process.env.LINE_CHANNEL_SECRET || '')
-  }
+  const channelSecret = String(input.channelSecret || '').trim()
 
   const tryImagemap =
     Boolean(input.transparentBackground)
@@ -505,6 +494,7 @@ function buildRichMessageLineMessage(input: {
                 action: a,
                 userId: input.userId,
                 publicBaseOverride: input.publicBaseOverride,
+                channelSecret: input.channelSecret,
               }),
               area,
             }
@@ -538,6 +528,7 @@ function buildRichMessageLineMessage(input: {
     transparentBackground: input.transparentBackground,
     userId: input.userId,
     publicBaseOverride: input.publicBaseOverride,
+    channelSecret: input.channelSecret,
   })
 }
 
@@ -551,6 +542,7 @@ function buildRichMessageFlexMessage(input: {
   transparentBackground?: boolean
   userId: string
   publicBaseOverride?: string
+  channelSecret: string
 }): messagingApi.FlexMessage {
   const layoutId = resolveRichMessageLayoutId(input.layoutId)
   const normalized = normalizeRichMessageActions(layoutId, input.actions)
@@ -574,6 +566,7 @@ function buildRichMessageFlexMessage(input: {
             action,
             userId: input.userId,
             publicBaseOverride: input.publicBaseOverride,
+            channelSecret: input.channelSecret,
           }),
         }
       }
@@ -665,6 +658,7 @@ function buildLineMessages(
   attributes: Record<string, string> = {},
   publicBaseOverride = '',
   userId = '',
+  lineChannelSecret: string,
 ): messagingApi.Message[] {
   if (!dbMessages) return []
   return dbMessages.flatMap((msg) => {
@@ -687,6 +681,7 @@ function buildLineMessages(
                   action: b,
                   userId,
                   publicBaseOverride,
+                  channelSecret: lineChannelSecret,
                 }),
               }
             }
@@ -744,6 +739,7 @@ function buildLineMessages(
               action,
               userId,
               publicBaseOverride,
+              channelSecret: lineChannelSecret,
             }),
           }
         }
@@ -816,6 +812,7 @@ function buildLineMessages(
                 action: col.action,
                 userId,
                 publicBaseOverride,
+                channelSecret: lineChannelSecret,
               }),
             }
           } else if (actionType === 'module') {
@@ -873,6 +870,7 @@ function buildLineMessages(
           transparentBackground: Boolean(msg.transparentBackground),
           publicBaseOverride,
           userId,
+          channelSecret: lineChannelSecret,
         }),
       ]
     }
@@ -907,6 +905,7 @@ function buildLineMessages(
           transparentBackground: Boolean(payload.transparentBackground),
           publicBaseOverride,
           userId,
+          channelSecret: lineChannelSecret,
         }),
       ]
     }
@@ -925,6 +924,7 @@ function buildLineMessages(
               action: qr.action,
               userId,
               publicBaseOverride,
+              channelSecret: lineChannelSecret,
             })
           }
         } else if (actionType === 'module') {
@@ -1017,6 +1017,7 @@ async function handleIncomingText(
 ): Promise<void> {
   const userData = userDataOverride ?? await ensureUser(userId)
   const userAttributes = buildAttributeContext(userData)
+  const { channelSecret } = await getLineWorkspaceCredentials()
   let handledByInput = false
 
   if (userData && userData.activeInput && userData.activeInput.expiresAt > Date.now()) {
@@ -1039,7 +1040,7 @@ async function handleIncomingText(
       const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
       await replyMessage(
         replyToken,
-        buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId),
+        buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId, channelSecret),
       )
       await dispatchPostReplyActions(userId, flow.messages)
       handledByInput = true
@@ -1067,7 +1068,7 @@ async function handleIncomingText(
             const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
             await replyMessage(
               replyToken,
-              buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId),
+              buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId, channelSecret),
             )
             await dispatchPostReplyActions(userId, flow.messages)
           } else {
@@ -1096,6 +1097,8 @@ export async function handlePostbackEvent(
   console.log('[handlePostbackEvent] event received:', JSON.stringify(event).slice(0, 300))
   const userId = event.source?.userId
   if (!userId) return
+
+  const { channelSecret } = await getLineWorkspaceCredentials()
 
   // Fetch user synchronously if needed, but for postback usually background is fine unless updating state
   const userDataTask = ensureUser(userId).catch(e => {
@@ -1192,7 +1195,7 @@ export async function handlePostbackEvent(
         const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
         await replyMessage(
           event.replyToken,
-          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId),
+          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId, channelSecret),
         )
         await dispatchPostReplyActions(userId, flow.messages)
       }
@@ -1213,7 +1216,7 @@ export async function handlePostbackEvent(
         const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
         await replyMessage(
           event.replyToken,
-          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId),
+          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId, channelSecret),
         )
         await dispatchPostReplyActions(userId, flow.messages)
       }

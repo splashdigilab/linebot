@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { createHash } from 'node:crypto'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { LeadClaimDoc } from '~~/shared/types/lead-campaign'
+import { getLineWorkspaceCredentials } from '~~/server/utils/line-workspace-credentials'
 
 const CLAIM_TTL_MS = 72 * 60 * 60 * 1000 // 72 小時
 
@@ -13,7 +14,14 @@ export default defineEventHandler(async (event) => {
   if (!snap.exists) throw createError({ statusCode: 404, statusMessage: 'Campaign not found' })
 
   const campaign = snap.data()!
-  if (!campaign.liffId) throw createError({ statusCode: 400, statusMessage: 'Campaign 未設定 LIFF ID' })
+  const { defaultLiffId: workspaceDefaultLiff } = await getLineWorkspaceCredentials()
+  const liffId = String(campaign.liffId || '').trim() || String(workspaceDefaultLiff || '').trim()
+  if (!liffId) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: 'Campaign 未設定 LIFF ID，且 workspaces/default 或 LIFF_DEFAULT_ID 亦無預設值',
+    })
+  }
   if (!campaign.isActive) throw createError({ statusCode: 400, statusMessage: 'Campaign 已停用' })
 
   const rawToken = uuidv4()
@@ -37,6 +45,6 @@ export default defineEventHandler(async (event) => {
 
   await db.collection('leadClaims').doc(claimId).set(claimDoc)
 
-  const ctaUrl = `https://liff.line.me/${campaign.liffId}?ct=${rawToken}&c=${encodeURIComponent(campaign.campaignCode)}`
+  const ctaUrl = `https://liff.line.me/${liffId}?ct=${rawToken}&c=${encodeURIComponent(campaign.campaignCode)}`
   return { ctaUrl, claimId, expiresAt: expiresAt.toISOString() }
 })

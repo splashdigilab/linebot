@@ -1,6 +1,7 @@
 import * as line from '@line/bot-sdk'
 import { HTTPFetchError } from '@line/bot-sdk'
 import { createHmac, timingSafeEqual } from 'crypto'
+import { getLineWorkspaceCredentials } from './line-workspace-credentials'
 
 function lineMulticastErrorDetail(err: unknown): string {
   if (err instanceof HTTPFetchError && err.body) return `${err.message} | ${err.body}`
@@ -8,45 +9,36 @@ function lineMulticastErrorDetail(err: unknown): string {
   return String(err)
 }
 
-let _client: line.messagingApi.MessagingApiClient
-let _blobClient: line.messagingApi.MessagingApiBlobClient
-let _insightClient: line.insight.InsightClient | null = null
-
-function getClient() {
-  if (!_client) {
-    const config = useRuntimeConfig()
-    _client = new line.messagingApi.MessagingApiClient({
-      channelAccessToken: config.lineChannelAccessToken,
-    })
-  }
-  return _client
+type MessagingBundle = {
+  token: string
+  client: line.messagingApi.MessagingApiClient
+  blob: line.messagingApi.MessagingApiBlobClient
 }
 
-function getBlobClient() {
-  if (!_blobClient) {
-    const config = useRuntimeConfig()
-    _blobClient = new line.messagingApi.MessagingApiBlobClient({
-      channelAccessToken: config.lineChannelAccessToken,
-    })
+let _messaging: MessagingBundle | null = null
+let _insight: { token: string; client: line.insight.InsightClient } | null = null
+
+async function getMessagingBundle(): Promise<MessagingBundle> {
+  const { channelAccessToken } = await getLineWorkspaceCredentials()
+  const token = String(channelAccessToken || '').trim()
+  if (!token) throw new Error('LINE channel access token is not set (Firestore workspaces/default or LINE_CHANNEL_ACCESS_TOKEN)')
+
+  if (!_messaging || _messaging.token !== token) {
+    _messaging = {
+      token,
+      client: new line.messagingApi.MessagingApiClient({ channelAccessToken: token }),
+      blob: new line.messagingApi.MessagingApiBlobClient({ channelAccessToken: token }),
+    }
   }
-  return _blobClient
+  return _messaging
 }
 
-/** LINE Insight（開封／官方互動統計） */
-export function getInsightClient(): line.insight.InsightClient {
-  if (!_insightClient) {
-    const config = useRuntimeConfig()
-    _insightClient = new line.insight.InsightClient({
-      channelAccessToken: config.lineChannelAccessToken,
-    })
-  }
-  return _insightClient
-}
-
-/** Verify x-line-signature header */
-export function verifySignature(body: string, signature: string): boolean {
-  const config = useRuntimeConfig()
-  const expected = createHmac('sha256', config.lineChannelSecret)
+/** Verify x-line-signature（憑證來自 Firestore 或 env） */
+export async function verifyLineWebhookSignature(body: string, signature: string): Promise<boolean> {
+  const { channelSecret } = await getLineWorkspaceCredentials()
+  const secret = String(channelSecret || '').trim()
+  if (!secret) return false
+  const expected = createHmac('sha256', secret)
     .update(body)
     .digest('base64')
   try {
@@ -57,22 +49,40 @@ export function verifySignature(body: string, signature: string): boolean {
   }
 }
 
+/** LINE Insight（開封／官方互動統計） */
+export async function getInsightClient(): Promise<line.insight.InsightClient> {
+  const { channelAccessToken } = await getLineWorkspaceCredentials()
+  const token = String(channelAccessToken || '').trim()
+  if (!token) throw new Error('LINE channel access token is not set')
+
+  if (!_insight || _insight.token !== token) {
+    _insight = {
+      token,
+      client: new line.insight.InsightClient({ channelAccessToken: token }),
+    }
+  }
+  return _insight.client
+}
+
 /** Reply to a LINE event's replyToken */
 export async function replyMessage(
   replyToken: string,
   messages: line.messagingApi.Message[],
 ) {
-  return getClient().replyMessage({ replyToken, messages })
+  const { client } = await getMessagingBundle()
+  return client.replyMessage({ replyToken, messages })
 }
 
 /** Push a message to a LINE userId */
 export async function pushMessage(userId: string, messages: line.messagingApi.Message[]) {
-  return getClient().pushMessage({ to: userId, messages })
+  const { client } = await getMessagingBundle()
+  return client.pushMessage({ to: userId, messages })
 }
 
 /** Create a Rich Menu and return its richMenuId */
 export async function createRichMenu(richMenu: line.messagingApi.RichMenuRequest) {
-  const res = await getClient().createRichMenu(richMenu)
+  const { client } = await getMessagingBundle()
+  const res = await client.createRichMenu(richMenu)
   return res.richMenuId
 }
 
@@ -82,17 +92,20 @@ export async function uploadRichMenuImage(
   imageBuffer: Buffer,
   contentType: 'image/jpeg' | 'image/png',
 ) {
-  return getBlobClient().setRichMenuImage(richMenuId, new Blob([imageBuffer], { type: contentType }))
+  const { blob } = await getMessagingBundle()
+  return blob.setRichMenuImage(richMenuId, new Blob([imageBuffer], { type: contentType }))
 }
 
 /** Set the default Rich Menu for all users */
 export async function setDefaultRichMenu(richMenuId: string) {
-  return getClient().setDefaultRichMenu(richMenuId)
+  const { client } = await getMessagingBundle()
+  return client.setDefaultRichMenu(richMenuId)
 }
 
 /** Delete a Rich Menu from LINE */
 export async function deleteLineRichMenu(richMenuId: string) {
-  return getClient().deleteRichMenu(richMenuId)
+  const { client } = await getMessagingBundle()
+  return client.deleteRichMenu(richMenuId)
 }
 
 export type MulticastOptions = {
@@ -109,6 +122,7 @@ export async function multicastMessage(
   messages: line.messagingApi.Message[],
   options?: MulticastOptions,
 ): Promise<{ successCount: number; failedIds: string[]; lineAggregationApplied: boolean }> {
+  const { client } = await getMessagingBundle()
   const BATCH_SIZE = 500
   let successCount = 0
   const failedIds: string[] = []
@@ -122,7 +136,7 @@ export async function multicastMessage(
     const batch = userIds.slice(i, i + BATCH_SIZE)
     const sendWithUnits = Boolean(units?.length && lineAggregationApplied)
     try {
-      await getClient().multicast(
+      await client.multicast(
         sendWithUnits
           ? { to: batch, messages, customAggregationUnits: units! }
           : { to: batch, messages },
@@ -137,7 +151,7 @@ export async function multicastMessage(
         )
         lineAggregationApplied = false
         try {
-          await getClient().multicast({ to: batch, messages })
+          await client.multicast({ to: batch, messages })
           successCount += batch.length
         }
         catch (err2) {
@@ -171,8 +185,8 @@ export async function fetchAllFollowerUserIds(options?: {
   /** 最多收集幾個 userId（避免極大帳號一次佔滿記憶體） */
   maxIds?: number
 }): Promise<{ userIds: string[]; truncated: boolean }> {
-  const config = useRuntimeConfig()
-  const token = String(config.lineChannelAccessToken || '').trim()
+  const { channelAccessToken } = await getLineWorkspaceCredentials()
+  const token = String(channelAccessToken || '').trim()
   if (!token) throw new Error('LINE_CHANNEL_ACCESS_TOKEN is not set')
 
   const maxIds = Math.min(Math.max(1, options?.maxIds ?? 80_000), 100_000)
@@ -218,7 +232,8 @@ export async function fetchAllFollowerUserIds(options?: {
 /** Get user profile */
 export async function getUserProfile(userId: string) {
   try {
-    return await getClient().getProfile(userId)
+    const { client } = await getMessagingBundle()
+    return await client.getProfile(userId)
   }
   catch {
     return null
@@ -227,18 +242,21 @@ export async function getUserProfile(userId: string) {
 
 /** Link a specific Rich Menu to a User */
 export async function linkRichMenuIdToUser(userId: string, richMenuId: string) {
-  return getClient().linkRichMenuIdToUser(userId, richMenuId)
+  const { client } = await getMessagingBundle()
+  return client.linkRichMenuIdToUser(userId, richMenuId)
 }
 
 /** Create a Rich Menu Alias (for instant richmenuswitch) */
 export async function createRichMenuAlias(richMenuId: string, richMenuAliasId: string) {
-  return getClient().createRichMenuAlias({ richMenuId, richMenuAliasId })
+  const { client } = await getMessagingBundle()
+  return client.createRichMenuAlias({ richMenuId, richMenuAliasId })
 }
 
 /** Delete a Rich Menu Alias */
 export async function deleteRichMenuAlias(richMenuAliasId: string) {
+  const { client } = await getMessagingBundle()
   try {
-    return await getClient().deleteRichMenuAlias(richMenuAliasId)
+    return await client.deleteRichMenuAlias(richMenuAliasId)
   } catch {
     // Ignore if alias doesn't exist
   }
@@ -253,7 +271,6 @@ export async function updateRichMenuAlias(richMenuId: string, richMenuAliasId: s
 
 /** Get Rich Menu Alias details from LINE */
 export async function getRichMenuAlias(richMenuAliasId: string) {
-  return getClient().getRichMenuAlias(richMenuAliasId)
+  const { client } = await getMessagingBundle()
+  return client.getRichMenuAlias(richMenuAliasId)
 }
-
-
