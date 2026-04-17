@@ -1041,8 +1041,13 @@ async function handleIncomingText(
         buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId),
       )
       await dispatchPostReplyActions(userId, flow.messages)
+      handledByInput = true
+    } else {
+      console.warn(
+        '[autoReply] activeInput flow missing/inactive, fallback to regular auto-reply:',
+        moduleId,
+      )
     }
-    handledByInput = true
   }
 
   if (!handledByInput) {
@@ -1064,6 +1069,12 @@ async function handleIncomingText(
               buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId),
             )
             await dispatchPostReplyActions(userId, flow.messages)
+          } else {
+            console.warn(
+              '[autoReply] matched rule module missing/inactive:',
+              rule.id ?? '(no-rule-id)',
+              rule.action.moduleId,
+            )
           }
         }
         else {
