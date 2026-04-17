@@ -22,6 +22,8 @@
   align-items: flex-end;
   flex-wrap: wrap;
   gap: var(--space-form-field-gap);
+  flex: 0 0 auto;
+  align-self: flex-start;
 }
 
 .users-toolbar__field {
