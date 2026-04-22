@@ -61,6 +61,7 @@ const navItems = [
   { to: '/admin/tags', icon: '🏷️', label: '標籤管理' },
   { to: '/admin/campaigns', icon: '📋', label: '活動貼標' },
   { to: '/admin/users', icon: '👥', label: '會員' },
+  { to: '/admin/conversations', icon: '💬', label: '對話' },
   { to: '/admin/broadcasts', icon: '📣', label: '推播' },
 ]
 </script>

@@ -95,10 +95,12 @@
           </div>
           <div class="card-section-stack">
             <p class="ar-section-hint">
-              設定此活動對應的 LIFF ID 與識別代碼。填完問券後的 CTA 連結將帶入這些設定，使用者進入後系統完成身份綁定。
+              活動代碼用於識別此問券；LIFF 可留空，產生 CTA 時會使用「LINE 連線」的預設 LIFF（或環境變數）。填完問券後的連結會帶入這些設定，使用者進入後完成身份綁定。
             </p>
             <div class="admin-field-group">
-              <AdminFieldLabel text="LIFF ID" tight />
+              <AdminFieldLabel tight>
+                LIFF ID <span class="text-muted">（選填；留空則用 LINE 連線預設）</span>
+              </AdminFieldLabel>
               <el-input
                 v-model="form.liffId"
                 placeholder="例：2007123456-AbCdEfGh"
@@ -285,6 +287,10 @@ const ctaUrl = ref('')
 const ctaExpiresAt = ref('')
 const stats = ref<any>(null)
 const statsLoading = ref(false)
+/** 產 CTA 時實際 fallback 的預設 LIFF（含 Firestore、LIFF_DEFAULT_ID） */
+const effectiveDefaultLiffId = ref('')
+
+const { $auth } = useNuxtApp()
 
 const defaultForm = () => ({
   name: '',
@@ -312,10 +318,26 @@ async function loadModules() {
   modulesLoading.value = false
 }
 
+async function loadWorkspaceEffectiveLiff() {
+  try {
+    const u = $auth.currentUser
+    if (!u) return
+    const token = await u.getIdToken()
+    const data = await $fetch<{ effectiveDefaultLiffId?: string }>('/api/admin/line-workspace', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    effectiveDefaultLiffId.value = String(data?.effectiveDefaultLiffId ?? '').trim()
+  }
+  catch {
+    effectiveDefaultLiffId.value = ''
+  }
+}
+
 onMounted(() => {
   loadCampaigns()
   loadModules()
   loadTags({ status: 'active' })
+  loadWorkspaceEffectiveLiff()
 })
 
 // ── Select / Create ───────────────────────────────────────
@@ -362,7 +384,9 @@ function cancelEdit() {
 async function submitForm() {
   if (!form.value.name.trim()) return showToast('請輸入活動名稱', 'error')
   if (!form.value.campaignCode.trim()) return showToast('請輸入活動代碼', 'error')
-  if (!form.value.liffId.trim()) return showToast('請輸入 LIFF ID', 'error')
+  if (!form.value.liffId.trim() && !effectiveDefaultLiffId.value.trim()) {
+    return showToast('請填寫活動 LIFF，或在「LINE 連線」設定預設 LIFF', 'error')
+  }
   if (!form.value.tagIds.length) return showToast('請至少選擇一個標籤', 'error')
 
   saving.value = true

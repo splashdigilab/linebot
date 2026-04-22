@@ -998,14 +998,34 @@ export async function handleMessageEvent(
   const userId = event.source?.userId
   if (!userId) return
 
-  // Auto reply: match keyword flows
   if (event.message.type === 'text') {
     const textContent = (event.message as webhook.TextMessageContent).text
+    saveConversationMessage(userId, 'incoming', textContent).catch(e => console.error('[conv] save error:', e))
     await handleIncomingText(userId, textContent, event.replyToken, options)
   } else {
-    // For non-text events, just ensure the user exists asynchronously if we want to log it
+    const typeLabel = event.message.type === 'image' ? '[圖片]'
+      : event.message.type === 'video' ? '[影片]'
+      : event.message.type === 'audio' ? '[語音]'
+      : event.message.type === 'sticker' ? '[貼圖]'
+      : `[${event.message.type}]`
+    saveConversationMessage(userId, 'incoming', typeLabel).catch(e => console.error('[conv] save error:', e))
     ensureUser(userId).catch(e => console.error('[ensureUser] Error:', e))
   }
+}
+
+export async function saveConversationMessage(
+  userId: string,
+  direction: 'incoming' | 'outgoing',
+  text: string,
+): Promise<void> {
+  const db = getDb()
+  const now = FieldValue.serverTimestamp()
+  const msgRef = db.collection('conversations').doc(userId).collection('messages').doc()
+  await msgRef.set({ direction, text, timestamp: now })
+  await db.collection('conversations').doc(userId).set(
+    { lastMessage: text, lastDirection: direction, lastMessageAt: now },
+    { merge: true },
+  )
 }
 
 async function handleIncomingText(

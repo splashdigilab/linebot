@@ -1,5 +1,6 @@
 import { getDb } from '~~/server/utils/firebase'
 import { requireFirebaseAuth } from '~~/server/utils/admin-auth'
+import { getLineWorkspaceCredentials } from '~~/server/utils/line-workspace-credentials'
 import type { LineWorkspaceDoc } from '~~/shared/line-workspace'
 import { DEFAULT_LINE_WORKSPACE_ID } from '~~/shared/line-workspace'
 
@@ -26,11 +27,15 @@ export default defineEventHandler(async (event) => {
   const access = secretSuffix(saved?.channelAccessToken)
   const secret = secretSuffix(saved?.channelSecret)
 
+  const creds = await getLineWorkspaceCredentials()
+
   return {
     id: DEFAULT_LINE_WORKSPACE_ID,
     savedInFirestore: snap.exists,
     name: String(saved?.name ?? '').trim() || 'default',
     defaultLiffId: String(saved?.defaultLiffId ?? '').trim(),
+    /** 實際用於 CTA fallback（含 Firestore、LIFF_DEFAULT_ID 等） */
+    effectiveDefaultLiffId: String(creds.defaultLiffId ?? '').trim(),
     channelAccessTokenConfigured: access.configured,
     channelAccessTokenSuffix: access.suffix,
     channelSecretConfigured: secret.configured,

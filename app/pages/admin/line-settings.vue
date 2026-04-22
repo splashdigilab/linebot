@@ -104,6 +104,8 @@ type WorkspaceGet = {
   savedInFirestore: boolean
   name: string
   defaultLiffId: string
+  /** 實際 CTA fallback（含 env） */
+  effectiveDefaultLiffId?: string
   channelAccessTokenConfigured: boolean
   channelAccessTokenSuffix: string | null
   channelSecretConfigured: boolean
