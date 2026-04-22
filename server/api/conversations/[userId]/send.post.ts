@@ -15,7 +15,10 @@ export default defineEventHandler(async (event) => {
   if (!userSnap.exists) throw createError({ statusCode: 404, statusMessage: '找不到此使用者' })
 
   await pushMessage(userId, [{ type: 'text', text }])
-  await saveConversationMessage(userId, 'outgoing', text)
+  await saveConversationMessage(userId, 'outgoing', text, {
+    messageType: 'text',
+    payload: { type: 'text', text },
+  })
 
   return { ok: true }
 })

@@ -91,8 +91,31 @@ async function saveOutgoingConversationMessages(userId: string, messages: messag
   for (const msg of messages) {
     const text = toConversationText(msg)
     if (!text) continue
-    await saveConversationMessage(userId, 'outgoing', text)
+    await saveConversationMessage(userId, 'outgoing', text, {
+      messageType: String((msg as any)?.type || 'message'),
+      payload: msg,
+    })
   }
+}
+
+function sanitizeForFirestore(value: any): any {
+  if (value === null) return null
+  if (value === undefined) return undefined
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return value
+  if (Array.isArray(value)) {
+    return value
+      .map(item => sanitizeForFirestore(item))
+      .filter(item => item !== undefined)
+  }
+  if (typeof value === 'object') {
+    const result: Record<string, any> = {}
+    for (const [key, raw] of Object.entries(value)) {
+      const parsed = sanitizeForFirestore(raw)
+      if (parsed !== undefined) result[key] = parsed
+    }
+    return result
+  }
+  return undefined
 }
 
 function renderWithAttributes(value: string, attributes: Record<string, string>): string {
@@ -1024,7 +1047,10 @@ export async function handleMessageEvent(
 
   if (event.message.type === 'text') {
     const textContent = (event.message as webhook.TextMessageContent).text
-    saveConversationMessage(userId, 'incoming', textContent).catch(e => console.error('[conv] save error:', e))
+    saveConversationMessage(userId, 'incoming', textContent, {
+      messageType: 'text',
+      payload: { type: 'text', text: textContent },
+    }).catch(e => console.error('[conv] save error:', e))
     await handleIncomingText(userId, textContent, event.replyToken, options)
   } else {
     const typeLabel = event.message.type === 'image' ? '[圖片]'
@@ -1032,7 +1058,10 @@ export async function handleMessageEvent(
       : event.message.type === 'audio' ? '[語音]'
       : event.message.type === 'sticker' ? '[貼圖]'
       : `[${event.message.type}]`
-    saveConversationMessage(userId, 'incoming', typeLabel).catch(e => console.error('[conv] save error:', e))
+    saveConversationMessage(userId, 'incoming', typeLabel, {
+      messageType: event.message.type,
+      payload: event.message,
+    }).catch(e => console.error('[conv] save error:', e))
     ensureUser(userId).catch(e => console.error('[ensureUser] Error:', e))
   }
 }
@@ -1041,11 +1070,22 @@ export async function saveConversationMessage(
   userId: string,
   direction: 'incoming' | 'outgoing',
   text: string,
+  options?: {
+    messageType?: string
+    payload?: unknown
+  },
 ): Promise<void> {
   const db = getDb()
   const now = FieldValue.serverTimestamp()
   const msgRef = db.collection('conversations').doc(userId).collection('messages').doc()
-  await msgRef.set({ direction, text, timestamp: now })
+  const payload = sanitizeForFirestore(options?.payload)
+  await msgRef.set({
+    direction,
+    text,
+    timestamp: now,
+    messageType: options?.messageType || 'text',
+    ...(payload !== undefined ? { payload } : {}),
+  })
   await db.collection('conversations').doc(userId).set(
     { lastMessage: text, lastDirection: direction, lastMessageAt: now },
     { merge: true },

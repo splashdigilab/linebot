@@ -16,6 +16,8 @@ export default defineEventHandler(async (event) => {
     id: d.id,
     direction: d.data().direction as 'incoming' | 'outgoing',
     text: d.data().text as string,
+    messageType: (d.data().messageType as string | undefined) ?? 'text',
+    payload: d.data().payload ?? null,
     timestamp: d.data().timestamp ?? null,
   })).reverse()
 

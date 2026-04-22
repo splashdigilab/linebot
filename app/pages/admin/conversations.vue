@@ -72,7 +72,31 @@
           :class="msg.direction"
         >
           <div class="conv-bubble" :class="msg.direction">
-            <span class="conv-bubble-text">{{ msg.text }}</span>
+            <template v-if="getMessageType(msg) === 'text'">
+              <span class="conv-bubble-text">{{ getMessageDisplayText(msg) }}</span>
+            </template>
+            <template v-else-if="getMessageType(msg) === 'image'">
+              <el-image
+                v-if="getMessageImageUrl(msg)"
+                :src="getMessageImageUrl(msg)"
+                fit="cover"
+                :preview-src-list="[getMessageImageUrl(msg)]"
+                :preview-teleported="true"
+              />
+              <span class="conv-bubble-text">{{ getMessageDisplayText(msg) }}</span>
+            </template>
+            <template v-else-if="getMessageType(msg) === 'template' || getMessageType(msg) === 'flex'">
+              <el-tag size="small" type="info">
+                {{ getMessageType(msg) === 'flex' ? 'Flex' : 'Template' }}
+              </el-tag>
+              <span class="conv-bubble-text">{{ getMessageDisplayText(msg) }}</span>
+              <span v-if="getPayloadSummary(msg)" class="conv-bubble-text text-muted">{{ getPayloadSummary(msg) }}</span>
+            </template>
+            <template v-else>
+              <el-tag size="small" type="info">{{ getMessageType(msg) }}</el-tag>
+              <span class="conv-bubble-text">{{ getMessageDisplayText(msg) }}</span>
+              <span v-if="getPayloadSummary(msg)" class="conv-bubble-text text-muted">{{ getPayloadSummary(msg) }}</span>
+            </template>
             <span class="conv-bubble-time text-muted">{{ formatTime(msg.timestamp) }}</span>
           </div>
         </div>
@@ -111,6 +135,8 @@ interface MsgItem {
   id: string
   direction: 'incoming' | 'outgoing'
   text: string
+  messageType?: string
+  payload?: any
   timestamp: any
 }
 
@@ -200,6 +226,46 @@ function formatTime(ts: any): string {
     return d.toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit' })
   }
   return d.toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
+}
+
+function getMessageType(msg: MsgItem): string {
+  const payloadType = String(msg?.payload?.type || '').trim()
+  if (payloadType) return payloadType
+  return String(msg?.messageType || 'text')
+}
+
+function getMessageDisplayText(msg: MsgItem): string {
+  const type = getMessageType(msg)
+  if (type === 'text') {
+    const payloadText = String(msg?.payload?.text || '').trim()
+    return payloadText || msg.text || ''
+  }
+  if (type === 'template' || type === 'flex') {
+    const altText = String(msg?.payload?.altText || '').trim()
+    return altText || msg.text || ''
+  }
+  return msg.text || ''
+}
+
+function getMessageImageUrl(msg: MsgItem): string {
+  if (getMessageType(msg) !== 'image') return ''
+  return String(msg?.payload?.previewImageUrl || msg?.payload?.originalContentUrl || '').trim()
+}
+
+function getPayloadSummary(msg: MsgItem): string {
+  const payload = msg?.payload
+  if (!payload || typeof payload !== 'object') return ''
+  if (payload.type === 'template' && payload.template?.type) {
+    return `template: ${String(payload.template.type)}`
+  }
+  if (payload.type === 'flex' && payload.contents?.type) {
+    return `flex: ${String(payload.contents.type)}`
+  }
+  if (payload.type === 'imagemap') {
+    const actions = Array.isArray(payload.actions) ? payload.actions.length : 0
+    return actions > 0 ? `imagemap actions: ${actions}` : 'imagemap'
+  }
+  return ''
 }
 
 onMounted(loadList)
