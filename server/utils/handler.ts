@@ -72,6 +72,29 @@ interface UserDoc {
   attributes?: Record<string, string>
 }
 
+function toConversationText(msg: messagingApi.Message): string {
+  const type = (msg as any)?.type
+  if (type === 'text') return String((msg as any).text || '').trim()
+  if (type === 'image') return '[圖片]'
+  if (type === 'video') return '[影片]'
+  if (type === 'audio') return '[語音]'
+  if (type === 'sticker') return '[貼圖]'
+  if (type === 'location') return '[位置]'
+  if (type === 'imagemap') return '[Imagemap]'
+  if (type === 'template') return String((msg as any).altText || '[模板訊息]').trim()
+  if (type === 'flex') return String((msg as any).altText || '[Flex 訊息]').trim()
+  return `[${String(type || 'message')}]`
+}
+
+async function saveOutgoingConversationMessages(userId: string, messages: messagingApi.Message[]): Promise<void> {
+  if (!Array.isArray(messages) || messages.length === 0) return
+  for (const msg of messages) {
+    const text = toConversationText(msg)
+    if (!text) continue
+    await saveConversationMessage(userId, 'outgoing', text)
+  }
+}
+
 function renderWithAttributes(value: string, attributes: Record<string, string>): string {
   if (!value || !value.includes('{{')) return value
   return value.replace(/\{\{\s*([A-Za-z][A-Za-z0-9_]*)\s*\}\}/g, (_, key: string) => {
@@ -168,6 +191,7 @@ async function applyPendingClaims(userId: string): Promise<void> {
           const lineMessages = buildLineMessages(hydratedMessages, {}, '', userId, channelSecret)
           if (lineMessages.length > 0) {
             await pushMessage(userId, lineMessages)
+            await saveOutgoingConversationMessages(userId, lineMessages)
             await dispatchPostReplyActions(userId, flow.messages)
           }
         }
@@ -1058,10 +1082,15 @@ async function handleIncomingText(
 
     if (flow && replyToken) {
       const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-      await replyMessage(
-        replyToken,
-        buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId, channelSecret),
-      )
+    const lineMessages = buildLineMessages(
+      hydratedMessages,
+      userAttributes,
+      options.requestOrigin || '',
+      userId,
+      channelSecret,
+    )
+    await replyMessage(replyToken, lineMessages)
+    await saveOutgoingConversationMessages(userId, lineMessages)
       await dispatchPostReplyActions(userId, flow.messages)
       handledByInput = true
     } else {
@@ -1086,10 +1115,15 @@ async function handleIncomingText(
           const flow = await getFlowByModuleId(rule.action.moduleId)
           if (flow) {
             const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-            await replyMessage(
-              replyToken,
-              buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId, channelSecret),
-            )
+          const lineMessages = buildLineMessages(
+            hydratedMessages,
+            userAttributes,
+            options.requestOrigin || '',
+            userId,
+            channelSecret,
+          )
+          await replyMessage(replyToken, lineMessages)
+          await saveOutgoingConversationMessages(userId, lineMessages)
             await dispatchPostReplyActions(userId, flow.messages)
           } else {
             console.warn(
@@ -1103,6 +1137,7 @@ async function handleIncomingText(
           const actionMessages = buildAutoReplyActionMessages(rule.action, userAttributes)
           if (actionMessages.length > 0) {
             await replyMessage(replyToken, actionMessages)
+            await saveOutgoingConversationMessages(userId, actionMessages)
           }
         }
       }
@@ -1213,10 +1248,15 @@ export async function handlePostbackEvent(
       if (event.replyToken) {
         const userAttributes = buildAttributeContext(await userDataTask)
         const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-        await replyMessage(
-          event.replyToken,
-          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId, channelSecret),
+        const lineMessages = buildLineMessages(
+          hydratedMessages,
+          userAttributes,
+          options.requestOrigin || '',
+          userId,
+          channelSecret,
         )
+        await replyMessage(event.replyToken, lineMessages)
+        await saveOutgoingConversationMessages(userId, lineMessages)
         await dispatchPostReplyActions(userId, flow.messages)
       }
     } else {
@@ -1234,16 +1274,22 @@ export async function handlePostbackEvent(
       const flow = await getFlowByModuleId(rule.action.moduleId)
       if (flow) {
         const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-        await replyMessage(
-          event.replyToken,
-          buildLineMessages(hydratedMessages, userAttributes, options.requestOrigin || '', userId, channelSecret),
+        const lineMessages = buildLineMessages(
+          hydratedMessages,
+          userAttributes,
+          options.requestOrigin || '',
+          userId,
+          channelSecret,
         )
+        await replyMessage(event.replyToken, lineMessages)
+        await saveOutgoingConversationMessages(userId, lineMessages)
         await dispatchPostReplyActions(userId, flow.messages)
       }
     } else {
       const actionMessages = buildAutoReplyActionMessages(rule.action, userAttributes)
       if (actionMessages.length > 0) {
         await replyMessage(event.replyToken, actionMessages)
+        await saveOutgoingConversationMessages(userId, actionMessages)
       }
     }
   }

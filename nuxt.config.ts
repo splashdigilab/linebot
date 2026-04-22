@@ -51,6 +51,10 @@ export default defineNuxtConfig({
     clickTrackingBaseUrl: appPublicBaseUrl,
     /** 排程推播自動觸發保護密鑰；由 Cron Job 帶在 X-Cron-Secret header */
     cronSecret: process.env.CRON_SECRET ?? '',
+    /** 對話訊息保留天數（超過天數會由 cleanup API 清掉） */
+    conversationRetentionDays: process.env.CONVERSATION_RETENTION_DAYS ?? '180',
+    /** 單次 cleanup 最多刪除幾筆舊訊息（Firestore batch 上限 500） */
+    conversationCleanupBatchSize: process.env.CONVERSATION_CLEANUP_BATCH_SIZE ?? '400',
     firebaseProjectId: process.env.FIREBASE_PROJECT_ID ?? '',
     firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL ?? '',
     firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY ?? '',
