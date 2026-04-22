@@ -96,15 +96,6 @@
                   </template>
                 </div>
               </div>
-              <div v-if="getQuickReplyItems(msg).length" class="conv-quick-reply-row">
-                <span
-                  v-for="(qr, qrIdx) in getQuickReplyItems(msg)"
-                  :key="`${msg.id}-qr-${qrIdx}`"
-                  class="conv-quick-reply-chip"
-                >
-                  {{ qr }}
-                </span>
-              </div>
             </template>
             <template v-else-if="getMessageType(msg) === 'image'">
               <el-image
@@ -116,12 +107,22 @@
                 :preview-teleported="true"
               />
             </template>
+            <template v-else-if="getMessageType(msg) === 'video'">
+              <div class="conv-video-frame">
+                <img
+                  v-if="getVideoPreviewImageUrl(msg)"
+                  :src="getVideoPreviewImageUrl(msg)"
+                  alt="video-preview"
+                  class="conv-video-preview"
+                />
+                <div class="conv-video-play">▶</div>
+              </div>
+            </template>
             <template v-else-if="isStructuredLineMessage(msg)">
-              <div class="conv-line-template">
-                <div class="conv-line-template-head">{{ getStructuredMessageTitle(msg) }}</div>
+              <div class="conv-line-template" :class="`variant-${getStructuredVariant(msg)}`">
                 <div class="conv-line-template-cards">
                   <div
-                    v-for="(card, cardIdx) in getStructuredMessageCards(msg)"
+                    v-for="(card, cardIdx) in getStructuredCards(msg)"
                     :key="`${msg.id}-card-${cardIdx}`"
                     class="conv-line-card"
                   >
@@ -131,14 +132,25 @@
                       :alt="card.title || 'preview'"
                       class="conv-line-card-image"
                     />
+                    <div
+                      v-if="getStructuredVariant(msg) === 'image_carousel' && getCardOverlayLabel(card)"
+                      class="conv-line-card-image-overlay"
+                    >
+                      {{ getCardOverlayLabel(card) }}
+                    </div>
                     <div v-if="card.title" class="conv-line-card-title">{{ card.title }}</div>
                     <div v-if="card.text" class="conv-line-card-text">{{ card.text }}</div>
-                    <div class="conv-line-card-actions">
+                    <div
+                      v-if="card.actions.length"
+                      class="conv-line-card-actions"
+                      :class="{ 'is-line-action': shouldUseLineActionStyle(msg) }"
+                    >
                       <button
                         v-for="(act, actIdx) in card.actions"
                         :key="`${msg.id}-act-${cardIdx}-${actIdx}`"
                         type="button"
                         class="conv-line-card-action"
+                        :class="{ 'is-line-action': shouldUseLineActionStyle(msg) }"
                       >
                         {{ act }}
                       </button>
@@ -295,6 +307,13 @@ type StructuredCardPreview = {
   text: string
   imageUrl: string
   actions: string[]
+}
+
+type StructuredVariant = 'buttons' | 'confirm' | 'carousel' | 'image_carousel' | 'flex' | 'imagemap' | 'generic'
+
+type StructuredMessagePreview = {
+  variant: StructuredVariant
+  cards: StructuredCardPreview[]
 }
 
 const { toasts, showToast } = useAdminToast()
@@ -605,7 +624,7 @@ function isStructuredLineMessage(msg: MsgItem): boolean {
 
 function isMediaMessage(msg: MsgItem): boolean {
   const type = getMessageType(msg)
-  return type === 'image' || type === 'sticker'
+  return type === 'image' || type === 'sticker' || type === 'video'
 }
 
 function toActionLabel(action: any): string {
@@ -654,14 +673,7 @@ function extractFlexActions(node: any, acc: string[] = []): string[] {
   return acc
 }
 
-function getStructuredMessageTitle(msg: MsgItem): string {
-  const type = getMessageType(msg)
-  if (type === 'template') return 'LINE 模板訊息'
-  if (type === 'flex') return 'LINE Flex 訊息'
-  return 'LINE 圖像互動訊息'
-}
-
-function getStructuredMessageCards(msg: MsgItem): StructuredCardPreview[] {
+function getStructuredMessagePreview(msg: MsgItem): StructuredMessagePreview | null {
   const payload = msg?.payload || {}
   const type = getMessageType(msg)
 
@@ -669,71 +681,122 @@ function getStructuredMessageCards(msg: MsgItem): StructuredCardPreview[] {
     const tpl = payload?.template || {}
     const tplType = String(tpl?.type || '').trim()
     if (tplType === 'buttons') {
-      return [normalizeCard({
-        title: tpl.title,
-        text: tpl.text,
-        imageUrl: tpl.thumbnailImageUrl,
-        actions: Array.isArray(tpl.actions) ? tpl.actions.map(toActionLabel) : [],
-      })]
+      const title = String(tpl.title || '').trim()
+      const text = String(tpl.text || '').trim()
+      return {
+        variant: 'buttons',
+        cards: [normalizeCard({
+          title: title || text,
+          text: title ? text : '',
+          imageUrl: tpl.thumbnailImageUrl,
+          actions: Array.isArray(tpl.actions) ? tpl.actions.map(toActionLabel) : [],
+        })],
+      }
     }
     if (tplType === 'confirm') {
-      return [normalizeCard({
-        text: tpl.text,
-        actions: Array.isArray(tpl.actions) ? tpl.actions.map(toActionLabel) : [],
-      })]
+      const text = String(tpl.text || '').trim()
+      return {
+        variant: 'confirm',
+        cards: [normalizeCard({
+          title: text,
+          text: '',
+          actions: Array.isArray(tpl.actions) ? tpl.actions.map(toActionLabel) : [],
+        })],
+      }
     }
     if (tplType === 'carousel') {
-      return (Array.isArray(tpl.columns) ? tpl.columns : []).map((c: any) => normalizeCard({
-        title: c.title,
-        text: c.text,
-        imageUrl: c.thumbnailImageUrl,
-        actions: Array.isArray(c.actions) ? c.actions.map(toActionLabel) : [],
-      }))
+      return {
+        variant: 'carousel',
+        cards: (Array.isArray(tpl.columns) ? tpl.columns : []).map((c: any) => normalizeCard({
+          title: c.title,
+          text: c.text,
+          imageUrl: c.thumbnailImageUrl,
+          actions: Array.isArray(c.actions) ? c.actions.map(toActionLabel) : [],
+        })),
+      }
     }
     if (tplType === 'image_carousel') {
-      return (Array.isArray(tpl.columns) ? tpl.columns : []).map((c: any) => normalizeCard({
-        imageUrl: c.imageUrl,
-        actions: c.action ? [toActionLabel(c.action)] : [],
-      }))
+      return {
+        variant: 'image_carousel',
+        cards: (Array.isArray(tpl.columns) ? tpl.columns : []).map((c: any) => normalizeCard({
+          imageUrl: c.imageUrl,
+          actions: c.action ? [toActionLabel(c.action)] : [],
+        })),
+      }
     }
-    return [normalizeCard({ text: payload.altText || msg.text })]
+    return { variant: 'generic', cards: [normalizeCard({ text: payload.altText || msg.text })] }
   }
 
   if (type === 'flex') {
     const contents = payload?.contents
     if (contents?.type === 'carousel' && Array.isArray(contents.contents)) {
-      return contents.contents.map((bubble: any) => {
-        const texts = extractFlexTexts(bubble, []).slice(0, 3)
-        const actions = extractFlexActions(bubble, []).slice(0, 4)
-        return normalizeCard({
-          title: texts[0],
-          text: texts.slice(1).join('\n'),
-          actions,
-        })
-      })
+      return {
+        variant: 'carousel',
+        cards: contents.contents.map((bubble: any) => {
+          const texts = extractFlexTexts(bubble, []).slice(0, 3)
+          const actions = extractFlexActions(bubble, []).slice(0, 4)
+          return normalizeCard({
+            title: texts[0],
+            text: texts.slice(1).join('\n'),
+            actions,
+          })
+        }),
+      }
     }
     const texts = extractFlexTexts(contents, []).slice(0, 4)
     const actions = extractFlexActions(contents, []).slice(0, 4)
-    return [normalizeCard({
-      title: texts[0],
-      text: texts.slice(1).join('\n') || payload?.altText || msg.text,
-      actions,
-    })]
+    return {
+      variant: 'flex',
+      cards: [normalizeCard({
+        title: texts[0],
+        text: texts.slice(1).join('\n') || payload?.altText || msg.text,
+        actions,
+      })],
+    }
   }
 
   if (type === 'imagemap') {
-    return [normalizeCard({
-      text: payload?.altText || msg.text || 'Imagemap',
-      imageUrl: payload?.baseUrl ? `${payload.baseUrl}/1040` : '',
-      actions: Array.isArray(payload?.actions) ? payload.actions.map(toActionLabel) : [],
-    })]
+    return {
+      variant: 'imagemap',
+      cards: [normalizeCard({
+        text: payload?.altText || msg.text || 'Imagemap',
+        imageUrl: payload?.baseUrl ? `${payload.baseUrl}/1040` : '',
+        actions: Array.isArray(payload?.actions) ? payload.actions.map(toActionLabel) : [],
+      })],
+    }
   }
 
-  return [normalizeCard({ text: msg.text })]
+  return { variant: 'generic', cards: [normalizeCard({ text: msg.text })] }
+}
+
+function getStructuredVariant(msg: MsgItem): StructuredVariant {
+  return getStructuredMessagePreview(msg)?.variant || 'generic'
+}
+
+function getStructuredCards(msg: MsgItem): StructuredCardPreview[] {
+  return getStructuredMessagePreview(msg)?.cards || []
+}
+
+function getCardOverlayLabel(card: StructuredCardPreview): string {
+  const fromAction = Array.isArray(card.actions) && card.actions.length > 0
+    ? String(card.actions[0] || '').trim()
+    : ''
+  if (fromAction && fromAction.toLowerCase() !== 'ignore') return fromAction
+  return String(card.title || '').trim()
+}
+
+function shouldUseLineActionStyle(msg: MsgItem): boolean {
+  const variant = getStructuredVariant(msg)
+  return variant === 'buttons' || variant === 'confirm' || variant === 'carousel'
 }
 
 function getMessageImageUrl(msg: MsgItem): string {
   if (getMessageType(msg) !== 'image') return ''
+  return String(msg?.payload?.previewImageUrl || msg?.payload?.originalContentUrl || '').trim()
+}
+
+function getVideoPreviewImageUrl(msg: MsgItem): string {
+  if (getMessageType(msg) !== 'video') return ''
   return String(msg?.payload?.previewImageUrl || msg?.payload?.originalContentUrl || '').trim()
 }
 
