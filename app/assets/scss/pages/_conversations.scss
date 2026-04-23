@@ -502,6 +502,18 @@
     object-fit: contain;
   }
 
+  .conv-picker-trigger__emoji {
+    font-size: 1.2rem;
+    line-height: 1;
+  }
+
+  .conv-picker-trigger__plus {
+    font-size: 1.25rem;
+    line-height: 1;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
   .conv-input-hint {
     font-size: 0.75rem;
   }
@@ -524,6 +536,50 @@
     min-height: 120px;
     display: flex;
     align-items: center;
+  }
+
+  .conv-attachment-card {
+    width: min(360px, 70vw);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg-surface);
+    padding: 0.55rem 0.7rem;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    text-decoration: none;
+    color: inherit;
+  }
+
+  .conv-attachment-card:hover {
+    border-color: var(--border-active);
+    background: var(--bg-hover);
+  }
+
+  .conv-attachment-card__icon {
+    font-size: 1.1rem;
+    line-height: 1;
+  }
+
+  .conv-attachment-card__meta {
+    display: flex;
+    flex-direction: column;
+    gap: 0.08rem;
+    min-width: 0;
+  }
+
+  .conv-attachment-card__title {
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .conv-attachment-card__desc {
+    font-size: 0.72rem;
+    color: var(--text-muted);
   }
 }
 
@@ -581,7 +637,10 @@
 .conv-picker-grid {
   display: grid;
   gap: 0.35rem;
-  max-height: 300px;
+}
+
+.conv-picker-scrollbox {
+  height: 300px;
   overflow-y: auto;
 }
 
@@ -589,7 +648,6 @@
   display: grid;
   grid-template-columns: repeat(8, minmax(0, 1fr));
   gap: 0.3rem;
-  max-height: 280px;
 }
 
 .conv-picker-grid--sticker {
@@ -638,4 +696,96 @@
   height: 44px;
   object-fit: contain;
   display: block;
+}
+
+.conv-support-preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.conv-support-preset-option {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: #fff;
+  text-align: left;
+  width: 100%;
+  padding: 0.55rem 0.65rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.conv-support-preset-option:hover:not(:disabled) {
+  border-color: var(--border-active);
+  background: #eef3fb;
+}
+
+.conv-support-preset-option.active {
+  border-color: var(--border-active);
+  background: #eef3fb;
+}
+
+.conv-support-preset-option:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.conv-support-preset-option__name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.conv-support-preset-option__meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.conv-picker-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 0.15rem;
+}
+
+.conv-quick-send-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.conv-quick-send-item__icon {
+  font-size: 1rem;
+}
+
+.conv-quick-send-form {
+  width: 100%;
+}
+
+.conv-quick-upload {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.conv-quick-upload__hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.conv-quick-uploading {
+  font-size: 0.8rem;
+}
+
+.conv-quick-send-form .el-input-number {
+  width: 100%;
+}
+
+.conv-quick-send-form__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.45rem;
 }

@@ -1,5 +1,6 @@
 import type { webhook } from '@line/bot-sdk'
 import type { messagingApi } from '@line/bot-sdk'
+import { createError } from 'h3'
 import { getDb } from './firebase'
 import { replyMessage, pushMessage, getUserProfile, linkRichMenuIdToUser } from './line'
 import { getLineWorkspaceCredentials } from './line-workspace-credentials'
@@ -339,6 +340,53 @@ function buildAutoReplyActionMessages(
   }
 
   return []
+}
+
+/**
+ * 管理後台「客服預存」：以 push 發送，邏輯對齊自動回覆命中後的模組／文字／網址處理。
+ */
+export async function pushSupportPresetActionToUser(
+  userId: string,
+  action: AutoReplyRuleShape['action'],
+  tagging: AutoReplyRuleShape['tagging'],
+  presetId: string,
+  requestOrigin: string,
+): Promise<void> {
+  const userData = await ensureUser(userId)
+  const userAttributes = buildAttributeContext(userData)
+  const { channelSecret } = await getLineWorkspaceCredentials()
+
+  if (tagging?.enabled && Array.isArray(tagging.addTagIds) && tagging.addTagIds.length > 0) {
+    addTagsToUser(userId, tagging.addTagIds, 'manual', presetId).catch((e) => {
+      console.error('[supportPreset] tagging failed:', e)
+    })
+  }
+
+  if (action.type === 'module') {
+    const flow = await getFlowByModuleId(action.moduleId)
+    if (!flow) {
+      throw createError({ statusCode: 400, statusMessage: '找不到或已停用的機器人模組' })
+    }
+    const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
+    const lineMessages = buildLineMessages(
+      hydratedMessages,
+      userAttributes,
+      requestOrigin,
+      userId,
+      channelSecret,
+    )
+    await pushMessage(userId, lineMessages)
+    await saveOutgoingConversationMessages(userId, lineMessages)
+    await dispatchPostReplyActions(userId, flow.messages)
+    return
+  }
+
+  const actionMessages = buildAutoReplyActionMessages(action, userAttributes)
+  if (actionMessages.length === 0) {
+    throw createError({ statusCode: 400, statusMessage: '無法送出此預存動作' })
+  }
+  await pushMessage(userId, actionMessages)
+  await saveOutgoingConversationMessages(userId, actionMessages)
 }
 
 function buildRichMessageSnapshot(item: any) {

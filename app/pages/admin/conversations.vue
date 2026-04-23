@@ -118,6 +118,36 @@
                 <div class="conv-video-play">▶</div>
               </div>
             </template>
+            <template v-else-if="getMessageType(msg) === 'audio'">
+              <a
+                v-if="getAudioUrl(msg)"
+                :href="getAudioUrl(msg)"
+                class="conv-attachment-card"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span class="conv-attachment-card__icon">🎵</span>
+                <span class="conv-attachment-card__meta">
+                  <span class="conv-attachment-card__title">音訊檔</span>
+                  <span class="conv-attachment-card__desc">{{ getAudioDurationLabel(msg) }}</span>
+                </span>
+              </a>
+            </template>
+            <template v-else-if="getMessageType(msg) === 'file'">
+              <a
+                v-if="getFileUrl(msg)"
+                :href="getFileUrl(msg)"
+                class="conv-attachment-card"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span class="conv-attachment-card__icon">📎</span>
+                <span class="conv-attachment-card__meta">
+                  <span class="conv-attachment-card__title">{{ getFileName(msg) }}</span>
+                  <span class="conv-attachment-card__desc">點擊下載</span>
+                </span>
+              </a>
+            </template>
             <template v-else-if="isStructuredLineMessage(msg)">
               <div class="conv-line-template" :class="`variant-${getStructuredVariant(msg)}`">
                 <div class="conv-line-template-cards">
@@ -187,6 +217,30 @@
 
       <div class="conv-input-tools">
         <div class="conv-picker-actions">
+          <el-dropdown trigger="click" placement="top-start" @command="onQuickSendCommand">
+            <button
+              type="button"
+              class="conv-picker-trigger"
+              :disabled="sending || msgLoading || !selectedUserId"
+              title="傳送媒體"
+            >
+              <span class="conv-picker-trigger__plus">＋</span>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item
+                  v-for="action in quickSendActions"
+                  :key="action.type"
+                  :command="action.type"
+                >
+                  <span class="conv-quick-send-item">
+                    <span class="conv-quick-send-item__icon">{{ action.icon }}</span>
+                    <span>{{ action.label }}</span>
+                  </span>
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-popover
             v-for="picker in pickerModes"
             :key="picker.key"
@@ -223,24 +277,74 @@
                   <span>{{ cat.label }}</span>
                 </button>
               </div>
-              <div class="conv-picker-grid" :class="`conv-picker-grid--${picker.key}`">
-                <button
-                  v-for="item in getPickerItems(picker.key)"
-                  :key="item.id"
-                  type="button"
-                  class="conv-picker-option"
-                  :class="`conv-picker-option--${picker.key}`"
-                  :disabled="sending"
-                  @click="onPickerItemSelect(picker.key, item)"
+              <div class="conv-picker-scrollbox">
+                <div class="conv-picker-grid" :class="`conv-picker-grid--${picker.key}`">
+                  <button
+                    v-for="item in getPickerItems(picker.key)"
+                    :key="item.id"
+                    type="button"
+                    class="conv-picker-option"
+                    :class="`conv-picker-option--${picker.key}`"
+                    :disabled="sending"
+                    @click="onPickerItemSelect(picker.key, item)"
+                  >
+                    <img
+                      v-if="item.kind === 'sticker'"
+                      :src="stickerPreviewUrl(item.stickerId)"
+                      :alt="`sticker ${item.stickerId}`"
+                      class="conv-picker-option__image"
+                    />
+                    <span v-else class="conv-picker-option__emoji">{{ item.emoji }}</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </el-popover>
+          <el-popover
+            v-if="selectedUserId && activeSupportPresets.length"
+            trigger="click"
+            placement="top-start"
+            :width="340"
+            popper-class="conv-picker-popover"
+          >
+            <template #reference>
+              <button
+                type="button"
+                class="conv-picker-trigger"
+                :disabled="sending || msgLoading"
+                title="客服預存"
+              >
+                <span class="conv-picker-trigger__emoji">📦</span>
+              </button>
+            </template>
+            <div class="conv-picker-panel">
+              <div class="conv-picker-title">客服預存</div>
+              <div class="conv-picker-scrollbox">
+                <div class="conv-support-preset-list">
+                  <button
+                    v-for="preset in activeSupportPresets"
+                    :key="preset.id"
+                    type="button"
+                    class="conv-support-preset-option"
+                    :class="{ active: pendingSupportPresetId === preset.id }"
+                    :disabled="isSupportPresetBusy"
+                    @click="pendingSupportPresetId = preset.id"
+                  >
+                    <span class="conv-support-preset-option__name">{{ preset.name || '(未命名)' }}</span>
+                    <span class="conv-support-preset-option__meta">{{ getActionSummary(preset) }}</span>
+                  </button>
+                </div>
+              </div>
+              <div class="conv-picker-footer">
+                <el-button
+                  size="small"
+                  type="primary"
+                  :loading="sending"
+                  :disabled="!pendingSupportPresetId || isSupportPresetBusy"
+                  @click="sendSupportPreset"
                 >
-                  <img
-                    v-if="item.kind === 'sticker'"
-                    :src="stickerPreviewUrl(item.stickerId)"
-                    :alt="`sticker ${item.stickerId}`"
-                    class="conv-picker-option__image"
-                  />
-                  <span v-else class="conv-picker-option__emoji">{{ item.emoji }}</span>
-                </button>
+                  確認送出
+                </el-button>
               </div>
             </div>
           </el-popover>
@@ -262,10 +366,156 @@
     </template>
   </AdminSplitLayout>
 
+  <el-dialog
+    v-model="mediaDialogVisible"
+    :title="quickSendDialogTitle"
+    width="520px"
+    destroy-on-close
+  >
+    <div class="admin-field-stack conv-quick-send-form">
+      <div v-if="quickSendType === 'image'" class="admin-field-group">
+        <AdminFieldLabel text="圖片檔案" tight />
+        <div class="conv-quick-upload">
+          <input
+            ref="imageInputRef"
+            type="file"
+            :accept="IMAGE_ACCEPT_ATTR"
+            class="admin-hidden-input"
+            :disabled="sending || quickMediaUploading"
+            @change="onQuickFileChange('image', $event)"
+          />
+          <el-button :disabled="sending || quickMediaUploading" @click="triggerQuickPick('image')">
+            {{ mediaForm.originalContentUrl ? '重新上傳圖片' : '選擇圖片' }}
+          </el-button>
+          <span class="conv-quick-upload__hint">JPG / PNG，最大 {{ imageMaxKb }}KB</span>
+        </div>
+      </div>
+
+      <div v-if="quickSendType === 'video'" class="admin-field-group">
+        <AdminFieldLabel text="預覽圖片" tight />
+        <div class="conv-quick-upload">
+          <input
+            ref="videoPreviewInputRef"
+            type="file"
+            :accept="IMAGE_ACCEPT_ATTR"
+            class="admin-hidden-input"
+            :disabled="sending || quickMediaUploading"
+            @change="onQuickFileChange('videoPreview', $event)"
+          />
+          <el-button :disabled="sending || quickMediaUploading" @click="triggerQuickPick('videoPreview')">
+            {{ mediaForm.previewImageUrl ? '重新上傳預覽圖' : '選擇預覽圖' }}
+          </el-button>
+          <span class="conv-quick-upload__hint">JPG / PNG，最大 {{ imageMaxKb }}KB</span>
+        </div>
+      </div>
+
+      <div v-if="quickSendType === 'video'" class="admin-field-group">
+        <AdminFieldLabel text="影片檔案" tight />
+        <div class="conv-quick-upload">
+          <input
+            ref="videoInputRef"
+            type="file"
+            :accept="VIDEO_ACCEPT_ATTR"
+            class="admin-hidden-input"
+            :disabled="sending || quickMediaUploading"
+            @change="onQuickFileChange('video', $event)"
+          />
+          <el-button :disabled="sending || quickMediaUploading" @click="triggerQuickPick('video')">
+            {{ mediaForm.originalContentUrl ? '重新上傳影片' : '選擇影片' }}
+          </el-button>
+          <span class="conv-quick-upload__hint">MP4，最大 {{ videoMaxMb }}MB</span>
+        </div>
+      </div>
+
+      <div v-if="quickSendType === 'audio'" class="admin-field-group">
+        <AdminFieldLabel text="音訊檔案" tight />
+        <div class="conv-quick-upload">
+          <input
+            ref="audioInputRef"
+            type="file"
+            :accept="AUDIO_ACCEPT_ATTR"
+            class="admin-hidden-input"
+            :disabled="sending || quickMediaUploading"
+            @change="onQuickFileChange('audio', $event)"
+          />
+          <el-button :disabled="sending || quickMediaUploading" @click="triggerQuickPick('audio')">
+            {{ mediaForm.originalContentUrl ? '重新上傳音訊' : '選擇音訊' }}
+          </el-button>
+          <span class="conv-quick-upload__hint">M4A / MP3 / WAV，最大 {{ audioMaxMb }}MB</span>
+        </div>
+      </div>
+
+      <div v-if="quickSendType === 'audio'" class="admin-field-group">
+        <AdminFieldLabel text="音訊秒數（可調整）" tight />
+        <el-input-number
+          v-model="mediaForm.durationSeconds"
+          :min="1"
+          :step="1"
+          :precision="0"
+          :disabled="sending"
+        />
+      </div>
+
+      <div v-if="quickSendType === 'file'" class="admin-field-group">
+        <AdminFieldLabel text="檔案" tight />
+        <div class="conv-quick-upload">
+          <input
+            ref="fileInputRef"
+            type="file"
+            :accept="FILE_ACCEPT_ATTR"
+            class="admin-hidden-input"
+            :disabled="sending || quickMediaUploading"
+            @change="onQuickFileChange('file', $event)"
+          />
+          <el-button :disabled="sending || quickMediaUploading" @click="triggerQuickPick('file')">
+            {{ mediaForm.originalContentUrl ? '重新上傳檔案' : '選擇檔案' }}
+          </el-button>
+          <span class="conv-quick-upload__hint">PDF / Office / TXT / ZIP，最大 {{ fileMaxMb }}MB</span>
+        </div>
+      </div>
+
+      <div v-if="quickSendType === 'file'" class="admin-field-group">
+        <AdminFieldLabel text="檔名" tight />
+        <el-input
+          v-model="mediaForm.fileName"
+          placeholder="例如：報價單.pdf"
+          :disabled="sending || quickMediaUploading"
+        />
+      </div>
+
+      <div v-if="quickMediaUploading" class="conv-quick-uploading text-muted">
+        上傳中，請稍候...
+      </div>
+    </div>
+    <template #footer>
+      <div class="conv-quick-send-form__footer">
+        <el-button :disabled="sending || quickMediaUploading" @click="mediaDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="sending" :disabled="!canSendQuickMedia" @click="sendQuickMedia">
+          送出
+        </el-button>
+      </div>
+    </template>
+  </el-dialog>
+
   <AdminToastStack :toasts="toasts" />
 </template>
 
 <script setup lang="ts">
+import {
+  AUDIO_ACCEPT_ATTR,
+  AUDIO_MAX_BYTES,
+  AUDIO_MIME_TYPES,
+  FILE_ACCEPT_ATTR,
+  FILE_MAX_BYTES,
+  FILE_MIME_TYPES,
+  IMAGE_ACCEPT_ATTR,
+  IMAGE_MAX_BYTES,
+  IMAGE_MIME_TYPES,
+  VIDEO_ACCEPT_ATTR,
+  VIDEO_MAX_BYTES,
+  VIDEO_MIME_TYPES,
+} from '~~/shared/upload-rules'
+
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 interface ConvItem {
@@ -287,6 +537,7 @@ interface MsgItem {
 }
 
 type PickerKind = 'emoji' | 'sticker'
+type QuickSendType = 'image' | 'video' | 'audio' | 'file'
 
 type PickerCategory = {
   id: string
@@ -327,6 +578,56 @@ const selectedUser = ref<ConvItem | null>(null)
 const inputText = ref('')
 const searchText = ref('')
 const messagesEl = ref<HTMLElement | null>(null)
+const supportPresetsRaw = ref<any[]>([])
+const pendingSupportPresetId = ref('')
+const mediaDialogVisible = ref(false)
+const quickMediaUploading = ref(false)
+const quickSendType = ref<QuickSendType>('image')
+const imageInputRef = ref<HTMLInputElement | null>(null)
+const videoPreviewInputRef = ref<HTMLInputElement | null>(null)
+const videoInputRef = ref<HTMLInputElement | null>(null)
+const audioInputRef = ref<HTMLInputElement | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
+const mediaForm = ref({
+  originalContentUrl: '',
+  previewImageUrl: '',
+  durationSeconds: 5,
+  fileName: '',
+})
+const imageMaxKb = Math.floor(IMAGE_MAX_BYTES / 1024)
+const videoMaxMb = Math.floor(VIDEO_MAX_BYTES / (1024 * 1024))
+const audioMaxMb = Math.floor(AUDIO_MAX_BYTES / (1024 * 1024))
+const fileMaxMb = Math.floor(FILE_MAX_BYTES / (1024 * 1024))
+
+const activeSupportPresets = computed(() =>
+  supportPresetsRaw.value.filter((p: any) => p.isActive !== false),
+)
+const isSupportPresetBusy = computed(() => sending.value || msgLoading.value)
+const quickSendActions: Array<{ type: QuickSendType, label: string, icon: string }> = [
+  { type: 'image', label: '圖片', icon: '🖼️' },
+  { type: 'video', label: '影片', icon: '🎬' },
+  { type: 'audio', label: '音訊', icon: '🎵' },
+  { type: 'file', label: '檔案', icon: '📎' },
+]
+const quickSendDialogTitle = computed(() => {
+  const label = quickSendActions.find(action => action.type === quickSendType.value)?.label || ''
+  return `傳送${label}`
+})
+const canSendQuickMedia = computed(() => {
+  if (quickMediaUploading.value) return false
+  const originalContentUrl = String(mediaForm.value.originalContentUrl || '').trim()
+  if (!originalContentUrl) return false
+  if (quickSendType.value === 'video') {
+    return !!String(mediaForm.value.previewImageUrl || '').trim()
+  }
+  if (quickSendType.value === 'audio') {
+    return Number(mediaForm.value.durationSeconds) > 0
+  }
+  if (quickSendType.value === 'file') {
+    return !!String(mediaForm.value.fileName || '').trim()
+  }
+  return true
+})
 
 const EMOJI_ALL = [
   '😀', '😃', '😄', '😁', '😆', '😅', '🤣', '😂', '🙂', '🙃', '😉', '😊', '😇', '🥰', '😍',
@@ -374,25 +675,17 @@ const stickerCategories: PickerCategory[] = [
   { id: 'cute', label: '⭐' },
   { id: 'funny', label: '🤣' },
   { id: 'reaction', label: '💬' },
-  { id: 'classic', label: '🐻' },
 ]
 
 const stickerCategoryMap: Record<string, Array<{ packageId: string, stickerId: string }>> = {
   cute: [
     ...buildStickerRange('11537', 52002734, 52002767),
-    ...buildStickerRange('11538', 51626494, 51626533),
   ],
   funny: [
-    ...buildStickerRange('11539', 52114110, 52114149),
-    ...buildStickerRange('11540', 52114150, 52114189),
+    ...buildStickerRange('11538', 51626494, 51626533),
   ],
   reaction: [
-    ...buildStickerRange('11541', 52114190, 52114229),
-    ...buildStickerRange('11542', 52114230, 52114269),
-  ],
-  classic: [
-    ...buildStickerRange('11544', 52114294, 52114333),
-    ...buildStickerRange('11545', 52114334, 52114373),
+    ...buildStickerRange('11539', 52114110, 52114149),
   ],
 }
 
@@ -438,9 +731,42 @@ async function loadList() {
   }
 }
 
+async function loadSupportPresets() {
+  supportPresetsRaw.value = await $fetch<any[]>('/api/support-preset/list').catch(() => [])
+}
+
+async function sendSupportPreset() {
+  const presetId = pendingSupportPresetId.value
+  if (!presetId || !selectedUserId.value || !selectedUser.value) return
+  sending.value = true
+  try {
+    await $fetch(`/api/conversations/${selectedUserId.value}/send-preset`, {
+      method: 'POST',
+      body: { presetId },
+    })
+    showToast('已送出客服預存', 'success')
+    await selectUser(selectedUser.value)
+  }
+  catch (e: any) {
+    showToast(e?.data?.statusMessage || '送出預存失敗', 'error')
+  }
+  finally {
+    sending.value = false
+    pendingSupportPresetId.value = ''
+  }
+}
+
+function getActionSummary(preset: any): string {
+  const action = preset?.action || {}
+  if (action.type === 'module') return '觸發機器人模組'
+  if (action.type === 'uri') return action.uri || '開啟網址'
+  return action.text || '傳送文字'
+}
+
 async function selectUser(c: ConvItem) {
   selectedUserId.value = c.userId
   selectedUser.value = c
+  pendingSupportPresetId.value = ''
   messages.value = []
   msgLoading.value = true
   try {
@@ -468,6 +794,187 @@ async function send() {
       body: { type: 'text', text },
     })
     inputText.value = ''
+    await selectUser(selectedUser.value!)
+  }
+  catch (e: any) {
+    showToast(e?.data?.statusMessage || '發送失敗', 'error')
+  }
+  finally {
+    sending.value = false
+  }
+}
+
+function resetQuickMediaForm() {
+  quickMediaUploading.value = false
+  mediaForm.value = {
+    originalContentUrl: '',
+    previewImageUrl: '',
+    durationSeconds: 5,
+    fileName: '',
+  }
+  clearQuickFileInputs()
+}
+
+function clearQuickFileInputs() {
+  if (imageInputRef.value) imageInputRef.value.value = ''
+  if (videoPreviewInputRef.value) videoPreviewInputRef.value.value = ''
+  if (videoInputRef.value) videoInputRef.value.value = ''
+  if (audioInputRef.value) audioInputRef.value.value = ''
+  if (fileInputRef.value) fileInputRef.value.value = ''
+}
+
+type QuickPickKind = 'image' | 'videoPreview' | 'video' | 'audio' | 'file'
+
+function triggerQuickPick(kind: QuickPickKind) {
+  if (kind === 'image') imageInputRef.value?.click()
+  else if (kind === 'videoPreview') videoPreviewInputRef.value?.click()
+  else if (kind === 'video') videoInputRef.value?.click()
+  else if (kind === 'audio') audioInputRef.value?.click()
+  else fileInputRef.value?.click()
+}
+
+function readAsDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+async function uploadFileToStorage(file: File): Promise<string> {
+  const base64 = await readAsDataUrl(file)
+  const res = await $fetch<{ imageUrl: string, url?: string }>('/api/upload', {
+    method: 'POST',
+    body: { fileBase64: base64, contentType: file.type },
+  })
+  return String(res.url || res.imageUrl || '').trim()
+}
+
+function isAllowedMimeAndSize(file: File, kind: QuickPickKind): { ok: boolean, message: string } {
+  const imageTypeSet = new Set(IMAGE_MIME_TYPES)
+  const videoTypeSet = new Set(VIDEO_MIME_TYPES)
+  const audioTypeSet = new Set(AUDIO_MIME_TYPES)
+  const fileTypeSet = new Set(FILE_MIME_TYPES)
+
+  if (kind === 'image' || kind === 'videoPreview') {
+    if (!imageTypeSet.has(file.type)) return { ok: false, message: '僅支援 JPG / PNG 圖片' }
+    if (file.size > IMAGE_MAX_BYTES) return { ok: false, message: '圖片不能超過 500KB' }
+    return { ok: true, message: '' }
+  }
+  if (kind === 'video') {
+    if (!videoTypeSet.has(file.type)) return { ok: false, message: '僅支援 MP4 影片' }
+    if (file.size > VIDEO_MAX_BYTES) return { ok: false, message: '影片不能超過 5MB' }
+    return { ok: true, message: '' }
+  }
+  if (kind === 'audio') {
+    if (!audioTypeSet.has(file.type)) return { ok: false, message: '僅支援 M4A / MP3 / WAV 音訊' }
+    if (file.size > AUDIO_MAX_BYTES) return { ok: false, message: '音訊不能超過 5MB' }
+    return { ok: true, message: '' }
+  }
+  if (!fileTypeSet.has(file.type)) return { ok: false, message: '僅支援 PDF / Office / TXT / ZIP 檔案' }
+  if (file.size > FILE_MAX_BYTES) return { ok: false, message: '檔案不能超過 5MB' }
+  return { ok: true, message: '' }
+}
+
+async function getAudioDurationSeconds(file: File): Promise<number> {
+  return await new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file)
+    const audio = new Audio()
+    audio.preload = 'metadata'
+    audio.onloadedmetadata = () => {
+      const duration = Number(audio.duration)
+      URL.revokeObjectURL(objectUrl)
+      resolve(Number.isFinite(duration) && duration > 0 ? Math.max(1, Math.round(duration)) : 5)
+    }
+    audio.onerror = () => {
+      URL.revokeObjectURL(objectUrl)
+      resolve(5)
+    }
+    audio.src = objectUrl
+  })
+}
+
+async function onQuickFileChange(kind: QuickPickKind, event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  const validation = isAllowedMimeAndSize(file, kind)
+  if (!validation.ok) {
+    showToast(validation.message, 'error')
+    return
+  }
+
+  quickMediaUploading.value = true
+  try {
+    const url = await uploadFileToStorage(file)
+    if (!url) throw new Error('empty upload url')
+
+    if (kind === 'image') {
+      mediaForm.value.originalContentUrl = url
+      mediaForm.value.previewImageUrl = url
+    }
+    else if (kind === 'videoPreview') {
+      mediaForm.value.previewImageUrl = url
+    }
+    else if (kind === 'video') {
+      mediaForm.value.originalContentUrl = url
+    }
+    else if (kind === 'audio') {
+      mediaForm.value.originalContentUrl = url
+      mediaForm.value.durationSeconds = await getAudioDurationSeconds(file)
+    }
+    else if (kind === 'file') {
+      mediaForm.value.originalContentUrl = url
+      mediaForm.value.fileName = file.name
+    }
+  }
+  catch {
+    showToast('上傳失敗，請稍後再試', 'error')
+  }
+  finally {
+    quickMediaUploading.value = false
+  }
+}
+
+function onQuickSendCommand(command: string | number | object) {
+  const type = String(command || '') as QuickSendType
+  if (!selectedUserId.value) {
+    showToast('請先選擇一位使用者', 'error')
+    return
+  }
+  if (!quickSendActions.some(action => action.type === type)) return
+  quickSendType.value = type
+  resetQuickMediaForm()
+  mediaDialogVisible.value = true
+}
+
+async function sendQuickMedia() {
+  if (!selectedUserId.value || !canSendQuickMedia.value) return
+  const body: Record<string, any> = {
+    type: quickSendType.value,
+    originalContentUrl: String(mediaForm.value.originalContentUrl || '').trim(),
+  }
+  if (quickSendType.value === 'image' || quickSendType.value === 'video') {
+    body.previewImageUrl = String(mediaForm.value.previewImageUrl || '').trim()
+  }
+  if (quickSendType.value === 'audio') {
+    body.duration = Math.round(Number(mediaForm.value.durationSeconds) * 1000)
+  }
+  if (quickSendType.value === 'file') {
+    body.fileName = String(mediaForm.value.fileName || '').trim()
+  }
+
+  sending.value = true
+  try {
+    await $fetch(`/api/conversations/${selectedUserId.value}/send`, {
+      method: 'POST',
+      body,
+    })
+    mediaDialogVisible.value = false
+    resetQuickMediaForm()
     await selectUser(selectedUser.value!)
   }
   catch (e: any) {
@@ -807,6 +1314,29 @@ function getStickerImageUrl(msg: MsgItem): string {
   return stickerPreviewUrl(sid)
 }
 
+function getAudioUrl(msg: MsgItem): string {
+  if (getMessageType(msg) !== 'audio') return ''
+  return String(msg?.payload?.originalContentUrl || '').trim()
+}
+
+function getAudioDurationLabel(msg: MsgItem): string {
+  if (getMessageType(msg) !== 'audio') return ''
+  const durationMs = Number(msg?.payload?.duration || 0)
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return '音訊'
+  return `${Math.max(1, Math.round(durationMs / 1000))} 秒`
+}
+
+function getFileUrl(msg: MsgItem): string {
+  if (getMessageType(msg) !== 'file') return ''
+  return String(msg?.payload?.originalContentUrl || '').trim()
+}
+
+function getFileName(msg: MsgItem): string {
+  if (getMessageType(msg) !== 'file') return ''
+  const fileName = String(msg?.payload?.fileName || '').trim()
+  return fileName || '檔案'
+}
+
 function splitEmojiUnits(text: string): string[] {
   const source = String(text || '').trim()
   if (!source) return []
@@ -855,5 +1385,8 @@ function getPayloadSummary(msg: MsgItem): string {
   return ''
 }
 
-onMounted(loadList)
+onMounted(() => {
+  loadList()
+  loadSupportPresets()
+})
 </script>
