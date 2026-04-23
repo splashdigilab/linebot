@@ -47,7 +47,7 @@ export default defineEventHandler(async (event) => {
 
   if (type === 'video') {
     const originalContentUrl = String(body?.originalContentUrl || '').trim()
-    const previewImageUrl = String(body?.previewImageUrl || '').trim()
+    const previewImageUrl = String(body?.previewImageUrl || originalContentUrl).trim()
     if (!isHttpUrl(originalContentUrl) || !isHttpUrl(previewImageUrl)) {
       throw createError({ statusCode: 400, statusMessage: '影片網址格式不正確' })
     }
@@ -63,10 +63,13 @@ export default defineEventHandler(async (event) => {
   if (type === 'audio') {
     const originalContentUrl = String(body?.originalContentUrl || '').trim()
     const duration = Number(body?.duration ?? body?.durationMs)
-    if (!isHttpUrl(originalContentUrl) || !Number.isFinite(duration) || duration < 1) {
+    if (!isHttpUrl(originalContentUrl)) {
       throw createError({ statusCode: 400, statusMessage: '音訊參數不正確' })
     }
-    const message = { type: 'audio' as const, originalContentUrl, duration: Math.round(duration) }
+    const normalizedDuration = Number.isFinite(duration) && duration > 0
+      ? Math.round(duration)
+      : 5000
+    const message = { type: 'audio' as const, originalContentUrl, duration: normalizedDuration }
     await pushMessage(userId, [message as any])
     await saveConversationMessage(userId, 'outgoing', '[音訊]', {
       messageType: 'audio',
@@ -77,12 +80,15 @@ export default defineEventHandler(async (event) => {
 
   if (type === 'file') {
     const originalContentUrl = String(body?.originalContentUrl || '').trim()
-    const fileName = String(body?.fileName || '').trim()
-    if (!isHttpUrl(originalContentUrl) || !fileName) {
+    const fileName = String(body?.fileName || '檔案').trim() || '檔案'
+    if (!isHttpUrl(originalContentUrl)) {
       throw createError({ statusCode: 400, statusMessage: '檔案參數不正確' })
     }
+    // 部分 LINE 帳號不支援 direct file message（會要求 contentId），
+    // 這裡改為送文字 + 下載連結以確保可送達。
     const message = { type: 'file' as const, originalContentUrl, fileName }
-    await pushMessage(userId, [message as any])
+    const fallbackText = `📎 ${fileName}\n${originalContentUrl}`
+    await pushMessage(userId, [{ type: 'text', text: fallbackText } as any])
     await saveConversationMessage(userId, 'outgoing', `[檔案] ${fileName}`, {
       messageType: 'file',
       payload: message,

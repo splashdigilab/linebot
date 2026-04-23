@@ -375,7 +375,7 @@
     <div class="admin-field-stack conv-quick-send-form">
       <div v-if="quickSendType === 'image'" class="admin-field-group">
         <AdminFieldLabel text="圖片檔案" tight />
-        <div class="conv-quick-upload">
+        <div class="conv-quick-upload conv-quick-upload--zone">
           <input
             ref="imageInputRef"
             type="file"
@@ -384,34 +384,38 @@
             :disabled="sending || quickMediaUploading"
             @change="onQuickFileChange('image', $event)"
           />
-          <el-button :disabled="sending || quickMediaUploading" @click="triggerQuickPick('image')">
-            {{ mediaForm.originalContentUrl ? '重新上傳圖片' : '選擇圖片' }}
-          </el-button>
-          <span class="conv-quick-upload__hint">JPG / PNG，最大 {{ imageMaxKb }}KB</span>
-        </div>
-      </div>
-
-      <div v-if="quickSendType === 'video'" class="admin-field-group">
-        <AdminFieldLabel text="預覽圖片" tight />
-        <div class="conv-quick-upload">
-          <input
-            ref="videoPreviewInputRef"
-            type="file"
-            :accept="IMAGE_ACCEPT_ATTR"
-            class="admin-hidden-input"
-            :disabled="sending || quickMediaUploading"
-            @change="onQuickFileChange('videoPreview', $event)"
-          />
-          <el-button :disabled="sending || quickMediaUploading" @click="triggerQuickPick('videoPreview')">
-            {{ mediaForm.previewImageUrl ? '重新上傳預覽圖' : '選擇預覽圖' }}
-          </el-button>
-          <span class="conv-quick-upload__hint">JPG / PNG，最大 {{ imageMaxKb }}KB</span>
+          <div
+            v-if="mediaForm.originalContentUrl"
+            class="fuz-preview conv-quick-preview-zone"
+          >
+            <img :src="mediaForm.originalContentUrl" alt="image-preview" class="fuz-preview-img" />
+            <div class="fuz-preview-overlay">
+              <el-button size="small" type="primary" :disabled="sending || quickMediaUploading" @click="triggerQuickPick('image')">
+                更換圖片
+              </el-button>
+            </div>
+          </div>
+          <div
+            v-else
+            class="upload-zone fuz-zone"
+            :class="{ uploading: quickMediaUploading }"
+            @click="triggerQuickPick('image')"
+          >
+            <div class="fuz-idle">
+              <span class="fuz-icon">📷</span>
+              <span class="fuz-label">點擊上傳圖片</span>
+              <el-button type="primary" size="small" class="admin-btn-compact fuz-upload-btn" :disabled="sending || quickMediaUploading">
+                選擇圖片
+              </el-button>
+              <span class="fuz-hint">JPG / PNG，最大 {{ imageMaxKb }}KB</span>
+            </div>
+          </div>
         </div>
       </div>
 
       <div v-if="quickSendType === 'video'" class="admin-field-group">
         <AdminFieldLabel text="影片檔案" tight />
-        <div class="conv-quick-upload">
+        <div class="conv-quick-upload conv-quick-upload--zone">
           <input
             ref="videoInputRef"
             type="file"
@@ -420,10 +424,32 @@
             :disabled="sending || quickMediaUploading"
             @change="onQuickFileChange('video', $event)"
           />
-          <el-button :disabled="sending || quickMediaUploading" @click="triggerQuickPick('video')">
-            {{ mediaForm.originalContentUrl ? '重新上傳影片' : '選擇影片' }}
-          </el-button>
-          <span class="conv-quick-upload__hint">MP4，最大 {{ videoMaxMb }}MB</span>
+          <div
+            v-if="mediaForm.originalContentUrl"
+            class="fuz-preview conv-quick-preview-zone"
+          >
+            <video :src="mediaForm.originalContentUrl" class="fuz-preview-img" controls preload="metadata" />
+            <div class="fuz-preview-overlay">
+              <el-button size="small" type="primary" :disabled="sending || quickMediaUploading" @click="triggerQuickPick('video')">
+                更換影片
+              </el-button>
+            </div>
+          </div>
+          <div
+            v-else
+            class="upload-zone fuz-zone"
+            :class="{ uploading: quickMediaUploading }"
+            @click="triggerQuickPick('video')"
+          >
+            <div class="fuz-idle">
+              <span class="fuz-icon">🎬</span>
+              <span class="fuz-label">點擊上傳影片</span>
+              <el-button type="primary" size="small" class="admin-btn-compact fuz-upload-btn" :disabled="sending || quickMediaUploading">
+                選擇影片
+              </el-button>
+              <span class="fuz-hint">MP4，最大 {{ videoMaxMb }}MB（系統會自動產生預覽）</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -443,44 +469,6 @@
           </el-button>
           <span class="conv-quick-upload__hint">M4A / MP3 / WAV，最大 {{ audioMaxMb }}MB</span>
         </div>
-      </div>
-
-      <div v-if="quickSendType === 'audio'" class="admin-field-group">
-        <AdminFieldLabel text="音訊秒數（可調整）" tight />
-        <el-input-number
-          v-model="mediaForm.durationSeconds"
-          :min="1"
-          :step="1"
-          :precision="0"
-          :disabled="sending"
-        />
-      </div>
-
-      <div v-if="quickSendType === 'file'" class="admin-field-group">
-        <AdminFieldLabel text="檔案" tight />
-        <div class="conv-quick-upload">
-          <input
-            ref="fileInputRef"
-            type="file"
-            :accept="FILE_ACCEPT_ATTR"
-            class="admin-hidden-input"
-            :disabled="sending || quickMediaUploading"
-            @change="onQuickFileChange('file', $event)"
-          />
-          <el-button :disabled="sending || quickMediaUploading" @click="triggerQuickPick('file')">
-            {{ mediaForm.originalContentUrl ? '重新上傳檔案' : '選擇檔案' }}
-          </el-button>
-          <span class="conv-quick-upload__hint">PDF / Office / TXT / ZIP，最大 {{ fileMaxMb }}MB</span>
-        </div>
-      </div>
-
-      <div v-if="quickSendType === 'file'" class="admin-field-group">
-        <AdminFieldLabel text="檔名" tight />
-        <el-input
-          v-model="mediaForm.fileName"
-          placeholder="例如：報價單.pdf"
-          :disabled="sending || quickMediaUploading"
-        />
       </div>
 
       <div v-if="quickMediaUploading" class="conv-quick-uploading text-muted">
@@ -504,8 +492,6 @@
 import {
   AUDIO_ACCEPT_ATTR,
   AUDIO_MAX_BYTES,
-  FILE_ACCEPT_ATTR,
-  FILE_MAX_BYTES,
   IMAGE_ACCEPT_ATTR,
   IMAGE_MAX_BYTES,
   VIDEO_ACCEPT_ATTR,
@@ -533,7 +519,7 @@ interface MsgItem {
 }
 
 type PickerKind = 'emoji' | 'sticker'
-type QuickSendType = 'image' | 'video' | 'audio' | 'file'
+type QuickSendType = 'image' | 'video' | 'audio'
 
 type PickerCategory = {
   id: string
@@ -581,20 +567,16 @@ const mediaDialogVisible = ref(false)
 const quickMediaUploading = ref(false)
 const quickSendType = ref<QuickSendType>('image')
 const imageInputRef = ref<HTMLInputElement | null>(null)
-const videoPreviewInputRef = ref<HTMLInputElement | null>(null)
 const videoInputRef = ref<HTMLInputElement | null>(null)
 const audioInputRef = ref<HTMLInputElement | null>(null)
-const fileInputRef = ref<HTMLInputElement | null>(null)
 const mediaForm = ref({
   originalContentUrl: '',
   previewImageUrl: '',
   durationSeconds: 5,
-  fileName: '',
 })
 const imageMaxKb = Math.floor(IMAGE_MAX_BYTES / 1024)
 const videoMaxMb = Math.floor(VIDEO_MAX_BYTES / (1024 * 1024))
 const audioMaxMb = Math.floor(AUDIO_MAX_BYTES / (1024 * 1024))
-const fileMaxMb = Math.floor(FILE_MAX_BYTES / (1024 * 1024))
 
 const activeSupportPresets = computed(() =>
   supportPresetsRaw.value.filter((p: any) => p.isActive !== false),
@@ -604,7 +586,6 @@ const quickSendActions: Array<{ type: QuickSendType, label: string, icon: string
   { type: 'image', label: '圖片', icon: '🖼️' },
   { type: 'video', label: '影片', icon: '🎬' },
   { type: 'audio', label: '音訊', icon: '🎵' },
-  { type: 'file', label: '檔案', icon: '📎' },
 ]
 const quickSendDialogTitle = computed(() => {
   const label = quickSendActions.find(action => action.type === quickSendType.value)?.label || ''
@@ -614,14 +595,8 @@ const canSendQuickMedia = computed(() => {
   if (quickMediaUploading.value) return false
   const originalContentUrl = String(mediaForm.value.originalContentUrl || '').trim()
   if (!originalContentUrl) return false
-  if (quickSendType.value === 'video') {
-    return !!String(mediaForm.value.previewImageUrl || '').trim()
-  }
   if (quickSendType.value === 'audio') {
     return Number(mediaForm.value.durationSeconds) > 0
-  }
-  if (quickSendType.value === 'file') {
-    return !!String(mediaForm.value.fileName || '').trim()
   }
   return true
 })
@@ -807,34 +782,28 @@ function resetQuickMediaForm() {
     originalContentUrl: '',
     previewImageUrl: '',
     durationSeconds: 5,
-    fileName: '',
   }
   clearQuickFileInputs()
 }
 
 function clearQuickFileInputs() {
   if (imageInputRef.value) imageInputRef.value.value = ''
-  if (videoPreviewInputRef.value) videoPreviewInputRef.value.value = ''
   if (videoInputRef.value) videoInputRef.value.value = ''
   if (audioInputRef.value) audioInputRef.value.value = ''
-  if (fileInputRef.value) fileInputRef.value.value = ''
 }
 
-type QuickPickKind = 'image' | 'videoPreview' | 'video' | 'audio' | 'file'
+type QuickPickKind = 'image' | 'video' | 'audio'
 
 function triggerQuickPick(kind: QuickPickKind) {
   if (kind === 'image') imageInputRef.value?.click()
-  else if (kind === 'videoPreview') videoPreviewInputRef.value?.click()
   else if (kind === 'video') videoInputRef.value?.click()
   else if (kind === 'audio') audioInputRef.value?.click()
-  else fileInputRef.value?.click()
 }
 
-function toUploadMediaKind(kind: QuickPickKind): 'image' | 'video' | 'audio' | 'file' {
-  if (kind === 'image' || kind === 'videoPreview') return 'image'
+function toUploadMediaKind(kind: QuickPickKind): 'image' | 'video' | 'audio' {
+  if (kind === 'image') return 'image'
   if (kind === 'video') return 'video'
-  if (kind === 'audio') return 'audio'
-  return 'file'
+  return 'audio'
 }
 
 async function getAudioDurationSeconds(file: File): Promise<number> {
@@ -853,6 +822,46 @@ async function getAudioDurationSeconds(file: File): Promise<number> {
     }
     audio.src = objectUrl
   })
+}
+
+async function createVideoPreviewFile(file: File): Promise<File | null> {
+  if (typeof document === 'undefined') return null
+  const objectUrl = URL.createObjectURL(file)
+  try {
+    const frameBlob = await new Promise<Blob | null>((resolve) => {
+      const video = document.createElement('video')
+      video.preload = 'metadata'
+      video.muted = true
+      video.playsInline = true
+
+      video.onloadeddata = () => {
+        const sourceWidth = video.videoWidth || 1280
+        const sourceHeight = video.videoHeight || 720
+        const targetWidth = Math.min(sourceWidth, 960)
+        const targetHeight = Math.max(1, Math.round((sourceHeight / sourceWidth) * targetWidth))
+        const canvas = document.createElement('canvas')
+        canvas.width = targetWidth
+        canvas.height = targetHeight
+        const ctx = canvas.getContext('2d')
+        if (!ctx) {
+          resolve(null)
+          return
+        }
+        ctx.drawImage(video, 0, 0, targetWidth, targetHeight)
+        canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.86)
+      }
+
+      video.onerror = () => resolve(null)
+      video.src = objectUrl
+    })
+
+    if (!frameBlob) return null
+    const baseName = file.name.replace(/\.[^/.]+$/, '') || 'video'
+    return new File([frameBlob], `${baseName}-preview.jpg`, { type: 'image/jpeg' })
+  }
+  finally {
+    URL.revokeObjectURL(objectUrl)
+  }
 }
 
 async function onQuickFileChange(kind: QuickPickKind, event: Event) {
@@ -876,19 +885,23 @@ async function onQuickFileChange(kind: QuickPickKind, event: Event) {
       mediaForm.value.originalContentUrl = url
       mediaForm.value.previewImageUrl = url
     }
-    else if (kind === 'videoPreview') {
-      mediaForm.value.previewImageUrl = url
-    }
     else if (kind === 'video') {
       mediaForm.value.originalContentUrl = url
+      mediaForm.value.previewImageUrl = url
+      const previewFile = await createVideoPreviewFile(file)
+      if (previewFile) {
+        try {
+          const previewUrl = await uploadToStorage(previewFile)
+          mediaForm.value.previewImageUrl = previewUrl || url
+        }
+        catch {
+          showToast('已上傳影片，預覽圖自動產生失敗，將使用影片連結', 'error')
+        }
+      }
     }
     else if (kind === 'audio') {
       mediaForm.value.originalContentUrl = url
       mediaForm.value.durationSeconds = await getAudioDurationSeconds(file)
-    }
-    else if (kind === 'file') {
-      mediaForm.value.originalContentUrl = url
-      mediaForm.value.fileName = file.name
     }
   }
   catch {
@@ -918,13 +931,10 @@ async function sendQuickMedia() {
     originalContentUrl: String(mediaForm.value.originalContentUrl || '').trim(),
   }
   if (quickSendType.value === 'image' || quickSendType.value === 'video') {
-    body.previewImageUrl = String(mediaForm.value.previewImageUrl || '').trim()
+    body.previewImageUrl = String(mediaForm.value.previewImageUrl || mediaForm.value.originalContentUrl || '').trim()
   }
   if (quickSendType.value === 'audio') {
     body.duration = Math.round(Number(mediaForm.value.durationSeconds) * 1000)
-  }
-  if (quickSendType.value === 'file') {
-    body.fileName = String(mediaForm.value.fileName || '').trim()
   }
 
   sending.value = true
