@@ -1,4 +1,5 @@
 import type { messagingApi } from '@line/bot-sdk'
+import { validateUploadPayload } from '~~/server/utils/upload-validator'
 
 export default defineEventHandler(async (event) => {
   const firestoreId = getRouterParam(event, 'id')
@@ -46,7 +47,13 @@ export default defineEventHandler(async (event) => {
   let finalContentType = contentType ?? 'image/png'
 
   if (imageBase64) {
-    imageBuffer = Buffer.from(imageBase64, 'base64')
+    const validated = validateUploadPayload({
+      base64Input: imageBase64,
+      contentType: finalContentType,
+      allowedCategories: ['image'],
+    })
+    imageBuffer = validated.buffer
+    finalContentType = validated.contentType
   } else if (oldDoc.imageUrl) {
     try {
       const response = await fetch(oldDoc.imageUrl)

@@ -504,16 +504,12 @@
 import {
   AUDIO_ACCEPT_ATTR,
   AUDIO_MAX_BYTES,
-  AUDIO_MIME_TYPES,
   FILE_ACCEPT_ATTR,
   FILE_MAX_BYTES,
-  FILE_MIME_TYPES,
   IMAGE_ACCEPT_ATTR,
   IMAGE_MAX_BYTES,
-  IMAGE_MIME_TYPES,
   VIDEO_ACCEPT_ATTR,
   VIDEO_MAX_BYTES,
-  VIDEO_MIME_TYPES,
 } from '~~/shared/upload-rules'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
@@ -568,6 +564,7 @@ type StructuredMessagePreview = {
 }
 
 const { toasts, showToast } = useAdminToast()
+const { uploadToStorage, validateFile } = useMediaUpload()
 const listLoading = ref(false)
 const msgLoading = ref(false)
 const sending = ref(false)
@@ -833,48 +830,11 @@ function triggerQuickPick(kind: QuickPickKind) {
   else fileInputRef.value?.click()
 }
 
-function readAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
-}
-
-async function uploadFileToStorage(file: File): Promise<string> {
-  const base64 = await readAsDataUrl(file)
-  const res = await $fetch<{ imageUrl: string, url?: string }>('/api/upload', {
-    method: 'POST',
-    body: { fileBase64: base64, contentType: file.type },
-  })
-  return String(res.url || res.imageUrl || '').trim()
-}
-
-function isAllowedMimeAndSize(file: File, kind: QuickPickKind): { ok: boolean, message: string } {
-  const imageTypeSet = new Set(IMAGE_MIME_TYPES)
-  const videoTypeSet = new Set(VIDEO_MIME_TYPES)
-  const audioTypeSet = new Set(AUDIO_MIME_TYPES)
-  const fileTypeSet = new Set(FILE_MIME_TYPES)
-
-  if (kind === 'image' || kind === 'videoPreview') {
-    if (!imageTypeSet.has(file.type)) return { ok: false, message: '僅支援 JPG / PNG 圖片' }
-    if (file.size > IMAGE_MAX_BYTES) return { ok: false, message: '圖片不能超過 500KB' }
-    return { ok: true, message: '' }
-  }
-  if (kind === 'video') {
-    if (!videoTypeSet.has(file.type)) return { ok: false, message: '僅支援 MP4 影片' }
-    if (file.size > VIDEO_MAX_BYTES) return { ok: false, message: '影片不能超過 5MB' }
-    return { ok: true, message: '' }
-  }
-  if (kind === 'audio') {
-    if (!audioTypeSet.has(file.type)) return { ok: false, message: '僅支援 M4A / MP3 / WAV 音訊' }
-    if (file.size > AUDIO_MAX_BYTES) return { ok: false, message: '音訊不能超過 5MB' }
-    return { ok: true, message: '' }
-  }
-  if (!fileTypeSet.has(file.type)) return { ok: false, message: '僅支援 PDF / Office / TXT / ZIP 檔案' }
-  if (file.size > FILE_MAX_BYTES) return { ok: false, message: '檔案不能超過 5MB' }
-  return { ok: true, message: '' }
+function toUploadMediaKind(kind: QuickPickKind): 'image' | 'video' | 'audio' | 'file' {
+  if (kind === 'image' || kind === 'videoPreview') return 'image'
+  if (kind === 'video') return 'video'
+  if (kind === 'audio') return 'audio'
+  return 'file'
 }
 
 async function getAudioDurationSeconds(file: File): Promise<number> {
@@ -901,7 +861,7 @@ async function onQuickFileChange(kind: QuickPickKind, event: Event) {
   input.value = ''
   if (!file) return
 
-  const validation = isAllowedMimeAndSize(file, kind)
+  const validation = validateFile(file, toUploadMediaKind(kind))
   if (!validation.ok) {
     showToast(validation.message, 'error')
     return
@@ -909,7 +869,7 @@ async function onQuickFileChange(kind: QuickPickKind, event: Event) {
 
   quickMediaUploading.value = true
   try {
-    const url = await uploadFileToStorage(file)
+    const url = await uploadToStorage(file)
     if (!url) throw new Error('empty upload url')
 
     if (kind === 'image') {

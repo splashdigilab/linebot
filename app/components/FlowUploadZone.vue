@@ -68,11 +68,7 @@
 <script setup lang="ts">
 import {
   IMAGE_ACCEPT_ATTR,
-  IMAGE_MAX_BYTES,
-  IMAGE_MIME_TYPES,
   VIDEO_ACCEPT_ATTR,
-  VIDEO_MAX_BYTES,
-  VIDEO_MIME_TYPES,
 } from '~~/shared/upload-rules'
 
 type LocalSelectedFile = {
@@ -104,6 +100,7 @@ const emit = defineEmits<{
 const inputRef = ref<HTMLInputElement | null>(null)
 const isUploading = ref(false)
 const lastObjectUrl = ref<string | null>(null)
+const { readAsDataUrl, uploadToStorage, validateFile } = useMediaUpload()
 
 const acceptAttr = computed(() =>
   props.type === 'video'
@@ -120,15 +117,6 @@ const uploadMode = computed(() => props.uploadMode ?? 'api')
 
 function triggerPick() {
   inputRef.value?.click()
-}
-
-function readAsDataUrl(file: File) {
-  return new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
 }
 
 function getImageSize(src: string) {
@@ -157,18 +145,10 @@ async function onFileChange(e: Event) {
   const file = input.files?.[0]
   if (!file) return
 
-  const isVideo = props.type === 'video'
-  const allowTypes = isVideo ? VIDEO_MIME_TYPES : IMAGE_MIME_TYPES
-  const maxBytes = isVideo ? VIDEO_MAX_BYTES : IMAGE_MAX_BYTES
-
-  if (!allowTypes.includes(file.type)) {
-    emitError(isVideo ? '僅支援 MP4 格式' : '僅支援 JPG / PNG 格式')
-    input.value = ''
-    return
-  }
-
-  if (file.size > maxBytes) {
-    emitError(isVideo ? '影片不能超過 5MB' : '圖片不能超過 500KB')
+  const mediaKind = props.type === 'video' ? 'video' : 'image'
+  const validation = validateFile(file, mediaKind)
+  if (!validation.ok) {
+    emitError(validation.message)
     input.value = ''
     return
   }
@@ -177,14 +157,13 @@ async function onFileChange(e: Event) {
   emit('uploading', true)
 
   try {
-    const base64 = await readAsDataUrl(file)
-
     if (uploadMode.value === 'local') {
+      const base64 = await readAsDataUrl(file)
       clearLastObjectUrl()
       const objectUrl = URL.createObjectURL(file)
       lastObjectUrl.value = objectUrl
       let size: { width: number; height: number } | undefined
-      if (!isVideo) {
+      if (mediaKind !== 'video') {
         size = await getImageSize(objectUrl)
       }
       emit('file-selected', {
@@ -199,12 +178,8 @@ async function onFileChange(e: Event) {
       return
     }
 
-    const res = await $fetch<{ imageUrl: string }>('/api/upload', {
-      method: 'POST',
-      body: { imageBase64: base64, contentType: file.type },
-    })
-
-    emit('update:modelValue', res.imageUrl)
+    const uploadedUrl = await uploadToStorage(file)
+    emit('update:modelValue', uploadedUrl)
   } catch {
     emitError('上傳失敗，請重試')
   } finally {
