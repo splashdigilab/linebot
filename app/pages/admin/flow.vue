@@ -687,6 +687,7 @@ const loading = ref(true)
 const saving = ref(false)
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
+const FLOW_MESSAGE_LIMIT = 5
 const { toasts, showToast } = useAdminToast()
 const { tags: allTags, loadTags } = useAdminTagList()
 
@@ -876,6 +877,11 @@ function cancelEdit() {
 
 // ── Messages ──────────────────────────────────────────
 function addMessage(type: string) {
+  if (form.value.messages.length >= FLOW_MESSAGE_LIMIT) {
+    showToast(`單一模組最多只能儲存 ${FLOW_MESSAGE_LIMIT} 則訊息`, 'error')
+    return
+  }
+
   if (type === 'text') {
     form.value.messages.push({ type: 'text', text: '', buttons: [] })
   } else if (type === 'image') {
@@ -1219,6 +1225,9 @@ function onQrDrop(e: DragEvent, msgIndex: number, dropIndex: number) {
 async function submitForm() {
   if (!form.value.name) return showToast('請輸入模組名稱', 'error')
   if (!form.value.messages.length) return showToast('請至少新增一則回覆訊息', 'error')
+  if (form.value.messages.length > FLOW_MESSAGE_LIMIT) {
+    return showToast(`單一模組最多只能儲存 ${FLOW_MESSAGE_LIMIT} 則訊息`, 'error')
+  }
 
   form.value.messages = normalizeMessages(form.value.messages)
   const validationError = validateMessages(form.value.messages)
@@ -1252,8 +1261,8 @@ async function submitForm() {
       showToast('模組已更新 ✅', 'success')
       await loadFlows()
     }
-  } catch {
-    showToast('儲存失敗', 'error')
+  } catch (error: any) {
+    showToast(error?.data?.statusMessage || '儲存失敗', 'error')
   } finally {
     saving.value = false
   }
@@ -1343,6 +1352,8 @@ function normalizeMessages(messages: any[]) {
 }
 
 function validateMessages(messages: any[]): string | null {
+  if (messages.length > FLOW_MESSAGE_LIMIT) return `單一模組最多只能儲存 ${FLOW_MESSAGE_LIMIT} 則訊息`
+
   const qrCount = messages.filter((m: any) => m.type === 'quickReply').length
   const uiCount = messages.filter((m: any) => m.type === 'userInput').length
   
@@ -1370,6 +1381,10 @@ function validateMessages(messages: any[]): string | null {
     // Validate quick replies
     if (msg?.type === 'quickReply') {
       if (!msg.text?.trim()) return '快速回覆模組：搭配的文字內容為必填'
+      if (!Array.isArray(msg.quickReplies) || msg.quickReplies.length < 1) {
+        return '快速回覆模組：至少要有 1 個快速回覆選項'
+      }
+      if (msg.quickReplies.length > 13) return '快速回覆模組：最多 13 個快速回覆選項'
 
       if (Array.isArray(msg.quickReplies)) {
         for (const qr of msg.quickReplies) {
@@ -1454,7 +1469,13 @@ function validateMessages(messages: any[]): string | null {
 
     // carousel buttons are required by design and must be complete
     if (msg?.type === 'carousel' && Array.isArray(msg.columns)) {
+      if (msg.columns.length < 1) return '輪播訊息：至少要有 1 個欄位'
+      if (msg.columns.length > 10) return '輪播訊息：最多 10 個欄位'
       for (const col of msg.columns) {
+        if (!Array.isArray(col?.actions) || col.actions.length < 1) {
+          return '輪播訊息：每個欄位至少要有 1 個按鈕'
+        }
+        if (col.actions.length > 3) return '輪播訊息：每個欄位按鈕最多 3 個'
         for (const action of (col?.actions ?? [])) {
           if (!action?.label?.trim()) return '輪播按鈕文字為必填'
           if (action.type === 'uri' && !action?.uri?.trim()) return '輪播按鈕網址為必填'
@@ -1469,7 +1490,10 @@ function validateMessages(messages: any[]): string | null {
 
     // image carousel action payload must be complete when action is enabled
     if (msg?.type === 'imageCarousel' && Array.isArray(msg.columns)) {
+      if (msg.columns.length < 1) return '圖片輪播：至少要有 1 個欄位'
+      if (msg.columns.length > 10) return '圖片輪播：最多 10 個欄位'
       for (const col of msg.columns) {
+        if (!col?.imageUrl?.trim()) return '圖片輪播：每個欄位都需要圖片'
         const action = col?.action
         if (action?.type === 'uri') {
           if (!action?.label?.trim()) return '圖片輪播按鈕文字為必填'

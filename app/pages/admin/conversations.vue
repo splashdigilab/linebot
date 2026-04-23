@@ -71,7 +71,13 @@
           class="conv-bubble-row"
           :class="msg.direction"
         >
-          <div class="conv-bubble-wrap" :class="msg.direction">
+          <div
+            class="conv-bubble-wrap"
+            :class="[
+              msg.direction,
+              { 'is-structured': isStructuredLineMessage(msg), 'is-media': isMediaMessage(msg) },
+            ]"
+          >
             <div
               class="conv-bubble"
               :class="[
@@ -104,6 +110,15 @@
                 :src="getMessageImageUrl(msg)"
                 fit="contain"
                 :preview-src-list="[getMessageImageUrl(msg)]"
+                :preview-teleported="true"
+              />
+            </template>
+            <template v-else-if="getLineRichImageUrl(msg)">
+              <el-image
+                class="conv-inline-image conv-inline-image--line-rich"
+                :src="getLineRichImageUrl(msg)"
+                fit="cover"
+                :preview-src-list="[getLineRichImageUrl(msg)]"
                 :preview-teleported="true"
               />
             </template>
@@ -149,12 +164,13 @@
               </a>
             </template>
             <template v-else-if="isStructuredLineMessage(msg)">
-              <div class="conv-line-template" :class="`variant-${getStructuredVariant(msg)}`">
+              <div class="conv-line-template" :class="getStructuredTemplateClass(msg)">
                 <div class="conv-line-template-cards">
                   <div
                     v-for="(card, cardIdx) in getStructuredCards(msg)"
                     :key="`${msg.id}-card-${cardIdx}`"
                     class="conv-line-card"
+                    :class="getStructuredCardClass(msg, card)"
                   >
                     <img
                       v-if="card.imageUrl"
@@ -1254,6 +1270,25 @@ function getStructuredCards(msg: MsgItem): StructuredCardPreview[] {
   return getStructuredMessagePreview(msg)?.cards || []
 }
 
+function hasStructuredCardImage(msg: MsgItem): boolean {
+  return getStructuredCards(msg).some(card => Boolean(card.imageUrl))
+}
+
+function getStructuredTemplateClass(msg: MsgItem): Array<string> {
+  const variant = getStructuredVariant(msg)
+  return [
+    `variant-${variant}`,
+    ...(hasStructuredCardImage(msg) ? ['has-card-image'] : ['is-text-only']),
+  ]
+}
+
+function getStructuredCardClass(msg: MsgItem, card: StructuredCardPreview): Record<string, boolean> {
+  return {
+    'has-card-image': Boolean(card.imageUrl),
+    'is-card-text-only': getStructuredVariant(msg) === 'carousel' && !card.imageUrl,
+  }
+}
+
 function getCardOverlayLabel(card: StructuredCardPreview): string {
   const fromAction = Array.isArray(card.actions) && card.actions.length > 0
     ? String(card.actions[0] || '').trim()
@@ -1264,12 +1299,35 @@ function getCardOverlayLabel(card: StructuredCardPreview): string {
 
 function shouldUseLineActionStyle(msg: MsgItem): boolean {
   const variant = getStructuredVariant(msg)
-  return variant === 'buttons' || variant === 'confirm' || variant === 'carousel'
+  return variant === 'buttons' || variant === 'confirm' || variant === 'carousel' || variant === 'image_carousel'
 }
 
 function getMessageImageUrl(msg: MsgItem): string {
   if (getMessageType(msg) !== 'image') return ''
   return String(msg?.payload?.previewImageUrl || msg?.payload?.originalContentUrl || '').trim()
+}
+
+function getLineRichImageUrl(msg: MsgItem): string {
+  const type = getMessageType(msg)
+  const payload = msg?.payload || {}
+  if (type === 'imagemap') {
+    return String(payload?.baseUrl ? `${payload.baseUrl}/1040` : '').trim()
+  }
+  if (type !== 'flex') return ''
+
+  const rootContents = payload?.contents
+  const bubble = rootContents?.type === 'carousel' && Array.isArray(rootContents?.contents)
+    ? rootContents.contents[0]
+    : rootContents
+  const bodyContents = Array.isArray(bubble?.body?.contents) ? bubble.body.contents : []
+  const imageNode = bodyContents.find((item: any) => item?.type === 'image' && item?.url)
+  const overlayOnly =
+    bodyContents.length > 1
+    && bodyContents
+      .filter((item: any) => item?.type !== 'image')
+      .every((item: any) => item?.position === 'absolute' && item?.action)
+  if (!imageNode?.url || !overlayOnly) return ''
+  return String(imageNode.url).trim()
 }
 
 function getVideoPreviewImageUrl(msg: MsgItem): string {

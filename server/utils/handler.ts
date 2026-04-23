@@ -375,6 +375,9 @@ export async function pushSupportPresetActionToUser(
       userId,
       channelSecret,
     )
+    if (lineMessages.length === 0) {
+      throw createError({ statusCode: 400, statusMessage: '此機器人模組沒有可發送的訊息' })
+    }
     await pushMessage(userId, lineMessages)
     await saveOutgoingConversationMessages(userId, lineMessages)
     await dispatchPostReplyActions(userId, flow.messages)
