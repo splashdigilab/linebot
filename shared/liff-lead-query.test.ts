@@ -13,6 +13,18 @@ describe('parseLeadClaimFromQuery', () => {
     expect(parseLeadClaimFromQuery(q)).toEqual({ ct: 'tok-2', campaignCode: 'c_def', liffId: '2009-def' })
   })
 
+  it('parses ct and c from liff.state full path format', () => {
+    const encoded = encodeURIComponent('/liff/lead?ct=tok-path&c=c_path&liffId=2009-path')
+    const q = { 'liff.state': encoded }
+    expect(parseLeadClaimFromQuery(q)).toEqual({ ct: 'tok-path', campaignCode: 'c_path', liffId: '2009-path' })
+  })
+
+  it('parses ct and c from liff.state full URL format', () => {
+    const encoded = encodeURIComponent('https://main.example.com/liff/lead?ct=tok-url&c=c_url&liffId=2009-url')
+    const q = { 'liff.state': encoded }
+    expect(parseLeadClaimFromQuery(q)).toEqual({ ct: 'tok-url', campaignCode: 'c_url', liffId: '2009-url' })
+  })
+
   it('top-level wins over liff.state when both present', () => {
     const q = { ct: 'a', c: 'b', liffId: 'top-id', 'liff.state': encodeURIComponent('?ct=x&c=y&liffId=state-id') }
     expect(parseLeadClaimFromQuery(q)).toEqual({ ct: 'a', campaignCode: 'b', liffId: 'top-id' })
