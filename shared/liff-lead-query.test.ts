@@ -39,4 +39,11 @@ describe('parseLeadClaimFromQuery', () => {
     const q = { ct: 'legacy', c: 'legacy_code', liffId: 'legacy-id' }
     expect(parseLeadClaimFromQuery(q)).toEqual({ ct: 'legacy', campaignCode: 'legacy_code', liffId: 'legacy-id' })
   })
+
+  it('parses nested liff.state wrapping another liff.state', () => {
+    const inner = encodeURIComponent('/liff/lead?claimToken=nested-token&c=c_nested&liffId=2009-nested')
+    const outer = `?liff.state=${inner}`
+    const q = { 'liff.state': outer }
+    expect(parseLeadClaimFromQuery(q)).toEqual({ ct: 'nested-token', campaignCode: 'c_nested', liffId: '2009-nested' })
+  })
 })

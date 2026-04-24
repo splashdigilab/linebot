@@ -32,22 +32,28 @@ export function parseLeadClaimFromQuery(
   const stateRaw = pick('liff.state') || pick('liff_state')
   if (stateRaw) {
     try {
-      const decoded = decodeURIComponent(stateRaw.replace(/\+/g, '%20'))
-      let search = ''
-      if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
-        // e.g. "https://xxx/liff/lead?ct=...&c=..."
-        search = new URL(decoded).search
+      let cursor = stateRaw
+      for (let i = 0; i < 4; i++) {
+        const decoded = decodeURIComponent(String(cursor || '').replace(/\+/g, '%20'))
+        let search = ''
+        if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
+          search = new URL(decoded).search
+        }
+        else {
+          const qIndex = decoded.indexOf('?')
+          search = qIndex >= 0 ? decoded.slice(qIndex) : decoded
+        }
+        const normalized = search.startsWith('?') ? search.slice(1) : search
+        const sp = new URLSearchParams(normalized)
+
+        if (!ct) ct = String(sp.get('claimToken') || sp.get('claim_token') || sp.get('ct') || '').trim()
+        if (!campaignCode) campaignCode = String(sp.get('c') || '').trim()
+        if (!liffId) liffId = String(sp.get('liffId') || sp.get('liff_id') || '').trim()
+
+        const nested = String(sp.get('liff.state') || sp.get('liff_state') || '').trim()
+        if (!nested) break
+        cursor = nested
       }
-      else {
-        const qIndex = decoded.indexOf('?')
-        // e.g. "/liff/lead?ct=...&c=..." or "?ct=...&c=..."
-        search = qIndex >= 0 ? decoded.slice(qIndex) : decoded
-      }
-      const normalized = search.startsWith('?') ? search.slice(1) : search
-      const sp = new URLSearchParams(normalized)
-      if (!ct) ct = String(sp.get('claimToken') || sp.get('claim_token') || sp.get('ct') || '').trim()
-      if (!campaignCode) campaignCode = String(sp.get('c') || '').trim()
-      if (!liffId) liffId = String(sp.get('liffId') || sp.get('liff_id') || '').trim()
     }
     catch {
       // ignore malformed state
