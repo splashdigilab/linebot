@@ -10,6 +10,10 @@
     <template v-else-if="phase === 'error'">
       <p class="liff-lead-title">無法完成綁定</p>
       <p class="liff-lead-msg liff-lead-err">{{ errorText }}</p>
+      <div v-if="debugInfo" class="liff-lead-debug">
+        <p class="liff-lead-debug-title">診斷資訊（請截圖提供給工程）</p>
+        <pre class="liff-lead-debug-body">{{ debugInfo }}</pre>
+      </div>
     </template>
   </div>
 </template>
@@ -23,6 +27,7 @@ const route = useRoute()
 const phase = ref<'loading' | 'need-login' | 'done' | 'error'>('loading')
 const errorText = ref('')
 const doneMessage = ref('')
+const debugInfo = ref('')
 
 function mergeParsedLead(
   base: { ct: string; campaignCode: string; liffId: string },
@@ -64,6 +69,29 @@ function parseLeadFromBrowserLocation() {
   return result
 }
 
+function buildDebugInfo(extra: Record<string, unknown>) {
+  try {
+    const routeQuery = route.query as Record<string, unknown>
+    const locationData = typeof window === 'undefined'
+      ? {}
+      : {
+        href: window.location.href,
+        search: window.location.search,
+        hash: window.location.hash,
+      }
+    return JSON.stringify({
+      routeQuery,
+      parsedFromRoute: parseLeadClaimFromQuery(routeQuery),
+      parsedFromLocation: parseLeadFromBrowserLocation(),
+      ...locationData,
+      ...extra,
+    }, null, 2)
+  }
+  catch (e) {
+    return `buildDebugInfo failed: ${String(e)}`
+  }
+}
+
 async function runClaim(ct: string, liffId: string) {
   const liffMod = await import('@line/liff')
   const liff = liffMod.default
@@ -100,11 +128,13 @@ onMounted(async () => {
   if (!ct) {
     phase.value = 'error'
     errorText.value = '連結缺少必要參數。請使用活動提供的完整網址，並確認 LINE Developers 中此 LIFF 的 Endpoint URL 為「你的網域/liff/lead」，勿與 Webhook（/webhook）相同。'
+    debugInfo.value = buildDebugInfo({ reason: 'missing_ct', mergedParsed: parsed })
     return
   }
   if (!liffId) {
     phase.value = 'error'
     errorText.value = '連結缺少 LIFF 識別。請回後台重新儲存活動以產生新連結，再重新開啟。'
+    debugInfo.value = buildDebugInfo({ reason: 'missing_liff_id', mergedParsed: parsed })
     return
   }
 
@@ -117,6 +147,11 @@ onMounted(async () => {
     const err = e as { data?: { statusMessage?: string }; message?: string }
     phase.value = 'error'
     errorText.value = err?.data?.statusMessage || err?.message || '發生錯誤，請稍後再試。'
+    debugInfo.value = buildDebugInfo({
+      reason: 'run_claim_failed',
+      mergedParsed: parsed,
+      errorMessage: err?.data?.statusMessage || err?.message || 'unknown',
+    })
   }
 })
 </script>
@@ -147,5 +182,25 @@ onMounted(async () => {
 }
 .liff-lead-err {
   color: #f28b82;
+}
+.liff-lead-debug {
+  margin-top: 1rem;
+  border: 1px solid #3c4043;
+  border-radius: 0.5rem;
+  background: #111827;
+  padding: 0.75rem;
+}
+.liff-lead-debug-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+  color: #9aa0a6;
+}
+.liff-lead-debug-body {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: #cfd8dc;
 }
 </style>
