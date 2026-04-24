@@ -1,0 +1,36 @@
+/* LINE 連線：已儲存 Token／Secret 遮罩（外觀接近輸入框） */
+.ls-cred-mask {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  min-height: 32px;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--el-border-radius-base, 4px);
+  background: var(--bg-elevated, #fff);
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.ls-cred-mask:focus {
+  outline: 2px solid var(--el-color-primary);
+  outline-offset: 1px;
+}
+
+.ls-cred-mask-dots {
+  font-family: ui-monospace, monospace;
+  letter-spacing: 0.06em;
+  user-select: none;
+}
+
+.ls-cred-mask-suffix {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.ls-cred-mask-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  flex-basis: 100%;
+}

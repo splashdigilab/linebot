@@ -4,7 +4,7 @@
       <AdminSoloPageHeading
         field-label="LINE 連線"
         title="🔐 LINE OA 憑證"
-        caption="以下三個欄位請填完再儲存。"
+        caption="預設 LIFF 必填；Token／Secret 第一次要貼。存過後會以黑點顯示，點黑點可改。"
       />
       <div class="flex gap-2 admin-header-actions">
         <el-button :loading="loading" @click="load">重新載入</el-button>
@@ -22,7 +22,7 @@
           </div>
           <div class="card-section-stack">
             <p class="ar-section-hint">
-              三項皆為必填。請到 LINE Developers → Messaging API 複製貼上。
+              請到 LINE Developers → Messaging API 複製貼上。
             </p>
             <div class="admin-field-group">
               <AdminFieldLabel text="預設 LIFF（必填）" tight />
@@ -34,30 +34,59 @@
             </div>
             <div class="admin-field-group">
               <AdminFieldLabel text="Channel Access Token（必填）" tight />
+              <div
+                v-if="showMaskedAccessToken"
+                class="ls-cred-mask"
+                role="button"
+                tabindex="0"
+                aria-label="Channel Access Token 已儲存，點擊以變更"
+                @click="revealAccessToken"
+                @keydown.enter.prevent="revealAccessToken"
+              >
+                <span class="ls-cred-mask-dots" aria-hidden="true">{{ maskDots }}</span>
+                <span v-if="meta.channelAccessTokenSuffix" class="ls-cred-mask-suffix">末四碼 {{ meta.channelAccessTokenSuffix }}</span>
+                <span class="ls-cred-mask-hint">已儲存（內容隱藏），點此變更</span>
+              </div>
               <el-input
+                v-else
+                ref="accessTokenInputRef"
                 v-model="form.channelAccessToken"
                 type="password"
                 show-password
                 placeholder="貼上完整 Token"
                 autocomplete="off"
+                @blur="onAccessTokenBlur"
               />
             </div>
             <div class="admin-field-group">
               <AdminFieldLabel text="Channel Secret（必填）" tight />
+              <div
+                v-if="showMaskedSecret"
+                class="ls-cred-mask"
+                role="button"
+                tabindex="0"
+                aria-label="Channel Secret 已儲存，點擊以變更"
+                @click="revealSecret"
+                @keydown.enter.prevent="revealSecret"
+              >
+                <span class="ls-cred-mask-dots" aria-hidden="true">{{ maskDots }}</span>
+                <span v-if="meta.channelSecretSuffix" class="ls-cred-mask-suffix">末四碼 {{ meta.channelSecretSuffix }}</span>
+                <span class="ls-cred-mask-hint">已儲存（內容隱藏），點此變更</span>
+              </div>
               <el-input
+                v-else
+                ref="channelSecretInputRef"
                 v-model="form.channelSecret"
                 type="password"
                 show-password
                 placeholder="貼上完整 Secret"
                 autocomplete="off"
+                @blur="onSecretBlur"
               />
               <p class="text-xs text-muted">須與 LINE 後台同一組。</p>
             </div>
-            <div v-if="meta.savedInFirestore" class="text-xs text-muted">
-              已存過：Token {{ tokenStatusLabel(meta.channelAccessTokenConfigured, meta.channelAccessTokenSuffix) }}；Secret {{ tokenStatusLabel(meta.channelSecretConfigured, meta.channelSecretSuffix) }}。
-            </div>
-            <div v-else class="text-xs text-muted">
-              還沒在這裡存過。若要在此更新密鑰，請貼上後按儲存。
+            <div v-if="!meta.savedInFirestore && !meta.channelAccessTokenConfigured" class="text-xs text-muted">
+              尚未在此頁存過憑證，請貼上 Token、Secret 後按儲存。
             </div>
 
             <hr class="divider">
@@ -194,6 +223,48 @@ const form = ref({
   channelSecret: '',
 })
 
+/** 已儲存時遮罩顯示用（非實際密文） */
+const maskDots = '••••••••••••'
+
+const accessTokenInputRef = ref<{ focus: () => void } | null>(null)
+const channelSecretInputRef = ref<{ focus: () => void } | null>(null)
+const accessTokenReveal = ref(false)
+const secretReveal = ref(false)
+
+const showMaskedAccessToken = computed(
+  () =>
+    meta.value.channelAccessTokenConfigured
+    && !form.value.channelAccessToken.trim()
+    && !accessTokenReveal.value,
+)
+
+const showMaskedSecret = computed(
+  () =>
+    meta.value.channelSecretConfigured
+    && !form.value.channelSecret.trim()
+    && !secretReveal.value,
+)
+
+function revealAccessToken() {
+  accessTokenReveal.value = true
+  nextTick(() => accessTokenInputRef.value?.focus?.())
+}
+
+function revealSecret() {
+  secretReveal.value = true
+  nextTick(() => channelSecretInputRef.value?.focus?.())
+}
+
+function onAccessTokenBlur() {
+  if (!form.value.channelAccessToken.trim() && meta.value.channelAccessTokenConfigured)
+    accessTokenReveal.value = false
+}
+
+function onSecretBlur() {
+  if (!form.value.channelSecret.trim() && meta.value.channelSecretConfigured)
+    secretReveal.value = false
+}
+
 /** 與 `server/routes/webhook.post.ts` 對應的公開路徑 */
 const suggestedWebhookUrl = ref('')
 
@@ -270,12 +341,6 @@ async function verifyWebhook(runTest: boolean) {
   }
 }
 
-function tokenStatusLabel(configured: boolean, suffix: string | null) {
-  if (!configured) return '未設定'
-  if (suffix) return `已設定（末四碼 ${suffix}）`
-  return '已設定'
-}
-
 async function getBearer(): Promise<string> {
   const u = $auth.currentUser
   if (!u) {
@@ -296,6 +361,8 @@ async function load() {
     form.value.defaultLiffId = data.defaultLiffId || ''
     form.value.channelAccessToken = ''
     form.value.channelSecret = ''
+    accessTokenReveal.value = false
+    secretReveal.value = false
   }
   catch (e: any) {
     showToast(e?.data?.message || e?.message || '載入失敗', 'error')
@@ -307,29 +374,38 @@ async function load() {
 
 async function save() {
   const defaultLiffId = form.value.defaultLiffId.trim()
-  const channelAccessToken = form.value.channelAccessToken.trim()
-  const channelSecret = form.value.channelSecret.trim()
+  const t = form.value.channelAccessToken.trim()
+  const s = form.value.channelSecret.trim()
+  const tc = meta.value.channelAccessTokenConfigured
+  const sc = meta.value.channelSecretConfigured
+
   if (!defaultLiffId) {
     showToast('請填寫預設 LIFF', 'error')
     return
   }
-  if (!channelAccessToken) {
+  if (!tc && !t) {
     showToast('請填寫 Channel Access Token', 'error')
     return
   }
-  if (!channelSecret) {
+  if (!sc && !s) {
     showToast('請填寫 Channel Secret', 'error')
+    return
+  }
+  if (t && !s && !sc) {
+    showToast('請填寫 Channel Secret', 'error')
+    return
+  }
+  if (s && !t && !tc) {
+    showToast('請填寫 Channel Access Token', 'error')
     return
   }
 
   saving.value = true
   try {
     const token = await getBearer()
-    const body: Record<string, unknown> = {
-      defaultLiffId,
-      channelAccessToken,
-      channelSecret,
-    }
+    const body: Record<string, unknown> = { defaultLiffId }
+    if (t) body.channelAccessToken = t
+    if (s) body.channelSecret = s
     await $fetch('/api/admin/line-workspace', {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}` },
