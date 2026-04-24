@@ -24,6 +24,46 @@ const phase = ref<'loading' | 'need-login' | 'done' | 'error'>('loading')
 const errorText = ref('')
 const doneMessage = ref('')
 
+function mergeParsedLead(
+  base: { ct: string; campaignCode: string; liffId: string },
+  next: { ct: string; campaignCode: string; liffId: string },
+) {
+  return {
+    ct: base.ct || next.ct,
+    campaignCode: base.campaignCode || next.campaignCode,
+    liffId: base.liffId || next.liffId,
+  }
+}
+
+function parseLeadFromBrowserLocation() {
+  if (typeof window === 'undefined') {
+    return { ct: '', campaignCode: '', liffId: '' }
+  }
+
+  let result = { ct: '', campaignCode: '', liffId: '' }
+  const url = new URL(window.location.href)
+  const searchQuery = Object.fromEntries(url.searchParams.entries())
+  result = mergeParsedLead(result, parseLeadClaimFromQuery(searchQuery))
+
+  // LINE 有時會把參數塞在 hash（例如 #ct=... 或 #/liff/lead?ct=...）
+  const hashRaw = String(url.hash || '').replace(/^#/, '')
+  if (hashRaw) {
+    const hashQueryString = hashRaw.includes('?')
+      ? hashRaw.slice(hashRaw.indexOf('?') + 1)
+      : hashRaw
+    const hashParams = new URLSearchParams(hashQueryString)
+    const hashQuery = Object.fromEntries(hashParams.entries())
+    result = mergeParsedLead(result, parseLeadClaimFromQuery(hashQuery))
+  }
+
+  // 再保險：將完整 href 當成 liff.state 來源解析一次
+  result = mergeParsedLead(result, parseLeadClaimFromQuery({
+    'liff.state': encodeURIComponent(window.location.href),
+  }))
+
+  return result
+}
+
 async function runClaim(ct: string, liffId: string) {
   const liffMod = await import('@line/liff')
   const liff = liffMod.default
@@ -52,7 +92,11 @@ async function runClaim(ct: string, liffId: string) {
 }
 
 onMounted(async () => {
-  const { ct, liffId } = parseLeadClaimFromQuery(route.query as Record<string, unknown>)
+  let parsed = parseLeadClaimFromQuery(route.query as Record<string, unknown>)
+  if (!parsed.ct || !parsed.liffId) {
+    parsed = mergeParsedLead(parsed, parseLeadFromBrowserLocation())
+  }
+  const { ct, liffId } = parsed
   if (!ct) {
     phase.value = 'error'
     errorText.value = '連結缺少必要參數。請使用活動提供的完整網址，並確認 LINE Developers 中此 LIFF 的 Endpoint URL 為「你的網域/liff/lead」，勿與 Webhook（/webhook）相同。'
