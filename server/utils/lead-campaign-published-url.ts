@@ -54,7 +54,7 @@ export async function syncPublishedEntryUrlForCampaign(
     createdAt: FieldValue.serverTimestamp(),
   }
 
-  const ctaUrl = `https://liff.line.me/${liffId}?ct=${rawToken}&c=${encodeURIComponent(campaignCode)}`
+  const ctaUrl = `https://liff.line.me/${liffId}?ct=${rawToken}&c=${encodeURIComponent(campaignCode)}&liffId=${encodeURIComponent(liffId)}`
 
   const batch = db.batch()
   batch.set(db.collection('leadClaims').doc(claimId), claimDoc)

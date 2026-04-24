@@ -441,10 +441,15 @@ async function save() {
     await $fetch('/api/admin/line-workspace', {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}` },
-      body,
+      body: {
+        ...body,
+        verifyWebhookOnSave: true,
+        compareWebhookUrl: suggestedWebhookUrl.value || undefined,
+      },
     })
-    showToast('已儲存', 'success')
+    showToast('已儲存（已自動測試 Webhook）', 'success')
     await load()
+    await verifyWebhook(false)
   }
   catch (e: any) {
     showToast(e?.data?.message || e?.message || '儲存失敗', 'error')

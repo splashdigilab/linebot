@@ -24,8 +24,6 @@
           :active="selectedId === c.id"
           :chip-text="c.isActive ? '啟用' : '停用'"
           :chip-tone="c.isActive ? 'success' : 'neutral'"
-          :meta-text="c.campaignCode"
-          :meta-truncate="true"
           @select="selectCampaign(c)"
         />
       </div>
@@ -95,24 +93,7 @@
           </div>
           <div class="card-section-stack">
             <p class="ar-section-hint">
-              LIFF 可留空；儲存後會用「LINE 連線」的預設 LIFF 自動產生活動進入網址。活動代碼由系統建立時自動產生。
-            </p>
-            <div class="admin-field-group">
-              <AdminFieldLabel tight>
-                LIFF ID <span class="text-muted">（選填；留空則用 LINE 連線預設）</span>
-              </AdminFieldLabel>
-              <el-input
-                v-model="form.liffId"
-                placeholder="例：2007123456-AbCdEfGh"
-                @keydown.enter.prevent
-              />
-            </div>
-            <div v-if="!isCreating && form.campaignCode" class="admin-field-group">
-              <AdminFieldLabel text="活動代碼（系統產生，僅供識別）" tight />
-              <el-input :model-value="form.campaignCode" readonly />
-            </div>
-            <p v-else-if="isCreating" class="ar-section-hint">
-              建立並儲存後，系統會自動產生活動代碼。
+              這裡是客服／行政日常會看的重點。活動連結會在儲存後自動更新。
             </p>
             <div class="admin-field-group">
               <AdminFieldLabel text="活動說明（選填）" tight />
@@ -143,6 +124,53 @@
                 />
               </div>
             </div>
+
+            <template v-if="!isCreating && selectedCampaign">
+              <hr class="divider">
+              <h4 class="admin-field-title">🔗 活動進入網址（貼標用）</h4>
+              <p class="ar-section-hint">
+                這個網址給客服／行政貼到問卷完成頁、簡訊、廣告按鈕即可。
+                使用者點入後會先綁 LINE；之後加官方帳號為好友時，系統才會自動貼上本活動標籤。
+              </p>
+              <div class="admin-field-group">
+                <AdminFieldLabel text="活動進入網址" tight />
+                <div v-if="ctaUrl" class="cmp-url-row">
+                  <el-input :model-value="ctaUrl" readonly />
+                  <el-button @click="copyCtaUrl">複製</el-button>
+                </div>
+                <div v-else class="ar-any-text-note">
+                  尚未有網址：請確認活動為「啟用」，再按上方「儲存變更」。
+                </div>
+              </div>
+
+              <hr class="divider">
+              <div class="flex items-center justify-between gap-2">
+                <h4 class="admin-field-title">📊 行銷成效</h4>
+                <el-button size="small" :loading="statsLoading" @click="loadStats">重新整理</el-button>
+              </div>
+              <p class="ar-section-hint">
+                看法很簡單：先看「待加好友」有多少，再看「已加好友並貼標」有多少。
+                「加好友→貼標完成率」越高，代表這波活動名單越順利轉成可用名單。
+              </p>
+              <div v-if="statsLoading" class="ar-modules-loading">
+                <div class="spinner" />
+              </div>
+              <div v-else-if="stats" class="cmp-stats-row">
+                <div class="cmp-stat-box">
+                  <div class="cmp-stat-label">已加好友並貼標</div>
+                  <div class="cmp-stat-value">{{ stats.applied }}</div>
+                </div>
+                <div class="cmp-stat-box">
+                  <div class="cmp-stat-label">待加好友（只綁 LINE）</div>
+                  <div class="cmp-stat-value">{{ stats.claimed }}</div>
+                </div>
+                <div class="cmp-stat-box">
+                  <div class="cmp-stat-label">加好友→貼標完成率</div>
+                  <div class="cmp-stat-value">{{ stats.tagCompletionRate }}%</div>
+                  <div v-if="stats.claimed + stats.applied === 0" class="cmp-stat-sub text-xs text-muted">尚無已完成綁定的名單</div>
+                </div>
+              </div>
+            </template>
           </div>
         </div>
 
@@ -211,66 +239,6 @@
                   :value="m.id"
                 />
               </el-select>
-            </div>
-          </div>
-        </div>
-
-        <!-- 行銷成效 -->
-        <div v-if="!isCreating && selectedCampaign" class="message-card cmp-section-card">
-          <div class="message-card-header">
-            <div class="card-header-main">
-              <span class="badge badge-green">📊 行銷成效</span>
-            </div>
-            <el-button size="small" :loading="statsLoading" @click="loadStats">重新整理</el-button>
-          </div>
-          <div class="card-section-stack">
-            <p class="ar-section-hint">
-              流程順序：點連結 → 在 LIFF 綁定 LINE →<strong>加官方帳號為好友</strong>→ 加好友當下系統才貼標（不是先貼標才加好友）。
-              以下只統計「已綁 LINE」之後：待加好友、已加好友且已貼標。完成率＝後者 ÷（兩者相加）。
-            </p>
-            <div v-if="statsLoading" class="ar-modules-loading">
-              <div class="spinner" />
-            </div>
-            <div v-else-if="stats" class="cmp-stats-row">
-              <div class="cmp-stat-box">
-                <div class="cmp-stat-label">已加好友並貼標</div>
-                <div class="cmp-stat-value">{{ stats.applied }}</div>
-              </div>
-              <div class="cmp-stat-box">
-                <div class="cmp-stat-label">待加好友（只綁 LINE）</div>
-                <div class="cmp-stat-value">{{ stats.claimed }}</div>
-              </div>
-              <div class="cmp-stat-box">
-                <div class="cmp-stat-label">加好友→貼標完成率</div>
-                <div class="cmp-stat-value">{{ stats.tagCompletionRate }}%</div>
-                <div v-if="stats.claimed + stats.applied === 0" class="cmp-stat-sub text-xs text-muted">尚無已走完 LIFF 綁定的人</div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 活動進入網址（貼標用） -->
-        <div v-if="!isCreating && selectedCampaign" class="message-card cmp-section-card">
-          <div class="message-card-header">
-            <div class="card-header-main">
-              <span class="badge badge-green">🔗 活動進入網址（貼標用）</span>
-            </div>
-          </div>
-          <div class="card-section-stack">
-            <p class="ar-section-hint">
-              儲存活動後會自動出現，可貼在問卷完成頁或廣告按鈕。
-              使用者點擊後會開啟 LINE LIFF 完成綁定，再加官方帳號為好友後，依上方設定自動貼標。每次儲存會更新成新連結。
-              請在 LINE Developers 將<strong>此活動所用 LIFF</strong>的 Endpoint URL 設為「你的網域/liff/lead」，勿設成 /webhook（否則會 404）。
-            </p>
-            <div class="admin-field-group">
-              <AdminFieldLabel text="活動進入網址" tight />
-              <div v-if="ctaUrl" class="cmp-url-row">
-                <el-input :model-value="ctaUrl" readonly />
-                <el-button @click="copyCtaUrl">複製</el-button>
-              </div>
-              <div v-else class="ar-any-text-note">
-                尚未有網址：請確認活動為「啟用」、且已設定 LIFF 或 LINE 連線預設 LIFF，再按上方「儲存變更」。
-              </div>
             </div>
           </div>
         </div>
@@ -413,8 +381,8 @@ function cancelEdit() {
 // ── Save / Delete ─────────────────────────────────────────
 async function submitForm() {
   if (!form.value.name.trim()) return showToast('請輸入活動名稱', 'error')
-  if (!form.value.liffId.trim() && !effectiveDefaultLiffId.value.trim()) {
-    return showToast('請填寫活動 LIFF，或在「LINE 連線」設定預設 LIFF', 'error')
+  if (!effectiveDefaultLiffId.value.trim()) {
+    return showToast('請先到「LINE 連線」設定預設 LIFF', 'error')
   }
   if (!form.value.tagIds.length) return showToast('請至少選擇一個標籤', 'error')
 
@@ -422,7 +390,7 @@ async function submitForm() {
   try {
     const payload = {
       name: form.value.name,
-      liffId: form.value.liffId,
+      liffId: '',
       tagIds: form.value.tagIds,
       moduleId: form.value.moduleId,
       description: form.value.description,

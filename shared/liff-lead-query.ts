@@ -1,8 +1,10 @@
 /**
- * 活動 LIFF 進入頁：從網址取得 ct（兌換 token）與 c（活動代碼，僅顯示用）。
- * LINE 可能把原始 query 放在 `liff.state`（例如 Endpoint 誤設為 /webhook 時）。
+ * 活動 LIFF 進入頁：從網址取得 ct（兌換 token）、c（活動代碼）與 liffId（初始化 LIFF SDK）。
+ * LINE 可能把原始 query 放在 `liff.state`。
  */
-export function parseLeadClaimFromQuery(query: Record<string, unknown>): { ct: string; campaignCode: string } {
+export function parseLeadClaimFromQuery(
+  query: Record<string, unknown>,
+): { ct: string; campaignCode: string; liffId: string } {
   const pick = (key: string): string => {
     const v = query[key]
     if (Array.isArray(v)) return String(v[0] ?? '').trim()
@@ -12,6 +14,20 @@ export function parseLeadClaimFromQuery(query: Record<string, unknown>): { ct: s
 
   let ct = pick('ct')
   let campaignCode = pick('c')
+  let liffId = pick('liffId') || pick('liff_id')
+
+  const referrer = pick('liff.referrer')
+  if (!liffId && referrer) {
+    try {
+      const u = new URL(referrer)
+      const seg = u.pathname.split('/').filter(Boolean)
+      if (seg.length > 0)
+        liffId = String(seg[seg.length - 1] || '').trim()
+    }
+    catch {
+      // ignore malformed referrer
+    }
+  }
 
   const stateRaw = pick('liff.state') || pick('liff_state')
   if (stateRaw) {
@@ -21,11 +37,12 @@ export function parseLeadClaimFromQuery(query: Record<string, unknown>): { ct: s
       const sp = new URLSearchParams(withoutQ)
       if (!ct) ct = String(sp.get('ct') || '').trim()
       if (!campaignCode) campaignCode = String(sp.get('c') || '').trim()
+      if (!liffId) liffId = String(sp.get('liffId') || sp.get('liff_id') || '').trim()
     }
     catch {
       // ignore malformed state
     }
   }
 
-  return { ct, campaignCode }
+  return { ct, campaignCode, liffId }
 }

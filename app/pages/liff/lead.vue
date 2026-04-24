@@ -24,10 +24,10 @@ const phase = ref<'loading' | 'need-login' | 'done' | 'error'>('loading')
 const errorText = ref('')
 const doneMessage = ref('')
 
-async function runClaim(ct: string) {
+async function runClaim(ct: string, liffId: string) {
   const liffMod = await import('@line/liff')
   const liff = liffMod.default
-  await liff.init({ withLoginOnExternalBrowser: true })
+  await liff.init({ liffId, withLoginOnExternalBrowser: true })
 
   if (!liff.isLoggedIn()) {
     phase.value = 'need-login'
@@ -52,15 +52,20 @@ async function runClaim(ct: string) {
 }
 
 onMounted(async () => {
-  const { ct } = parseLeadClaimFromQuery(route.query as Record<string, unknown>)
+  const { ct, liffId } = parseLeadClaimFromQuery(route.query as Record<string, unknown>)
   if (!ct) {
     phase.value = 'error'
     errorText.value = '連結缺少必要參數。請使用活動提供的完整網址，並確認 LINE Developers 中此 LIFF 的 Endpoint URL 為「你的網域/liff/lead」，勿與 Webhook（/webhook）相同。'
     return
   }
+  if (!liffId) {
+    phase.value = 'error'
+    errorText.value = '連結缺少 LIFF 識別。請回後台重新儲存活動以產生新連結，再重新開啟。'
+    return
+  }
 
   try {
-    await runClaim(ct)
+    await runClaim(ct, liffId)
     if (phase.value === 'need-login')
       return
   }
