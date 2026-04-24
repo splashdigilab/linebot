@@ -62,11 +62,22 @@ export async function syncPublishedEntryUrlForCampaign(
     createdAt: FieldValue.serverTimestamp(),
   }
 
-  // Use query-only liff.state (starting with ?) so LINE appends params to the endpoint URL
-  // rather than treating the value as a sub-path. Path-prefixed states that match the endpoint
-  // path (/liff/lead?...) can get stripped by LINE before the page JS runs.
-  const stateParams = `?claimToken=${encodeURIComponent(rawToken)}&c=${encodeURIComponent(campaignCode)}&liffId=${encodeURIComponent(liffId)}`
-  const ctaUrl = `https://liff.line.me/${liffId}?liff.state=${encodeURIComponent(stateParams)}`
+  // LINE's in-app browser intentionally strips the liff.state value (passing it via
+  // native bridge instead). To reliably carry claimToken/c/liffId across the redirect,
+  // we use a direct endpoint URL — params land in the query string without going through
+  // liff.line.me. liff.init() still works the same way in LINE's in-app browser.
+  // Fallback to liff.state URL when PUBLIC_BASE_URL is not configured.
+  const config = useRuntimeConfig()
+  const appBase = String(config.lineImagemapBaseUrl || '').replace(/\/$/, '')
+
+  let ctaUrl: string
+  if (appBase) {
+    ctaUrl = `${appBase}/liff/lead?claimToken=${encodeURIComponent(rawToken)}&c=${encodeURIComponent(campaignCode)}&liffId=${encodeURIComponent(liffId)}`
+  }
+  else {
+    const stateParams = `?claimToken=${encodeURIComponent(rawToken)}&c=${encodeURIComponent(campaignCode)}&liffId=${encodeURIComponent(liffId)}`
+    ctaUrl = `https://liff.line.me/${liffId}?liff.state=${encodeURIComponent(stateParams)}`
+  }
 
   const batch = db.batch()
   batch.set(db.collection('leadClaims').doc(claimId), claimDoc)

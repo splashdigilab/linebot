@@ -94,56 +94,75 @@ function buildDebugInfo(extra: Record<string, unknown>) {
 }
 
 onMounted(async () => {
+  // Diagnostic context accumulated across steps — visible in every error's debugInfo.
+  const ctx: Record<string, unknown> = { v: 3 }
+
   // --- Step 1: Parse whatever params are already in the URL ---
   let parsed = parseLeadClaimFromQuery(route.query as Record<string, unknown>)
   if (!parsed.ct || !parsed.liffId) {
     parsed = mergeParsedLead(parsed, parseLeadFromBrowserLocation())
   }
+  ctx.step1Parsed = { ...parsed }
 
   // --- Step 2: Resolve liffId for liff.init() ---
-  // LINE's browser pre-processes liff.state (strips the value from the URL, stores
-  // it internally). liff.init() is needed to trigger URL restoration. So we always
-  // init LIFF first; liffId must come from the URL or a server fallback.
+  // LINE's in-app browser intentionally strips the liff.state value from the URL
+  // (passing it via the native bridge instead). We must call liff.init() before
+  // reading params so the SDK can restore the URL from the native bridge.
+  // If no liffId is in the URL, fall back to the workspace defaultLiffId from the API.
   let liffId = parsed.liffId
   if (!liffId) {
     try {
       const cfg = await $fetch<{ liffId: string }>('/api/liff/config')
       liffId = cfg?.liffId || ''
+      ctx.liffIdSource = 'api'
     }
-    catch { /* silent — will error below */ }
+    catch (e) {
+      ctx.liffIdSource = 'api_failed'
+      ctx.liffIdApiError = String(e)
+    }
   }
+  else {
+    ctx.liffIdSource = 'url'
+  }
+  ctx.liffId = liffId
 
   if (!liffId) {
     phase.value = 'error'
     errorText.value = '連結缺少 LIFF 識別。請回後台重新儲存活動以產生新連結，再重新開啟。'
-    debugInfo.value = buildDebugInfo({ reason: 'missing_liff_id', mergedParsed: parsed })
+    debugInfo.value = buildDebugInfo({ reason: 'missing_liff_id', mergedParsed: parsed, ...ctx })
     return
   }
 
-  // --- Step 3: Init LIFF first ---
-  // After init, LINE SDK restores the liff.state it pre-consumed and updates
-  // window.location to the actual params URL (e.g. ?claimToken=...&c=...&liffId=...).
+  // --- Step 3: Init LIFF (always before reading params / checking login) ---
   const liffMod = await import('@line/liff')
   const liff = liffMod.default
 
+  ctx.preInitUrl = typeof window !== 'undefined' ? window.location.href : ''
   try {
     await liff.init({ liffId, withLoginOnExternalBrowser: true })
+    ctx.initOk = true
   }
   catch (e: unknown) {
     const err = e as { message?: string }
+    ctx.initOk = false
+    ctx.initError = err?.message || String(e)
     phase.value = 'error'
     errorText.value = `LIFF 初始化失敗：${err?.message || '未知錯誤'}`
-    debugInfo.value = buildDebugInfo({ reason: 'liff_init_failed', mergedParsed: parsed })
+    debugInfo.value = buildDebugInfo({ reason: 'liff_init_failed', mergedParsed: parsed, ...ctx })
     return
   }
+  ctx.postInitUrl = typeof window !== 'undefined' ? window.location.href : ''
+  ctx.isLoggedIn = liff.isLoggedIn()
 
-  // --- Step 4: Re-read params after init (URL may have changed) ---
+  // --- Step 4: Re-read params after init (URL may have changed via history.replaceState) ---
   if (!parsed.ct) {
-    parsed = mergeParsedLead(parsed, parseLeadFromBrowserLocation())
+    const postInit = parseLeadFromBrowserLocation()
+    parsed = mergeParsedLead(parsed, postInit)
+    ctx.step4Parsed = { ...parsed }
   }
   const ct = parsed.ct
 
-  // --- Step 5: Handle login before attempting claim ---
+  // --- Step 5: Handle login ---
   if (!liff.isLoggedIn()) {
     phase.value = 'need-login'
     liff.login({ redirectUri: window.location.href })
@@ -155,9 +174,9 @@ onMounted(async () => {
     phase.value = 'error'
     const malformedCtOnly = typeof window !== 'undefined' && window.location.search === '?ct'
     errorText.value = malformedCtOnly
-      ? '目前收到的是「/liff/lead?ct」：ct 參數只有名稱、沒有值。這通常是把 LIFF Endpoint 網址當成活動網址，或連結在傳遞時被截斷。請回後台重新複製「活動進入網址（liff.line.me 開頭）」再測試。'
-      : '連結缺少必要參數。請使用活動提供的完整網址，並確認 LINE Developers 中此 LIFF 的 Endpoint URL 為「你的網域/liff/lead」，勿與 Webhook（/webhook）相同。'
-    debugInfo.value = buildDebugInfo({ reason: 'missing_ct', mergedParsed: parsed })
+      ? '目前收到的是「/liff/lead?ct」：ct 參數只有名稱、沒有值。這通常是把 LIFF Endpoint 網址當成活動網址，或連結在傳遞時被截斷。請回後台重新複製「活動進入網址（直接網址，非 liff.line.me 開頭）」再測試。'
+      : '連結缺少必要參數。請回後台重新儲存活動以取得最新連結，再重新開啟。'
+    debugInfo.value = buildDebugInfo({ reason: 'missing_ct', mergedParsed: parsed, ...ctx })
     return
   }
 
@@ -185,6 +204,7 @@ onMounted(async () => {
       reason: 'run_claim_failed',
       mergedParsed: parsed,
       errorMessage: err?.data?.statusMessage || err?.message || 'unknown',
+      ...ctx,
     })
   }
 })
