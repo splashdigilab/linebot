@@ -62,8 +62,9 @@ export async function syncPublishedEntryUrlForCampaign(
     createdAt: FieldValue.serverTimestamp(),
   }
 
-  // Use `claimToken` instead of short `ct` to avoid possible query key rewriting in LIFF redirects.
-  const ctaUrl = `https://liff.line.me/${liffId}?claimToken=${rawToken}&c=${encodeURIComponent(campaignCode)}&liffId=${encodeURIComponent(liffId)}`
+  // Use official `liff.state` wrapper to preserve query payload across LIFF redirect.
+  const entryPath = `/liff/lead?claimToken=${encodeURIComponent(rawToken)}&c=${encodeURIComponent(campaignCode)}&liffId=${encodeURIComponent(liffId)}`
+  const ctaUrl = `https://liff.line.me/${liffId}?liff.state=${encodeURIComponent(entryPath)}`
 
   const batch = db.batch()
   batch.set(db.collection('leadClaims').doc(claimId), claimDoc)
