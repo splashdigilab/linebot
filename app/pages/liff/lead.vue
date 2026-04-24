@@ -127,7 +127,10 @@ onMounted(async () => {
   const { ct, liffId } = parsed
   if (!ct) {
     phase.value = 'error'
-    errorText.value = '連結缺少必要參數。請使用活動提供的完整網址，並確認 LINE Developers 中此 LIFF 的 Endpoint URL 為「你的網域/liff/lead」，勿與 Webhook（/webhook）相同。'
+    const malformedCtOnly = typeof window !== 'undefined' && window.location.search === '?ct'
+    errorText.value = malformedCtOnly
+      ? '目前收到的是「/liff/lead?ct」：ct 參數只有名稱、沒有值。這通常是把 LIFF Endpoint 網址當成活動網址，或連結在傳遞時被截斷。請回後台重新複製「活動進入網址（liff.line.me 開頭）」再測試。'
+      : '連結缺少必要參數。請使用活動提供的完整網址，並確認 LINE Developers 中此 LIFF 的 Endpoint URL 為「你的網域/liff/lead」，勿與 Webhook（/webhook）相同。'
     debugInfo.value = buildDebugInfo({ reason: 'missing_ct', mergedParsed: parsed })
     return
   }
