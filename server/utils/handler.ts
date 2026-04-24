@@ -190,14 +190,15 @@ async function applyPendingClaims(userId: string): Promise<void> {
   for (const doc of snap.docs) {
     const claim = doc.data()
 
-    // 逾期檢查：已過期則標記後略過
-    const expiresAt = claim.expiresAt instanceof Date
-      ? claim.expiresAt
-      : claim.expiresAt?.toDate?.()
-    if (expiresAt && expiresAt < now) {
-      await doc.ref.update({ status: 'expired' })
-      console.log('[follow] claim expired, skipping:', doc.id)
-      continue
+    // 逾期檢查：僅舊 claim 含 expiresAt 時有效
+    const rawExp = claim.expiresAt
+    if (rawExp != null) {
+      const expiresAt = rawExp instanceof Date ? rawExp : rawExp?.toDate?.()
+      if (expiresAt && expiresAt < now) {
+        await doc.ref.update({ status: 'expired' })
+        console.log('[follow] claim expired, skipping:', doc.id)
+        continue
+      }
     }
 
     // 貼標（冪等，已存在自動略過）

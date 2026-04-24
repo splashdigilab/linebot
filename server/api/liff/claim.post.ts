@@ -52,13 +52,14 @@ export default defineEventHandler(async (event) => {
     return { ok: true, alreadyApplied: true, campaignCode: claim.campaignCode }
   }
 
-  // 逾期檢查
-  const expiresAt = claim.expiresAt instanceof Date
-    ? claim.expiresAt
-    : claim.expiresAt?.toDate?.()
-  if (expiresAt && expiresAt < new Date()) {
-    await doc.ref.update({ status: 'expired' })
-    throw createError({ statusCode: 410, statusMessage: '此連結已逾期，請重新取得' })
+  // 逾期檢查（僅舊 claim 含 expiresAt 時有效；新產生連結不設期限）
+  const rawExp = claim.expiresAt
+  if (rawExp != null) {
+    const expiresAt = rawExp instanceof Date ? rawExp : rawExp?.toDate?.()
+    if (expiresAt && expiresAt < new Date()) {
+      await doc.ref.update({ status: 'expired' })
+      throw createError({ statusCode: 410, statusMessage: '此連結已逾期，請重新取得' })
+    }
   }
 
   // 若已有另一個 lineUserId 綁定（不同人搶用），拒絕

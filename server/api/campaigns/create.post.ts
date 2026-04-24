@@ -1,6 +1,8 @@
 import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
 import { generateLeadCampaignCode } from '~~/server/utils/lead-campaign-code'
+import { syncPublishedEntryUrlForCampaign } from '~~/server/utils/lead-campaign-published-url'
+import { normalizeCampaignScheduleInput } from '~~/server/utils/campaign-schedule'
 
 function validateCampaign(body: any): string | null {
   if (!String(body?.name || '').trim()) return '請輸入活動名稱'
@@ -15,10 +17,13 @@ export default defineEventHandler(async (event) => {
   const error = validateCampaign(body)
   if (error) throw createError({ statusCode: 400, statusMessage: error })
 
+  const sched = normalizeCampaignScheduleInput(body)
+  if (typeof sched === 'string') throw createError({ statusCode: 400, statusMessage: sched })
+
   const id = uuidv4()
   const now = FieldValue.serverTimestamp()
   const campaignCode = String(body.campaignCode ?? '').trim() || generateLeadCampaignCode()
-  const doc = {
+  const doc: Record<string, unknown> = {
     name: String(body.name).trim(),
     campaignCode,
     liffId: String(body.liffId ?? '').trim(),
@@ -29,8 +34,19 @@ export default defineEventHandler(async (event) => {
     createdAt: now,
     updatedAt: now,
   }
+  if (sched.startsAt) doc.startsAt = sched.startsAt
+  if (sched.endsAt) doc.endsAt = sched.endsAt
 
   const db = getDb()
   await db.collection('leadCampaigns').doc(id).set(doc)
-  return { id, ...doc }
+
+  const urlRes = await syncPublishedEntryUrlForCampaign(db, id, {
+    liffId: doc.liffId,
+    campaignCode: doc.campaignCode,
+    isActive: doc.isActive,
+    tagIds: doc.tagIds,
+    moduleId: doc.moduleId,
+  })
+
+  return { id, ...doc, publishedCtaUrl: urlRes.publishedCtaUrl ?? null }
 })

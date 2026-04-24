@@ -73,7 +73,7 @@
             </div>
           </div>
           <div class="card-section-stack">
-            <p class="ar-section-hint">停用的活動無法產生新的活動進入網址。</p>
+            <p class="ar-section-hint">停用的活動儲存後會隱藏活動進入網址。</p>
             <div class="admin-field-group">
               <AdminFieldLabel text="啟用狀態" tight />
               <el-switch
@@ -95,7 +95,7 @@
           </div>
           <div class="card-section-stack">
             <p class="ar-section-hint">
-              LIFF 可留空；產生活動進入網址時會使用「LINE 連線」的預設 LIFF（或環境變數）。活動代碼由系統建立時自動產生，用於辨識此活動與追蹤連結參數。
+              LIFF 可留空；儲存後會用「LINE 連線」的預設 LIFF 自動產生活動進入網址。活動代碼由系統建立時自動產生。
             </p>
             <div class="admin-field-group">
               <AdminFieldLabel tight>
@@ -122,6 +122,26 @@
                 :rows="2"
                 placeholder="備註此活動的用途或來源"
               />
+            </div>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="活動檔期（選填）" tight />
+              <p class="text-xs text-muted">僅供內部／行銷紀錄，不影響連結或貼標；清空後儲存可刪除。</p>
+              <div class="flex flex-wrap gap-2 admin-w-full">
+                <el-date-picker
+                  v-model="form.startsAt"
+                  type="datetime"
+                  placeholder="開始時間"
+                  value-format="YYYY-MM-DDTHH:mm:ss"
+                  class="admin-w-full cmp-date-field"
+                />
+                <el-date-picker
+                  v-model="form.endsAt"
+                  type="datetime"
+                  placeholder="結束時間"
+                  value-format="YYYY-MM-DDTHH:mm:ss"
+                  class="admin-w-full cmp-date-field"
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -195,40 +215,35 @@
           </div>
         </div>
 
-        <!-- 漏斗統計 -->
+        <!-- 行銷成效 -->
         <div v-if="!isCreating && selectedCampaign" class="message-card cmp-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">📊 活動漏斗統計</span>
+              <span class="badge badge-green">📊 行銷成效</span>
             </div>
             <el-button size="small" :loading="statsLoading" @click="loadStats">重新整理</el-button>
           </div>
           <div class="card-section-stack">
+            <p class="ar-section-hint">
+              流程順序：點連結 → 在 LIFF 綁定 LINE →<strong>加官方帳號為好友</strong>→ 加好友當下系統才貼標（不是先貼標才加好友）。
+              以下只統計「已綁 LINE」之後：待加好友、已加好友且已貼標。完成率＝後者 ÷（兩者相加）。
+            </p>
             <div v-if="statsLoading" class="ar-modules-loading">
               <div class="spinner" />
             </div>
             <div v-else-if="stats" class="cmp-stats-row">
               <div class="cmp-stat-box">
-                <div class="cmp-stat-label">產生連結</div>
-                <div class="cmp-stat-value">{{ stats.total }}</div>
-              </div>
-              <div class="cmp-stat-box">
-                <div class="cmp-stat-label">已綁定</div>
-                <div class="cmp-stat-value">{{ stats.claimed + stats.applied }}</div>
-                <div class="cmp-stat-rate">{{ stats.claimRate }}%</div>
-              </div>
-              <div class="cmp-stat-box">
-                <div class="cmp-stat-label">已加好友貼標</div>
+                <div class="cmp-stat-label">已加好友並貼標</div>
                 <div class="cmp-stat-value">{{ stats.applied }}</div>
-                <div class="cmp-stat-rate">{{ stats.applyRate }}%</div>
               </div>
               <div class="cmp-stat-box">
-                <div class="cmp-stat-label">等待加好友</div>
+                <div class="cmp-stat-label">待加好友（只綁 LINE）</div>
                 <div class="cmp-stat-value">{{ stats.claimed }}</div>
               </div>
               <div class="cmp-stat-box">
-                <div class="cmp-stat-label">已逾期</div>
-                <div class="cmp-stat-value">{{ stats.expired }}</div>
+                <div class="cmp-stat-label">加好友→貼標完成率</div>
+                <div class="cmp-stat-value">{{ stats.tagCompletionRate }}%</div>
+                <div v-if="stats.claimed + stats.applied === 0" class="cmp-stat-sub text-xs text-muted">尚無已走完 LIFF 綁定的人</div>
               </div>
             </div>
           </div>
@@ -243,9 +258,8 @@
           </div>
           <div class="card-section-stack">
             <p class="ar-section-hint">
-              此連結即對外使用的「活動網址」：放在問卷完成頁、廣告按鈕等即可。
-              使用者點擊後會開啟 LINE LIFF 完成身份綁定，再將官方帳號加為好友後，系統會依上方「加好友後貼標」設定自動貼標。
-              每次點擊「產生」會建立一組新的一次性連結（有效期 72 小時）。
+              儲存活動後會自動出現，可貼在問卷完成頁或廣告按鈕。
+              使用者點擊後會開啟 LINE LIFF 完成綁定，再加官方帳號為好友後，依上方設定自動貼標。每次儲存會更新成新連結。
             </p>
             <div class="admin-field-group">
               <AdminFieldLabel text="活動進入網址" tight />
@@ -253,12 +267,10 @@
                 <el-input :model-value="ctaUrl" readonly />
                 <el-button @click="copyCtaUrl">複製</el-button>
               </div>
-              <div v-else class="ar-any-text-note">尚未產生連結，請點擊下方按鈕。</div>
-              <p v-if="ctaExpiresAt" class="cmp-url-hint">有效期限：{{ ctaExpiresAt }}</p>
+              <div v-else class="ar-any-text-note">
+                尚未有網址：請確認活動為「啟用」、且已設定 LIFF 或 LINE 連線預設 LIFF，再按上方「儲存變更」。
+              </div>
             </div>
-            <el-button :loading="generatingCta" @click="generateCta">
-              {{ ctaUrl ? '重新產生連結' : '產生活動進入網址' }}
-            </el-button>
           </div>
         </div>
 
@@ -280,17 +292,32 @@ const modules = ref<any[]>([])
 const loading = ref(true)
 const modulesLoading = ref(true)
 const saving = ref(false)
-const generatingCta = ref(false)
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
 const ctaUrl = ref('')
-const ctaExpiresAt = ref('')
-const stats = ref<any>(null)
+const stats = ref<{
+  applied: number
+  claimed: number
+  tagCompletionRate: number
+} | null>(null)
 const statsLoading = ref(false)
 /** 產 CTA 時實際 fallback 的預設 LIFF（含 Firestore、LIFF_DEFAULT_ID） */
 const effectiveDefaultLiffId = ref('')
 
 const { $auth } = useNuxtApp()
+
+function campaignTimestampToPicker(v: unknown): string {
+  if (v == null || v === '') return ''
+  if (typeof v === 'string')
+    return v.length >= 19 ? v.slice(0, 19) : v
+  if (typeof v === 'object' && v !== null) {
+    const o = v as { seconds?: number; _seconds?: number }
+    const sec = typeof o.seconds === 'number' ? o.seconds : o._seconds
+    if (typeof sec === 'number')
+      return new Date(sec * 1000).toISOString().slice(0, 19)
+  }
+  return ''
+}
 
 const defaultForm = () => ({
   name: '',
@@ -299,6 +326,8 @@ const defaultForm = () => ({
   tagIds: [] as string[],
   moduleId: null as string | null,
   description: '',
+  startsAt: '' as string,
+  endsAt: '' as string,
   isActive: true,
 })
 const form = ref(defaultForm())
@@ -344,8 +373,7 @@ onMounted(() => {
 function selectCampaign(c: any) {
   isCreating.value = false
   selectedId.value = c.id
-  ctaUrl.value = ''
-  ctaExpiresAt.value = ''
+  ctaUrl.value = String(c.publishedCtaUrl || '')
   stats.value = null
   form.value = {
     name: c.name ?? '',
@@ -354,6 +382,8 @@ function selectCampaign(c: any) {
     tagIds: Array.isArray(c.tagIds) ? [...c.tagIds] : [],
     moduleId: c.moduleId ?? null,
     description: c.description ?? '',
+    startsAt: campaignTimestampToPicker(c.startsAt),
+    endsAt: campaignTimestampToPicker(c.endsAt),
     isActive: c.isActive !== false,
   }
   loadStats()
@@ -363,7 +393,6 @@ function openCreate() {
   isCreating.value = true
   selectedId.value = null
   ctaUrl.value = ''
-  ctaExpiresAt.value = ''
   stats.value = null
   form.value = defaultForm()
 }
@@ -396,6 +425,8 @@ async function submitForm() {
       tagIds: form.value.tagIds,
       moduleId: form.value.moduleId,
       description: form.value.description,
+      startsAt: form.value.startsAt || '',
+      endsAt: form.value.endsAt || '',
       isActive: form.value.isActive,
     }
     if (isCreating.value) {
@@ -410,6 +441,9 @@ async function submitForm() {
       await $fetch(`/api/campaigns/${selectedId.value}`, { method: 'PUT', body: payload })
       showToast('活動已更新', 'success')
       await loadCampaigns()
+      const updated = campaigns.value.find(c => c.id === selectedId.value)
+      if (updated) selectCampaign(updated)
+      else await loadStats()
     }
   }
   catch {
@@ -435,27 +469,6 @@ async function deleteCampaign() {
   }
 }
 
-// ── CTA 產生 ─────────────────────────────────────────────
-async function generateCta() {
-  if (!selectedId.value) return
-  generatingCta.value = true
-  try {
-    const res = await $fetch<{ ctaUrl: string; expiresAt: string }>(
-      `/api/campaigns/${selectedId.value}/create-cta`,
-      { method: 'POST' },
-    )
-    ctaUrl.value = res.ctaUrl
-    ctaExpiresAt.value = new Date(res.expiresAt).toLocaleString('zh-TW')
-    showToast('活動進入網址已產生', 'success')
-  }
-  catch {
-    showToast('產生失敗，請確認活動已儲存且啟用', 'error')
-  }
-  finally {
-    generatingCta.value = false
-  }
-}
-
 async function copyCtaUrl() {
   try {
     await navigator.clipboard.writeText(ctaUrl.value)
@@ -466,7 +479,6 @@ async function copyCtaUrl() {
   }
 }
 
-// ── 漏斗統計 ──────────────────────────────────────────────
 async function loadStats() {
   if (!selectedId.value) return
   statsLoading.value = true
@@ -480,4 +492,5 @@ async function loadStats() {
     statsLoading.value = false
   }
 }
+
 </script>
