@@ -62,7 +62,8 @@ export async function syncPublishedEntryUrlForCampaign(
     createdAt: FieldValue.serverTimestamp(),
   }
 
-  const ctaUrl = `https://liff.line.me/${liffId}?ct=${rawToken}&c=${encodeURIComponent(campaignCode)}&liffId=${encodeURIComponent(liffId)}`
+  // Use `claimToken` instead of short `ct` to avoid possible query key rewriting in LIFF redirects.
+  const ctaUrl = `https://liff.line.me/${liffId}?claimToken=${rawToken}&c=${encodeURIComponent(campaignCode)}&liffId=${encodeURIComponent(liffId)}`
 
   const batch = db.batch()
   batch.set(db.collection('leadClaims').doc(claimId), claimDoc)

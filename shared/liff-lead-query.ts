@@ -1,5 +1,5 @@
 /**
- * 活動 LIFF 進入頁：從網址取得 ct（兌換 token）、c（活動代碼）與 liffId（初始化 LIFF SDK）。
+ * 活動 LIFF 進入頁：從網址取得 claimToken/ct（兌換 token）、c（活動代碼）與 liffId（初始化 LIFF SDK）。
  * LINE 可能把原始 query 放在 `liff.state`。
  */
 export function parseLeadClaimFromQuery(
@@ -12,7 +12,7 @@ export function parseLeadClaimFromQuery(
     return String(v).trim()
   }
 
-  let ct = pick('ct')
+  let ct = pick('claimToken') || pick('claim_token') || pick('ct')
   let campaignCode = pick('c')
   let liffId = pick('liffId') || pick('liff_id')
 
@@ -45,7 +45,7 @@ export function parseLeadClaimFromQuery(
       }
       const normalized = search.startsWith('?') ? search.slice(1) : search
       const sp = new URLSearchParams(normalized)
-      if (!ct) ct = String(sp.get('ct') || '').trim()
+      if (!ct) ct = String(sp.get('claimToken') || sp.get('claim_token') || sp.get('ct') || '').trim()
       if (!campaignCode) campaignCode = String(sp.get('c') || '').trim()
       if (!liffId) liffId = String(sp.get('liffId') || sp.get('liff_id') || '').trim()
     }
