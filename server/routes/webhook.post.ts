@@ -13,19 +13,28 @@ function resolveRequestOrigin(event: Parameters<typeof getHeader>[0]): string {
   return `${safeProto}://${host}`
 }
 
+function toRawBodyBuffer(raw: unknown): Buffer {
+  if (raw instanceof Buffer) return raw
+  if (raw instanceof Uint8Array) return Buffer.from(raw)
+  if (typeof raw === 'string') return Buffer.from(raw, 'utf8')
+  // Some runtimes expose raw body as { type: 'Buffer', data: number[] }.
+  if (raw && typeof raw === 'object') {
+    const o = raw as { type?: unknown; data?: unknown }
+    if (o.type === 'Buffer' && Array.isArray(o.data)) {
+      const bytes = o.data.filter(v => Number.isInteger(v) && v >= 0 && v <= 255) as number[]
+      if (bytes.length) return Buffer.from(bytes)
+    }
+  }
+  return Buffer.alloc(0)
+}
+
 export default defineEventHandler(async (event) => {
   // 必須用「未改動的 raw body」驗簽；Buffer 可避免部分環境字串解碼與 LINE 不一致。
   const raw = await readRawBody(event, false)
   const signature = getHeader(event, 'x-line-signature') ?? ''
   const requestOrigin = resolveRequestOrigin(event)
 
-  const bodyBuf = raw instanceof Buffer
-    ? raw
-    : raw instanceof Uint8Array
-      ? Buffer.from(raw)
-      : typeof raw === 'string'
-        ? Buffer.from(raw, 'utf8')
-        : Buffer.alloc(0)
+  const bodyBuf = toRawBodyBuffer(raw)
 
   const creds = await getLineWorkspaceCredentials()
   const secretConfigured = Boolean(String(creds.channelSecret || '').trim())
@@ -37,6 +46,7 @@ export default defineEventHandler(async (event) => {
       secretConfigured,
       bodyBytes: bodyBuf.length,
       hasSignature: Boolean(String(signature || '').trim()),
+      rawType: raw == null ? String(raw) : (raw as any).constructor?.name || typeof raw,
     })
     throw createError({ statusCode: 401, statusMessage: 'Invalid signature' })
   }
