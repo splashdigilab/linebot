@@ -19,7 +19,6 @@ function secretSuffix(value: unknown): { configured: boolean; suffix: string | n
 export default defineEventHandler(async (event) => {
   await requireFirebaseAuth(event)
 
-  const config = useRuntimeConfig(event)
   const db = getDb()
   const snap = await db.collection('workspaces').doc(DEFAULT_LINE_WORKSPACE_ID).get()
   const saved = snap.exists ? (snap.data() as LineWorkspaceDoc) : null
@@ -34,15 +33,11 @@ export default defineEventHandler(async (event) => {
     savedInFirestore: snap.exists,
     name: String(saved?.name ?? '').trim() || 'default',
     defaultLiffId: String(saved?.defaultLiffId ?? '').trim(),
-    /** 實際用於 CTA fallback（含 Firestore、LIFF_DEFAULT_ID 等） */
+    /** 實際用於 CTA fallback（僅 Firestore） */
     effectiveDefaultLiffId: String(creds.defaultLiffId ?? '').trim(),
     channelAccessTokenConfigured: access.configured,
     channelAccessTokenSuffix: access.suffix,
     channelSecretConfigured: secret.configured,
     channelSecretSuffix: secret.suffix,
-    envFallbackAvailable: Boolean(
-      String(config.lineChannelAccessToken || '').trim()
-      && String(config.lineChannelSecret || '').trim(),
-    ),
   }
 })

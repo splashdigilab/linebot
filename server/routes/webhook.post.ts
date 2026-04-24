@@ -1,4 +1,5 @@
 import { verifyLineWebhookSignature } from '../utils/line'
+import { getLineWorkspaceCredentials } from '../utils/line-workspace-credentials'
 import { handleMessageEvent, handlePostbackEvent, handleFollowEvent, handleUnfollowEvent } from '../utils/handler'
 import type { webhook } from '@line/bot-sdk'
 
@@ -13,18 +14,37 @@ function resolveRequestOrigin(event: Parameters<typeof getHeader>[0]): string {
 }
 
 export default defineEventHandler(async (event) => {
-  // Read raw body for signature verification
-  const body = await readRawBody(event)
+  // 必須用「未改動的 raw body」驗簽；Buffer 可避免部分環境字串解碼與 LINE 不一致。
+  const raw = await readRawBody(event, false)
   const signature = getHeader(event, 'x-line-signature') ?? ''
   const requestOrigin = resolveRequestOrigin(event)
 
-  if (!body || !await verifyLineWebhookSignature(body, signature)) {
+  const bodyBuf = raw instanceof Buffer
+    ? raw
+    : raw instanceof Uint8Array
+      ? Buffer.from(raw)
+      : typeof raw === 'string'
+        ? Buffer.from(raw, 'utf8')
+        : Buffer.alloc(0)
+
+  const creds = await getLineWorkspaceCredentials()
+  const secretConfigured = Boolean(String(creds.channelSecret || '').trim())
+  const sigOk = bodyBuf.length > 0
+    && await verifyLineWebhookSignature(bodyBuf, signature, { channelSecret: creds.channelSecret })
+
+  if (!sigOk) {
+    console.warn('[webhook] signature verify failed', {
+      secretConfigured,
+      bodyBytes: bodyBuf.length,
+      hasSignature: Boolean(String(signature || '').trim()),
+    })
     throw createError({ statusCode: 401, statusMessage: 'Invalid signature' })
   }
 
+  const bodyText = bodyBuf.toString('utf8')
   let payload: { events: webhook.Event[] }
   try {
-    payload = JSON.parse(body)
+    payload = JSON.parse(bodyText)
   }
   catch {
     throw createError({ statusCode: 400, statusMessage: 'Invalid JSON' })

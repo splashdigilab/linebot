@@ -1,0 +1,102 @@
+<template>
+  <div class="liff-lead">
+    <p v-if="phase === 'loading'" class="liff-lead-msg">載入中…</p>
+    <p v-else-if="phase === 'need-login'" class="liff-lead-msg">正在前往 LINE 登入…</p>
+    <template v-else-if="phase === 'done'">
+      <p class="liff-lead-title">綁定完成</p>
+      <p class="liff-lead-msg">{{ doneMessage }}</p>
+      <p class="liff-lead-hint">請加入官方帳號為好友，加好友後系統會自動完成活動貼標。</p>
+    </template>
+    <template v-else-if="phase === 'error'">
+      <p class="liff-lead-title">無法完成綁定</p>
+      <p class="liff-lead-msg liff-lead-err">{{ errorText }}</p>
+    </template>
+  </div>
+</template>
+
+<script setup lang="ts">
+import { parseLeadClaimFromQuery } from '~~/shared/liff-lead-query'
+
+definePageMeta({ layout: false, ssr: false })
+
+const route = useRoute()
+const phase = ref<'loading' | 'need-login' | 'done' | 'error'>('loading')
+const errorText = ref('')
+const doneMessage = ref('')
+
+async function runClaim(ct: string) {
+  const liffMod = await import('@line/liff')
+  const liff = liffMod.default
+  await liff.init({ withLoginOnExternalBrowser: true })
+
+  if (!liff.isLoggedIn()) {
+    phase.value = 'need-login'
+    liff.login({ redirectUri: window.location.href })
+    return
+  }
+
+  const profile = await liff.getProfile()
+  const res = await $fetch<{ ok?: boolean; alreadyApplied?: boolean; campaignCode?: string }>(
+    '/api/liff/claim',
+    {
+      method: 'POST',
+      body: { rawToken: ct, lineUserId: profile.userId },
+    },
+  )
+
+  phase.value = 'done'
+  if (res.alreadyApplied)
+    doneMessage.value = '此活動先前已完成貼標。'
+  else
+    doneMessage.value = '已將你的 LINE 與活動綁定。'
+}
+
+onMounted(async () => {
+  const { ct } = parseLeadClaimFromQuery(route.query as Record<string, unknown>)
+  if (!ct) {
+    phase.value = 'error'
+    errorText.value = '連結缺少必要參數。請使用活動提供的完整網址，並確認 LINE Developers 中此 LIFF 的 Endpoint URL 為「你的網域/liff/lead」，勿與 Webhook（/webhook）相同。'
+    return
+  }
+
+  try {
+    await runClaim(ct)
+    if (phase.value === 'need-login')
+      return
+  }
+  catch (e: unknown) {
+    const err = e as { data?: { statusMessage?: string }; message?: string }
+    phase.value = 'error'
+    errorText.value = err?.data?.statusMessage || err?.message || '發生錯誤，請稍後再試。'
+  }
+})
+</script>
+
+<style scoped>
+.liff-lead {
+  min-height: 100dvh;
+  box-sizing: border-box;
+  padding: 1.5rem;
+  font-family: system-ui, sans-serif;
+  background: #0f1419;
+  color: #e8eaed;
+}
+.liff-lead-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 0.75rem;
+}
+.liff-lead-msg {
+  margin: 0 0 0.75rem;
+  line-height: 1.5;
+}
+.liff-lead-hint {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #9aa0a6;
+  line-height: 1.5;
+}
+.liff-lead-err {
+  color: #f28b82;
+}
+</style>

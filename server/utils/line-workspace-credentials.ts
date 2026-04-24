@@ -18,7 +18,7 @@ export function invalidateLineWorkspaceCredentialsCache() {
 }
 
 /**
- * 讀取 LINE Messaging 憑證：優先 Firestore `workspaces/default`，否則 fallback `runtimeConfig` / process.env。
+ * 讀取 LINE Messaging 憑證：僅使用 Firestore `workspaces/default`。
  * 結果短暫快取，避免每則 webhook 都打 Firestore。
  */
 export async function getLineWorkspaceCredentials(): Promise<ResolvedLineCredentials> {
@@ -31,43 +31,21 @@ export async function getLineWorkspaceCredentials(): Promise<ResolvedLineCredent
     }
   }
 
+  let defaultLiffId = ''
   let channelAccessToken = ''
   let channelSecret = ''
-  let defaultLiffId = ''
-
-  let dbToken = ''
-  let dbSecret = ''
   try {
     const db = getDb()
     const snap = await db.collection('workspaces').doc(DEFAULT_LINE_WORKSPACE_ID).get()
     if (snap.exists) {
       const d = snap.data() as LineWorkspaceDoc
-      dbToken = String(d?.channelAccessToken ?? '').trim()
-      dbSecret = String(d?.channelSecret ?? '').trim()
+      channelAccessToken = String(d?.channelAccessToken ?? '').trim()
+      channelSecret = String(d?.channelSecret ?? '').trim()
       defaultLiffId = String(d?.defaultLiffId ?? '').trim()
     }
   }
   catch (e) {
     console.warn('[line-workspace] read workspaces/default failed:', e)
-  }
-
-  let envToken = ''
-  let envSecret = ''
-  try {
-    const config = useRuntimeConfig()
-    envToken = String(config.lineChannelAccessToken || '').trim()
-    envSecret = String(config.lineChannelSecret || '').trim()
-  }
-  catch {
-    envToken = String(process.env.LINE_CHANNEL_ACCESS_TOKEN || '').trim()
-    envSecret = String(process.env.LINE_CHANNEL_SECRET || '').trim()
-  }
-
-  channelAccessToken = dbToken || envToken
-  channelSecret = dbSecret || envSecret
-
-  if (!defaultLiffId) {
-    defaultLiffId = String(process.env.LIFF_DEFAULT_ID || '').trim()
   }
 
   const resolved: ResolvedLineCredentials = {

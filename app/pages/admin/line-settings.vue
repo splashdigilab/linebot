@@ -32,6 +32,16 @@
               />
               <p class="text-xs text-muted">活動沒填 LIFF 時會用這一組。</p>
             </div>
+            <p class="ar-section-hint">
+              在 LINE Developers 建立／編輯<strong>同一個</strong> LIFF 時，Endpoint URL 請設為下方「活動 LIFF 頁」，<strong>不可</strong>填 Webhook 路徑（<code>/webhook</code>），否則點活動連結會 404。
+            </p>
+            <div v-if="suggestedLiffEndpointUrl" class="admin-field-group">
+              <AdminFieldLabel text="活動 LIFF 頁（貼到 LINE Developers → 該 LIFF 的 Endpoint URL）" tight />
+              <div class="cmp-url-row">
+                <el-input :model-value="suggestedLiffEndpointUrl" readonly />
+                <el-button @click="copyLiffEndpointUrl">複製</el-button>
+              </div>
+            </div>
             <div class="admin-field-group">
               <AdminFieldLabel text="Channel Access Token（必填）" tight />
               <div
@@ -99,7 +109,7 @@
                 rel="noopener noreferrer"
                 class="ar-link"
               >LINE Developers</a>
-              → Messaging API → Webhook URL 貼下面這個（須為 https、網路上連得到）。Secret 要跟上面同一組。
+              → Messaging API → Webhook URL 貼下面這個（須為 https、網路上連得到）。Secret 要跟上面同一組。後台按「Verify」若回 401，幾乎都是 Secret 與伺服器上的不一致或部署環境未帶入 Secret。
             </p>
             <div class="admin-field-group">
               <AdminFieldLabel text="Webhook 網址（複製貼到 LINE）" tight />
@@ -152,6 +162,12 @@
                         <span v-if="webhookVerifyResult.test.detail">（{{ webhookVerifyResult.test.detail }}）</span>
                         <span v-if="webhookVerifyResult.test.statusCode != null"> HTTP {{ webhookVerifyResult.test.statusCode }}</span>
                       </p>
+                      <p
+                        v-if="!webhookVerifyResult.test.success && webhookVerifyResult.test.statusCode === 401"
+                        class="ar-section-hint"
+                      >
+                        HTTP 401 表示你的網站有收到 LINE 的 POST，但<strong>驗簽失敗</strong>。請確認本頁儲存的 Channel Secret 與 LINE Developers → Messaging API 的 Channel secret 為<strong>同一組</strong>。目前系統只吃 Firestore 憑證，Secret 錯誤、未儲存，或部署環境無法讀取 Firestore 都會 401。
+                      </p>
                     </template>
                   </template>
                   <p v-else class="text-muted text-xs">這次沒跑測試。</p>
@@ -192,7 +208,6 @@ type WorkspaceGet = {
   channelAccessTokenSuffix: string | null
   channelSecretConfigured: boolean
   channelSecretSuffix: string | null
-  envFallbackAvailable: boolean
 }
 
 const { showToast } = useAdminToast()
@@ -214,7 +229,6 @@ const meta = ref<WorkspaceGet>({
   channelAccessTokenSuffix: null,
   channelSecretConfigured: false,
   channelSecretSuffix: null,
-  envFallbackAvailable: false,
 })
 
 const form = ref({
@@ -267,10 +281,28 @@ function onSecretBlur() {
 
 /** 與 `server/routes/webhook.post.ts` 對應的公開路徑 */
 const suggestedWebhookUrl = ref('')
+/** 與 `app/pages/liff/lead.vue` 對應；Messaging Webhook 與 LIFF 進入頁必須分開 */
+const suggestedLiffEndpointUrl = ref('')
 
 function refreshSuggestedWebhookUrl() {
   if (typeof window === 'undefined') return
   suggestedWebhookUrl.value = `${window.location.origin}/webhook`
+}
+
+function refreshSuggestedLiffEndpointUrl() {
+  if (typeof window === 'undefined') return
+  suggestedLiffEndpointUrl.value = `${window.location.origin}/liff/lead`
+}
+
+async function copyLiffEndpointUrl() {
+  if (!suggestedLiffEndpointUrl.value) return
+  try {
+    await navigator.clipboard.writeText(suggestedLiffEndpointUrl.value)
+    showToast('已複製活動 LIFF 頁網址', 'success')
+  }
+  catch {
+    showToast('複製失敗，請手動複製', 'error')
+  }
 }
 
 async function copyWebhookUrl() {
@@ -445,6 +477,7 @@ async function clearWorkspace() {
 
 onMounted(() => {
   refreshSuggestedWebhookUrl()
+  refreshSuggestedLiffEndpointUrl()
   load()
 })
 </script>

@@ -260,6 +260,7 @@
             <p class="ar-section-hint">
               儲存活動後會自動出現，可貼在問卷完成頁或廣告按鈕。
               使用者點擊後會開啟 LINE LIFF 完成綁定，再加官方帳號為好友後，依上方設定自動貼標。每次儲存會更新成新連結。
+              請在 LINE Developers 將<strong>此活動所用 LIFF</strong>的 Endpoint URL 設為「你的網域/liff/lead」，勿設成 /webhook（否則會 404）。
             </p>
             <div class="admin-field-group">
               <AdminFieldLabel text="活動進入網址" tight />
@@ -301,7 +302,7 @@ const stats = ref<{
   tagCompletionRate: number
 } | null>(null)
 const statsLoading = ref(false)
-/** 產 CTA 時實際 fallback 的預設 LIFF（含 Firestore、LIFF_DEFAULT_ID） */
+/** 產 CTA 時實際 fallback 的預設 LIFF（僅 Firestore） */
 const effectiveDefaultLiffId = ref('')
 
 const { $auth } = useNuxtApp()

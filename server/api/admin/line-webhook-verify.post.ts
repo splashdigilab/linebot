@@ -55,7 +55,7 @@ export default defineEventHandler(async (event): Promise<LineWebhookVerifyRespon
   if (!token) {
     throw createError({
       statusCode: 400,
-      statusMessage: '尚未設定 Channel Access Token（Firestore 或環境變數）',
+      statusMessage: '尚未在 Firestore 設定 Channel Access Token',
     })
   }
 

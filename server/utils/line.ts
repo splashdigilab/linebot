@@ -21,7 +21,7 @@ let _insight: { token: string; client: line.insight.InsightClient } | null = nul
 async function getMessagingBundle(): Promise<MessagingBundle> {
   const { channelAccessToken } = await getLineWorkspaceCredentials()
   const token = String(channelAccessToken || '').trim()
-  if (!token) throw new Error('LINE channel access token is not set (Firestore workspaces/default or LINE_CHANNEL_ACCESS_TOKEN)')
+  if (!token) throw new Error('LINE channel access token is not set in Firestore workspaces/default')
 
   if (!_messaging || _messaging.token !== token) {
     _messaging = {
@@ -33,16 +33,31 @@ async function getMessagingBundle(): Promise<MessagingBundle> {
   return _messaging
 }
 
-/** Verify x-line-signature（憑證來自 Firestore 或 env） */
-export async function verifyLineWebhookSignature(body: string, signature: string): Promise<boolean> {
-  const { channelSecret } = await getLineWorkspaceCredentials()
-  const secret = String(channelSecret || '').trim()
+type VerifyLineWebhookSignatureOpts = {
+  /** 若已讀過憑證可傳入，避免 webhook 重複打 Firestore／快取邏輯 */
+  channelSecret?: string
+}
+
+/** Verify x-line-signature（憑證來自 Firestore）。`body` 須與請求位元組一致（勿用 JSON.parse 後再 stringify）。 */
+export async function verifyLineWebhookSignature(
+  body: string | Buffer,
+  signature: string,
+  opts?: VerifyLineWebhookSignatureOpts,
+): Promise<boolean> {
+  const secret = opts?.channelSecret !== undefined
+    ? String(opts.channelSecret || '').trim()
+    : String((await getLineWorkspaceCredentials()).channelSecret || '').trim()
   if (!secret) return false
-  const expected = createHmac('sha256', secret)
-    .update(body)
-    .digest('base64')
+  const sig = String(signature || '').trim()
+  if (!sig) return false
+  const hmac = createHmac('sha256', secret)
+  if (typeof body === 'string')
+    hmac.update(body, 'utf8')
+  else
+    hmac.update(body)
+  const expected = hmac.digest('base64')
   try {
-    return timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
+    return timingSafeEqual(Buffer.from(sig, 'utf8'), Buffer.from(expected, 'utf8'))
   }
   catch {
     return false

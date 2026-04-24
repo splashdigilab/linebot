@@ -27,6 +27,7 @@ export default defineNuxtConfig({
   // Disable SSR for admin pages — they are behind auth and don't need SEO
   routeRules: {
     '/admin/**': { ssr: false },
+    '/liff/**': { ssr: false },
   },
 
   vite: {

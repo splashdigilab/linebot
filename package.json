@@ -11,6 +11,7 @@
     "test:unit": "vitest run"
   },
   "dependencies": {
+    "@line/liff": "^2.27.3",
     "@line/bot-sdk": "^11.0.0",
     "firebase": "^12.12.0",
     "firebase-admin": "^13.8.0",
