@@ -1,4 +1,5 @@
 import type { Timestamp, FieldValue } from 'firebase-admin/firestore'
+import type { AutoReplyAction } from '~~/shared/auto-reply-rule'
 
 // ═══════════════════════════════════════════════════════════════════
 //  Collection: leadCampaigns
@@ -15,6 +16,8 @@ export interface LeadCampaignDoc {
   tagIds: string[]
   /** 加好友後要自動觸發的機器人模組（選填；null = 只貼標） */
   moduleId: string | null
+  /** 加好友後下一步動作（可為 module/message/uri；未設定時視為不觸發） */
+  action?: AutoReplyAction | null
   description: string
   isActive: boolean
   /**
@@ -54,6 +57,8 @@ export interface LeadClaimDoc {
   tagIds: string[]
   /** 從活動快照複製的 moduleId */
   moduleId: string | null
+  /** 從活動快照複製的 action */
+  action?: AutoReplyAction | null
   /** 未設定則不因時間逾期（仍為一次性 token，用過即進入 claimed／applied 流程） */
   expiresAt?: Timestamp | Date | null
   claimedAt: Timestamp | FieldValue | null

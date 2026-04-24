@@ -174,15 +174,18 @@
           </div>
         </div>
 
-        <!-- 貼標設定 -->
+        <!-- 貼標與觸發設定 -->
         <div class="message-card cmp-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🏷️ 加好友後貼標</span>
+              <span class="badge badge-green">🎯 貼標與觸發設定</span>
             </div>
           </div>
           <div class="card-section-stack">
-            <p class="ar-section-hint">使用者透過此活動連結加入好友後，系統會自動貼上以下標籤，方便後續分眾推播。</p>
+            <p class="ar-section-hint">
+              參考「觸發動作設定」的操作方式：先選要貼的標籤（此欄必填），再設定機器人模組／動作（選填）。
+              實際執行時機都是「使用者加好友當下」。
+            </p>
             <div v-if="tagsLoading" class="ar-modules-loading">
               <div class="spinner" />
             </div>
@@ -209,36 +212,29 @@
                 </el-option>
               </el-select>
             </div>
-          </div>
-        </div>
-
-        <!-- 模組設定 -->
-        <div class="message-card cmp-section-card">
-          <div class="message-card-header">
-            <div class="card-header-main">
-              <span class="badge badge-green">🤖 加好友後觸發模組（選填）</span>
-            </div>
-          </div>
-          <div class="card-section-stack">
-            <p class="ar-section-hint">使用者加入好友後，自動推送指定機器人模組。不設定則僅貼標，不觸發模組。</p>
             <div v-if="modulesLoading" class="ar-modules-loading">
               <div class="spinner" />
             </div>
             <div v-else class="admin-field-group">
-              <AdminFieldLabel text="選擇模組（可清空）" tight />
-              <el-select
-                v-model="form.moduleId"
-                clearable
-                placeholder="不觸發模組"
-                class="admin-w-full"
-              >
-                <el-option
-                  v-for="m in modules"
-                  :key="m.id"
-                  :label="m.name"
-                  :value="m.id"
-                />
-              </el-select>
+              <FlowActionEditor
+                :action="form.action"
+                :type-options="campaignActionTypeOptions"
+                :module-options="modules"
+                :variable-options="[]"
+                header-label=""
+                flat
+                :show-label-field="false"
+                :show-variable-inset="false"
+                :hide-fields-when-none="true"
+                none-type-value="none"
+                module-title="機器人模組"
+                module-placeholder="請選擇要觸發的模組"
+                text-title="回覆文字"
+                text-placeholder="輸入要回覆給使用者的文字"
+                uri-title="網址"
+                uri-placeholder="https://..."
+              />
+              <p class="text-xs text-muted">可清空成「不觸發動作」；此時系統只會貼標，不會推送訊息或模組。</p>
             </div>
           </div>
         </div>
@@ -293,13 +289,24 @@ const defaultForm = () => ({
   campaignCode: '',
   liffId: '',
   tagIds: [] as string[],
-  moduleId: null as string | null,
+  action: {
+    type: 'none',
+    moduleId: '',
+    text: '',
+    uri: '',
+  },
   description: '',
   startsAt: '' as string,
   endsAt: '' as string,
   isActive: true,
 })
 const form = ref(defaultForm())
+const campaignActionTypeOptions = [
+  { value: 'none', label: '不觸發動作' },
+  { value: 'uri', label: '開啟網址' },
+  { value: 'message', label: '傳送文字' },
+  { value: 'module', label: '觸發機器人模組' },
+]
 
 const selectedCampaign = computed(() => campaigns.value.find(c => c.id === selectedId.value) ?? null)
 
@@ -349,7 +356,12 @@ function selectCampaign(c: any) {
     campaignCode: c.campaignCode ?? '',
     liffId: c.liffId ?? '',
     tagIds: Array.isArray(c.tagIds) ? [...c.tagIds] : [],
-    moduleId: c.moduleId ?? null,
+    action: {
+      type: c.action?.type || (c.moduleId ? 'module' : 'none'),
+      moduleId: c.action?.moduleId || c.moduleId || '',
+      text: c.action?.text || '',
+      uri: c.action?.uri || '',
+    },
     description: c.description ?? '',
     startsAt: campaignTimestampToPicker(c.startsAt),
     endsAt: campaignTimestampToPicker(c.endsAt),
@@ -385,6 +397,15 @@ async function submitForm() {
     return showToast('請先到「LINE 連線」設定預設 LIFF', 'error')
   }
   if (!form.value.tagIds.length) return showToast('請至少選擇一個標籤', 'error')
+  if (form.value.action.type === 'module' && !String(form.value.action.moduleId || '').trim()) {
+    return showToast('請選擇要觸發的模組，或改成「不觸發動作」', 'error')
+  }
+  if (form.value.action.type === 'message' && !String(form.value.action.text || '').trim()) {
+    return showToast('請輸入回覆文字，或改成「不觸發動作」', 'error')
+  }
+  if (form.value.action.type === 'uri' && !String(form.value.action.uri || '').trim()) {
+    return showToast('請輸入網址，或改成「不觸發動作」', 'error')
+  }
 
   saving.value = true
   try {
@@ -392,7 +413,17 @@ async function submitForm() {
       name: form.value.name,
       liffId: '',
       tagIds: form.value.tagIds,
-      moduleId: form.value.moduleId,
+      moduleId: form.value.action.type === 'module'
+        ? (form.value.action.moduleId || null)
+        : null,
+      action: form.value.action.type === 'none'
+        ? null
+        : {
+          type: form.value.action.type,
+          moduleId: String(form.value.action.moduleId || '').trim(),
+          text: String(form.value.action.text || '').trim(),
+          uri: String(form.value.action.uri || '').trim(),
+        },
       description: form.value.description,
       startsAt: form.value.startsAt || '',
       endsAt: form.value.endsAt || '',

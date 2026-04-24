@@ -14,6 +14,7 @@ import {
 } from '~~/shared/action-schema'
 import {
   matchAutoReplyText,
+  normalizeAutoReplyAction,
   normalizeAutoReplyRule,
   type AutoReplyRuleShape,
 } from '~~/shared/auto-reply-rule'
@@ -207,10 +208,11 @@ async function applyPendingClaims(userId: string): Promise<void> {
       console.log('[follow] tagging result:', result, 'claimId:', doc.id)
     }
 
-    // 若活動設有自動推送模組，發送 push message
-    if (claim.moduleId) {
+    // 活動下一步動作：module / message / uri（舊資料無 action 時回退 moduleId）
+    const action = normalizeAutoReplyAction(claim.action, String(claim.moduleId ?? ''))
+    if (action.type === 'module' && action.moduleId) {
       try {
-        const flow = await getFlowByModuleId(claim.moduleId)
+        const flow = await getFlowByModuleId(action.moduleId)
         if (flow) {
           const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
           const lineMessages = buildLineMessages(hydratedMessages, {}, '', userId, channelSecret)
@@ -223,6 +225,18 @@ async function applyPendingClaims(userId: string): Promise<void> {
       }
       catch (e) {
         console.error('[follow] pushMessage module failed:', e)
+      }
+    }
+    else {
+      const actionMessages = buildAutoReplyActionMessages(action, {})
+      if (actionMessages.length > 0) {
+        try {
+          await pushMessage(userId, actionMessages)
+          await saveOutgoingConversationMessages(userId, actionMessages)
+        }
+        catch (e) {
+          console.error('[follow] pushMessage action failed:', e)
+        }
       }
     }
 

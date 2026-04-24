@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
 import type { LeadClaimDoc } from '~~/shared/types/lead-campaign'
 import { getLineWorkspaceCredentials } from '~~/server/utils/line-workspace-credentials'
+import { normalizeAutoReplyAction } from '~~/shared/auto-reply-rule'
 
 type CampaignForEntryUrl = {
   liffId?: string
@@ -10,6 +11,7 @@ type CampaignForEntryUrl = {
   isActive?: boolean
   tagIds?: unknown
   moduleId?: unknown
+  action?: unknown
 }
 
 /**
@@ -39,7 +41,12 @@ export async function syncPublishedEntryUrlForCampaign(
   const campaignCode = String(campaign.campaignCode || '')
 
   const mod = campaign.moduleId
-  const moduleId = mod != null && String(mod).trim() ? String(mod).trim() : null
+  const hasActionType = Boolean(String((campaign.action as any)?.type ?? '').trim())
+  const fallbackModule = mod != null ? String(mod).trim() : ''
+  const action = hasActionType || fallbackModule
+    ? normalizeAutoReplyAction(campaign.action, fallbackModule)
+    : null
+  const moduleId = action?.type === 'module' && action.moduleId ? action.moduleId : null
 
   const claimDoc: LeadClaimDoc = {
     campaignId,
@@ -49,6 +56,7 @@ export async function syncPublishedEntryUrlForCampaign(
     status: 'pending',
     tagIds: Array.isArray(campaign.tagIds) ? campaign.tagIds.map(String).filter(Boolean) : [],
     moduleId,
+    action,
     claimedAt: null,
     appliedAt: null,
     createdAt: FieldValue.serverTimestamp(),
