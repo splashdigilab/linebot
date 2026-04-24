@@ -19,6 +19,7 @@
 </template>
 
 <script setup lang="ts">
+import { $fetch } from 'ofetch'
 import { parseLeadClaimFromQuery } from '~~/shared/liff-lead-query'
 
 definePageMeta({ layout: false, ssr: false })
@@ -92,39 +93,64 @@ function buildDebugInfo(extra: Record<string, unknown>) {
   }
 }
 
-async function runClaim(ct: string, liffId: string) {
+onMounted(async () => {
+  // --- Step 1: Parse whatever params are already in the URL ---
+  let parsed = parseLeadClaimFromQuery(route.query as Record<string, unknown>)
+  if (!parsed.ct || !parsed.liffId) {
+    parsed = mergeParsedLead(parsed, parseLeadFromBrowserLocation())
+  }
+
+  // --- Step 2: Resolve liffId for liff.init() ---
+  // LINE's browser pre-processes liff.state (strips the value from the URL, stores
+  // it internally). liff.init() is needed to trigger URL restoration. So we always
+  // init LIFF first; liffId must come from the URL or a server fallback.
+  let liffId = parsed.liffId
+  if (!liffId) {
+    try {
+      const cfg = await $fetch<{ liffId: string }>('/api/liff/config')
+      liffId = cfg?.liffId || ''
+    }
+    catch { /* silent — will error below */ }
+  }
+
+  if (!liffId) {
+    phase.value = 'error'
+    errorText.value = '連結缺少 LIFF 識別。請回後台重新儲存活動以產生新連結，再重新開啟。'
+    debugInfo.value = buildDebugInfo({ reason: 'missing_liff_id', mergedParsed: parsed })
+    return
+  }
+
+  // --- Step 3: Init LIFF first ---
+  // After init, LINE SDK restores the liff.state it pre-consumed and updates
+  // window.location to the actual params URL (e.g. ?claimToken=...&c=...&liffId=...).
   const liffMod = await import('@line/liff')
   const liff = liffMod.default
-  await liff.init({ liffId, withLoginOnExternalBrowser: true })
 
+  try {
+    await liff.init({ liffId, withLoginOnExternalBrowser: true })
+  }
+  catch (e: unknown) {
+    const err = e as { message?: string }
+    phase.value = 'error'
+    errorText.value = `LIFF 初始化失敗：${err?.message || '未知錯誤'}`
+    debugInfo.value = buildDebugInfo({ reason: 'liff_init_failed', mergedParsed: parsed })
+    return
+  }
+
+  // --- Step 4: Re-read params after init (URL may have changed) ---
+  if (!parsed.ct) {
+    parsed = mergeParsedLead(parsed, parseLeadFromBrowserLocation())
+  }
+  const ct = parsed.ct
+
+  // --- Step 5: Handle login before attempting claim ---
   if (!liff.isLoggedIn()) {
     phase.value = 'need-login'
     liff.login({ redirectUri: window.location.href })
     return
   }
 
-  const profile = await liff.getProfile()
-  const res = await $fetch<{ ok?: boolean; alreadyApplied?: boolean; campaignCode?: string }>(
-    '/api/liff/claim',
-    {
-      method: 'POST',
-      body: { rawToken: ct, lineUserId: profile.userId },
-    },
-  )
-
-  phase.value = 'done'
-  if (res.alreadyApplied)
-    doneMessage.value = '此活動先前已完成貼標。'
-  else
-    doneMessage.value = '已將你的 LINE 與活動綁定。'
-}
-
-onMounted(async () => {
-  let parsed = parseLeadClaimFromQuery(route.query as Record<string, unknown>)
-  if (!parsed.ct || !parsed.liffId) {
-    parsed = mergeParsedLead(parsed, parseLeadFromBrowserLocation())
-  }
-  const { ct, liffId } = parsed
+  // --- Step 6: Validate ct ---
   if (!ct) {
     phase.value = 'error'
     const malformedCtOnly = typeof window !== 'undefined' && window.location.search === '?ct'
@@ -134,17 +160,22 @@ onMounted(async () => {
     debugInfo.value = buildDebugInfo({ reason: 'missing_ct', mergedParsed: parsed })
     return
   }
-  if (!liffId) {
-    phase.value = 'error'
-    errorText.value = '連結缺少 LIFF 識別。請回後台重新儲存活動以產生新連結，再重新開啟。'
-    debugInfo.value = buildDebugInfo({ reason: 'missing_liff_id', mergedParsed: parsed })
-    return
-  }
 
+  // --- Step 7: Claim ---
   try {
-    await runClaim(ct, liffId)
-    if (phase.value === 'need-login')
-      return
+    const profile = await liff.getProfile()
+    const res = await $fetch<{ ok?: boolean; alreadyApplied?: boolean; campaignCode?: string }>(
+      '/api/liff/claim',
+      {
+        method: 'POST',
+        body: { rawToken: ct, lineUserId: profile.userId },
+      },
+    )
+    phase.value = 'done'
+    if (res.alreadyApplied)
+      doneMessage.value = '此活動先前已完成貼標。'
+    else
+      doneMessage.value = '已將你的 LINE 與活動綁定。'
   }
   catch (e: unknown) {
     const err = e as { data?: { statusMessage?: string }; message?: string }

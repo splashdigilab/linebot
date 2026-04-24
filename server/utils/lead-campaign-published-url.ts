@@ -62,9 +62,11 @@ export async function syncPublishedEntryUrlForCampaign(
     createdAt: FieldValue.serverTimestamp(),
   }
 
-  // Use official `liff.state` wrapper to preserve query payload across LIFF redirect.
-  const entryPath = `/liff/lead?claimToken=${encodeURIComponent(rawToken)}&c=${encodeURIComponent(campaignCode)}&liffId=${encodeURIComponent(liffId)}`
-  const ctaUrl = `https://liff.line.me/${liffId}?liff.state=${encodeURIComponent(entryPath)}`
+  // Use query-only liff.state (starting with ?) so LINE appends params to the endpoint URL
+  // rather than treating the value as a sub-path. Path-prefixed states that match the endpoint
+  // path (/liff/lead?...) can get stripped by LINE before the page JS runs.
+  const stateParams = `?claimToken=${encodeURIComponent(rawToken)}&c=${encodeURIComponent(campaignCode)}&liffId=${encodeURIComponent(liffId)}`
+  const ctaUrl = `https://liff.line.me/${liffId}?liff.state=${encodeURIComponent(stateParams)}`
 
   const batch = db.batch()
   batch.set(db.collection('leadClaims').doc(claimId), claimDoc)
