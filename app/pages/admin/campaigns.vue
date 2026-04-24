@@ -73,7 +73,7 @@
             </div>
           </div>
           <div class="card-section-stack">
-            <p class="ar-section-hint">停用的活動無法產生新的 CTA 連結。</p>
+            <p class="ar-section-hint">停用的活動無法產生新的活動進入網址。</p>
             <div class="admin-field-group">
               <AdminFieldLabel text="啟用狀態" tight />
               <el-switch
@@ -95,7 +95,7 @@
           </div>
           <div class="card-section-stack">
             <p class="ar-section-hint">
-              活動代碼用於識別此問券；LIFF 可留空，產生 CTA 時會使用「LINE 連線」的預設 LIFF（或環境變數）。填完問券後的連結會帶入這些設定，使用者進入後完成身份綁定。
+              LIFF 可留空；產生活動進入網址時會使用「LINE 連線」的預設 LIFF（或環境變數）。活動代碼由系統建立時自動產生，用於辨識此活動與追蹤連結參數。
             </p>
             <div class="admin-field-group">
               <AdminFieldLabel tight>
@@ -107,14 +107,13 @@
                 @keydown.enter.prevent
               />
             </div>
-            <div class="admin-field-group">
-              <AdminFieldLabel text="活動代碼（英文小寫、數字、底線）" tight />
-              <el-input
-                v-model="form.campaignCode"
-                placeholder="例：launch_2026_q2"
-                @keydown.enter.prevent
-              />
+            <div v-if="!isCreating && form.campaignCode" class="admin-field-group">
+              <AdminFieldLabel text="活動代碼（系統產生，僅供識別）" tight />
+              <el-input :model-value="form.campaignCode" readonly />
             </div>
+            <p v-else-if="isCreating" class="ar-section-hint">
+              建立並儲存後，系統會自動產生活動代碼。
+            </p>
             <div class="admin-field-group">
               <AdminFieldLabel text="活動說明（選填）" tight />
               <el-input
@@ -210,7 +209,7 @@
             </div>
             <div v-else-if="stats" class="cmp-stats-row">
               <div class="cmp-stat-box">
-                <div class="cmp-stat-label">產生 CTA</div>
+                <div class="cmp-stat-label">產生連結</div>
                 <div class="cmp-stat-value">{{ stats.total }}</div>
               </div>
               <div class="cmp-stat-box">
@@ -235,20 +234,21 @@
           </div>
         </div>
 
-        <!-- CTA 產生 -->
+        <!-- 活動進入網址（貼標用） -->
         <div v-if="!isCreating && selectedCampaign" class="message-card cmp-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🔗 產生 CTA 連結</span>
+              <span class="badge badge-green">🔗 活動進入網址（貼標用）</span>
             </div>
           </div>
           <div class="card-section-stack">
             <p class="ar-section-hint">
+              此連結即對外使用的「活動網址」：放在問卷完成頁、廣告按鈕等即可。
+              使用者點擊後會開啟 LINE LIFF 完成身份綁定，再將官方帳號加為好友後，系統會依上方「加好友後貼標」設定自動貼標。
               每次點擊「產生」會建立一組新的一次性連結（有效期 72 小時）。
-              將此連結放在問券完成頁的 CTA 按鈕，使用者點擊後進入 LINE 完成身份綁定，加好友後即自動貼標。
             </p>
             <div class="admin-field-group">
-              <AdminFieldLabel text="CTA 網址" tight />
+              <AdminFieldLabel text="活動進入網址" tight />
               <div v-if="ctaUrl" class="cmp-url-row">
                 <el-input :model-value="ctaUrl" readonly />
                 <el-button @click="copyCtaUrl">複製</el-button>
@@ -257,7 +257,7 @@
               <p v-if="ctaExpiresAt" class="cmp-url-hint">有效期限：{{ ctaExpiresAt }}</p>
             </div>
             <el-button :loading="generatingCta" @click="generateCta">
-              {{ ctaUrl ? '重新產生連結' : '產生 CTA 連結' }}
+              {{ ctaUrl ? '重新產生連結' : '產生活動進入網址' }}
             </el-button>
           </div>
         </div>
@@ -383,7 +383,6 @@ function cancelEdit() {
 // ── Save / Delete ─────────────────────────────────────────
 async function submitForm() {
   if (!form.value.name.trim()) return showToast('請輸入活動名稱', 'error')
-  if (!form.value.campaignCode.trim()) return showToast('請輸入活動代碼', 'error')
   if (!form.value.liffId.trim() && !effectiveDefaultLiffId.value.trim()) {
     return showToast('請填寫活動 LIFF，或在「LINE 連線」設定預設 LIFF', 'error')
   }
@@ -391,7 +390,14 @@ async function submitForm() {
 
   saving.value = true
   try {
-    const payload = { ...form.value }
+    const payload = {
+      name: form.value.name,
+      liffId: form.value.liffId,
+      tagIds: form.value.tagIds,
+      moduleId: form.value.moduleId,
+      description: form.value.description,
+      isActive: form.value.isActive,
+    }
     if (isCreating.value) {
       const res = await $fetch<any>('/api/campaigns/create', { method: 'POST', body: payload })
       showToast('活動已建立', 'success')
@@ -440,7 +446,7 @@ async function generateCta() {
     )
     ctaUrl.value = res.ctaUrl
     ctaExpiresAt.value = new Date(res.expiresAt).toLocaleString('zh-TW')
-    showToast('CTA 連結已產生', 'success')
+    showToast('活動進入網址已產生', 'success')
   }
   catch {
     showToast('產生失敗，請確認活動已儲存且啟用', 'error')

@@ -21,6 +21,7 @@
 
 /* ── Generic Utilities ───────────────────────────────────────── */
 .flex { display: flex; }
+.flex-wrap { flex-wrap: wrap; }
 .flex-col { flex-direction: column; }
 .items-center { align-items: center; }
 .justify-between { justify-content: space-between; }
@@ -30,6 +31,9 @@
 .text-xs { font-size: 0.75rem; }
 .text-muted { color: var(--text-muted); }
 .text-secondary { color: var(--text-secondary); }
+.text-success { color: var(--el-color-success, #16a34a); }
+.text-danger { color: var(--el-color-danger, #dc2626); }
+.text-warning { color: var(--el-color-warning, #d97706); }
 .font-bold { font-weight: 700; }
 .w-full { width: 100%; }
 .mt-1 { margin-top: 0.5rem; }
