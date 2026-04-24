@@ -10,12 +10,12 @@ export default defineEventHandler(async (event) => {
 
   // Get existing doc to get the old richMenuId and old imageUrl
   const oldDoc = await getDoc<any>('richmenus', firestoreId)
-  if (!oldDoc) throw createError({ statusCode: 404, statusMessage: 'Rich Menu not found' })
+  if (!oldDoc) throw createError({ statusCode: 404, statusMessage: '找不到圖文選單' })
 
   // Use stored aliasId or derive — max 32 chars, alphanumeric only (LINE requirement)
   const aliasId = oldDoc.aliasId ?? `rm${firestoreId.replace(/-/g, '').slice(0, 28)}`
 
-  // 1. Create NEW Rich Menu on LINE
+  // 1. 在 LINE 建立新圖文選單
   const richMenuPayload: messagingApi.RichMenuRequest = {
     size: size ?? { width: 2500, height: 843 },
     selected: selected ?? true,
@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
   }
 
 
-  // 2. Upload Image to NEW Rich Menu
+  // 2. 上傳圖片至新圖文選單
   let imageBuffer: Buffer
   let finalContentType = contentType ?? 'image/png'
 
@@ -90,12 +90,12 @@ export default defineEventHandler(async (event) => {
     await batch.commit()
   }
 
-  // 5. Delete old Rich Menu from LINE
+  // 5. 從 LINE 刪除舊圖文選單
   if (oldDoc.richMenuId) {
     try {
       await deleteLineRichMenu(oldDoc.richMenuId)
     } catch (e) {
-      console.warn('[richmenu] Failed to delete old LINE rich menu:', e)
+      console.warn('[richmenu] 無法刪除舊的 LINE 圖文選單:', e)
     }
   }
 

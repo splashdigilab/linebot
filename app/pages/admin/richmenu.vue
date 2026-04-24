@@ -1,7 +1,7 @@
 <template>
   <AdminSplitLayout :is-empty="!selectedMenu && !isCreating">
     <template #sidebar-header>
-      <span class="split-sidebar-title">🗂️ Rich Menu</span>
+      <span class="split-sidebar-title">🗂️ 圖文選單</span>
       <el-button type="primary" size="small" @click="openCreate">➕ 新增</el-button>
     </template>
 
@@ -10,7 +10,7 @@
         <div class="spinner" />
       </div>
       <div v-else-if="!menus.length" class="split-sidebar-empty">
-        <span>尚無 Rich Menu</span>
+        <span>尚無圖文選單</span>
         <el-button size="small" type="primary" plain @click="openCreate">立即建立</el-button>
       </div>
       <div v-else class="split-list">
@@ -29,16 +29,16 @@
 
     <template #editor-empty>
       <span class="empty-icon">🗂️</span>
-      <h3>選擇一個 Rich Menu 開始編輯</h3>
-      <p>或點擊左側「➕ 新增」建立新的 Rich Menu</p>
-      <el-button type="primary" @click="openCreate">建立 Rich Menu</el-button>
+      <h3>選擇一個圖文選單開始編輯</h3>
+      <p>或點擊左側「➕ 新增」建立新的圖文選單</p>
+      <el-button type="primary" @click="openCreate">建立圖文選單</el-button>
     </template>
 
     <template #editor-header>
       <AdminEditorHeaderTitle
         v-model="form.name"
         field-label="選單名稱"
-        create-prefix="新增 Rich Menu:"
+        create-prefix="新增圖文選單:"
         placeholder="請輸入選單名稱..."
         :caption="`版型：${form.layoutId} · 區塊 ${form.areas.length} 個`"
         :is-creating="isCreating"
@@ -49,7 +49,7 @@
         </el-button>
         <el-button @click="cancelEdit">取消</el-button>
         <el-button type="primary" :loading="creating" @click="submitForm">
-          {{ isCreating ? '建立 Rich Menu' : '儲存變更' }}
+          {{ isCreating ? '建立圖文選單' : '儲存變更' }}
         </el-button>
       </div>
     </template>
@@ -717,7 +717,7 @@ async function submitForm() {
           contentType: form.value.contentType,
         },
       })
-      showToast('Rich Menu 已成功更新 ✅', 'success')
+      showToast('圖文選單已成功更新 ✅', 'success')
     } else {
       // Create Flow
       const docResponse = await $fetch<any>('/api/richmenu/create', {
@@ -742,7 +742,7 @@ async function submitForm() {
           contentType: form.value.contentType,
         },
       })
-      showToast('Rich Menu 已成功建立與部署 ✅', 'success')
+      showToast('圖文選單已成功建立與部署 ✅', 'success')
     }
 
     await loadMenus()

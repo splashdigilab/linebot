@@ -55,7 +55,7 @@ const { user, logout } = useAuth()
 const navItems = [
   { to: '/admin', icon: '🏠', label: '儀表板' },
   { to: '/admin/line-settings', icon: '🔐', label: 'LINE 連線' },
-  { to: '/admin/richmenu', icon: '🗂️', label: 'Rich Menu' },
+  { to: '/admin/richmenu', icon: '🗂️', label: '圖文選單' },
   { to: '/admin/flow', icon: '🤖', label: '機器人模組' },
   { to: '/admin/auto-reply', icon: '⚡', label: '自動回覆' },
   { to: '/admin/support-presets', icon: '📦', label: '客服預存' },

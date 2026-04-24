@@ -5,7 +5,7 @@ export default defineEventHandler(async (event) => {
   const menu = await getDoc<{ richMenuId: string; aliasId?: string }>('richmenus', id)
   if (!menu) throw createError({ statusCode: 404, statusMessage: 'Not found' })
 
-  // Delete the Rich Menu Alias first (to free up the alias ID)
+  // 先刪除圖文選單別名（釋出 alias ID）
   if (menu.aliasId) {
     try {
       await deleteRichMenuAlias(menu.aliasId)
@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // Delete the Rich Menu from LINE
+  // 從 LINE 刪除圖文選單
   try {
     await deleteLineRichMenu(menu.richMenuId)
   } catch (e) {

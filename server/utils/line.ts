@@ -79,14 +79,14 @@ export async function pushMessage(userId: string, messages: line.messagingApi.Me
   return client.pushMessage({ to: userId, messages })
 }
 
-/** Create a Rich Menu and return its richMenuId */
+/** 建立圖文選單並回傳 richMenuId */
 export async function createRichMenu(richMenu: line.messagingApi.RichMenuRequest) {
   const { client } = await getMessagingBundle()
   const res = await client.createRichMenu(richMenu)
   return res.richMenuId
 }
 
-/** Upload image to a Rich Menu */
+/** 上傳圖片至圖文選單 */
 export async function uploadRichMenuImage(
   richMenuId: string,
   imageBuffer: Buffer,
@@ -96,13 +96,13 @@ export async function uploadRichMenuImage(
   return blob.setRichMenuImage(richMenuId, new Blob([imageBuffer], { type: contentType }))
 }
 
-/** Set the default Rich Menu for all users */
+/** 將指定圖文選單設為全體使用者的預設選單 */
 export async function setDefaultRichMenu(richMenuId: string) {
   const { client } = await getMessagingBundle()
   return client.setDefaultRichMenu(richMenuId)
 }
 
-/** Delete a Rich Menu from LINE */
+/** 從 LINE 刪除圖文選單 */
 export async function deleteLineRichMenu(richMenuId: string) {
   const { client } = await getMessagingBundle()
   return client.deleteRichMenu(richMenuId)
@@ -240,19 +240,19 @@ export async function getUserProfile(userId: string) {
   }
 }
 
-/** Link a specific Rich Menu to a User */
+/** 將指定圖文選單連結至使用者 */
 export async function linkRichMenuIdToUser(userId: string, richMenuId: string) {
   const { client } = await getMessagingBundle()
   return client.linkRichMenuIdToUser(userId, richMenuId)
 }
 
-/** Create a Rich Menu Alias (for instant richmenuswitch) */
+/** 建立圖文選單別名（供 LINE 原生 richmenuswitch 瞬間切換） */
 export async function createRichMenuAlias(richMenuId: string, richMenuAliasId: string) {
   const { client } = await getMessagingBundle()
   return client.createRichMenuAlias({ richMenuId, richMenuAliasId })
 }
 
-/** Delete a Rich Menu Alias */
+/** 刪除圖文選單別名 */
 export async function deleteRichMenuAlias(richMenuAliasId: string) {
   const { client } = await getMessagingBundle()
   try {
@@ -262,14 +262,14 @@ export async function deleteRichMenuAlias(richMenuAliasId: string) {
   }
 }
 
-/** Update a Rich Menu Alias to point to a new richMenuId.
- *  LINE doesn't have a direct "update" API, so we delete then recreate. */
+/** 更新圖文選單別名指向新的 richMenuId。
+ *  LINE 無直接更新 API，故採刪除後重建。 */
 export async function updateRichMenuAlias(richMenuId: string, richMenuAliasId: string) {
   await deleteRichMenuAlias(richMenuAliasId)
   return createRichMenuAlias(richMenuId, richMenuAliasId)
 }
 
-/** Get Rich Menu Alias details from LINE */
+/** 自 LINE 取得圖文選單別名詳情 */
 export async function getRichMenuAlias(richMenuAliasId: string) {
   const { client } = await getMessagingBundle()
   return client.getRichMenuAlias(richMenuAliasId)

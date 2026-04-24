@@ -152,7 +152,7 @@ const props = withDefaults(defineProps<{
   menuValuePrefix: 'switchMenu=',
   moduleLabel: '選擇目標模組',
   modulePlaceholder: '請選擇要觸發的機器人模組...',
-  switchLabel: '選擇目標 Rich Menu',
+  switchLabel: '選擇目標圖文選單',
   switchPlaceholder: '請選擇要切換的選單...',
   errorMessage: '',
   disabled: false,

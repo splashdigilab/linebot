@@ -17,7 +17,7 @@
           <div class="stat-card-el-inner">
             <div class="stat-icon orange">🗂️</div>
             <div>
-              <div class="stat-label">Rich Menu</div>
+              <div class="stat-label">圖文選單</div>
               <div class="stat-value">{{ stats.richmenus }}</div>
             </div>
           </div>
@@ -43,7 +43,7 @@
         <el-col :span="12">
           <NuxtLink to="/admin/richmenu" class="quick-action">
             <span class="quick-icon">🗂️</span>
-            <span>設定 Rich Menu</span>
+            <span>設定圖文選單</span>
           </NuxtLink>
         </el-col>
         <el-col :span="12">

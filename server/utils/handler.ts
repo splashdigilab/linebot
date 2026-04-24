@@ -1313,7 +1313,7 @@ export async function handlePostbackEvent(
         await linkRichMenuIdToUser(userId, lineRichMenuId)
         console.log('[switchMenu] Fallback linkRichMenuIdToUser success')
       } catch (e) {
-        console.error('[webhook] Failed to link rich menu:', e)
+        console.error('[webhook] 連結圖文選單失敗:', e)
       }
     } else {
       console.warn('[switchMenu] doc not found or missing richMenuId')
