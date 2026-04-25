@@ -43,6 +43,46 @@ const debugInfo = ref('')
 const needAddFriend = ref(false)
 const addFriendUrl = ref('')
 
+// ── localStorage helpers for surviving the LINE OAuth redirect ──────────
+// When liff.init({ withLoginOnExternalBrowser: true }) redirects to LINE OAuth,
+// LINE redirects back with ?code=...&state=...&liffClientId=... but strips all
+// original query params (claimToken, c, liffId). We persist them in localStorage
+// before the redirect so we can restore them afterwards.
+const STORAGE_KEY = 'liff_lead_params'
+const STORAGE_TTL = 10 * 60 * 1000 // 10 minutes
+
+function saveLeadParams(params: { ct: string; campaignCode: string; liffId: string }) {
+  if (typeof localStorage === 'undefined') return
+  if (!params.ct && !params.liffId) return
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...params, savedAt: Date.now() }))
+  }
+  catch {}
+}
+
+function loadLeadParams(): { ct: string; campaignCode: string; liffId: string } | null {
+  if (typeof localStorage === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return null
+    const data = JSON.parse(raw)
+    if (Date.now() - (data.savedAt || 0) > STORAGE_TTL) {
+      localStorage.removeItem(STORAGE_KEY)
+      return null
+    }
+    return { ct: String(data.ct || ''), campaignCode: String(data.campaignCode || ''), liffId: String(data.liffId || '') }
+  }
+  catch { return null }
+}
+
+function clearLeadParams() {
+  if (typeof localStorage === 'undefined') return
+  try { localStorage.removeItem(STORAGE_KEY) }
+  catch {}
+}
+
+// ── URL parsing helpers ──────────────────────────────────────────────────
+
 function mergeParsedLead(
   base: { ct: string; campaignCode: string; liffId: string },
   next: { ct: string; campaignCode: string; liffId: string },
@@ -108,7 +148,7 @@ function buildDebugInfo(extra: Record<string, unknown>) {
 
 onMounted(async () => {
   // Diagnostic context accumulated across steps — visible in every error's debugInfo.
-  const ctx: Record<string, unknown> = { v: 4 }
+  const ctx: Record<string, unknown> = { v: 5 }
 
   // --- Step 1: Parse whatever params are already in the URL ---
   let parsed = parseLeadClaimFromQuery(route.query as Record<string, unknown>)
@@ -116,6 +156,27 @@ onMounted(async () => {
     parsed = mergeParsedLead(parsed, parseLeadFromBrowserLocation())
   }
   ctx.step1Parsed = { ...parsed }
+
+  // --- Step 1b: localStorage persistence across LINE OAuth redirect ---
+  // If we have real params, save them now (so they survive the OAuth redirect).
+  // If URL has only OAuth callback params (code/state/liffClientId), restore from storage.
+  const isOAuthCallback = !parsed.ct && !parsed.liffId
+    && typeof route.query.code === 'string'
+    && typeof route.query.liffClientId === 'string'
+
+  if (parsed.ct || parsed.liffId) {
+    saveLeadParams(parsed)
+    ctx.storageSaved = true
+  }
+  else if (isOAuthCallback) {
+    const stored = loadLeadParams()
+    if (stored) {
+      parsed = mergeParsedLead(parsed, stored)
+      ctx.storedParams = { ...stored }
+      ctx.restoredFromStorage = true
+    }
+  }
+  ctx.step1bParsed = { ...parsed }
 
   // --- Step 2: Fetch config (liffId fallback + lineOaBasicId for add-friend link) ---
   let liffId = parsed.liffId
@@ -126,7 +187,7 @@ onMounted(async () => {
       ctx.liffIdSource = 'api'
     }
     else {
-      ctx.liffIdSource = 'url'
+      ctx.liffIdSource = 'storage_or_url'
     }
     const basicId = String(cfg?.lineOaBasicId || '').trim()
     if (basicId) {
@@ -140,7 +201,7 @@ onMounted(async () => {
       ctx.liffIdApiError = String(e)
     }
     else {
-      ctx.liffIdSource = 'url'
+      ctx.liffIdSource = 'storage_or_url'
     }
   }
   ctx.liffId = liffId
@@ -183,6 +244,8 @@ onMounted(async () => {
 
   // --- Step 5: Handle login ---
   if (!liff.isLoggedIn()) {
+    // Save params before redirect so they survive the OAuth round-trip
+    saveLeadParams(parsed)
     phase.value = 'need-login'
     liff.login({ redirectUri: window.location.href })
     return
@@ -209,6 +272,7 @@ onMounted(async () => {
         body: { rawToken: ct, lineUserId: profile.userId },
       },
     )
+    clearLeadParams()
     phase.value = 'done'
     if (res.alreadyApplied) {
       doneMessage.value = '此活動先前已完成貼標。'
