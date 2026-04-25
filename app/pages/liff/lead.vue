@@ -5,7 +5,17 @@
     <template v-else-if="phase === 'done'">
       <p class="liff-lead-title">綁定完成</p>
       <p class="liff-lead-msg">{{ doneMessage }}</p>
-      <p class="liff-lead-hint">請加入官方帳號為好友，加好友後系統會自動完成活動貼標。</p>
+      <template v-if="needAddFriend">
+        <p class="liff-lead-hint">請加入官方帳號為好友，加好友後系統會自動完成活動貼標。</p>
+        <a
+          v-if="addFriendUrl"
+          :href="addFriendUrl"
+          class="liff-lead-btn"
+          target="_blank"
+          rel="noopener noreferrer"
+        >加入官方帳號好友</a>
+      </template>
+      <p v-else class="liff-lead-hint">貼標與活動訊息已即時套用，請至 LINE 查收。</p>
     </template>
     <template v-else-if="phase === 'error'">
       <p class="liff-lead-title">無法完成綁定</p>
@@ -19,6 +29,7 @@
 </template>
 
 <script setup lang="ts">
+import { ref, onMounted } from 'vue'
 import { $fetch } from 'ofetch'
 import { parseLeadClaimFromQuery } from '~~/shared/liff-lead-query'
 
@@ -29,6 +40,8 @@ const phase = ref<'loading' | 'need-login' | 'done' | 'error'>('loading')
 const errorText = ref('')
 const doneMessage = ref('')
 const debugInfo = ref('')
+const needAddFriend = ref(false)
+const addFriendUrl = ref('')
 
 function mergeParsedLead(
   base: { ct: string; campaignCode: string; liffId: string },
@@ -95,7 +108,7 @@ function buildDebugInfo(extra: Record<string, unknown>) {
 
 onMounted(async () => {
   // Diagnostic context accumulated across steps — visible in every error's debugInfo.
-  const ctx: Record<string, unknown> = { v: 3 }
+  const ctx: Record<string, unknown> = { v: 4 }
 
   // --- Step 1: Parse whatever params are already in the URL ---
   let parsed = parseLeadClaimFromQuery(route.query as Record<string, unknown>)
@@ -104,25 +117,31 @@ onMounted(async () => {
   }
   ctx.step1Parsed = { ...parsed }
 
-  // --- Step 2: Resolve liffId for liff.init() ---
-  // LINE's in-app browser intentionally strips the liff.state value from the URL
-  // (passing it via the native bridge instead). We must call liff.init() before
-  // reading params so the SDK can restore the URL from the native bridge.
-  // If no liffId is in the URL, fall back to the workspace defaultLiffId from the API.
+  // --- Step 2: Fetch config (liffId fallback + lineOaBasicId for add-friend link) ---
   let liffId = parsed.liffId
-  if (!liffId) {
-    try {
-      const cfg = await $fetch<{ liffId: string }>('/api/liff/config')
+  try {
+    const cfg = await $fetch<{ liffId: string; lineOaBasicId: string }>('/api/liff/config')
+    if (!liffId) {
       liffId = cfg?.liffId || ''
       ctx.liffIdSource = 'api'
     }
-    catch (e) {
+    else {
+      ctx.liffIdSource = 'url'
+    }
+    const basicId = String(cfg?.lineOaBasicId || '').trim()
+    if (basicId) {
+      addFriendUrl.value = `https://line.me/R/ti/p/${encodeURIComponent(basicId)}`
+    }
+    ctx.lineOaBasicId = basicId
+  }
+  catch (e) {
+    if (!liffId) {
       ctx.liffIdSource = 'api_failed'
       ctx.liffIdApiError = String(e)
     }
-  }
-  else {
-    ctx.liffIdSource = 'url'
+    else {
+      ctx.liffIdSource = 'url'
+    }
   }
   ctx.liffId = liffId
 
@@ -183,7 +202,7 @@ onMounted(async () => {
   // --- Step 7: Claim ---
   try {
     const profile = await liff.getProfile()
-    const res = await $fetch<{ ok?: boolean; alreadyApplied?: boolean; campaignCode?: string }>(
+    const res = await $fetch<{ ok?: boolean; alreadyApplied?: boolean; immediatelyApplied?: boolean; campaignCode?: string }>(
       '/api/liff/claim',
       {
         method: 'POST',
@@ -191,10 +210,18 @@ onMounted(async () => {
       },
     )
     phase.value = 'done'
-    if (res.alreadyApplied)
+    if (res.alreadyApplied) {
       doneMessage.value = '此活動先前已完成貼標。'
-    else
+      needAddFriend.value = false
+    }
+    else if (res.immediatelyApplied) {
       doneMessage.value = '已將你的 LINE 與活動綁定。'
+      needAddFriend.value = false
+    }
+    else {
+      doneMessage.value = '已將你的 LINE 與活動綁定。'
+      needAddFriend.value = true
+    }
   }
   catch (e: unknown) {
     const err = e as { data?: { statusMessage?: string }; message?: string }
@@ -229,10 +256,23 @@ onMounted(async () => {
   line-height: 1.5;
 }
 .liff-lead-hint {
-  margin: 0;
+  margin: 0 0 1rem;
   font-size: 0.875rem;
   color: #9aa0a6;
   line-height: 1.5;
+}
+.liff-lead-btn {
+  display: inline-block;
+  padding: 0.625rem 1.25rem;
+  background: #06c755;
+  color: #fff;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  border-radius: 0.5rem;
+  text-decoration: none;
+}
+.liff-lead-btn:active {
+  opacity: 0.85;
 }
 .liff-lead-err {
   color: #f28b82;

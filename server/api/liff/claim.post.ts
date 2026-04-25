@@ -1,11 +1,14 @@
 import { createHash } from 'node:crypto'
 import { FieldValue } from 'firebase-admin/firestore'
+import { getUserProfile } from '~~/server/utils/line'
+import { handleFollowEvent } from '~~/server/utils/handler'
 
 /**
  * POST /api/liff/claim
  *
  * LIFF 頁面取得 LINE userId 後呼叫此 API，完成 token 兌換與身份綁定。
- * 後續等待使用者加好友（follow webhook），再由 handleFollowEvent 完成貼標。
+ * 若使用者已加好友，立即觸發 handleFollowEvent 完成貼標；
+ * 否則等待 follow webhook 觸發。
  *
  * Body:
  * {
@@ -17,7 +20,8 @@ import { FieldValue } from 'firebase-admin/firestore'
  * {
  *   ok: true
  *   campaignCode: string
- *   alreadyApplied?: true   // 已完成貼標（follow 已觸發）
+ *   alreadyApplied?: true      // 此 token 先前已完成貼標
+ *   immediatelyApplied?: true  // 使用者已加好友，本次立即完成貼標
  * }
  */
 export default defineEventHandler(async (event) => {
@@ -73,6 +77,19 @@ export default defineEventHandler(async (event) => {
     claimedAt: FieldValue.serverTimestamp(),
   })
 
-  console.log('[liff/claim] claimed:', doc.id, 'userId:', lineUserId)
-  return { ok: true, campaignCode: claim.campaignCode }
+  // 若使用者已加官方帳號為好友，立即套用貼標與推播，無需等待 follow webhook
+  let immediatelyApplied = false
+  try {
+    const profile = await getUserProfile(lineUserId)
+    if (profile) {
+      await handleFollowEvent(lineUserId)
+      immediatelyApplied = true
+    }
+  }
+  catch (e) {
+    console.error('[liff/claim] immediate apply failed:', e)
+  }
+
+  console.log('[liff/claim] claimed:', doc.id, 'userId:', lineUserId, 'immediatelyApplied:', immediatelyApplied)
+  return { ok: true, campaignCode: claim.campaignCode, immediatelyApplied }
 })
