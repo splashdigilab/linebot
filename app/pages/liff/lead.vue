@@ -35,6 +35,16 @@ import { parseLeadClaimFromQuery } from '~~/shared/liff-lead-query'
 
 definePageMeta({ layout: false, ssr: false })
 
+// 提前建立 TCP+TLS 連線到 LINE，縮短 liff.init() 的等待時間
+useHead({
+  link: [
+    { rel: 'preconnect', href: 'https://api.line.me' },
+    { rel: 'preconnect', href: 'https://access.line.me' },
+    { rel: 'dns-prefetch', href: 'https://api.line.me' },
+    { rel: 'dns-prefetch', href: 'https://access.line.me' },
+  ],
+})
+
 const route = useRoute()
 const phase = ref<'loading' | 'need-login' | 'done' | 'error'>('loading')
 const errorText = ref('')

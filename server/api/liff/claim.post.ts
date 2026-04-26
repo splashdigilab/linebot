@@ -74,24 +74,28 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 409, statusMessage: 'Token already claimed by another user' })
   }
 
-  await doc.ref.update({
-    lineUserId,
-    status: 'claimed',
-    claimedAt: FieldValue.serverTimestamp(),
-    appliedAt: null, // 重置，讓重新觸發的 apply 能正確記錄時間
-  })
+  // 並行：Firestore 更新 + 查詢是否已加好友（兩者互不依賴）
+  const [, followProfile] = await Promise.all([
+    doc.ref.update({
+      lineUserId,
+      status: 'claimed',
+      claimedAt: FieldValue.serverTimestamp(),
+      appliedAt: null,
+    }),
+    getUserProfile(lineUserId),
+  ])
 
   // 若使用者已加官方帳號為好友，立即套用貼標與推播，無需等待 follow webhook
+  // 傳入已取得的 profile，避免 ensureUser 內重複呼叫 LINE API
   let immediatelyApplied = false
-  try {
-    const profile = await getUserProfile(lineUserId)
-    if (profile) {
-      await handleFollowEvent(lineUserId)
+  if (followProfile) {
+    try {
+      await handleFollowEvent(lineUserId, followProfile)
       immediatelyApplied = true
     }
-  }
-  catch (e) {
-    console.error('[liff/claim] immediate apply failed:', e)
+    catch (e) {
+      console.error('[liff/claim] immediate apply failed:', e)
+    }
   }
 
   const redirectUrl = String(claim.redirectUrl || '').trim() || undefined

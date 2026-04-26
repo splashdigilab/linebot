@@ -137,13 +137,17 @@ function buildAttributeContext(userData: UserDoc | null): Record<string, string>
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-async function ensureUser(userId: string): Promise<UserDoc | null> {
+async function ensureUser(
+  userId: string,
+  preloadedProfile?: { displayName: string; pictureUrl: string } | null,
+): Promise<UserDoc | null> {
   const db = getDb()
   const ref = db.collection('users').doc(userId)
   const snap = await ref.get()
 
   if (!snap.exists) {
-    const profile = await getUserProfile(userId)
+    // Use caller-supplied profile to avoid a redundant LINE API round-trip
+    const profile = preloadedProfile ?? await getUserProfile(userId)
     const newDoc: UserDoc = {
       displayName: profile?.displayName ?? userId,
       pictureUrl: profile?.pictureUrl ?? '',
@@ -161,9 +165,12 @@ async function ensureUser(userId: string): Promise<UserDoc | null> {
   return data
 }
 
-export async function handleFollowEvent(userId: string): Promise<void> {
+export async function handleFollowEvent(
+  userId: string,
+  preloadedProfile?: { displayName: string; pictureUrl: string } | null,
+): Promise<void> {
   try {
-    await ensureUser(userId)
+    await ensureUser(userId, preloadedProfile)
     console.log('[webhook] follow ensureUser:', userId)
     await applyPendingClaims(userId)
   }
