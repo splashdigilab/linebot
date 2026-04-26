@@ -43,42 +43,45 @@ const debugInfo = ref('')
 const needAddFriend = ref(false)
 const addFriendUrl = ref('')
 
-// ── localStorage helpers for surviving the LINE OAuth redirect ──────────
-// When liff.init({ withLoginOnExternalBrowser: true }) redirects to LINE OAuth,
-// LINE redirects back with ?code=...&state=...&liffClientId=... but strips all
-// original query params (claimToken, c, liffId). We persist them in localStorage
-// before the redirect so we can restore them afterwards.
-const STORAGE_KEY = 'liff_lead_params'
-const STORAGE_TTL = 10 * 60 * 1000 // 10 minutes
+// ── localStorage: claim params (survives LINE OAuth redirect) ────────────
+const LEAD_KEY = 'liff_lead_params'
+const LEAD_TTL = 10 * 60 * 1000 // 10 min
 
-function saveLeadParams(params: { ct: string; campaignCode: string; liffId: string }) {
-  if (typeof localStorage === 'undefined') return
-  if (!params.ct && !params.liffId) return
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ...params, savedAt: Date.now() }))
-  }
-  catch {}
+function saveLeadParams(p: { ct: string; campaignCode: string; liffId: string }) {
+  if (typeof localStorage === 'undefined' || (!p.ct && !p.liffId)) return
+  try { localStorage.setItem(LEAD_KEY, JSON.stringify({ ...p, savedAt: Date.now() })) } catch {}
 }
-
 function loadLeadParams(): { ct: string; campaignCode: string; liffId: string } | null {
   if (typeof localStorage === 'undefined') return null
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(LEAD_KEY)
     if (!raw) return null
-    const data = JSON.parse(raw)
-    if (Date.now() - (data.savedAt || 0) > STORAGE_TTL) {
-      localStorage.removeItem(STORAGE_KEY)
-      return null
-    }
-    return { ct: String(data.ct || ''), campaignCode: String(data.campaignCode || ''), liffId: String(data.liffId || '') }
-  }
-  catch { return null }
+    const d = JSON.parse(raw)
+    if (Date.now() - (d.savedAt || 0) > LEAD_TTL) { localStorage.removeItem(LEAD_KEY); return null }
+    return { ct: String(d.ct || ''), campaignCode: String(d.campaignCode || ''), liffId: String(d.liffId || '') }
+  } catch { return null }
+}
+function clearLeadParams() {
+  if (typeof localStorage !== 'undefined') try { localStorage.removeItem(LEAD_KEY) } catch {}
 }
 
-function clearLeadParams() {
+// ── localStorage: config cache (avoids API round-trip on repeat visits) ─
+const CFG_KEY = 'liff_config_cache'
+const CFG_TTL = 60 * 60 * 1000 // 1 hour
+
+function loadConfigCache(): { liffId: string; lineOaBasicId: string } | null {
+  if (typeof localStorage === 'undefined') return null
+  try {
+    const raw = localStorage.getItem(CFG_KEY)
+    if (!raw) return null
+    const d = JSON.parse(raw)
+    if (Date.now() - (d.cachedAt || 0) > CFG_TTL) { localStorage.removeItem(CFG_KEY); return null }
+    return { liffId: String(d.liffId || ''), lineOaBasicId: String(d.lineOaBasicId || '') }
+  } catch { return null }
+}
+function saveConfigCache(cfg: { liffId: string; lineOaBasicId: string }) {
   if (typeof localStorage === 'undefined') return
-  try { localStorage.removeItem(STORAGE_KEY) }
-  catch {}
+  try { localStorage.setItem(CFG_KEY, JSON.stringify({ ...cfg, cachedAt: Date.now() })) } catch {}
 }
 
 // ── URL parsing helpers ──────────────────────────────────────────────────
@@ -95,71 +98,40 @@ function mergeParsedLead(
 }
 
 function parseLeadFromBrowserLocation() {
-  if (typeof window === 'undefined') {
-    return { ct: '', campaignCode: '', liffId: '' }
-  }
-
+  if (typeof window === 'undefined') return { ct: '', campaignCode: '', liffId: '' }
   let result = { ct: '', campaignCode: '', liffId: '' }
   const url = new URL(window.location.href)
-  const searchQuery = Object.fromEntries(url.searchParams.entries())
-  result = mergeParsedLead(result, parseLeadClaimFromQuery(searchQuery))
-
-  // LINE 有時會把參數塞在 hash（例如 #ct=... 或 #/liff/lead?ct=...）
+  result = mergeParsedLead(result, parseLeadClaimFromQuery(Object.fromEntries(url.searchParams.entries())))
   const hashRaw = String(url.hash || '').replace(/^#/, '')
   if (hashRaw) {
-    const hashQueryString = hashRaw.includes('?')
-      ? hashRaw.slice(hashRaw.indexOf('?') + 1)
-      : hashRaw
-    const hashParams = new URLSearchParams(hashQueryString)
-    const hashQuery = Object.fromEntries(hashParams.entries())
-    result = mergeParsedLead(result, parseLeadClaimFromQuery(hashQuery))
+    const qs = hashRaw.includes('?') ? hashRaw.slice(hashRaw.indexOf('?') + 1) : hashRaw
+    result = mergeParsedLead(result, parseLeadClaimFromQuery(Object.fromEntries(new URLSearchParams(qs).entries())))
   }
-
-  // 再保險：將完整 href 當成 liff.state 來源解析一次
-  result = mergeParsedLead(result, parseLeadClaimFromQuery({
-    'liff.state': encodeURIComponent(window.location.href),
-  }))
-
+  result = mergeParsedLead(result, parseLeadClaimFromQuery({ 'liff.state': encodeURIComponent(window.location.href) }))
   return result
 }
 
 function buildDebugInfo(extra: Record<string, unknown>) {
   try {
     const routeQuery = route.query as Record<string, unknown>
-    const locationData = typeof window === 'undefined'
-      ? {}
-      : {
-        href: window.location.href,
-        search: window.location.search,
-        hash: window.location.hash,
-      }
-    return JSON.stringify({
-      routeQuery,
-      parsedFromRoute: parseLeadClaimFromQuery(routeQuery),
-      parsedFromLocation: parseLeadFromBrowserLocation(),
-      ...locationData,
-      ...extra,
-    }, null, 2)
-  }
-  catch (e) {
-    return `buildDebugInfo failed: ${String(e)}`
-  }
+    const loc = typeof window === 'undefined' ? {} : { href: window.location.href, search: window.location.search, hash: window.location.hash }
+    return JSON.stringify({ routeQuery, parsedFromRoute: parseLeadClaimFromQuery(routeQuery), parsedFromLocation: parseLeadFromBrowserLocation(), ...loc, ...extra }, null, 2)
+  } catch (e) { return `buildDebugInfo failed: ${String(e)}` }
 }
 
 onMounted(async () => {
-  // Diagnostic context accumulated across steps — visible in every error's debugInfo.
-  const ctx: Record<string, unknown> = { v: 5 }
+  const ctx: Record<string, unknown> = { v: 6 }
 
-  // --- Step 1: Parse whatever params are already in the URL ---
+  // ── 最先啟動：LIFF SDK 動態載入（與其他步驟並行執行）──────────────────
+  // @line/liff 是最重的資源，越早開始載入越好。
+  const liffImportPromise = import('@line/liff')
+
+  // --- Step 1: Parse URL params ---
   let parsed = parseLeadClaimFromQuery(route.query as Record<string, unknown>)
-  if (!parsed.ct || !parsed.liffId) {
-    parsed = mergeParsedLead(parsed, parseLeadFromBrowserLocation())
-  }
+  if (!parsed.ct || !parsed.liffId) parsed = mergeParsedLead(parsed, parseLeadFromBrowserLocation())
   ctx.step1Parsed = { ...parsed }
 
-  // --- Step 1b: localStorage persistence across LINE OAuth redirect ---
-  // If we have real params, save them now (so they survive the OAuth redirect).
-  // If URL has only OAuth callback params (code/state/liffClientId), restore from storage.
+  // --- Step 1b: Restore params from localStorage after LINE OAuth redirect ---
   const isOAuthCallback = !parsed.ct && !parsed.liffId
     && typeof route.query.code === 'string'
     && typeof route.query.liffClientId === 'string'
@@ -170,39 +142,43 @@ onMounted(async () => {
   }
   else if (isOAuthCallback) {
     const stored = loadLeadParams()
-    if (stored) {
-      parsed = mergeParsedLead(parsed, stored)
-      ctx.storedParams = { ...stored }
-      ctx.restoredFromStorage = true
-    }
+    if (stored) { parsed = mergeParsedLead(parsed, stored); ctx.storedParams = { ...stored }; ctx.restoredFromStorage = true }
   }
   ctx.step1bParsed = { ...parsed }
 
-  // --- Step 2: Fetch config (liffId fallback + lineOaBasicId for add-friend link) ---
+  // --- Step 2: Resolve liffId — localStorage cache → URL params → API ---
+  // API fetch runs in parallel with liffImportPromise when liffId already known.
   let liffId = parsed.liffId
-  try {
-    const cfg = await $fetch<{ liffId: string; lineOaBasicId: string }>('/api/liff/config')
-    if (!liffId) {
+
+  // Try config cache first (instant, no network)
+  const cachedCfg = loadConfigCache()
+  if (cachedCfg) {
+    if (!liffId) liffId = cachedCfg.liffId
+    if (cachedCfg.lineOaBasicId) addFriendUrl.value = `https://line.me/R/ti/p/${encodeURIComponent(cachedCfg.lineOaBasicId)}`
+    ctx.liffIdSource = liffId === cachedCfg.liffId ? 'cache' : 'url_or_params'
+  }
+
+  if (!liffId) {
+    // Must fetch API before proceeding — but liffImportPromise is already loading in parallel
+    try {
+      const cfg = await $fetch<{ liffId: string; lineOaBasicId: string }>('/api/liff/config')
       liffId = cfg?.liffId || ''
+      if (cfg) saveConfigCache(cfg)
+      if (cfg?.lineOaBasicId) addFriendUrl.value = `https://line.me/R/ti/p/${encodeURIComponent(cfg.lineOaBasicId)}`
       ctx.liffIdSource = 'api'
     }
-    else {
-      ctx.liffIdSource = 'storage_or_url'
-    }
-    const basicId = String(cfg?.lineOaBasicId || '').trim()
-    if (basicId) {
-      addFriendUrl.value = `https://line.me/R/ti/p/${encodeURIComponent(basicId)}`
-    }
-    ctx.lineOaBasicId = basicId
-  }
-  catch (e) {
-    if (!liffId) {
+    catch (e) {
       ctx.liffIdSource = 'api_failed'
       ctx.liffIdApiError = String(e)
     }
-    else {
-      ctx.liffIdSource = 'storage_or_url'
-    }
+  }
+  else if (!cachedCfg || Date.now() - (loadConfigCache() as any)?.cachedAt > CFG_TTL / 2) {
+    // Have liffId — refresh config cache in background without blocking
+    $fetch<{ liffId: string; lineOaBasicId: string }>('/api/liff/config').then((cfg) => {
+      if (cfg) saveConfigCache(cfg)
+      if (cfg?.lineOaBasicId && !addFriendUrl.value) addFriendUrl.value = `https://line.me/R/ti/p/${encodeURIComponent(cfg.lineOaBasicId)}`
+    }).catch(() => {})
+    ctx.liffIdSource = ctx.liffIdSource || 'url_or_params'
   }
   ctx.liffId = liffId
 
@@ -213,8 +189,8 @@ onMounted(async () => {
     return
   }
 
-  // --- Step 3: Init LIFF (always before reading params / checking login) ---
-  const liffMod = await import('@line/liff')
+  // --- Step 3: Await LIFF SDK (已與 Step 2 並行載入) ---
+  const liffMod = await liffImportPromise
   const liff = liffMod.default
 
   ctx.preInitUrl = typeof window !== 'undefined' ? window.location.href : ''
@@ -224,8 +200,7 @@ onMounted(async () => {
   }
   catch (e: unknown) {
     const err = e as { message?: string }
-    ctx.initOk = false
-    ctx.initError = err?.message || String(e)
+    ctx.initOk = false; ctx.initError = err?.message || String(e)
     phase.value = 'error'
     errorText.value = `LIFF 初始化失敗：${err?.message || '未知錯誤'}`
     debugInfo.value = buildDebugInfo({ reason: 'liff_init_failed', mergedParsed: parsed, ...ctx })
@@ -234,17 +209,15 @@ onMounted(async () => {
   ctx.postInitUrl = typeof window !== 'undefined' ? window.location.href : ''
   ctx.isLoggedIn = liff.isLoggedIn()
 
-  // --- Step 4: Re-read params after init (URL may have changed via history.replaceState) ---
+  // --- Step 4: Re-read params after init (history.replaceState may have changed URL) ---
   if (!parsed.ct) {
-    const postInit = parseLeadFromBrowserLocation()
-    parsed = mergeParsedLead(parsed, postInit)
+    parsed = mergeParsedLead(parsed, parseLeadFromBrowserLocation())
     ctx.step4Parsed = { ...parsed }
   }
   const ct = parsed.ct
 
   // --- Step 5: Handle login ---
   if (!liff.isLoggedIn()) {
-    // Save params before redirect so they survive the OAuth round-trip
     saveLeadParams(parsed)
     phase.value = 'need-login'
     liff.login({ redirectUri: window.location.href })
@@ -267,14 +240,10 @@ onMounted(async () => {
     const profile = await liff.getProfile()
     const res = await $fetch<{ ok?: boolean; immediatelyApplied?: boolean; campaignCode?: string; redirectUrl?: string }>(
       '/api/liff/claim',
-      {
-        method: 'POST',
-        body: { rawToken: ct, lineUserId: profile.userId },
-      },
+      { method: 'POST', body: { rawToken: ct, lineUserId: profile.userId } },
     )
     clearLeadParams()
 
-    // 有設定轉址網址 → 直接跳轉，不顯示成功畫面
     if (res.redirectUrl) {
       window.location.href = res.redirectUrl
       return
@@ -284,10 +253,7 @@ onMounted(async () => {
     if (res.immediatelyApplied) {
       doneMessage.value = '已將你的 LINE 與活動綁定。'
       needAddFriend.value = false
-      // 在 LINE 內開啟時，自動關閉 LIFF 視窗回到聊天室
-      if (liff.isInClient()) {
-        setTimeout(() => liff.closeWindow(), 2000)
-      }
+      if (liff.isInClient()) setTimeout(() => liff.closeWindow(), 2000)
     }
     else {
       doneMessage.value = '已將你的 LINE 與活動綁定。'
@@ -298,12 +264,7 @@ onMounted(async () => {
     const err = e as { data?: { statusMessage?: string }; message?: string }
     phase.value = 'error'
     errorText.value = err?.data?.statusMessage || err?.message || '發生錯誤，請稍後再試。'
-    debugInfo.value = buildDebugInfo({
-      reason: 'run_claim_failed',
-      mergedParsed: parsed,
-      errorMessage: err?.data?.statusMessage || err?.message || 'unknown',
-      ...ctx,
-    })
+    debugInfo.value = buildDebugInfo({ reason: 'run_claim_failed', mergedParsed: parsed, errorMessage: err?.data?.statusMessage || err?.message || 'unknown', ...ctx })
   }
 })
 </script>
