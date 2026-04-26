@@ -105,6 +105,15 @@
               />
             </div>
             <div class="admin-field-group">
+              <AdminFieldLabel text="完成後轉址網址（選填）" tight />
+              <p class="text-xs text-muted">使用者完成綁定後自動跳轉到此網址（如問卷感謝頁）。留空則停留在綁定成功頁。</p>
+              <el-input
+                v-model="form.redirectUrl"
+                placeholder="https://example.com/thank-you"
+                clearable
+              />
+            </div>
+            <div class="admin-field-group">
               <AdminFieldLabel text="活動檔期（選填）" tight />
               <p class="text-xs text-muted">僅供內部／行銷紀錄，不影響連結或貼標；清空後儲存可刪除。</p>
               <div class="flex flex-wrap gap-2 admin-w-full">
@@ -296,6 +305,7 @@ const defaultForm = () => ({
     uri: '',
   },
   description: '',
+  redirectUrl: '' as string,
   startsAt: '' as string,
   endsAt: '' as string,
   isActive: true,
@@ -363,6 +373,7 @@ function selectCampaign(c: any) {
       uri: c.action?.uri || '',
     },
     description: c.description ?? '',
+    redirectUrl: c.redirectUrl ?? '',
     startsAt: campaignTimestampToPicker(c.startsAt),
     endsAt: campaignTimestampToPicker(c.endsAt),
     isActive: c.isActive !== false,
@@ -425,6 +436,7 @@ async function submitForm() {
           uri: String(form.value.action.uri || '').trim(),
         },
       description: form.value.description,
+      redirectUrl: String(form.value.redirectUrl || '').trim() || null,
       startsAt: form.value.startsAt || '',
       endsAt: form.value.endsAt || '',
       isActive: form.value.isActive,

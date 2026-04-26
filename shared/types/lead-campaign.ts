@@ -25,6 +25,8 @@ export interface LeadCampaignDoc {
    */
   startsAt?: string | null
   endsAt?: string | null
+  /** 完成綁定後轉址的網址（選填；留空則停留在 LIFF 頁） */
+  redirectUrl?: string | null
   /** 儲存活動後自動產生的活動進入網址（含一次性 ct） */
   publishedCtaUrl?: string | null
   publishedClaimId?: string | null
@@ -59,6 +61,8 @@ export interface LeadClaimDoc {
   moduleId: string | null
   /** 從活動快照複製的 action */
   action?: AutoReplyAction | null
+  /** 從活動快照複製的完成後轉址網址 */
+  redirectUrl?: string | null
   /** 未設定則不因時間逾期（仍為一次性 token，用過即進入 claimed／applied 流程） */
   expiresAt?: Timestamp | Date | null
   claimedAt: Timestamp | FieldValue | null

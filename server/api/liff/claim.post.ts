@@ -7,8 +7,8 @@ import { handleFollowEvent } from '~~/server/utils/handler'
  * POST /api/liff/claim
  *
  * LIFF 頁面取得 LINE userId 後呼叫此 API，完成 token 兌換與身份綁定。
- * 若使用者已加好友，立即觸發 handleFollowEvent 完成貼標；
- * 否則等待 follow webhook 觸發。
+ * - 若使用者已加好友，立即觸發 handleFollowEvent 完成貼標；否則等待 follow webhook。
+ * - 若 claim 已是 applied 狀態（同一使用者），重置並重新觸發貼標與模組。
  *
  * Body:
  * {
@@ -20,8 +20,8 @@ import { handleFollowEvent } from '~~/server/utils/handler'
  * {
  *   ok: true
  *   campaignCode: string
- *   alreadyApplied?: true      // 此 token 先前已完成貼標
- *   immediatelyApplied?: true  // 使用者已加好友，本次立即完成貼標
+ *   redirectUrl?: string         // 活動設定的完成後轉址網址（有設定才有此欄位）
+ *   immediatelyApplied?: true    // 使用者已加好友，本次立即完成貼標
  * }
  */
 export default defineEventHandler(async (event) => {
@@ -51,9 +51,12 @@ export default defineEventHandler(async (event) => {
   }
   const claim = doc.data()
 
-  // 已完成貼標，冪等回應
+  // 若已完成（applied），同一使用者可重新觸發貼標與模組；不同使用者則拒絕
   if (claim.status === 'applied') {
-    return { ok: true, alreadyApplied: true, campaignCode: claim.campaignCode }
+    if (claim.lineUserId && claim.lineUserId !== lineUserId) {
+      throw createError({ statusCode: 409, statusMessage: 'Token already claimed by another user' })
+    }
+    // 同一使用者：重置 appliedAt，下方 update 會設回 claimed，讓 handleFollowEvent 重新套用
   }
 
   // 逾期檢查（僅舊 claim 含 expiresAt 時有效；新產生連結不設期限）
@@ -75,6 +78,7 @@ export default defineEventHandler(async (event) => {
     lineUserId,
     status: 'claimed',
     claimedAt: FieldValue.serverTimestamp(),
+    appliedAt: null, // 重置，讓重新觸發的 apply 能正確記錄時間
   })
 
   // 若使用者已加官方帳號為好友，立即套用貼標與推播，無需等待 follow webhook
@@ -90,6 +94,8 @@ export default defineEventHandler(async (event) => {
     console.error('[liff/claim] immediate apply failed:', e)
   }
 
+  const redirectUrl = String(claim.redirectUrl || '').trim() || undefined
+
   console.log('[liff/claim] claimed:', doc.id, 'userId:', lineUserId, 'immediatelyApplied:', immediatelyApplied)
-  return { ok: true, campaignCode: claim.campaignCode, immediatelyApplied }
+  return { ok: true, campaignCode: claim.campaignCode, immediatelyApplied, redirectUrl }
 })

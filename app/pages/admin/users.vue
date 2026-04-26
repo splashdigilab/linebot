@@ -81,10 +81,8 @@
                       />
                     </th>
                     <th>會員</th>
-                    <th>LINE ID</th>
                     <th>加入時間</th>
-                    <th>標籤</th>
-                    <th class="users-table__th--actions">操作</th>
+                    <th class="users-table__th--actions">標籤操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -108,24 +106,13 @@
                         <span class="user-name">{{ user.displayName || user.id }}</span>
                       </div>
                     </td>
-                    <td class="td-code">{{ user.id }}</td>
                     <td class="td-time">{{ formatZhDateOnly(user.createdAt) }}</td>
                     <td>
-                      <div class="user-tags-row">
-                        <AdminTagTintChip
-                          v-for="tag in user.tags.slice(0, 4)"
-                          :key="tag.id"
-                          :color="tag.color"
-                        >
-                          {{ tag.name }}
-                        </AdminTagTintChip>
-                        <span v-if="user.tags.length > 4" class="tag-chip-more">
-                          +{{ user.tags.length - 4 }}
-                        </span>
+                      <div class="td-actions">
+                        <el-button size="small" @click="openUserTagDialog(user)">
+                          標籤（{{ user.tags.length }}）
+                        </el-button>
                       </div>
-                    </td>
-                    <td>
-                      <el-button size="small" @click="openUserTagDialog(user)">貼標</el-button>
                     </td>
                   </tr>
                 </tbody>
@@ -177,6 +164,7 @@
     v-model="userTagDialogVisible"
     :title="`管理標籤：${dialogUser?.displayName ?? ''}`"
     width="480px"
+    class="users-tag-dialog"
   >
     <div v-if="dialogUser" class="admin-field-stack">
       <div class="admin-field-group">

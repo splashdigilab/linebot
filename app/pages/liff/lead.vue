@@ -265,7 +265,7 @@ onMounted(async () => {
   // --- Step 7: Claim ---
   try {
     const profile = await liff.getProfile()
-    const res = await $fetch<{ ok?: boolean; alreadyApplied?: boolean; immediatelyApplied?: boolean; campaignCode?: string }>(
+    const res = await $fetch<{ ok?: boolean; immediatelyApplied?: boolean; campaignCode?: string; redirectUrl?: string }>(
       '/api/liff/claim',
       {
         method: 'POST',
@@ -273,14 +273,21 @@ onMounted(async () => {
       },
     )
     clearLeadParams()
-    phase.value = 'done'
-    if (res.alreadyApplied) {
-      doneMessage.value = '此活動先前已完成貼標。'
-      needAddFriend.value = false
+
+    // 有設定轉址網址 → 直接跳轉，不顯示成功畫面
+    if (res.redirectUrl) {
+      window.location.href = res.redirectUrl
+      return
     }
-    else if (res.immediatelyApplied) {
+
+    phase.value = 'done'
+    if (res.immediatelyApplied) {
       doneMessage.value = '已將你的 LINE 與活動綁定。'
       needAddFriend.value = false
+      // 在 LINE 內開啟時，自動關閉 LIFF 視窗回到聊天室
+      if (liff.isInClient()) {
+        setTimeout(() => liff.closeWindow(), 2000)
+      }
     }
     else {
       doneMessage.value = '已將你的 LINE 與活動綁定。'

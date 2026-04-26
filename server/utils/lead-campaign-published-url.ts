@@ -12,6 +12,7 @@ type CampaignForEntryUrl = {
   tagIds?: unknown
   moduleId?: unknown
   action?: unknown
+  redirectUrl?: string | null
 }
 
 /**
@@ -48,6 +49,8 @@ export async function syncPublishedEntryUrlForCampaign(
     : null
   const moduleId = action?.type === 'module' && action.moduleId ? action.moduleId : null
 
+  const redirectUrl = String(campaign.redirectUrl || '').trim() || null
+
   const claimDoc: LeadClaimDoc = {
     campaignId,
     campaignCode,
@@ -57,6 +60,7 @@ export async function syncPublishedEntryUrlForCampaign(
     tagIds: Array.isArray(campaign.tagIds) ? campaign.tagIds.map(String).filter(Boolean) : [],
     moduleId,
     action,
+    redirectUrl,
     claimedAt: null,
     appliedAt: null,
     createdAt: FieldValue.serverTimestamp(),

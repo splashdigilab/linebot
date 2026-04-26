@@ -46,6 +46,7 @@ export default defineEventHandler(async (event) => {
     moduleId,
     action,
     description: String(body.description || '').trim(),
+    redirectUrl: String(body.redirectUrl || '').trim() || null,
     isActive: body.isActive !== false,
     createdAt: now,
     updatedAt: now,
@@ -63,6 +64,7 @@ export default defineEventHandler(async (event) => {
     tagIds: doc.tagIds,
     moduleId: doc.moduleId,
     action: doc.action,
+    redirectUrl: doc.redirectUrl as string | null,
   })
 
   return { id, ...doc, publishedCtaUrl: urlRes.publishedCtaUrl ?? null }

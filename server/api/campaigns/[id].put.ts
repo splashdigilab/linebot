@@ -43,6 +43,7 @@ export default defineEventHandler(async (event) => {
     moduleId,
     action,
     description: String(body.description || '').trim(),
+    redirectUrl: String(body.redirectUrl || '').trim() || null,
     isActive: body.isActive !== false,
     updatedAt: FieldValue.serverTimestamp(),
     ...schedulePatchForUpdate(sched),
@@ -58,6 +59,7 @@ export default defineEventHandler(async (event) => {
     tagIds: merged.tagIds,
     moduleId: merged.moduleId,
     action: merged.action,
+    redirectUrl: String(merged.redirectUrl ?? '') || null,
   })
 
   return {
