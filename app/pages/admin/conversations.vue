@@ -165,7 +165,75 @@
             </template>
             <template v-else-if="isStructuredLineMessage(msg)">
               <div class="conv-line-template" :class="getStructuredTemplateClass(msg)">
-                <div class="conv-line-template-cards">
+                <div
+                  v-if="shouldUseStructuredCarousel(msg)"
+                  class="conv-line-template-carousel"
+                >
+                  <button
+                    type="button"
+                    class="conv-line-template-carousel__arrow"
+                    :disabled="isStructuredCarouselAtStart(msg)"
+                    @click="moveStructuredCarousel(msg, -1)"
+                  >
+                    &lt;
+                  </button>
+                  <div class="conv-line-template-carousel__viewport">
+                    <div
+                      class="conv-line-template-carousel__track"
+                      :style="{ transform: `translateX(calc(-1 * ${getStructuredCarouselIndex(msg)} * (50% + (var(--conv-carousel-gap) / 2))))` }"
+                    >
+                      <div
+                        v-for="(card, cardIdx) in getStructuredCards(msg)"
+                        :key="`${msg.id}-card-slide-${cardIdx}`"
+                        class="conv-line-template-carousel__item"
+                      >
+                        <div
+                          class="conv-line-card"
+                          :class="getStructuredCardClass(msg, card)"
+                        >
+                          <img
+                            v-if="card.imageUrl"
+                            :src="card.imageUrl"
+                            :alt="card.title || 'preview'"
+                            class="conv-line-card-image"
+                          />
+                          <div
+                            v-if="getStructuredVariant(msg) === 'image_carousel' && getCardOverlayLabel(card)"
+                            class="conv-line-card-image-overlay"
+                          >
+                            {{ getCardOverlayLabel(card) }}
+                          </div>
+                          <div v-if="card.title" class="conv-line-card-title">{{ card.title }}</div>
+                          <div v-if="card.text" class="conv-line-card-text">{{ card.text }}</div>
+                          <div
+                            v-if="card.actions.length"
+                            class="conv-line-card-actions"
+                            :class="{ 'is-line-action': shouldUseLineActionStyle(msg) }"
+                          >
+                            <button
+                              v-for="(act, actIdx) in card.actions"
+                              :key="`${msg.id}-act-${cardIdx}-${actIdx}`"
+                              type="button"
+                              class="conv-line-card-action"
+                              :class="{ 'is-line-action': shouldUseLineActionStyle(msg) }"
+                            >
+                              {{ act }}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="conv-line-template-carousel__arrow"
+                    :disabled="isStructuredCarouselAtEnd(msg)"
+                    @click="moveStructuredCarousel(msg, 1)"
+                  >
+                    >
+                  </button>
+                </div>
+                <div v-else class="conv-line-template-cards">
                   <div
                     v-for="(card, cardIdx) in getStructuredCards(msg)"
                     :key="`${msg.id}-card-${cardIdx}`"
@@ -593,6 +661,7 @@ const mediaForm = ref({
 const imageMaxKb = Math.floor(IMAGE_MAX_BYTES / 1024)
 const videoMaxMb = Math.floor(VIDEO_MAX_BYTES / (1024 * 1024))
 const audioMaxMb = Math.floor(AUDIO_MAX_BYTES / (1024 * 1024))
+const structuredCarouselPage = ref<Record<string, number>>({})
 
 const activeSupportPresets = computed(() =>
   supportPresetsRaw.value.filter((p: any) => p.isActive !== false),
@@ -1300,6 +1369,40 @@ function getCardOverlayLabel(card: StructuredCardPreview): string {
 function shouldUseLineActionStyle(msg: MsgItem): boolean {
   const variant = getStructuredVariant(msg)
   return variant === 'buttons' || variant === 'confirm' || variant === 'carousel' || variant === 'image_carousel'
+}
+
+function shouldUseStructuredCarousel(msg: MsgItem): boolean {
+  const variant = getStructuredVariant(msg)
+  if (variant !== 'carousel' && variant !== 'image_carousel') return false
+  return getStructuredCards(msg).length > 2
+}
+
+function getStructuredCarouselMaxIndex(msg: MsgItem): number {
+  const cards = getStructuredCards(msg)
+  return Math.max(0, cards.length - 2)
+}
+
+function getStructuredCarouselIndex(msg: MsgItem): number {
+  const maxIndex = getStructuredCarouselMaxIndex(msg)
+  const currentIndex = Number(structuredCarouselPage.value[msg.id] ?? 0)
+  if (!Number.isFinite(currentIndex)) return 0
+  return Math.max(0, Math.min(maxIndex, currentIndex))
+}
+
+function isStructuredCarouselAtStart(msg: MsgItem): boolean {
+  return getStructuredCarouselIndex(msg) <= 0
+}
+
+function isStructuredCarouselAtEnd(msg: MsgItem): boolean {
+  return getStructuredCarouselIndex(msg) >= getStructuredCarouselMaxIndex(msg)
+}
+
+function moveStructuredCarousel(msg: MsgItem, delta: number) {
+  const maxIndex = getStructuredCarouselMaxIndex(msg)
+  if (maxIndex <= 0) return
+  const currentIndex = getStructuredCarouselIndex(msg)
+  const nextIndex = Math.max(0, Math.min(maxIndex, currentIndex + delta))
+  structuredCarouselPage.value[msg.id] = nextIndex
 }
 
 function getMessageImageUrl(msg: MsgItem): string {

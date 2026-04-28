@@ -235,6 +235,74 @@
     justify-content: flex-start;
   }
 
+  .conv-line-template-carousel {
+    --conv-carousel-gap: 0.44rem;
+    width: min(calc(var(--line-card-width-text) * 2 + var(--conv-carousel-gap)), 90vw);
+    position: relative;
+  }
+
+  .conv-line-template-carousel__viewport {
+    overflow: hidden;
+  }
+
+  .conv-line-template-carousel__track {
+    display: flex;
+    gap: var(--conv-carousel-gap);
+    transition: transform 0.24s ease;
+    will-change: transform;
+  }
+
+  .conv-line-template-carousel__arrow {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    border-radius: 999px;
+    border: 0;
+    background: rgba(21, 28, 38, 0.52);
+    color: #fff;
+    font-size: 0.95rem;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .conv-line-template-carousel__arrow:disabled {
+    opacity: 0.25;
+    cursor: not-allowed;
+  }
+
+  .conv-line-template-carousel__arrow:hover:not(:disabled) {
+    background: rgba(21, 28, 38, 0.68);
+  }
+
+  .conv-line-template-carousel__arrow:first-child {
+    left: 0.3rem;
+  }
+
+  .conv-line-template-carousel__arrow:last-child {
+    right: 0.3rem;
+  }
+
+  .conv-line-template-carousel__item .conv-line-card {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .conv-line-template-carousel__item {
+    display: flex;
+    justify-content: stretch;
+    align-items: stretch;
+    width: calc((100% - var(--conv-carousel-gap)) / 2);
+    min-width: calc((100% - var(--conv-carousel-gap)) / 2);
+  }
+
   .conv-line-card {
     width: var(--line-card-width-text);
     background: #fff;
@@ -312,6 +380,14 @@
     height: 300px;
     border-radius: 1rem;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.14);
+  }
+
+  .conv-line-template.variant-carousel .conv-line-template-carousel .conv-line-card {
+    width: min(var(--line-card-width-text), calc((100% - var(--conv-carousel-gap)) / 2));
+  }
+
+  .conv-line-template.variant-image_carousel .conv-line-template-carousel .conv-line-card {
+    width: min(var(--line-card-width-image), calc((100% - var(--conv-carousel-gap)) / 2));
   }
 
   .conv-line-template.variant-carousel,
