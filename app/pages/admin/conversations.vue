@@ -18,7 +18,7 @@
           :class="{ active: activeTab === tab.value }"
           @click="switchTab(tab.value)"
         >
-          {{ tab.label }}
+          {{ tab.value === 'all' ? tab.label : `${tab.label}（${sessionStatusCounts[tab.value]}）` }}
         </button>
       </div>
       <div class="conv-search-bar">
@@ -85,11 +85,11 @@
             <div class="conv-user-id text-muted">{{ selectedUserId }}</div>
           </div>
         </div>
-        <div v-if="selectedSessionId && sessionMeta" class="conv-session-toolbar">
-          <span class="conv-session-toolbar__hint">此場會話</span>
-          <el-tag size="small" type="info">{{ sessionMeta.statusLabel }}</el-tag>
+        <div v-if="sessionToolbarMeta" class="conv-session-toolbar">
+          <span class="conv-session-toolbar__hint">{{ selectedSessionId ? '此場會話' : '進行中會話' }}</span>
+          <el-tag size="small" type="info">{{ sessionToolbarMeta.statusLabel }}</el-tag>
           <el-button
-            v-if="sessionMeta.status !== 'closed'"
+            v-if="sessionToolbarMeta.status !== 'closed'"
             size="small"
             plain
             :loading="closingSession"
@@ -759,6 +759,15 @@ const messages = ref<MsgItem[]>([])
 /** 依 session 的 timeline API（含事件列 + 該場訊息） */
 const sessionTimelineItems = ref<SessionTimelineItem[]>([])
 const sessionMeta = ref<SessionPanelMeta | null>(null)
+/** 「全部」分頁：依 conversations.currentSessionId 取得的進行中會話（可手動結束） */
+const allTabActiveSession = ref<SessionPanelMeta | null>(null)
+const sessionStatusCounts = ref<Record<ConvSessionStatus, number>>({
+  open: 0,
+  bot_handling: 0,
+  pending_human: 0,
+  human_handling: 0,
+  closed: 0,
+})
 const closingSession = ref(false)
 const selectedUserId = ref<string | null>(null)
 const selectedSessionId = ref<string | null>(null)
@@ -906,6 +915,14 @@ const sidebarItems = computed(() =>
   activeTab.value === 'all' ? convSidebarItems.value : sessionSidebarItems.value,
 )
 
+const sessionToolbarMeta = computed<SessionPanelMeta | null>(() => {
+  if (selectedSessionId.value && sessionMeta.value)
+    return sessionMeta.value
+  if (activeTab.value === 'all' && allTabActiveSession.value)
+    return allTabActiveSession.value
+  return null
+})
+
 const chatRows = computed<ChatRow[]>(() => {
   if (selectedSessionId.value) {
     return sessionTimelineItems.value.map((item) => {
@@ -941,6 +958,7 @@ function sessionChipTone(status: ConvSessionStatus): 'neutral' | 'warning' | 'su
 async function switchTab(tab: TabValue) {
   activeTab.value = tab
   selectedSessionId.value = null
+  allTabActiveSession.value = null
   sessionTimelineItems.value = []
   sessionMeta.value = null
   await loadList()
@@ -951,6 +969,7 @@ async function switchTab(tab: TabValue) {
 
 async function selectSession(s: SessionItem) {
   selectedSessionId.value = s.sessionId
+  allTabActiveSession.value = null
   selectedUserId.value = s.userId
   messages.value = []
   const convItem: ConvItem = {
@@ -1017,6 +1036,22 @@ async function loadList() {
   finally {
     listLoading.value = false
   }
+  await loadSessionCounts()
+}
+
+async function loadSessionCounts() {
+  try {
+    const res = await $fetch<{ counts: Record<ConvSessionStatus, number> }>(
+      '/api/conversations/sessions-counts',
+      { headers: await getAdminAuthHeaders() },
+    )
+    for (const k of Object.keys(sessionStatusCounts.value) as ConvSessionStatus[]) {
+      sessionStatusCounts.value[k] = Number(res.counts?.[k] ?? 0)
+    }
+  }
+  catch {
+    // 分頁仍可用；數字維持上次成功值
+  }
 }
 
 async function loadSupportPresets() {
@@ -1055,14 +1090,21 @@ async function selectUser(c: ConvItem) {
   selectedSessionId.value = null
   sessionTimelineItems.value = []
   sessionMeta.value = null
+  allTabActiveSession.value = null
   selectedUserId.value = c.userId
   selectedUser.value = c
   pendingSupportPresetId.value = ''
   messages.value = []
   msgLoading.value = true
   try {
-    const res = await $fetch<{ messages: MsgItem[] }>(`/api/conversations/${c.userId}/messages`)
+    const res = await $fetch<{
+      messages: MsgItem[]
+      activeSession: SessionPanelMeta | null
+    }>(`/api/conversations/${c.userId}/messages`, {
+      headers: await getAdminAuthHeaders(),
+    })
     messages.value = res.messages
+    allTabActiveSession.value = res.activeSession ?? null
     await nextTick()
     scrollToBottom()
   }
@@ -1133,12 +1175,14 @@ async function reloadAfterOutgoing() {
   }
   else if (selectedUser.value) {
     await selectUser(selectedUser.value)
+    await loadSessionCounts()
   }
 }
 
 async function closeSelectedSession() {
-  const sid = selectedSessionId.value
-  if (!sid || sessionMeta.value?.status === 'closed')
+  const sid = selectedSessionId.value || allTabActiveSession.value?.sessionId
+  const st = sessionToolbarMeta.value?.status
+  if (!sid || st === 'closed')
     return
   closingSession.value = true
   try {
@@ -1147,7 +1191,10 @@ async function closeSelectedSession() {
       headers: await getAdminAuthHeaders(),
     })
     showToast('已結束會話', 'success')
-    await reloadSessionTimeline()
+    if (selectedSessionId.value)
+      await reloadSessionTimeline()
+    else if (selectedUser.value)
+      await selectUser(selectedUser.value)
     await loadList()
   }
   catch (e: any) {

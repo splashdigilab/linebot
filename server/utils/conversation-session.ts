@@ -139,6 +139,14 @@ export async function enterModule(
   }
 
   await sessionRef.update(updates)
+
+  if (moduleType === 'live_agent') {
+    await db
+      .collection('users')
+      .doc(userId)
+      .update({ activeInput: FieldValue.delete() })
+      .catch((e) => console.warn('[session] clear activeInput on live_agent:', e))
+  }
   await recordConversationEvent(sessionId, userId, 'entered_module', { moduleType, moduleId })
   if (isNewHandoff) {
     await recordConversationEvent(sessionId, userId, 'handoff_request')
@@ -196,6 +204,21 @@ export async function closeConversationSession(sessionId: string, userId: string
  * Update lastActivityAt when an outgoing message is sent by human agent.
  * Also promotes pending_human → human_handling on first human reply.
  */
+/**
+ * 待真人或真人處理中：使用者文字不應再觸發機器人（activeInput、自動回覆含 anyText），
+ * 避免與真人客服對話時誤觸「輸入任何內容」等規則。
+ */
+export async function shouldSuppressInboundBotAutomationForSession(
+  sessionId: string | null | undefined,
+): Promise<boolean> {
+  if (!sessionId) return false
+  const db = getDb()
+  const snap = await db.collection('conversationSessions').doc(sessionId).get()
+  if (!snap.exists) return false
+  const status = snap.data()?.status as ConversationStatus | undefined
+  return status === 'pending_human' || status === 'human_handling'
+}
+
 export async function onHumanOutgoingMessage(userId: string): Promise<void> {
   const db = getDb()
   const convSnap = await db.collection('conversations').doc(userId).get()

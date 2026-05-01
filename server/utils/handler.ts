@@ -26,6 +26,7 @@ import { addTagsToUser } from './tagging'
 import {
   ensureConversationSession,
   enterModule,
+  shouldSuppressInboundBotAutomationForSession,
 } from './conversation-session'
 import type { ModuleType } from '~~/shared/types/conversation-stats'
 
@@ -1193,9 +1194,12 @@ async function handleIncomingText(
   const userData = userDataOverride ?? await ensureUser(userId)
   const userAttributes = buildAttributeContext(userData)
   const { channelSecret } = await getLineWorkspaceCredentials()
+  const suppressBotAutomation = sessionId
+    ? await shouldSuppressInboundBotAutomationForSession(sessionId)
+    : false
   let handledByInput = false
 
-  if (userData && userData.activeInput && userData.activeInput.expiresAt > Date.now()) {
+  if (!suppressBotAutomation && userData && userData.activeInput && userData.activeInput.expiresAt > Date.now()) {
     const { moduleId, attribute, tagIds } = userData.activeInput
     const db = getDb()
     const updates: any = { activeInput: FieldValue.delete() }
@@ -1237,7 +1241,7 @@ async function handleIncomingText(
     }
   }
 
-  if (!handledByInput) {
+  if (!handledByInput && !suppressBotAutomation) {
     const rule = await matchAutoReplyRule(textContent)
     if (rule) {
       // 貼標（非阻塞，不影響回覆速度）
@@ -1300,6 +1304,10 @@ export async function handlePostbackEvent(
     console.error('[session] postback session error:', e)
     return null
   })
+
+  const suppressBotAutomationPostback = sessionId
+    ? await shouldSuppressInboundBotAutomationForSession(sessionId)
+    : false
 
   // Fetch user synchronously if needed, but for postback usually background is fine unless updating state
   const userDataTask = ensureUser(userId).catch(e => {
@@ -1379,7 +1387,7 @@ export async function handlePostbackEvent(
   }
   // Handle direct module trigger
   const trigger = parseTriggerModuleData(data)
-  if (trigger.moduleId) {
+  if (trigger.moduleId && !suppressBotAutomationPostback) {
     const moduleId = trigger.moduleId
     if (trigger.tagIds.length > 0) {
       try {
@@ -1418,8 +1426,15 @@ export async function handlePostbackEvent(
     return
   }
 
+  if (trigger.moduleId && suppressBotAutomationPostback) {
+    await userDataTask
+    return
+  }
+
   // Fallback: Match legacy postback data to an auto-reply keyword (if any)
-  const rule = await matchAutoReplyRule(data, { allowAnyText: false })
+  const rule = !suppressBotAutomationPostback
+    ? await matchAutoReplyRule(data, { allowAnyText: false })
+    : null
   if (rule && event.replyToken) {
     const userAttributes = buildAttributeContext(await userDataTask)
     if (rule.action.type === 'module') {
