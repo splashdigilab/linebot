@@ -1,0 +1,57 @@
+/* ═══════════════════════════════════════════════════════════════
+   對話統計（solo split + message-card；KPI 對齊儀表板 el-card）
+═══════════════════════════════════════════════════════════════ */
+
+.conv-stats-page.solo-editor-body {
+  max-width: 1100px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.conv-stats-page .message-card {
+  width: 100%;
+  max-width: 100%;
+}
+
+.conv-stats-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.conv-stats-granularity {
+  width: 90px;
+}
+
+.conv-stats-kpi-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.conv-stats-kpi-card .stat-label {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.conv-stats-kpi-card--bot .stat-value {
+  color: var(--el-color-primary);
+}
+
+.conv-stats-kpi-card--human .stat-value {
+  color: var(--el-color-success);
+}
+
+.conv-stats-kpi-card--unhandled .stat-value {
+  color: var(--el-color-warning);
+}
+
+.conv-stats-kpi-card--handoff .stat-value {
+  color: #9b59b6;
+}
+
+.conv-stats-kpi-card--closed .stat-value {
+  color: var(--el-text-color-secondary);
+}

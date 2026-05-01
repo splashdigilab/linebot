@@ -19,9 +19,10 @@
         <AdminSplitListItem
           v-for="flow in flows"
           :key="flow.id"
-          :title="flow.name"
+          :title="(flow.isSystem ? '🔒 ' : '') + flow.name"
           :active="selectedId === flow.id"
-          :meta-text="`${flow.messages?.length ?? 0} 則訊息`"
+          :meta-text="MODULE_TYPE_LABELS[flow.moduleType] ?? '機器人流程'"
+          chip-tone="neutral"
           @select="selectFlow(flow)"
         />
       </div>
@@ -45,8 +46,22 @@
         :caption="`共 ${form.messages.length} 則回覆訊息；關鍵字觸發請到「自動回覆」設定`"
         :is-creating="isCreating"
       />
+      <div v-if="selectedFlow || isCreating" class="flow-module-meta">
+        <el-tag v-if="isSystemFlow" type="warning" size="small" disable-transitions>🔒 系統模組</el-tag>
+        <!-- System modules: type is locked, show label only -->
+        <el-tag v-if="isSystemFlow" size="small" disable-transitions>
+          {{ MODULE_TYPE_LABELS[form.moduleType] ?? '機器人流程' }}
+        </el-tag>
+        <!-- Regular modules (create or edit): show selector -->
+        <el-select v-else v-model="form.moduleType" size="small" style="width: 130px">
+          <el-option label="機器人流程" value="bot_flow" />
+          <el-option label="歡迎模組" value="welcome" />
+          <el-option label="系統通知" value="system_notice" />
+          <el-option label="真人客服" value="live_agent" />
+        </el-select>
+      </div>
       <div class="flex gap-1 admin-header-actions">
-        <el-button v-if="!isCreating && selectedFlow" type="danger" @click="deleteFlow">
+        <el-button v-if="!isCreating && selectedFlow && !isSystemFlow" type="danger" @click="deleteFlow">
           🗑️ 刪除
         </el-button>
         <el-button @click="cancelEdit">取消</el-button>
@@ -680,11 +695,32 @@ import {
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
+const { $auth } = useNuxtApp()
+
+async function getBearer(): Promise<string> {
+  const u = $auth.currentUser
+  if (!u) {
+    await navigateTo('/login')
+    throw new Error('not logged in')
+  }
+  return u.getIdToken()
+}
+
+// ── Module type labels ────────────────────────────────
+type ModuleType = 'welcome' | 'bot_flow' | 'system_notice' | 'live_agent'
+const MODULE_TYPE_LABELS: Record<ModuleType, string> = {
+  welcome: '歡迎模組',
+  bot_flow: '機器人流程',
+  system_notice: '系統通知',
+  live_agent: '真人客服',
+}
+
 // ── State ─────────────────────────────────────────────
 const flows = ref<any[]>([])
 const richMessages = ref<any[]>([])
 const loading = ref(true)
 const saving = ref(false)
+const seeding = ref(false)
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
 const FLOW_MESSAGE_LIMIT = 5
@@ -732,10 +768,12 @@ function resolveDraggedIndex(e: DragEvent, fallback: number | null) {
 const defaultForm = () => ({
   name: '',
   messages: [] as any[],
+  moduleType: 'bot_flow' as ModuleType,
 })
 const form = ref(defaultForm())
 
 const selectedFlow = computed(() => flows.value.find(f => f.id === selectedId.value) ?? null)
+const isSystemFlow = computed(() => selectedFlow.value?.isSystem === true)
 const BUILTIN_VARIABLE_LABELS: Record<string, string> = {
   displayName: '聯絡人名稱（使用者名字）',
 }
@@ -855,6 +893,29 @@ function selectFlow(flow: any) {
   form.value = {
     name: flow.name,
     messages: normalizeMessages(JSON.parse(JSON.stringify(flow.messages ?? []))),
+    moduleType: flow.moduleType ?? 'bot_flow',
+  }
+}
+
+async function seedSystemModules() {
+  seeding.value = true
+  try {
+    const token = await getBearer()
+    const res = await $fetch<{ results: { id: string; created: boolean }[] }>(
+      '/api/admin/seed-system-modules',
+      { method: 'POST', headers: { Authorization: `Bearer ${token}` } },
+    )
+    const created = res.results.filter(r => r.created).map(r => r.id)
+    if (created.length) {
+      showToast(`已建立系統模組：${created.join('、')}`, 'success')
+    } else {
+      showToast('系統模組已存在，無需重建', 'success')
+    }
+    await loadFlows()
+  } catch {
+    showToast('初始化失敗', 'error')
+  } finally {
+    seeding.value = false
   }
 }
 
@@ -1242,6 +1303,7 @@ async function submitForm() {
           name: form.value.name,
           messages: form.value.messages,
           isActive: true,
+          moduleType: form.value.moduleType,
         },
       })
       showToast('模組已建立 ✅', 'success')
@@ -1256,6 +1318,8 @@ async function submitForm() {
           name: form.value.name,
           messages: form.value.messages,
           isActive: true,
+          // Only allow moduleType change for non-system flows
+          ...(!isSystemFlow.value ? { moduleType: form.value.moduleType } : {}),
         },
       })
       showToast('模組已更新 ✅', 'success')

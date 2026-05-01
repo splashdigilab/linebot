@@ -1,6 +1,7 @@
 import { getDb } from '~~/server/utils/firebase'
 import { pushMessage } from '~~/server/utils/line'
 import { saveConversationMessage } from '~~/server/utils/handler'
+import { onHumanOutgoingMessage } from '~~/server/utils/conversation-session'
 
 export default defineEventHandler(async (event) => {
   const userId = getRouterParam(event, 'userId')
@@ -27,6 +28,7 @@ export default defineEventHandler(async (event) => {
       messageType: 'sticker',
       payload: message,
     })
+    onHumanOutgoingMessage(userId).catch(e => console.error('[session] onHumanOutgoing error:', e))
     return { ok: true }
   }
 
@@ -42,6 +44,7 @@ export default defineEventHandler(async (event) => {
       messageType: 'image',
       payload: message,
     })
+    onHumanOutgoingMessage(userId).catch(e => console.error('[session] onHumanOutgoing error:', e))
     return { ok: true }
   }
 
@@ -57,6 +60,7 @@ export default defineEventHandler(async (event) => {
       messageType: 'video',
       payload: message,
     })
+    onHumanOutgoingMessage(userId).catch(e => console.error('[session] onHumanOutgoing error:', e))
     return { ok: true }
   }
 
@@ -75,6 +79,7 @@ export default defineEventHandler(async (event) => {
       messageType: 'audio',
       payload: message,
     })
+    onHumanOutgoingMessage(userId).catch(e => console.error('[session] onHumanOutgoing error:', e))
     return { ok: true }
   }
 
@@ -93,6 +98,7 @@ export default defineEventHandler(async (event) => {
       messageType: 'file',
       payload: message,
     })
+    onHumanOutgoingMessage(userId).catch(e => console.error('[session] onHumanOutgoing error:', e))
     return { ok: true }
   }
 
@@ -105,6 +111,7 @@ export default defineEventHandler(async (event) => {
     messageType: 'text',
     payload: message,
   })
+  onHumanOutgoingMessage(userId).catch(e => console.error('[session] onHumanOutgoing error:', e))
 
   return { ok: true }
 })

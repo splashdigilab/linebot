@@ -14,6 +14,47 @@
   --line-image-message-width: min(620px, 78vw);
   --line-rich-image-width: min(640px, 80vw);
 
+  .conv-status-tabs {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.65rem 0.75rem 0.55rem;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    overflow-x: auto;
+  }
+
+  .conv-status-tab {
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: #fff;
+    height: 30px;
+    padding: 0 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .conv-status-tab:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-active);
+    color: var(--text-primary);
+  }
+
+  .conv-status-tab.active {
+    background: #eef3fb;
+    border-color: var(--border-active);
+    color: var(--text-primary);
+  }
+
+  .conv-status-tab:focus-visible {
+    outline: 2px solid var(--border-active);
+    outline-offset: 1px;
+  }
+
   .conv-search-bar {
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid var(--border);
@@ -26,6 +67,60 @@
     flex: 1;
     min-height: 0;
     overflow: hidden;
+  }
+
+  .conv-editor-header-block {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .conv-session-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem;
+    padding-left: calc(36px + 0.75rem);
+  }
+
+  .conv-session-toolbar__hint {
+    font-size: 0.72rem;
+    color: var(--text-secondary);
+  }
+
+  .conv-timeline-event {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    align-self: center;
+    max-width: 100%;
+    padding: 0.35rem 0.65rem;
+    border-radius: var(--radius-pill);
+    background: var(--bg-hover);
+    border: 1px dashed var(--border);
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+  }
+
+  .conv-timeline-event__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--border-active);
+    flex-shrink: 0;
+  }
+
+  .conv-timeline-event__label {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .conv-timeline-event__time {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    margin-left: 0.15rem;
   }
 
   .conv-user-info {

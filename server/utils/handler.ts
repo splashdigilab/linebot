@@ -23,6 +23,11 @@ import { normalizeRichMessageActions } from '~~/shared/rich-message-editor-helpe
 import { createImagemapImageToken } from './line-imagemap-image-token'
 import { createUriTagToken } from './line-action-tag-token'
 import { addTagsToUser } from './tagging'
+import {
+  ensureConversationSession,
+  enterModule,
+} from './conversation-session'
+import type { ModuleType } from '~~/shared/types/conversation-stats'
 
 // ── In-Memory Caching to Reduce DB Latency ──────────────────────────
 const userCheckedCache = new Set<string>()
@@ -56,6 +61,8 @@ interface FlowDoc {
   trigger: string
   messages: messagingApi.Message[]
   isActive: boolean
+  moduleType?: ModuleType
+  isSystem?: boolean
 }
 
 interface UserDoc {
@@ -172,6 +179,10 @@ export async function handleFollowEvent(
   try {
     await ensureUser(userId, preloadedProfile)
     console.log('[webhook] follow ensureUser:', userId)
+    // New follow always starts a fresh session
+    await ensureConversationSession(userId).catch(e =>
+      console.error('[session] follow session error:', e),
+    )
     await applyPendingClaims(userId)
   }
   catch (e) {
@@ -1118,13 +1129,19 @@ export async function handleMessageEvent(
   const userId = event.source?.userId
   if (!userId) return
 
+  // Establish/extend the conversation session (24h rule)
+  const sessionId = await ensureConversationSession(userId).catch((e) => {
+    console.error('[session] ensureConversationSession error:', e)
+    return null
+  })
+
   if (event.message.type === 'text') {
     const textContent = (event.message as webhook.TextMessageContent).text
     saveConversationMessage(userId, 'incoming', textContent, {
       messageType: 'text',
       payload: { type: 'text', text: textContent },
     }).catch(e => console.error('[conv] save error:', e))
-    await handleIncomingText(userId, textContent, event.replyToken, options)
+    await handleIncomingText(userId, textContent, event.replyToken, options, undefined, sessionId)
   } else {
     const typeLabel = event.message.type === 'image' ? '[圖片]'
       : event.message.type === 'video' ? '[影片]'
@@ -1171,6 +1188,7 @@ async function handleIncomingText(
   replyToken: string | undefined,
   options: { requestOrigin?: string } = {},
   userDataOverride?: UserDoc | null,
+  sessionId?: string | null,
 ): Promise<void> {
   const userData = userDataOverride ?? await ensureUser(userId)
   const userAttributes = buildAttributeContext(userData)
@@ -1195,16 +1213,21 @@ async function handleIncomingText(
 
     if (flow && replyToken) {
       const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-    const lineMessages = buildLineMessages(
-      hydratedMessages,
-      userAttributes,
-      options.requestOrigin || '',
-      userId,
-      channelSecret,
-    )
-    await replyMessage(replyToken, lineMessages)
-    await saveOutgoingConversationMessages(userId, lineMessages)
+      const lineMessages = buildLineMessages(
+        hydratedMessages,
+        userAttributes,
+        options.requestOrigin || '',
+        userId,
+        channelSecret,
+      )
+      await replyMessage(replyToken, lineMessages)
+      await saveOutgoingConversationMessages(userId, lineMessages)
       await dispatchPostReplyActions(userId, flow.messages)
+      if (sessionId) {
+        enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', moduleId).catch(e =>
+          console.error('[session] enterModule error:', e),
+        )
+      }
       handledByInput = true
     } else {
       console.warn(
@@ -1228,16 +1251,21 @@ async function handleIncomingText(
           const flow = await getFlowByModuleId(rule.action.moduleId)
           if (flow) {
             const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-          const lineMessages = buildLineMessages(
-            hydratedMessages,
-            userAttributes,
-            options.requestOrigin || '',
-            userId,
-            channelSecret,
-          )
-          await replyMessage(replyToken, lineMessages)
-          await saveOutgoingConversationMessages(userId, lineMessages)
+            const lineMessages = buildLineMessages(
+              hydratedMessages,
+              userAttributes,
+              options.requestOrigin || '',
+              userId,
+              channelSecret,
+            )
+            await replyMessage(replyToken, lineMessages)
+            await saveOutgoingConversationMessages(userId, lineMessages)
             await dispatchPostReplyActions(userId, flow.messages)
+            if (sessionId) {
+              enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', rule.action.moduleId).catch(e =>
+                console.error('[session] enterModule error:', e),
+              )
+            }
           } else {
             console.warn(
               '[autoReply] matched rule module missing/inactive:',
@@ -1268,6 +1296,11 @@ export async function handlePostbackEvent(
 
   const { channelSecret } = await getLineWorkspaceCredentials()
 
+  const sessionId = await ensureConversationSession(userId).catch((e) => {
+    console.error('[session] postback session error:', e)
+    return null
+  })
+
   // Fetch user synchronously if needed, but for postback usually background is fine unless updating state
   const userDataTask = ensureUser(userId).catch(e => {
     console.error('[ensureUser] Error:', e)
@@ -1293,6 +1326,7 @@ export async function handlePostbackEvent(
       event.replyToken,
       options,
       await userDataTask,
+      sessionId,
     )
     await userDataTask
     return
@@ -1371,6 +1405,11 @@ export async function handlePostbackEvent(
         await replyMessage(event.replyToken, lineMessages)
         await saveOutgoingConversationMessages(userId, lineMessages)
         await dispatchPostReplyActions(userId, flow.messages)
+        if (sessionId) {
+          enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', moduleId).catch(e =>
+            console.error('[session] enterModule error:', e),
+          )
+        }
       }
     } else {
       console.warn('[webhook] triggerModule target not found or inactive:', moduleId)
@@ -1397,6 +1436,11 @@ export async function handlePostbackEvent(
         await replyMessage(event.replyToken, lineMessages)
         await saveOutgoingConversationMessages(userId, lineMessages)
         await dispatchPostReplyActions(userId, flow.messages)
+        if (sessionId) {
+          enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', rule.action.moduleId).catch(e =>
+            console.error('[session] enterModule (fallback) error:', e),
+          )
+        }
       }
     } else {
       const actionMessages = buildAutoReplyActionMessages(rule.action, userAttributes)

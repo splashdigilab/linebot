@@ -8,27 +8,57 @@
 
     <!-- ── Sidebar List ── -->
     <template #sidebar-list>
+      <!-- Status Tabs -->
+      <div class="conv-status-tabs">
+        <button
+          v-for="tab in STATUS_TABS"
+          :key="tab.value"
+          type="button"
+          class="conv-status-tab"
+          :class="{ active: activeTab === tab.value }"
+          @click="switchTab(tab.value)"
+        >
+          {{ tab.label }}
+        </button>
+      </div>
       <div class="conv-search-bar">
         <el-input v-model="searchText" placeholder="搜尋名稱…" clearable size="small" />
       </div>
       <div v-if="listLoading" class="split-sidebar-loading">
         <div class="spinner" />
       </div>
-      <div v-else-if="!filteredConversations.length" class="split-sidebar-empty">
+      <div v-else-if="!sidebarItems.length" class="split-sidebar-empty">
         <span>{{ searchText ? '無符合結果' : '尚無對話紀錄' }}</span>
       </div>
       <div v-else class="split-list">
-        <AdminSplitListItem
-          v-for="c in filteredConversations"
-          :key="c.userId"
-          :title="c.displayName"
-          :active="selectedUserId === c.userId"
-          :meta-text="(c.lastDirection === 'outgoing' ? '↑ ' : '') + c.lastMessage"
-          :meta-truncate="true"
-          :chip-text="formatTime(c.lastMessageAt)"
-          chip-tone="neutral"
-          @select="selectUser(c)"
-        />
+        <!-- Session-based view (status tabs) -->
+        <template v-if="activeTab !== 'all'">
+          <AdminSplitListItem
+            v-for="s in sessionSidebarItems"
+            :key="s.sessionId"
+            :title="s.displayName"
+            :active="selectedSessionId === s.sessionId"
+            :meta-text="SESSION_STATUS_LABELS[s.status] || s.status"
+            :meta-truncate="true"
+            :chip-text="formatTime(s.lastActivityAt)"
+            :chip-tone="sessionChipTone(s.status)"
+            @select="selectSession(s)"
+          />
+        </template>
+        <!-- User-based view (all tab) -->
+        <template v-else>
+          <AdminSplitListItem
+            v-for="c in convSidebarItems"
+            :key="c.userId"
+            :title="c.displayName"
+            :active="selectedUserId === c.userId && !selectedSessionId"
+            :meta-text="(c.lastDirection === 'outgoing' ? '↑ ' : '') + c.lastMessage"
+            :meta-truncate="true"
+            :chip-text="formatTime(c.lastMessageAt)"
+            chip-tone="neutral"
+            @select="selectUser(c)"
+          />
+        </template>
       </div>
     </template>
 
@@ -41,17 +71,32 @@
 
     <!-- ── Editor Header ── -->
     <template #editor-header>
-      <div class="conv-user-info">
-        <img
-          v-if="selectedUser?.pictureUrl"
-          :src="selectedUser.pictureUrl"
-          class="conv-avatar"
-          :alt="selectedUser.displayName"
-        />
-        <span v-else class="conv-avatar-placeholder">👤</span>
-        <div>
-          <div class="split-editor-title">{{ selectedUser?.displayName }}</div>
-          <div class="conv-user-id text-muted">{{ selectedUserId }}</div>
+      <div class="conv-editor-header-block">
+        <div class="conv-user-info">
+          <img
+            v-if="selectedUser?.pictureUrl"
+            :src="selectedUser.pictureUrl"
+            class="conv-avatar"
+            :alt="selectedUser.displayName"
+          />
+          <span v-else class="conv-avatar-placeholder">👤</span>
+          <div>
+            <div class="split-editor-title">{{ selectedUser?.displayName }}</div>
+            <div class="conv-user-id text-muted">{{ selectedUserId }}</div>
+          </div>
+        </div>
+        <div v-if="selectedSessionId && sessionMeta" class="conv-session-toolbar">
+          <span class="conv-session-toolbar__hint">此場會話</span>
+          <el-tag size="small" type="info">{{ sessionMeta.statusLabel }}</el-tag>
+          <el-button
+            v-if="sessionMeta.status !== 'closed'"
+            size="small"
+            plain
+            :loading="closingSession"
+            @click="closeSelectedSession"
+          >
+            結束會話
+          </el-button>
         </div>
       </div>
     </template>
@@ -62,30 +107,36 @@
         <div v-if="msgLoading" class="split-sidebar-loading">
           <div class="spinner" />
         </div>
-        <div v-else-if="!messages.length" class="split-empty-state">
+        <div v-else-if="!chatRows.length" class="split-empty-state">
           <p>尚無對話內容</p>
         </div>
-        <div
-          v-for="msg in messages"
-          :key="msg.id"
-          class="conv-bubble-row"
-          :class="msg.direction"
-        >
-          <div
-            class="conv-bubble-wrap"
-            :class="[
-              msg.direction,
-              { 'is-structured': isStructuredLineMessage(msg), 'is-media': isMediaMessage(msg) },
-            ]"
-          >
-            <div
-              class="conv-bubble"
-              :class="[
-                msg.direction,
-                { 'is-structured': isStructuredLineMessage(msg), 'is-media': isMediaMessage(msg) },
-              ]"
-            >
-            <template v-if="getMessageType(msg) === 'text'">
+        <template v-for="row in chatRows" :key="row.key">
+          <div v-if="row.kind === 'event'" class="conv-timeline-event">
+            <span class="conv-timeline-event__dot" aria-hidden="true" />
+            <span class="conv-timeline-event__label">{{ row.label }}</span>
+            <span class="conv-timeline-event__time">{{ formatTime(row.timestamp) }}</span>
+          </div>
+          <template v-else>
+            <template v-for="msg in [row.msg]" :key="msg.id">
+              <div
+                class="conv-bubble-row"
+                :class="msg.direction"
+              >
+                <div
+                  class="conv-bubble-wrap"
+                  :class="[
+                    msg.direction,
+                    { 'is-structured': isStructuredLineMessage(msg), 'is-media': isMediaMessage(msg) },
+                  ]"
+                >
+                  <div
+                    class="conv-bubble"
+                    :class="[
+                      msg.direction,
+                      { 'is-structured': isStructuredLineMessage(msg), 'is-media': isMediaMessage(msg) },
+                    ]"
+                  >
+                    <template v-if="getMessageType(msg) === 'text'">
               <div v-if="isEmojiOnlyMessage(msg)" class="conv-emoji-message">
                 <img
                   v-for="(emoji, idx) in splitEmojiUnits(getMessageDisplayText(msg))"
@@ -291,12 +342,15 @@
               <span v-if="getPayloadSummary(msg)" class="conv-bubble-text text-muted">{{ getPayloadSummary(msg) }}</span>
             </template>
             </div>
-            <div class="conv-bubble-meta">
-              <span v-if="msg.direction === 'outgoing'" class="conv-bubble-read">Read</span>
-              <span class="conv-bubble-time">{{ formatTime(msg.timestamp) }}</span>
-            </div>
-          </div>
-        </div>
+                  <div class="conv-bubble-meta">
+                    <span v-if="msg.direction === 'outgoing'" class="conv-bubble-read">Read</span>
+                    <span class="conv-bubble-time">{{ formatTime(msg.timestamp) }}</span>
+                  </div>
+                </div>
+              </div>
+            </template>
+          </template>
+        </template>
       </div>
 
       <div class="conv-input-tools">
@@ -581,8 +635,40 @@ import {
   VIDEO_ACCEPT_ATTR,
   VIDEO_MAX_BYTES,
 } from '~~/shared/upload-rules'
-
 definePageMeta({ middleware: 'auth', layout: 'default' })
+
+// ── Session tab types ─────────────────────────────────────────────
+
+type ConvSessionStatus = 'open' | 'bot_handling' | 'pending_human' | 'human_handling' | 'closed'
+type TabValue = 'all' | ConvSessionStatus
+
+interface SessionItem {
+  sessionId: string
+  userId: string
+  displayName: string
+  pictureUrl: string
+  status: ConvSessionStatus
+  initialHandler: string
+  hasHandoff: boolean
+  lastActivityAt: any
+}
+
+const STATUS_TABS: { value: TabValue; label: string }[] = [
+  { value: 'all', label: '全部' },
+  { value: 'open', label: '未首接' },
+  { value: 'bot_handling', label: '機器人' },
+  { value: 'pending_human', label: '待真人' },
+  { value: 'human_handling', label: '真人處理' },
+  { value: 'closed', label: '已結束' },
+]
+
+const SESSION_STATUS_LABELS: Record<ConvSessionStatus, string> = {
+  open: '未首接',
+  bot_handling: '機器人處理中',
+  pending_human: '待真人',
+  human_handling: '真人處理中',
+  closed: '已結束',
+}
 
 interface ConvItem {
   userId: string
@@ -601,6 +687,27 @@ interface MsgItem {
   payload?: any
   timestamp: any
 }
+
+interface SessionTimelineItem {
+  id: string
+  type: 'event' | 'message'
+  timestamp: any
+  label?: string
+  direction?: 'incoming' | 'outgoing'
+  text?: string
+  messageType?: string
+  payload?: unknown
+}
+
+interface SessionPanelMeta {
+  sessionId: string
+  status: ConvSessionStatus
+  statusLabel: string
+}
+
+type ChatRowEvent = { kind: 'event'; key: string; label: string; timestamp: any }
+type ChatRowMsg = { kind: 'msg'; key: string; msg: MsgItem }
+type ChatRow = ChatRowEvent | ChatRowMsg
 
 type PickerKind = 'emoji' | 'sticker'
 type QuickSendType = 'image' | 'video' | 'audio'
@@ -634,14 +741,29 @@ type StructuredMessagePreview = {
 }
 
 const { toasts, showToast } = useAdminToast()
+const { $auth } = useNuxtApp()
 const { uploadToStorage, validateFile } = useMediaUpload()
+
+async function getAdminAuthHeaders(): Promise<Record<string, string>> {
+  const u = $auth.currentUser
+  if (!u) throw new Error('not logged in')
+  const token = await u.getIdToken()
+  return { Authorization: `Bearer ${token}` }
+}
 const listLoading = ref(false)
 const msgLoading = ref(false)
 const sending = ref(false)
 const conversations = ref<ConvItem[]>([])
+const sessions = ref<SessionItem[]>([])
 const messages = ref<MsgItem[]>([])
+/** 依 session 的 timeline API（含事件列 + 該場訊息） */
+const sessionTimelineItems = ref<SessionTimelineItem[]>([])
+const sessionMeta = ref<SessionPanelMeta | null>(null)
+const closingSession = ref(false)
 const selectedUserId = ref<string | null>(null)
+const selectedSessionId = ref<string | null>(null)
 const selectedUser = ref<ConvItem | null>(null)
+const activeTab = ref<TabValue>('all')
 const inputText = ref('')
 const searchText = ref('')
 const messagesEl = ref<HTMLElement | null>(null)
@@ -772,13 +894,122 @@ const filteredConversations = computed(() => {
   return conversations.value.filter(c => c.displayName.toLowerCase().includes(kw))
 })
 
+const sessionSidebarItems = computed<SessionItem[]>(() => {
+  const kw = searchText.value.toLowerCase().trim()
+  if (!kw) return sessions.value
+  return sessions.value.filter(s => s.displayName.toLowerCase().includes(kw))
+})
+
+const convSidebarItems = computed<ConvItem[]>(() => filteredConversations.value)
+
+const sidebarItems = computed(() =>
+  activeTab.value === 'all' ? convSidebarItems.value : sessionSidebarItems.value,
+)
+
+const chatRows = computed<ChatRow[]>(() => {
+  if (selectedSessionId.value) {
+    return sessionTimelineItems.value.map((item) => {
+      if (item.type === 'event') {
+        return {
+          kind: 'event' as const,
+          key: `e-${item.id}`,
+          label: item.label || '',
+          timestamp: item.timestamp,
+        }
+      }
+      const msg: MsgItem = {
+        id: item.id,
+        direction: item.direction === 'outgoing' ? 'outgoing' : 'incoming',
+        text: item.text ?? '',
+        messageType: String(item.messageType || 'text'),
+        payload: item.payload as any,
+        timestamp: item.timestamp,
+      }
+      return { kind: 'msg' as const, key: item.id, msg }
+    })
+  }
+  return messages.value.map(msg => ({ kind: 'msg' as const, key: msg.id, msg }))
+})
+
+function sessionChipTone(status: ConvSessionStatus): 'neutral' | 'warning' | 'success' | 'error' {
+  if (status === 'pending_human') return 'warning'
+  if (status === 'human_handling') return 'success'
+  if (status === 'closed') return 'neutral'
+  return 'neutral'
+}
+
+async function switchTab(tab: TabValue) {
+  activeTab.value = tab
+  selectedSessionId.value = null
+  sessionTimelineItems.value = []
+  sessionMeta.value = null
+  await loadList()
+  if (tab === 'all' && selectedUserId.value && selectedUser.value) {
+    await selectUser(selectedUser.value)
+  }
+}
+
+async function selectSession(s: SessionItem) {
+  selectedSessionId.value = s.sessionId
+  selectedUserId.value = s.userId
+  messages.value = []
+  const convItem: ConvItem = {
+    userId: s.userId,
+    displayName: s.displayName,
+    pictureUrl: s.pictureUrl,
+    lastMessage: SESSION_STATUS_LABELS[s.status] ?? '',
+    lastDirection: 'incoming',
+    lastMessageAt: s.lastActivityAt,
+  }
+  selectedUser.value = convItem
+  sessionMeta.value = {
+    sessionId: s.sessionId,
+    status: s.status,
+    statusLabel: SESSION_STATUS_LABELS[s.status] ?? String(s.status),
+  }
+  msgLoading.value = true
+  try {
+    const res = await $fetch<{
+      sessionId: string
+      status: ConvSessionStatus
+      statusLabel: string
+      items: SessionTimelineItem[]
+    }>(`/api/conversations/sessions/${s.sessionId}/timeline`, {
+      headers: await getAdminAuthHeaders(),
+    })
+    sessionMeta.value = {
+      sessionId: res.sessionId,
+      status: res.status,
+      statusLabel: res.statusLabel,
+    }
+    sessionTimelineItems.value = res.items ?? []
+    await nextTick()
+    scrollToBottom()
+  }
+  catch {
+    sessionTimelineItems.value = []
+    showToast('載入會話時間軸失敗', 'error')
+  }
+  finally {
+    msgLoading.value = false
+  }
+}
+
 const canSend = computed(() => !!inputText.value.trim())
 
 async function loadList() {
   listLoading.value = true
   try {
-    const res = await $fetch<{ conversations: ConvItem[] }>('/api/conversations/list')
-    conversations.value = res.conversations
+    if (activeTab.value === 'all') {
+      const res = await $fetch<{ conversations: ConvItem[] }>('/api/conversations/list')
+      conversations.value = res.conversations
+    } else {
+      const res = await $fetch<{ sessions: SessionItem[] }>('/api/conversations/sessions', {
+        params: { status: activeTab.value, limit: 100 },
+        headers: await getAdminAuthHeaders(),
+      })
+      sessions.value = res.sessions
+    }
   }
   catch {
     showToast('載入對話列表失敗', 'error')
@@ -802,7 +1033,7 @@ async function sendSupportPreset() {
       body: { presetId },
     })
     showToast('已送出客服預存', 'success')
-    await selectUser(selectedUser.value)
+    await reloadAfterOutgoing()
   }
   catch (e: any) {
     showToast(e?.data?.statusMessage || '送出預存失敗', 'error')
@@ -821,6 +1052,9 @@ function getActionSummary(preset: any): string {
 }
 
 async function selectUser(c: ConvItem) {
+  selectedSessionId.value = null
+  sessionTimelineItems.value = []
+  sessionMeta.value = null
   selectedUserId.value = c.userId
   selectedUser.value = c
   pendingSupportPresetId.value = ''
@@ -851,13 +1085,76 @@ async function send() {
       body: { type: 'text', text },
     })
     inputText.value = ''
-    await selectUser(selectedUser.value!)
+    await reloadAfterOutgoing()
   }
   catch (e: any) {
     showToast(e?.data?.statusMessage || '發送失敗', 'error')
   }
   finally {
     sending.value = false
+  }
+}
+
+async function reloadSessionTimeline() {
+  const sid = selectedSessionId.value
+  if (!sid)
+    return
+  msgLoading.value = true
+  try {
+    const res = await $fetch<{
+      sessionId: string
+      status: ConvSessionStatus
+      statusLabel: string
+      items: SessionTimelineItem[]
+    }>(`/api/conversations/sessions/${sid}/timeline`, {
+      headers: await getAdminAuthHeaders(),
+    })
+    sessionMeta.value = {
+      sessionId: res.sessionId,
+      status: res.status,
+      statusLabel: res.statusLabel,
+    }
+    sessionTimelineItems.value = res.items ?? []
+    await nextTick()
+    scrollToBottom()
+  }
+  catch {
+    showToast('重新載入會話失敗', 'error')
+  }
+  finally {
+    msgLoading.value = false
+  }
+}
+
+async function reloadAfterOutgoing() {
+  if (selectedSessionId.value) {
+    await reloadSessionTimeline()
+    await loadList()
+  }
+  else if (selectedUser.value) {
+    await selectUser(selectedUser.value)
+  }
+}
+
+async function closeSelectedSession() {
+  const sid = selectedSessionId.value
+  if (!sid || sessionMeta.value?.status === 'closed')
+    return
+  closingSession.value = true
+  try {
+    await $fetch(`/api/conversations/sessions/${sid}/close`, {
+      method: 'POST',
+      headers: await getAdminAuthHeaders(),
+    })
+    showToast('已結束會話', 'success')
+    await reloadSessionTimeline()
+    await loadList()
+  }
+  catch (e: any) {
+    showToast(e?.data?.statusMessage || '結束會話失敗', 'error')
+  }
+  finally {
+    closingSession.value = false
   }
 }
 
@@ -1030,7 +1327,7 @@ async function sendQuickMedia() {
     })
     mediaDialogVisible.value = false
     resetQuickMediaForm()
-    await selectUser(selectedUser.value!)
+    await reloadAfterOutgoing()
   }
   catch (e: any) {
     showToast(e?.data?.statusMessage || '發送失敗', 'error')
@@ -1113,7 +1410,7 @@ async function sendSticker(packageId: string, sid: string) {
       method: 'POST',
       body: { type: 'sticker', packageId, stickerId: sid },
     })
-    await selectUser(selectedUser.value!)
+    await reloadAfterOutgoing()
   }
   catch (e: any) {
     showToast(e?.data?.statusMessage || '發送失敗', 'error')
