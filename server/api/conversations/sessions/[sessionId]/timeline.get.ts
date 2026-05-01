@@ -36,6 +36,19 @@ function eventLabel(eventType: ConversationEventType, moduleType?: ModuleType): 
   return eventType
 }
 
+function toMillis(raw: unknown): number {
+  if (raw == null) return 0
+  if (typeof raw === 'object' && raw !== null && 'toMillis' in raw && typeof (raw as { toMillis: () => number }).toMillis === 'function') {
+    return (raw as { toMillis: () => number }).toMillis()
+  }
+  if (typeof raw === 'object' && raw !== null && 'toDate' in raw && typeof (raw as { toDate: () => Date }).toDate === 'function') {
+    return (raw as { toDate: () => Date }).toDate().getTime()
+  }
+  if (raw instanceof Date) return raw.getTime()
+  const t = new Date(String(raw)).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
 export default defineEventHandler(async (event) => {
   const sessionId = getRouterParam(event, 'sessionId')
   if (!sessionId) throw createError({ statusCode: 400, statusMessage: 'sessionId required' })
@@ -49,28 +62,48 @@ export default defineEventHandler(async (event) => {
   const session = sessionSnap.data()!
   const userId = session.userId as string
 
-  // Fetch events for this session
+  // Fetch events for this session (avoid composite index: sessionId + orderBy timestamp)
   const eventsSnap = await db.collection('conversationEvents')
     .where('sessionId', '==', sessionId)
-    .orderBy('timestamp', 'asc')
     .get()
 
   // Fetch messages in the session time window
   const openedAt = session.openedAt?.toDate?.() ?? new Date(0)
   const closedAt = session.closedAt?.toDate?.() ?? new Date()
+  const openMs = toMillis(openedAt)
+  const closeMs = session.closedAt ? toMillis(closedAt) : Number.POSITIVE_INFINITY
 
-  let msgsRef = db.collection('conversations').doc(userId).collection('messages')
-    .where('timestamp', '>=', openedAt)
-    .orderBy('timestamp', 'asc') as FirebaseFirestore.Query
+  const msgCol = db.collection('conversations').doc(userId).collection('messages')
 
-  if (session.closedAt) {
-    msgsRef = db.collection('conversations').doc(userId).collection('messages')
+  let messageDocs: FirebaseFirestore.QueryDocumentSnapshot[] = []
+  try {
+    let msgsRef = msgCol
       .where('timestamp', '>=', openedAt)
-      .where('timestamp', '<=', closedAt)
-      .orderBy('timestamp', 'asc')
-  }
+      .orderBy('timestamp', 'asc') as FirebaseFirestore.Query
 
-  const msgsSnap = await msgsRef.limit(500).get()
+    if (session.closedAt) {
+      msgsRef = msgCol
+        .where('timestamp', '>=', openedAt)
+        .where('timestamp', '<=', closedAt)
+        .orderBy('timestamp', 'asc')
+    }
+
+    messageDocs = (await msgsRef.limit(500).get()).docs
+  }
+  catch (e: any) {
+    const msg = String(e?.message || '')
+    const code = Number(e?.code || 0)
+    const isMissingIndex = code === 9 && /requires an index/i.test(msg)
+    if (!isMissingIndex) throw e
+    console.warn('[timeline] message window query missing index, using fallback:', msg.slice(0, 280))
+    const snap = await msgCol.orderBy('timestamp', 'desc').limit(500).get()
+    messageDocs = snap.docs
+      .filter((d) => {
+        const t = toMillis(d.data().timestamp)
+        return t >= openMs && t <= closeMs
+      })
+      .reverse()
+  }
 
   const items: TimelineItem[] = []
 
@@ -87,7 +120,7 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  for (const d of msgsSnap.docs) {
+  for (const d of messageDocs) {
     const m = d.data()
     items.push({
       id: d.id,
@@ -101,11 +134,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // Sort by timestamp
-  items.sort((a, b) => {
-    const ta = a.timestamp?.toMillis?.() ?? 0
-    const tb = b.timestamp?.toMillis?.() ?? 0
-    return ta - tb
-  })
+  items.sort((a, b) => toMillis(a.timestamp) - toMillis(b.timestamp))
 
   return {
     sessionId,
