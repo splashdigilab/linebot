@@ -2,6 +2,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { syncPublishedEntryUrlForCampaign } from '~~/server/utils/lead-campaign-published-url'
 import { normalizeCampaignScheduleInput, schedulePatchForUpdate } from '~~/server/utils/campaign-schedule'
 import { normalizeAutoReplyAction } from '~~/shared/auto-reply-rule'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 function normalizeCampaignAction(body: any): { action: ReturnType<typeof normalizeAutoReplyAction> | null; moduleId: string | null } {
   const hasActionType = Boolean(String(body?.action?.type ?? '').trim())
@@ -23,6 +24,7 @@ function validateCampaign(body: any): string | null {
 }
 
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
   const id = getRouterParam(event, 'id')!
   const body = await readBody(event)
   const error = validateCampaign(body)
@@ -33,7 +35,9 @@ export default defineEventHandler(async (event) => {
 
   const db = getDb()
   const snap = await db.collection('leadCampaigns').doc(id).get()
-  if (!snap.exists) throw createError({ statusCode: 404, statusMessage: 'Campaign not found' })
+  if (!snap.exists || snap.data()?.workspaceId !== workspaceId) {
+    throw createError({ statusCode: 404, statusMessage: 'Campaign not found' })
+  }
   const { action, moduleId } = normalizeCampaignAction(body)
 
   const updates: Record<string, unknown> = {

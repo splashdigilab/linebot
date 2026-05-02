@@ -1,4 +1,5 @@
 import { getDb } from '~~/server/utils/firebase'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import { resolveAudienceUserIds } from '~~/server/utils/audience'
 import type { BroadcastDoc, AudienceFilter } from '~~/shared/types/tag-broadcast'
 
@@ -15,6 +16,8 @@ import type { BroadcastDoc, AudienceFilter } from '~~/shared/types/tag-broadcast
  * }
  */
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id is required' })
 
@@ -23,6 +26,9 @@ export default defineEventHandler(async (event) => {
   if (!snap.exists) throw createError({ statusCode: 404, statusMessage: 'Broadcast not found' })
 
   const data = snap.data() as BroadcastDoc
+  if (data.workspaceId !== workspaceId) {
+    throw createError({ statusCode: 404, statusMessage: 'Broadcast not found' })
+  }
   const errors: string[] = []
 
   // 檢查訊息內容

@@ -1,13 +1,14 @@
 import { getDb } from '~~/server/utils/firebase'
 import type { KpiResult } from '~~/shared/types/conversation-stats'
-import { requireFirebaseAuth } from '~~/server/utils/admin-auth'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event): Promise<KpiResult> => {
-  await requireFirebaseAuth(event)
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const query = getQuery(event)
   const db = getDb()
 
   let ref = db.collection('conversationSessions') as FirebaseFirestore.Query
+  ref = ref.where('workspaceId', '==', workspaceId)
 
   if (query.startDate) {
     ref = ref.where('openedAt', '>=', new Date(String(query.startDate)))

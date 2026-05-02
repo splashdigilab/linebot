@@ -1,9 +1,12 @@
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id is required' })
 
-  const menu = await getDoc<{ richMenuId: string; aliasId?: string }>('richmenus', id)
-  if (!menu) throw createError({ statusCode: 404, statusMessage: 'Not found' })
+  const menu = await getDoc<{ richMenuId: string; aliasId?: string; workspaceId?: string }>('richmenus', id)
+  if (!menu || menu.workspaceId !== workspaceId) throw createError({ statusCode: 404, statusMessage: 'Not found' })
 
   // 先刪除圖文選單別名（釋出 alias ID）
   if (menu.aliasId) {

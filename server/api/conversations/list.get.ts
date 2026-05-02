@@ -1,9 +1,13 @@
 import { getDb } from '~~/server/utils/firebase'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+
   const db = getDb()
 
   const snap = await db.collection('conversations')
+    .where('workspaceId', '==', workspaceId)
     .orderBy('lastMessageAt', 'desc')
     .limit(100)
     .get()

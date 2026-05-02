@@ -1,6 +1,6 @@
 import { getDb } from '~~/server/utils/firebase'
 import type { ConversationStatus, InitialHandler } from '~~/shared/types/conversation-stats'
-import { requireFirebaseAuth } from '~~/server/utils/admin-auth'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 const PAGE_SIZE = 30
 const CHUNK = 30
@@ -17,7 +17,7 @@ function toMillis(raw: any): number {
 }
 
 export default defineEventHandler(async (event) => {
-  await requireFirebaseAuth(event)
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const query = getQuery(event)
   const db = getDb()
 
@@ -40,6 +40,7 @@ export default defineEventHandler(async (event) => {
   // fall back to a safe query (status-only) and do the rest in memory.
   const runFallback = async () => {
     let safeRef = db.collection('conversationSessions') as FirebaseFirestore.Query
+    safeRef = safeRef.where('workspaceId', '==', workspaceId)
     if (status !== 'all') {
       safeRef = safeRef.where('status', '==', status as ConversationStatus)
     }
@@ -100,6 +101,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     let ref = db.collection('conversationSessions') as FirebaseFirestore.Query
+    ref = ref.where('workspaceId', '==', workspaceId)
 
     if (status !== 'all') {
       ref = ref.where('status', '==', status as ConversationStatus)

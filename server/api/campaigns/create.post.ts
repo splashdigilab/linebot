@@ -4,6 +4,7 @@ import { generateLeadCampaignCode } from '~~/server/utils/lead-campaign-code'
 import { syncPublishedEntryUrlForCampaign } from '~~/server/utils/lead-campaign-published-url'
 import { normalizeCampaignScheduleInput } from '~~/server/utils/campaign-schedule'
 import { normalizeAutoReplyAction } from '~~/shared/auto-reply-rule'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 function normalizeCampaignAction(body: any): { action: ReturnType<typeof normalizeAutoReplyAction> | null; moduleId: string | null } {
   const hasActionType = Boolean(String(body?.action?.type ?? '').trim())
@@ -27,6 +28,7 @@ function validateCampaign(body: any): string | null {
 }
 
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
   const body = await readBody(event)
   const error = validateCampaign(body)
   if (error) throw createError({ statusCode: 400, statusMessage: error })
@@ -48,6 +50,7 @@ export default defineEventHandler(async (event) => {
     description: String(body.description || '').trim(),
     redirectUrl: String(body.redirectUrl || '').trim() || null,
     isActive: body.isActive !== false,
+    workspaceId,
     createdAt: now,
     updatedAt: now,
   }

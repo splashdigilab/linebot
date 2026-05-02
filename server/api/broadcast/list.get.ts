@@ -1,4 +1,5 @@
 import { listDocs } from '~~/server/utils/firebase'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import type { BroadcastDoc } from '~~/shared/types/tag-broadcast'
 
 /**
@@ -8,11 +9,13 @@ import type { BroadcastDoc } from '~~/shared/types/tag-broadcast'
  * Response: Array<BroadcastDoc & { id: string }>（不含 messages、不含 audienceSnapshot.resolvedUserIds；編輯內容請 GET /api/broadcast/:id）
  */
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+
   const query = getQuery(event)
   const statusFilter = query.status as string | undefined
 
   const broadcasts = await listDocs<BroadcastDoc>('broadcasts', (ref) =>
-    ref.orderBy('createdAt', 'desc'),
+    ref.where('workspaceId', '==', workspaceId).orderBy('createdAt', 'desc'),
   )
 
   const filtered = statusFilter

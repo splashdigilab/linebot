@@ -4,8 +4,10 @@ import {
   normalizeUnifiedActions,
   validateUnifiedAction,
 } from '~~/shared/action-schema'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
   const body = await readBody(event)
   const { name, layoutId, transparentBackground, altText, heroImageUrl, actions, isActive } = body
 
@@ -37,6 +39,7 @@ export default defineEventHandler(async (event) => {
     heroImageUrl: typeof heroImageUrl === 'string' ? heroImageUrl.trim() : '',
     actions: normalizedActions,
     isActive: isActive ?? true,
+    workspaceId,
     createdAt: FieldValue.serverTimestamp(),
   })
 

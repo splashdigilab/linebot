@@ -1,4 +1,5 @@
 import { getDb } from '~~/server/utils/firebase'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 /**
  * GET /api/users/list
@@ -22,6 +23,8 @@ import { getDb } from '~~/server/utils/firebase'
  * }
  */
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+
   const query = getQuery(event)
   const tagIdsParam = query.tagIds as string | undefined
   const limitParam = Math.min(parseInt((query.limit as string) || '500'), 800)
@@ -36,6 +39,7 @@ export default defineEventHandler(async (event) => {
     if (tagIds.length > 0) {
       // Firestore `in` 最多 30 個值，先取前 30
       const snap = await db.collection('userTags')
+        .where('workspaceId', '==', workspaceId)
         .where('tagId', 'in', tagIds.slice(0, 30))
         .get()
       filterUserIds = new Set(snap.docs.map((d) => d.data().userId as string))
@@ -44,6 +48,7 @@ export default defineEventHandler(async (event) => {
 
   // ── Step 2: 取用戶列表 ───────────────────────────────────────────
   const usersSnap = await db.collection('users')
+    .where('workspaceId', '==', workspaceId)
     .orderBy('createdAt', 'desc')
     .limit(Math.min(limitParam * 3, 1500))
     .get()

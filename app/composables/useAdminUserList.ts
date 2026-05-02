@@ -4,6 +4,7 @@
 export function useAdminUserList() {
   const users = ref<any[]>([])
   const loading = ref(false)
+  const { apiFetch } = useWorkspace()
 
   async function loadUsers(query?: { tagIds?: string[]; limit?: number }): Promise<boolean> {
     loading.value = true
@@ -12,7 +13,7 @@ export function useAdminUserList() {
       if (query?.tagIds?.length) search.set('tagIds', query.tagIds.join(','))
       search.set('limit', String(query?.limit ?? 500))
       const qs = search.toString() ? `?${search.toString()}` : ''
-      const res = await $fetch<{ users: any[] }>(`/api/users/list${qs}`)
+      const res = await apiFetch<{ users: any[] }>(`/api/users/list${qs}`)
       users.value = res.users ?? []
       return true
     }

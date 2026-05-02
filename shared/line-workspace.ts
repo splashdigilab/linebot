@@ -8,6 +8,8 @@ export type LineWorkspaceDoc = {
   channelSecret?: string
   /** 活動未填 liffId 時可 fallback（選填） */
   defaultLiffId?: string
+  /** 所屬組織 ID（選填；未設定時為獨立 workspace） */
+  organizationId?: string
   updatedAt?: unknown
 }
 

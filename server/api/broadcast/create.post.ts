@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import type { BroadcastDoc, BroadcastAudienceSource } from '~~/shared/types/tag-broadcast'
 
 /**
@@ -18,6 +19,8 @@ import type { BroadcastDoc, BroadcastAudienceSource } from '~~/shared/types/tag-
  * Response: BroadcastDoc & { id: string }
  */
 export default defineEventHandler(async (event) => {
+  const { uid, workspaceId } = await requireWorkspaceAccess(event, 'admin')
+
   const body = await readBody(event)
   const { name, audienceSource, messages, scheduleAt } = body
 
@@ -34,6 +37,7 @@ export default defineEventHandler(async (event) => {
   const now = FieldValue.serverTimestamp()
 
   const doc: BroadcastDoc = {
+    workspaceId,
     name,
     status: scheduleAt ? 'scheduled' : 'draft',
     channel: 'line',
@@ -51,7 +55,7 @@ export default defineEventHandler(async (event) => {
     sentCount: 0,
     failedCount: 0,
     skippedCount: 0,
-    createdBy: '',
+    createdBy: uid,
     createdAt: now,
     updatedAt: now,
   }

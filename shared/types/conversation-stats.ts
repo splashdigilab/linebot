@@ -16,6 +16,7 @@ export type ConversationEventType =
 export type TrendGranularity = 'day' | 'week' | 'month'
 
 export interface ConversationSessionDoc {
+  workspaceId: string
   userId: string
   openedAt: FirebaseFirestore.Timestamp
   closedAt: FirebaseFirestore.Timestamp | null
@@ -31,6 +32,7 @@ export interface ConversationSessionDoc {
 }
 
 export interface ConversationEventDoc {
+  workspaceId: string
   sessionId: string
   userId: string
   eventType: ConversationEventType

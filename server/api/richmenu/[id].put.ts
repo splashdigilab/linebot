@@ -1,7 +1,9 @@
 import type { messagingApi } from '@line/bot-sdk'
 import { validateUploadPayload } from '~~/server/utils/upload-validator'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
   const firestoreId = getRouterParam(event, 'id')
   if (!firestoreId) throw createError({ statusCode: 400, statusMessage: 'id is required' })
 
@@ -10,7 +12,7 @@ export default defineEventHandler(async (event) => {
 
   // Get existing doc to get the old richMenuId and old imageUrl
   const oldDoc = await getDoc<any>('richmenus', firestoreId)
-  if (!oldDoc) throw createError({ statusCode: 404, statusMessage: '找不到圖文選單' })
+  if (!oldDoc || oldDoc.workspaceId !== workspaceId) throw createError({ statusCode: 404, statusMessage: '找不到圖文選單' })
 
   // Use stored aliasId or derive — max 32 chars, alphanumeric only (LINE requirement)
   const aliasId = oldDoc.aliasId ?? `rm${firestoreId.replace(/-/g, '').slice(0, 28)}`

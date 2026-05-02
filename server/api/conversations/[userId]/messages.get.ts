@@ -1,15 +1,22 @@
 import { getDb } from '~~/server/utils/firebase'
 import type { ConversationStatus } from '~~/shared/types/conversation-stats'
 import { STATUS_LABELS } from '~~/shared/types/conversation-stats'
-import { requireFirebaseAuth } from '~~/server/utils/admin-auth'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event) => {
-  await requireFirebaseAuth(event)
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+
   const userId = getRouterParam(event, 'userId')
   if (!userId) throw createError({ statusCode: 400, statusMessage: 'userId required' })
 
   const db = getDb()
+
+  // Verify the conversation belongs to this workspace
   const convRef = db.collection('conversations').doc(userId)
+  const convSnap = await convRef.get()
+  if (!convSnap.exists || convSnap.data()?.workspaceId !== workspaceId) {
+    throw createError({ statusCode: 404, statusMessage: '找不到此對話' })
+  }
   const snap = await convRef
     .collection('messages')
     .orderBy('timestamp', 'desc')
@@ -26,7 +33,7 @@ export default defineEventHandler(async (event) => {
     timestamp: d.data().timestamp ?? null,
   })).reverse()
 
-  const convData = (await convRef.get()).data()
+  const convData = convSnap.data()
   const currentSessionId = convData?.currentSessionId as string | undefined | null
   let activeSession: {
     sessionId: string

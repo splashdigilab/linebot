@@ -17,6 +17,7 @@ export type TagStatus = 'active' | 'inactive'
 export type TagCategory = 'member_status' | 'interest' | 'behavior' | 'activity' | 'custom'
 
 export interface TagDoc {
+  workspaceId: string
   /** 唯一識別碼，英文小寫加底線，程式內部使用。例如 interest_food */
   code: string
   /** 顯示名稱，給後台營運人員看 */
@@ -45,6 +46,7 @@ export interface TagDoc {
 export type UserTagSourceType = 'manual' | 'import' | 'rule' | 'system'
 
 export interface UserTagDoc {
+  workspaceId: string
   userId: string
   tagId: string
   sourceType: UserTagSourceType
@@ -64,6 +66,7 @@ export interface UserTagDoc {
 export type TagOpAction = 'add' | 'remove'
 
 export interface TagLogDoc {
+  workspaceId: string
   action: TagOpAction
   userId: string
   tagId: string
@@ -100,6 +103,7 @@ export interface AudienceFilter {
 }
 
 export interface AudienceDoc {
+  workspaceId: string
   name: string
   description: string
   audienceType: AudienceType
@@ -139,6 +143,7 @@ export interface BroadcastAudienceSource {
 }
 
 export interface BroadcastDoc {
+  workspaceId: string
   name: string
   status: BroadcastStatus
   channel: BroadcastChannel
@@ -200,6 +205,7 @@ export interface BroadcastDeliveryDoc {
 // ═══════════════════════════════════════════════════════════════════
 
 export interface BroadcastClickLogDoc {
+  workspaceId: string
   campaignId: string
   /** 對應 broadcasts/{id}/deliveries 的 doc ID */
   deliveryId: string | null
@@ -220,6 +226,7 @@ export type RuleActionType = 'add_tag' | 'remove_tag' | 'send_broadcast'
 export type RuleStatus = 'active' | 'inactive'
 
 export interface AutomationRuleDoc {
+  workspaceId: string
   name: string
   triggerType: RuleTriggerType
   /** 觸發條件（依 triggerType 有不同欄位） */

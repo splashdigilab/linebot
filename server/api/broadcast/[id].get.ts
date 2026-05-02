@@ -1,4 +1,5 @@
 import { getDoc } from '~~/server/utils/firebase'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import type { BroadcastDoc } from '~~/shared/types/tag-broadcast'
 
 /**
@@ -11,6 +12,8 @@ import type { BroadcastDoc } from '~~/shared/types/tag-broadcast'
  * 預設會省略 resolvedUserIds，避免單次回應過大。
  */
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id is required' })
 
@@ -18,7 +21,7 @@ export default defineEventHandler(async (event) => {
   const withAudienceIds = query.withAudienceIds === '1' || query.withAudienceIds === 'true'
 
   const doc = await getDoc<BroadcastDoc>('broadcasts', id)
-  if (!doc) throw createError({ statusCode: 404, statusMessage: 'Broadcast not found' })
+  if (!doc || doc.workspaceId !== workspaceId) throw createError({ statusCode: 404, statusMessage: 'Broadcast not found' })
 
   if (withAudienceIds) return doc
 

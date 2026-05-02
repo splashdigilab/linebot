@@ -1,5 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 /**
  * POST /api/broadcast/:id/cancel
@@ -8,6 +9,8 @@ import { getDb } from '~~/server/utils/firebase'
  * Response: { success: true, id: string }
  */
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id is required' })
 
@@ -17,7 +20,12 @@ export default defineEventHandler(async (event) => {
 
   if (!snap.exists) throw createError({ statusCode: 404, statusMessage: 'Broadcast not found' })
 
-  const { status } = snap.data()!
+  const data = snap.data()!
+  if (data.workspaceId !== workspaceId) {
+    throw createError({ statusCode: 404, statusMessage: 'Broadcast not found' })
+  }
+
+  const { status } = data
   const cancellableStatuses = ['draft', 'scheduled']
 
   if (!cancellableStatuses.includes(status)) {

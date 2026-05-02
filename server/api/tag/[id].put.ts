@@ -1,5 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import type { TagCategory, TagStatus } from '~~/shared/types/tag-broadcast'
 
 /**
@@ -19,6 +20,8 @@ import type { TagCategory, TagStatus } from '~~/shared/types/tag-broadcast'
  * Response: { id: string, ...updatedFields }
  */
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id is required' })
 
@@ -27,6 +30,10 @@ export default defineEventHandler(async (event) => {
   const snap = await ref.get()
 
   if (!snap.exists) {
+    throw createError({ statusCode: 404, statusMessage: 'Tag not found' })
+  }
+
+  if (snap.data()!.workspaceId !== workspaceId) {
     throw createError({ statusCode: 404, statusMessage: 'Tag not found' })
   }
 

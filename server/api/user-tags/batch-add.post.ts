@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
 import type { UserTagDoc, TagLogDoc } from '~~/shared/types/tag-broadcast'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 const FIRESTORE_BATCH_LIMIT = 400
 
@@ -23,6 +24,8 @@ const FIRESTORE_BATCH_LIMIT = 400
  * }
  */
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+
   const body = await readBody(event)
   const userIds: string[] = body?.userIds ?? []
   const tagIds: string[] = body?.tagIds ?? []
@@ -66,6 +69,7 @@ export default defineEventHandler(async (event) => {
       const userTagDoc: UserTagDoc = {
         userId,
         tagId,
+        workspaceId,
         sourceType: 'manual',
         sourceRefId: null,
         createdBy: null,

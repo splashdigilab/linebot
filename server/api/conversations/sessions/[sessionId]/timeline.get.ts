@@ -4,7 +4,7 @@ import {
   MODULE_TYPE_LABELS,
   STATUS_LABELS,
 } from '~~/shared/types/conversation-stats'
-import { requireFirebaseAuth } from '~~/server/utils/admin-auth'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 type TimelineItemType = 'message' | 'event'
 
@@ -50,14 +50,16 @@ function toMillis(raw: unknown): number {
 }
 
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+
   const sessionId = getRouterParam(event, 'sessionId')
   if (!sessionId) throw createError({ statusCode: 400, statusMessage: 'sessionId required' })
 
-  await requireFirebaseAuth(event)
-
   const db = getDb()
   const sessionSnap = await db.collection('conversationSessions').doc(sessionId).get()
-  if (!sessionSnap.exists) throw createError({ statusCode: 404, statusMessage: '找不到此會話' })
+  if (!sessionSnap.exists || sessionSnap.data()?.workspaceId !== workspaceId) {
+    throw createError({ statusCode: 404, statusMessage: '找不到此會話' })
+  }
 
   const session = sessionSnap.data()!
   const userId = session.userId as string

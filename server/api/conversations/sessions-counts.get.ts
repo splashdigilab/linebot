@@ -1,6 +1,6 @@
 import { getDb } from '~~/server/utils/firebase'
 import type { ConversationStatus } from '~~/shared/types/conversation-stats'
-import { requireFirebaseAuth } from '~~/server/utils/admin-auth'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 const STATUSES: ConversationStatus[] = [
   'open',
@@ -11,7 +11,7 @@ const STATUSES: ConversationStatus[] = [
 ]
 
 export default defineEventHandler(async (event) => {
-  await requireFirebaseAuth(event)
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const db = getDb()
 
   const counts = {} as Record<ConversationStatus, number>
@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
     STATUSES.map(async (status) => {
       const snap = await db
         .collection('conversationSessions')
+        .where('workspaceId', '==', workspaceId)
         .where('status', '==', status)
         .count()
         .get()

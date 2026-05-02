@@ -4,15 +4,17 @@ import {
 } from '~~/server/utils/flow-validator'
 import { getDoc } from '~~/server/utils/firebase'
 import type { ModuleType } from '~~/shared/types/conversation-stats'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 const VALID_MODULE_TYPES: ModuleType[] = ['welcome', 'bot_flow', 'system_notice', 'live_agent']
 
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id is required' })
 
-  const existing = await getDoc<{ isSystem?: boolean; moduleType?: ModuleType }>('flows', id)
-  if (!existing) throw createError({ statusCode: 404, statusMessage: '找不到此模組' })
+  const existing = await getDoc<{ isSystem?: boolean; moduleType?: ModuleType; workspaceId?: string }>('flows', id)
+  if (!existing || existing.workspaceId !== workspaceId) throw createError({ statusCode: 404, statusMessage: '找不到此模組' })
 
   const body = await readBody(event)
   const { name, messages, isActive, moduleType } = body

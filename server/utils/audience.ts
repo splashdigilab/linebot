@@ -10,7 +10,7 @@ import type { AudienceFilter } from '~~/shared/types/tag-broadcast'
  *
  * Phase 2 可擴充：isBlocked、最近互動時間、行為事件等。
  */
-export async function resolveAudienceUserIds(filter: AudienceFilter): Promise<string[]> {
+export async function resolveAudienceUserIds(filter: AudienceFilter, workspaceId?: string): Promise<string[]> {
   const db = getDb()
 
   // ── Step 1: 從 includeAny / includeAll 條件取候選 userIds ──────────
@@ -23,9 +23,9 @@ export async function resolveAudienceUserIds(filter: AudienceFilter): Promise<st
   // includeAny：有任一標籤即納入
   for (const cond of includeAny) {
     if (!cond.tagIds.length) continue
-    const snap = await db.collection('userTags')
-      .where('tagId', 'in', cond.tagIds.slice(0, 30))
-      .get()
+    let query = db.collection('userTags').where('tagId', 'in', cond.tagIds.slice(0, 30))
+    if (workspaceId) query = query.where('workspaceId', '==', workspaceId) as any
+    const snap = await query.get()
     const ids = new Set(snap.docs.map((d) => d.data().userId as string))
 
     if (candidateIds === null) {
@@ -42,9 +42,11 @@ export async function resolveAudienceUserIds(filter: AudienceFilter): Promise<st
 
     // 每個 tagId 查一次，取交集
     const snaps = await Promise.all(
-      cond.tagIds.map((tagId) =>
-        db.collection('userTags').where('tagId', '==', tagId).get(),
-      ),
+      cond.tagIds.map((tagId) => {
+        let query = db.collection('userTags').where('tagId', '==', tagId)
+        if (workspaceId) query = query.where('workspaceId', '==', workspaceId) as any
+        return query.get()
+      }),
     )
 
     const sets = snaps.map((s) => new Set(s.docs.map((d) => d.data().userId as string)))
@@ -65,7 +67,9 @@ export async function resolveAudienceUserIds(filter: AudienceFilter): Promise<st
 
   // 若沒有 include 條件，預設取全部用戶（type === 'all' 情況）
   if (candidateIds === null) {
-    const snap = await db.collection('users').get()
+    let query = db.collection('users') as FirebaseFirestore.Query
+    if (workspaceId) query = query.where('workspaceId', '==', workspaceId)
+    const snap = await query.get()
     candidateIds = new Set(
       snap.docs.filter((d) => d.data().isBlocked !== true).map((d) => d.id),
     )
@@ -74,9 +78,9 @@ export async function resolveAudienceUserIds(filter: AudienceFilter): Promise<st
   // ── Step 2: 排除 excludeAny ────────────────────────────────────────
   for (const cond of excludeAny) {
     if (!cond.tagIds.length) continue
-    const snap = await db.collection('userTags')
-      .where('tagId', 'in', cond.tagIds.slice(0, 30))
-      .get()
+    let query = db.collection('userTags').where('tagId', 'in', cond.tagIds.slice(0, 30))
+    if (workspaceId) query = query.where('workspaceId', '==', workspaceId) as any
+    const snap = await query.get()
     for (const d of snap.docs) {
       candidateIds.delete(d.data().userId as string)
     }
@@ -120,7 +124,7 @@ export async function resolveAudienceUserIds(filter: AudienceFilter): Promise<st
  * 估算受眾人數（不回傳完整名單，效能較快）
  * 目前直接呼叫 resolveAudienceUserIds，Phase 2 可改用 count() 優化。
  */
-export async function estimateAudienceCount(filter: AudienceFilter): Promise<number> {
-  const ids = await resolveAudienceUserIds(filter)
+export async function estimateAudienceCount(filter: AudienceFilter, workspaceId?: string): Promise<number> {
+  const ids = await resolveAudienceUserIds(filter, workspaceId)
   return ids.length
 }

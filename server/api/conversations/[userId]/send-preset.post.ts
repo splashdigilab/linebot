@@ -1,6 +1,7 @@
 import { getDb } from '~~/server/utils/firebase'
 import { normalizeSupportPreset } from '~~/shared/support-preset'
 import { pushSupportPresetActionToUser } from '~~/server/utils/handler'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 function resolveRequestOrigin(event: Parameters<typeof getHeader>[0]): string {
   const protoRaw = String(getHeader(event, 'x-forwarded-proto') || 'https')
@@ -13,6 +14,8 @@ function resolveRequestOrigin(event: Parameters<typeof getHeader>[0]): string {
 }
 
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+
   const userId = getRouterParam(event, 'userId')
   if (!userId) throw createError({ statusCode: 400, statusMessage: 'userId required' })
 
@@ -22,7 +25,9 @@ export default defineEventHandler(async (event) => {
 
   const db = getDb()
   const userSnap = await db.collection('users').doc(userId).get()
-  if (!userSnap.exists) throw createError({ statusCode: 404, statusMessage: '找不到此使用者' })
+  if (!userSnap.exists || userSnap.data()?.workspaceId !== workspaceId) {
+    throw createError({ statusCode: 404, statusMessage: '找不到此使用者' })
+  }
 
   const presetSnap = await db.collection('supportPresets').doc(presetId).get()
   if (!presetSnap.exists) throw createError({ statusCode: 404, statusMessage: '找不到此預存' })

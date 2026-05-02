@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import type { TagDoc, TagCategory } from '~~/shared/types/tag-broadcast'
 
 const VALID_CATEGORIES: TagCategory[] = ['member_status', 'interest', 'behavior', 'activity', 'custom']
@@ -20,6 +21,8 @@ const VALID_CATEGORIES: TagCategory[] = ['member_status', 'interest', 'behavior'
  * Response: TagDoc & { id: string }
  */
 export default defineEventHandler(async (event) => {
+  const { uid, workspaceId } = await requireWorkspaceAccess(event, 'admin')
+
   const body = await readBody(event)
   const { code, name, category, color = '#6B7280', description = '' } = body
 
@@ -46,13 +49,14 @@ export default defineEventHandler(async (event) => {
   const now = FieldValue.serverTimestamp()
 
   const doc: TagDoc = {
+    workspaceId,
     code,
     name,
     category,
     color,
     description,
     status: 'active',
-    createdBy: '',
+    createdBy: uid,
     createdAt: now,
     updatedAt: now,
   }

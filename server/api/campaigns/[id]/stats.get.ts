@@ -3,12 +3,17 @@
  *
  * 行銷向指標（不含連結產生次數、不含「尚未兌換」pending）。
  */
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const campaignId = getRouterParam(event, 'id')!
   const db = getDb()
 
   const campaignSnap = await db.collection('leadCampaigns').doc(campaignId).get()
-  if (!campaignSnap.exists) throw createError({ statusCode: 404, statusMessage: 'Campaign not found' })
+  if (!campaignSnap.exists || campaignSnap.data()?.workspaceId !== workspaceId) {
+    throw createError({ statusCode: 404, statusMessage: 'Campaign not found' })
+  }
 
   const snap = await db.collection('leadClaims')
     .where('campaignId', '==', campaignId)

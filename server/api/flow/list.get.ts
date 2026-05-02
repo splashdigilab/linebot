@@ -1,6 +1,9 @@
-export default defineEventHandler(async () => {
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+
+export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const flows = await listDocs('flows', (ref) =>
-    ref.orderBy('createdAt', 'desc'),
+    ref.where('workspaceId', '==', workspaceId).orderBy('createdAt', 'desc'),
   )
   return flows.map((flow: any) => {
     const { triggers, trigger, ...rest } = flow

@@ -1,8 +1,10 @@
 import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { messagingApi } from '@line/bot-sdk'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
   const body = await readBody(event)
   const { name, size, areas, chatBarText, selected, setAsDefault } = body
 
@@ -52,6 +54,7 @@ export default defineEventHandler(async (event) => {
     chatBarText: chatBarText ?? '選單',
     imageUrl: '',
     isDefault: setAsDefault ?? false,
+    workspaceId,
     createdAt: FieldValue.serverTimestamp(),
   })
 

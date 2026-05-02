@@ -4,8 +4,10 @@ import {
   normalizeSupportPreset,
   validateSupportPreset,
 } from '~~/shared/support-preset'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
   const rawBody = await readBody(event)
   const body = normalizeSupportPreset(rawBody)
   const errorMessage = validateSupportPreset(body)
@@ -22,6 +24,7 @@ export default defineEventHandler(async (event) => {
     moduleId,
     isActive: body.isActive,
     tagging: body.tagging,
+    workspaceId,
     createdAt: FieldValue.serverTimestamp(),
   })
 

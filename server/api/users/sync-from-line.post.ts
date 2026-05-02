@@ -2,6 +2,7 @@ import type { DocumentSnapshot } from 'firebase-admin/firestore'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
 import { fetchAllFollowerUserIds, getUserProfile } from '~~/server/utils/line'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 /**
  * POST /api/users/sync-from-line
@@ -17,6 +18,8 @@ import { fetchAllFollowerUserIds, getUserProfile } from '~~/server/utils/line'
  *   lineFollowerTotal, offset, processed, remaining, listTruncated, profileFailures
  */
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+
   try {
     const body = (await readBody(event).catch(() => ({}))) as {
       offset?: number
@@ -52,7 +55,7 @@ export default defineEventHandler(async (event) => {
       const out: DocumentSnapshot[] = []
       for (let i = 0; i < ids.length; i += CONCURRENCY) {
         const chunk = ids.slice(i, i + CONCURRENCY)
-        const part = await Promise.all(chunk.map((id) => db.collection('users').doc(id).get()))
+        const part = await Promise.all(chunk.map((id) => db.collection('users').doc(`${workspaceId}_${id}`).get()))
         out.push(...part)
       }
       return out
@@ -89,18 +92,20 @@ export default defineEventHandler(async (event) => {
     }
 
     for (let i = 0; i < slice.length; i++) {
-      const userId = slice[i]!
+      const lineUserId = slice[i]!
       const snap = snaps[i]!
       const profile = profiles[i]
-      const ref = db.collection('users').doc(userId)
+      const ref = db.collection('users').doc(`${workspaceId}_${lineUserId}`)
 
       if (!profile) profileFailures++
 
-      const displayName = profile?.displayName ?? userId
+      const displayName = profile?.displayName ?? lineUserId
       const pictureUrl = profile?.pictureUrl ?? ''
 
       if (!snap.exists) {
         batch.set(ref, {
+          workspaceId,
+          lineUserId,
           displayName,
           pictureUrl,
           createdAt: FieldValue.serverTimestamp(),
@@ -110,6 +115,8 @@ export default defineEventHandler(async (event) => {
       }
       else {
         const patch: Record<string, unknown> = {
+          workspaceId,
+          lineUserId,
           displayName,
           pictureUrl,
           isBlocked: false,

@@ -7,6 +7,7 @@ import type { AutoReplyAction } from '~~/shared/auto-reply-rule'
 // ═══════════════════════════════════════════════════════════════════
 
 export interface LeadCampaignDoc {
+  workspaceId: string
   name: string
   /** 小寫底線格式，例如 launch_2026_q2；用於 CTA URL 的 c= 參數 */
   campaignCode: string
@@ -48,6 +49,7 @@ export interface LeadCampaignDoc {
 export type LeadClaimStatus = 'pending' | 'claimed' | 'applied' | 'expired'
 
 export interface LeadClaimDoc {
+  workspaceId: string
   campaignId: string
   campaignCode: string
   /** SHA-256(rawToken) hex，原始 token 不存 DB */

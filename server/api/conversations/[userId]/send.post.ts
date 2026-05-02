@@ -2,8 +2,11 @@ import { getDb } from '~~/server/utils/firebase'
 import { pushMessage } from '~~/server/utils/line'
 import { saveConversationMessage } from '~~/server/utils/handler'
 import { onHumanOutgoingMessage } from '~~/server/utils/conversation-session'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+
   const userId = getRouterParam(event, 'userId')
   if (!userId) throw createError({ statusCode: 400, statusMessage: 'userId required' })
 
@@ -12,7 +15,9 @@ export default defineEventHandler(async (event) => {
 
   const db = getDb()
   const userSnap = await db.collection('users').doc(userId).get()
-  if (!userSnap.exists) throw createError({ statusCode: 404, statusMessage: '找不到此使用者' })
+  if (!userSnap.exists || userSnap.data()?.workspaceId !== workspaceId) {
+    throw createError({ statusCode: 404, statusMessage: '找不到此使用者' })
+  }
 
   const isHttpUrl = (input: unknown) => /^https?:\/\//i.test(String(input || '').trim())
 

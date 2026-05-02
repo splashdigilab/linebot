@@ -1,5 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 /**
  * PUT /api/broadcast/:id
@@ -16,6 +17,8 @@ import { getDb } from '~~/server/utils/firebase'
  * Response: { id: string, ...updatedFields }
  */
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id is required' })
 
@@ -28,6 +31,9 @@ export default defineEventHandler(async (event) => {
   }
 
   const current = snap.data()!
+  if (current.workspaceId !== workspaceId) {
+    throw createError({ statusCode: 404, statusMessage: 'Broadcast not found' })
+  }
   const lockedStatuses = ['processing', 'completed', 'failed']
   if (lockedStatuses.includes(current.status)) {
     throw createError({ statusCode: 409, statusMessage: `Cannot edit a broadcast with status: ${current.status}` })

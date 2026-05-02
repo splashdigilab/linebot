@@ -1,6 +1,6 @@
 import { getDb } from '~~/server/utils/firebase'
 import type { TrendBucket, TrendGranularity } from '~~/shared/types/conversation-stats'
-import { requireFirebaseAuth } from '~~/server/utils/admin-auth'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 function bucketKey(date: Date, granularity: TrendGranularity): string {
   const y = date.getFullYear()
@@ -19,7 +19,7 @@ function bucketKey(date: Date, granularity: TrendGranularity): string {
 }
 
 export default defineEventHandler(async (event): Promise<{ buckets: TrendBucket[] }> => {
-  await requireFirebaseAuth(event)
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const query = getQuery(event)
   const granularity: TrendGranularity =
     query.granularity === 'week' || query.granularity === 'month'
@@ -28,6 +28,7 @@ export default defineEventHandler(async (event): Promise<{ buckets: TrendBucket[
 
   const db = getDb()
   let ref = db.collection('conversationSessions') as FirebaseFirestore.Query
+  ref = ref.where('workspaceId', '==', workspaceId)
 
   const startDate = query.startDate ? new Date(String(query.startDate)) : (() => {
     const d = new Date(); d.setDate(d.getDate() - 29); d.setHours(0, 0, 0, 0); return d

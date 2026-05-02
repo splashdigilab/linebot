@@ -1,5 +1,6 @@
 import { resolveAudienceUserIds } from '~~/server/utils/audience'
 import type { AudienceFilter } from '~~/shared/types/tag-broadcast'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 /**
  * POST /api/audience/estimate
@@ -18,6 +19,7 @@ import type { AudienceFilter } from '~~/shared/types/tag-broadcast'
  * }
  */
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const body = await readBody(event)
   const filter: AudienceFilter = body?.filter
 
@@ -25,7 +27,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'filter is required' })
   }
 
-  const userIds = await resolveAudienceUserIds(filter)
+  const userIds = await resolveAudienceUserIds(filter, workspaceId)
 
   return {
     estimatedCount: userIds.length,

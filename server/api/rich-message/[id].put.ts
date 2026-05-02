@@ -2,10 +2,18 @@ import {
   normalizeUnifiedActions,
   validateUnifiedAction,
 } from '~~/shared/action-schema'
+import { getDoc } from '~~/server/utils/firebase'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id is required' })
+
+  const existing = await getDoc<{ workspaceId?: string }>('richMessages', id)
+  if (!existing || existing.workspaceId !== workspaceId) {
+    throw createError({ statusCode: 404, statusMessage: 'Not found' })
+  }
 
   const body = await readBody(event)
   const { name, layoutId, transparentBackground, altText, heroImageUrl, actions, isActive } = body

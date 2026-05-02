@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); deps={**d.get\\('dependencies',{}\\),**d.get\\('devDependencies',{}\\)}; [print\\(k,v\\) for k,v in deps.items\\(\\) if any\\(x in k for x in ['tsx','ts-node','dotenv']\\)]\")",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('node:', d.get\\('engines',{}\\).get\\('node','not set'\\)\\); print\\('all devDeps:', list\\(d.get\\('devDependencies',{}\\).keys\\(\\)\\)\\)\")",
+      "Bash(npx nuxt *)",
+      "Bash(grep -n 'apiFetch\\\\|$fetch\\\\|getBearer\\\\|$auth' '/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/conversations.vue')",
+      "Bash(grep -n 'apiFetch\\\\|$fetch\\\\|getBearer\\\\|$auth' '/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/campaigns.vue')",
+      "Bash(grep -n 'apiFetch\\\\|$fetch\\\\|getBearer\\\\|$auth' '/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/users.vue')"
+    ],
+    "additionalDirectories": [
+      "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]"
+    ]
+  }
+}

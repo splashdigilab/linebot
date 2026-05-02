@@ -1,4 +1,5 @@
 import { getDb } from '~~/server/utils/firebase'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 /**
  * GET /api/users/:id/tags
@@ -20,13 +21,22 @@ import { getDb } from '~~/server/utils/firebase'
  * }
  */
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+
   const userId = getRouterParam(event, 'id')
   if (!userId) throw createError({ statusCode: 400, statusMessage: 'userId is required' })
 
   const db = getDb()
 
+  // Verify the user belongs to this workspace
+  const userSnap = await db.collection('users').doc(userId).get()
+  if (!userSnap.exists || userSnap.data()?.workspaceId !== workspaceId) {
+    throw createError({ statusCode: 404, statusMessage: '找不到此使用者' })
+  }
+
   const userTagsSnap = await db.collection('userTags')
     .where('userId', '==', userId)
+    .where('workspaceId', '==', workspaceId)
     .get()
 
   if (userTagsSnap.empty) {
