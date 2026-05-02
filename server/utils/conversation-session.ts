@@ -33,64 +33,123 @@ export async function recordConversationEvent(
 // ── Session Lifecycle ─────────────────────────────────────────────
 
 /**
+ * Close any non-closed sessions for a user that are not the current active session.
+ * Handles orphaned sessions left by race conditions.
+ */
+async function closeOrphanedSessions(lineUserId: string, currentSessionId: string): Promise<void> {
+  const db = getDb()
+  const snap = await db
+    .collection('conversationSessions')
+    .where('userId', '==', lineUserId)
+    .where('workspaceId', '==', DEFAULT_LINE_WORKSPACE_ID)
+    .get()
+
+  const orphans = snap.docs.filter(d => d.id !== currentSessionId && d.data().status !== 'closed')
+  if (orphans.length === 0) return
+
+  const batch = db.batch()
+  for (const doc of orphans) {
+    batch.update(doc.ref, {
+      status: 'closed' as ConversationStatus,
+      closedAt: FieldValue.serverTimestamp(),
+      lastActivityAt: FieldValue.serverTimestamp(),
+    })
+  }
+  await batch.commit()
+
+  for (const doc of orphans) {
+    await recordConversationEvent(doc.id, lineUserId, 'conversation_closed')
+      .catch(e => console.warn('[session] orphan close event failed:', doc.id, e))
+  }
+}
+
+/**
  * Get or create the active conversation session for a user.
  * Creates a new session if:
  * - No current session exists
  * - Current session is closed
  * - >= 24h since last activity (the previous open session is closed first so stats stay correct)
+ *
+ * Uses a Firestore transaction to prevent duplicate sessions from concurrent webhook calls.
+ * After creating a new session, any orphaned non-closed sessions for the same user are also closed.
  */
 export async function ensureConversationSession(userId: string): Promise<string> {
   const db = getDb()
   const lineUserId = lineUserIdFromFirestoreDocId(userId)
   const convDocId = lineUserFirestoreDocId(lineUserId)
   const convRef = db.collection('conversations').doc(convDocId)
-  const convSnap = await convRef.get()
-  const convData = convSnap.data()
   const now = Date.now()
 
-  if (convData?.currentSessionId) {
-    const sessionRef = db.collection('conversationSessions').doc(convData.currentSessionId)
-    const sessionSnap = await sessionRef.get()
-    const session = sessionSnap.data()
+  // Pre-generate the new session ID outside the transaction so tx.set() can reference it.
+  const newSessionId = uuidv4()
+  const newSessionRef = db.collection('conversationSessions').doc(newSessionId)
 
-    if (session && session.status !== 'closed') {
-      const lastActivity: number = session.lastActivityAt?.toMillis?.() ?? 0
-      if (now - lastActivity < SESSION_24H_MS) {
-        await sessionRef.update({ lastActivityAt: FieldValue.serverTimestamp() })
-        return convData.currentSessionId as string
-      }
-      await closeConversationSession(convData.currentSessionId as string, lineUserId)
+  let createdNew = false
+  let closedOldSessionId: string | null = null
+
+  const resultId = await db.runTransaction(async (tx) => {
+    const convSnap = await tx.get(convRef)
+    const convData = convSnap.data()
+
+    // Read existing session inside the transaction (prevents concurrent creates).
+    let existingRef: FirebaseFirestore.DocumentReference | null = null
+    let existingData: FirebaseFirestore.DocumentData | null = null
+    if (convData?.currentSessionId) {
+      existingRef = db.collection('conversationSessions').doc(convData.currentSessionId as string)
+      const existingSnap = await tx.get(existingRef)
+      existingData = existingSnap.data() ?? null
     }
-  }
 
-  const sessionId = uuidv4()
-  await db.collection('conversationSessions').doc(sessionId).set({
-    workspaceId: DEFAULT_LINE_WORKSPACE_ID,
-    userId: lineUserId,
-    openedAt: FieldValue.serverTimestamp(),
-    closedAt: null,
-    lastActivityAt: FieldValue.serverTimestamp(),
-    status: 'open' as ConversationStatus,
-    initialHandler: 'unhandled' as InitialHandler,
-    currentHandler: 'unhandled' as InitialHandler,
-    initialModuleType: null,
-    currentModuleType: null,
-    hasHandoff: false,
-    handoffRequestedAt: null,
-    humanFirstRepliedAt: null,
-  })
+    if (existingData && existingData.status !== 'closed' && existingRef) {
+      const lastActivity: number = existingData.lastActivityAt?.toMillis?.() ?? 0
+      if (now - lastActivity < SESSION_24H_MS) {
+        tx.update(existingRef, { lastActivityAt: FieldValue.serverTimestamp() })
+        return convData!.currentSessionId as string
+      }
+      // 24h expired — close inline (event recorded outside the tx)
+      tx.update(existingRef, {
+        status: 'closed' as ConversationStatus,
+        closedAt: FieldValue.serverTimestamp(),
+        lastActivityAt: FieldValue.serverTimestamp(),
+      })
+      closedOldSessionId = convData!.currentSessionId as string
+    }
 
-  await convRef.set(
-    {
+    tx.set(newSessionRef, {
       workspaceId: DEFAULT_LINE_WORKSPACE_ID,
       userId: lineUserId,
-      currentSessionId: sessionId,
-    },
-    { merge: true },
-  )
-  await recordConversationEvent(sessionId, lineUserId, 'conversation_opened')
+      openedAt: FieldValue.serverTimestamp(),
+      closedAt: null,
+      lastActivityAt: FieldValue.serverTimestamp(),
+      status: 'open' as ConversationStatus,
+      initialHandler: 'unhandled' as InitialHandler,
+      currentHandler: 'unhandled' as InitialHandler,
+      initialModuleType: null,
+      currentModuleType: null,
+      hasHandoff: false,
+      handoffRequestedAt: null,
+      humanFirstRepliedAt: null,
+    })
+    tx.set(convRef, {
+      workspaceId: DEFAULT_LINE_WORKSPACE_ID,
+      userId: lineUserId,
+      currentSessionId: newSessionId,
+    }, { merge: true })
 
-  return sessionId
+    createdNew = true
+    return newSessionId
+  })
+
+  // Record events and clean up orphans outside the transaction.
+  if (closedOldSessionId) {
+    await recordConversationEvent(closedOldSessionId, lineUserId, 'conversation_closed')
+  }
+  if (createdNew) {
+    await recordConversationEvent(newSessionId, lineUserId, 'conversation_opened')
+    await closeOrphanedSessions(lineUserId, newSessionId)
+  }
+
+  return resultId
 }
 
 /**
@@ -137,9 +196,10 @@ export async function enterModule(
     }
   } else if (moduleType === 'welcome' || moduleType === 'bot_flow') {
     updates.currentHandler = 'bot'
-    if (session.status === 'open' || session.status === 'pending_human') {
+    if (session.status === 'open') {
       updates.status = 'bot_handling'
     }
+    // pending_human / human_handling are intentionally not overwritten here
   }
 
   // Record handoff_request on first live_agent entry
@@ -214,10 +274,6 @@ export async function closeConversationSession(sessionId: string, userId: string
   await recordConversationEvent(sessionId, lineUserId, 'conversation_closed')
 }
 
-/**
- * Update lastActivityAt when an outgoing message is sent by human agent.
- * Also promotes pending_human → human_handling on first human reply.
- */
 /**
  * 待真人或真人處理中：使用者文字不應再觸發機器人（activeInput、自動回覆含 anyText），
  * 避免與真人客服對話時誤觸「輸入任何內容」等規則。

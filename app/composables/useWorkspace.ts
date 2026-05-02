@@ -6,6 +6,7 @@ export interface WorkspaceItem {
   name: string
   role: WorkspaceMemberRole
   organizationId: string | null
+  organizationName: string | null
 }
 
 /**

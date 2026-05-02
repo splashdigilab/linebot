@@ -12,8 +12,41 @@ export interface OrganizationDoc {
   plan: OrganizationPlan
   /** Firebase uid of the organization owner */
   ownerId: string
+  disabled?: boolean
   createdAt: Timestamp | FieldValue
   updatedAt: Timestamp | FieldValue
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Collection: workspaces
+//  Doc ID: workspace id (e.g. uuid or "default")
+// ═══════════════════════════════════════════════════════════════════
+
+export interface WorkspaceDoc {
+  name: string
+  channelAccessToken?: string
+  channelSecret?: string
+  defaultLiffId?: string
+  organizationId?: string | null
+  updatedAt: Timestamp | FieldValue
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Collection: orgMembers
+//  Doc ID: `${uid}_${orgId}`
+// ═══════════════════════════════════════════════════════════════════
+
+/** 組織層級角色：目前只有 admin */
+export type OrgMemberRole = 'admin'
+
+export interface OrgMemberDoc {
+  uid: string
+  orgId: string
+  role: OrgMemberRole
+  invitedBy: string | null
+  invitedEmail: string | null
+  joinedAt: Timestamp | FieldValue
+  createdAt: Timestamp | FieldValue
 }
 
 // ═══════════════════════════════════════════════════════════════════

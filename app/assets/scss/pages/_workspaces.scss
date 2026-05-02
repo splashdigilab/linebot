@@ -1,0 +1,178 @@
+/* ── Workspace 選擇頁 ────────────────────────────────────────── */
+
+.ws-select-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-base);
+  padding: 2rem;
+}
+
+.ws-select-card {
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  padding: 2.5rem 2rem;
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.ws-select-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+
+  .logo-icon {
+    font-size: 2rem;
+  }
+
+  h1 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--text-primary);
+  }
+}
+
+.ws-select-sub {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  margin: -0.75rem 0 0;
+}
+
+.ws-select-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.ws-select-empty {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+/* 組織分組列表 */
+.ws-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.ws-group-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 0.25rem;
+  margin-bottom: 0.35rem;
+}
+
+.ws-group-items {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+/* 單一帳號按鈕 */
+.ws-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.8rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  background: var(--bg-surface);
+  text-align: left;
+  transition: border-color var(--t-fast), background var(--t-fast), box-shadow var(--t-fast);
+  width: 100%;
+
+  &:hover {
+    border-color: var(--border-active);
+    background: var(--bg-elevated);
+    box-shadow: var(--shadow-sm);
+  }
+}
+
+.ws-item-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+  width: 28px;
+  text-align: center;
+}
+
+.ws-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.ws-item-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ws-item-role {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.1rem;
+}
+
+.ws-item-arrow {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  flex-shrink: 0;
+  transition: transform var(--t-fast);
+}
+
+.ws-item:hover .ws-item-arrow {
+  transform: translateX(2px);
+}
+
+/* Super Admin 入口 */
+.ws-super-admin-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 1rem;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+
+  &:hover {
+    border-color: var(--border-active);
+    color: var(--text-primary);
+    background: var(--bg-elevated);
+  }
+
+  .ws-item-arrow {
+    margin-left: auto;
+    color: var(--text-muted);
+  }
+}
+
+.ws-select-footer {
+  display: flex;
+  justify-content: center;
+}

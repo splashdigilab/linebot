@@ -32,11 +32,13 @@
 @use "./pages/auto-reply";
 @use "./pages/campaigns";
 @use "./pages/login";
+@use "./pages/workspaces";
 @use "./pages/tags";
 @use "./pages/users";
 @use "./pages/broadcasts";
 @use "./pages/conversations";
 @use "./pages/conversation-stats";
 @use "./pages/line-settings";
+@use "./pages/super-admin";
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');

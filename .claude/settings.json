@@ -6,10 +6,14 @@
       "Bash(npx nuxt *)",
       "Bash(grep -n 'apiFetch\\\\|$fetch\\\\|getBearer\\\\|$auth' '/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/conversations.vue')",
       "Bash(grep -n 'apiFetch\\\\|$fetch\\\\|getBearer\\\\|$auth' '/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/campaigns.vue')",
-      "Bash(grep -n 'apiFetch\\\\|$fetch\\\\|getBearer\\\\|$auth' '/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/users.vue')"
+      "Bash(grep -n 'apiFetch\\\\|$fetch\\\\|getBearer\\\\|$auth' '/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/users.vue')",
+      "Bash(grep -r \"super.admin\\\\|superadmin\\\\|super_admin\" --include=\"*.ts\" --include=\"*.tsx\" --include=\"*.js\" --include=\"*.jsx\" --include=\"*.py\" ! -path \"node_modules/*\" ! -path \".nuxt/*\")"
     ],
     "additionalDirectories": [
-      "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]"
+      "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",
+      "/Users/kevin/Documents/Github/linebot/server/api/admin/super/organizations",
+      "/Users/kevin/Documents/Github/linebot/server/api/admin/super/users",
+      "/Users/kevin/Documents/Github/linebot/server/api/admin/super/organizations/[id]/members"
     ]
   }
 }
