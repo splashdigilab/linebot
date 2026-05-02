@@ -7,11 +7,14 @@ export default defineEventHandler(async (event) => {
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id is required' })
 
   const flow = await getDoc<{ isSystem?: boolean; workspaceId?: string }>('flows', id)
-  if (!flow || flow.workspaceId !== workspaceId) {
+  if (!flow) {
     throw createError({ statusCode: 404, statusMessage: 'Not found' })
   }
-  if (flow?.isSystem) {
+  if (flow.isSystem) {
     throw createError({ statusCode: 403, statusMessage: '系統模組不可刪除' })
+  }
+  if (flow.workspaceId !== workspaceId) {
+    throw createError({ statusCode: 404, statusMessage: 'Not found' })
   }
 
   await deleteDoc('flows', id)

@@ -54,10 +54,12 @@
         </el-tag>
         <!-- Regular modules (create or edit): show selector -->
         <el-select v-else v-model="form.moduleType" size="small" style="width: 130px">
-          <el-option label="機器人流程" value="bot_flow" />
-          <el-option label="歡迎模組" value="welcome" />
-          <el-option label="系統通知" value="system_notice" />
-          <el-option label="真人客服" value="live_agent" />
+          <el-option
+            v-for="t in WORKSPACE_FLOW_MODULE_TYPES"
+            :key="t"
+            :label="MODULE_TYPE_LABELS[t]"
+            :value="t"
+          />
         </el-select>
       </div>
       <div class="flex gap-1 admin-header-actions">
@@ -692,19 +694,15 @@ import {
   richMessageEditorActionsOverlap,
   RICH_MESSAGE_MIN_BOUNDS,
 } from '~~/shared/rich-message-editor-helpers'
+import {
+  MODULE_TYPE_LABELS,
+  WORKSPACE_FLOW_MODULE_TYPES,
+  type ModuleType,
+} from '~~/shared/types/conversation-stats'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 const { apiFetch } = useWorkspace()
-
-// ── Module type labels ────────────────────────────────
-type ModuleType = 'welcome' | 'bot_flow' | 'system_notice' | 'live_agent'
-const MODULE_TYPE_LABELS: Record<ModuleType, string> = {
-  welcome: '歡迎模組',
-  bot_flow: '機器人流程',
-  system_notice: '系統通知',
-  live_agent: '真人客服',
-}
 
 // ── State ─────────────────────────────────────────────
 const flows = ref<any[]>([])
@@ -878,13 +876,18 @@ onMounted(async () => {
 })
 
 // ── Select / Create ───────────────────────────────────
+function normalizeWorkspaceModuleType(raw: ModuleType | undefined): ModuleType {
+  return raw === 'system_notice' ? 'system_notice' : 'bot_flow'
+}
+
 function selectFlow(flow: any) {
   isCreating.value = false
   selectedId.value = flow.id
+  const rawType = (flow.moduleType ?? 'bot_flow') as ModuleType
   form.value = {
     name: flow.name,
     messages: normalizeMessages(JSON.parse(JSON.stringify(flow.messages ?? []))),
-    moduleType: flow.moduleType ?? 'bot_flow',
+    moduleType: flow.isSystem ? rawType : normalizeWorkspaceModuleType(rawType),
   }
 }
 

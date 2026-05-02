@@ -69,6 +69,9 @@ export const SYSTEM_MODULE_IDS = {
   live_agent: 'sys_live_agent',
 } as const
 
+/** 工作區自行建立的流程可用類型（歡迎／真人僅限系統預設兩筆） */
+export const WORKSPACE_FLOW_MODULE_TYPES: readonly ModuleType[] = ['bot_flow', 'system_notice']
+
 export const MODULE_TYPE_LABELS: Record<ModuleType, string> = {
   welcome: '歡迎模組',
   bot_flow: '機器人流程',

@@ -4,10 +4,8 @@ import {
   assertValidFlowMessages,
   assertValidFlowName,
 } from '~~/server/utils/flow-validator'
-import type { ModuleType } from '~~/shared/types/conversation-stats'
+import { WORKSPACE_FLOW_MODULE_TYPES, type ModuleType } from '~~/shared/types/conversation-stats'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
-
-const VALID_MODULE_TYPES: ModuleType[] = ['welcome', 'bot_flow', 'system_notice', 'live_agent']
 
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
@@ -17,7 +15,7 @@ export default defineEventHandler(async (event) => {
   const validName = assertValidFlowName(name)
   assertValidFlowMessages(messages)
 
-  const resolvedModuleType: ModuleType = VALID_MODULE_TYPES.includes(moduleType)
+  const resolvedModuleType: ModuleType = WORKSPACE_FLOW_MODULE_TYPES.includes(moduleType)
     ? moduleType
     : 'bot_flow'
 
