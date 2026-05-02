@@ -29,6 +29,11 @@ import {
   shouldSuppressInboundBotAutomationForSession,
 } from './conversation-session'
 import type { ModuleType } from '~~/shared/types/conversation-stats'
+import {
+  DEFAULT_LINE_WORKSPACE_ID,
+  lineUserFirestoreDocId,
+  lineUserIdFromFirestoreDocId,
+} from '~~/shared/line-workspace'
 
 // ── In-Memory Caching to Reduce DB Latency ──────────────────────────
 const userCheckedCache = new Set<string>()
@@ -67,6 +72,8 @@ interface FlowDoc {
 }
 
 interface UserDoc {
+  workspaceId?: string
+  lineUserId?: string
   displayName: string
   pictureUrl: string
   createdAt: FirebaseFirestore.FieldValue
@@ -146,18 +153,22 @@ function buildAttributeContext(userData: UserDoc | null): Record<string, string>
 // ── Helpers ───────────────────────────────────────────────────────
 
 async function ensureUser(
-  userId: string,
+  userIdOrDocId: string,
   preloadedProfile?: { displayName: string; pictureUrl: string } | null,
 ): Promise<UserDoc | null> {
   const db = getDb()
-  const ref = db.collection('users').doc(userId)
+  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId)
+  const docId = lineUserFirestoreDocId(lineUserId)
+  const ref = db.collection('users').doc(docId)
   const snap = await ref.get()
 
   if (!snap.exists) {
     // Use caller-supplied profile to avoid a redundant LINE API round-trip
-    const profile = preloadedProfile ?? await getUserProfile(userId)
+    const profile = preloadedProfile ?? await getUserProfile(lineUserId)
     const newDoc: UserDoc = {
-      displayName: profile?.displayName ?? userId,
+      workspaceId: DEFAULT_LINE_WORKSPACE_ID,
+      lineUserId,
+      displayName: profile?.displayName ?? lineUserId,
       pictureUrl: profile?.pictureUrl ?? '',
       createdAt: FieldValue.serverTimestamp(),
       isBlocked: false,
@@ -223,7 +234,12 @@ async function applyPendingClaims(userId: string): Promise<void> {
 
     // 貼標（冪等，已存在自動略過）
     if (Array.isArray(claim.tagIds) && claim.tagIds.length > 0) {
-      const result = await addTagsToUser(userId, claim.tagIds, 'system', doc.id)
+      const result = await addTagsToUser(
+        lineUserFirestoreDocId(userId),
+        claim.tagIds,
+        'system',
+        doc.id,
+      )
       console.log('[follow] tagging result:', result, 'claimId:', doc.id)
     }
 
@@ -271,7 +287,8 @@ async function applyPendingClaims(userId: string): Promise<void> {
 export async function handleUnfollowEvent(userId: string): Promise<void> {
   try {
     const db = getDb()
-    const ref = db.collection('users').doc(userId)
+    const docId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId))
+    const ref = db.collection('users').doc(docId)
     const snap = await ref.get()
     if (snap.exists) {
       await ref.update({ isBlocked: true, blockedAt: FieldValue.serverTimestamp() })
@@ -287,11 +304,12 @@ async function dispatchPostReplyActions(userId: string, messages: any[]) {
   const userInputMsg = messages.find((m: any) => m.type === 'userInput')
   if (userInputMsg && userInputMsg.moduleId) {
     const db = getDb()
+    const uid = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId))
     const tagging = userInputMsg?.tagging
     const tagIds = tagging?.enabled && Array.isArray(tagging?.addTagIds)
       ? tagging.addTagIds.map((item: unknown) => String(item || '').trim()).filter(Boolean)
       : []
-    await db.collection('users').doc(userId).update({
+    await db.collection('users').doc(uid).update({
       activeInput: {
         moduleId: userInputMsg.moduleId,
         attribute: userInputMsg.attribute || null,
@@ -380,18 +398,20 @@ function buildAutoReplyActionMessages(
  * 管理後台「客服預存」：以 push 發送，邏輯對齊自動回覆命中後的模組／文字／網址處理。
  */
 export async function pushSupportPresetActionToUser(
-  userId: string,
+  userIdOrDocId: string,
   action: AutoReplyRuleShape['action'],
   tagging: AutoReplyRuleShape['tagging'],
   presetId: string,
   requestOrigin: string,
 ): Promise<void> {
-  const userData = await ensureUser(userId)
+  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId)
+  const fsUserDocId = lineUserFirestoreDocId(lineUserId)
+  const userData = await ensureUser(userIdOrDocId)
   const userAttributes = buildAttributeContext(userData)
   const { channelSecret } = await getLineWorkspaceCredentials()
 
   if (tagging?.enabled && Array.isArray(tagging.addTagIds) && tagging.addTagIds.length > 0) {
-    addTagsToUser(userId, tagging.addTagIds, 'manual', presetId).catch((e) => {
+    addTagsToUser(fsUserDocId, tagging.addTagIds, 'manual', presetId).catch((e) => {
       console.error('[supportPreset] tagging failed:', e)
     })
   }
@@ -406,15 +426,15 @@ export async function pushSupportPresetActionToUser(
       hydratedMessages,
       userAttributes,
       requestOrigin,
-      userId,
+      lineUserId,
       channelSecret,
     )
     if (lineMessages.length === 0) {
       throw createError({ statusCode: 400, statusMessage: '此機器人模組沒有可發送的訊息' })
     }
-    await pushMessage(userId, lineMessages)
-    await saveOutgoingConversationMessages(userId, lineMessages)
-    await dispatchPostReplyActions(userId, flow.messages)
+    await pushMessage(lineUserId, lineMessages)
+    await saveOutgoingConversationMessages(lineUserId, lineMessages)
+    await dispatchPostReplyActions(lineUserId, flow.messages)
     return
   }
 
@@ -422,8 +442,8 @@ export async function pushSupportPresetActionToUser(
   if (actionMessages.length === 0) {
     throw createError({ statusCode: 400, statusMessage: '無法送出此預存動作' })
   }
-  await pushMessage(userId, actionMessages)
-  await saveOutgoingConversationMessages(userId, actionMessages)
+  await pushMessage(lineUserId, actionMessages)
+  await saveOutgoingConversationMessages(lineUserId, actionMessages)
 }
 
 function buildRichMessageSnapshot(item: any) {
@@ -1158,7 +1178,7 @@ export async function handleMessageEvent(
 }
 
 export async function saveConversationMessage(
-  userId: string,
+  userIdOrDocId: string,
   direction: 'incoming' | 'outgoing',
   text: string,
   options?: {
@@ -1167,8 +1187,10 @@ export async function saveConversationMessage(
   },
 ): Promise<void> {
   const db = getDb()
+  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId)
+  const convDocId = lineUserFirestoreDocId(lineUserId)
   const now = FieldValue.serverTimestamp()
-  const msgRef = db.collection('conversations').doc(userId).collection('messages').doc()
+  const msgRef = db.collection('conversations').doc(convDocId).collection('messages').doc()
   const payload = sanitizeForFirestore(options?.payload)
   await msgRef.set({
     direction,
@@ -1177,8 +1199,14 @@ export async function saveConversationMessage(
     messageType: options?.messageType || 'text',
     ...(payload !== undefined ? { payload } : {}),
   })
-  await db.collection('conversations').doc(userId).set(
-    { lastMessage: text, lastDirection: direction, lastMessageAt: now },
+  await db.collection('conversations').doc(convDocId).set(
+    {
+      workspaceId: DEFAULT_LINE_WORKSPACE_ID,
+      userId: lineUserId,
+      lastMessage: text,
+      lastDirection: direction,
+      lastMessageAt: now,
+    },
     { merge: true },
   )
 }
@@ -1191,6 +1219,8 @@ async function handleIncomingText(
   userDataOverride?: UserDoc | null,
   sessionId?: string | null,
 ): Promise<void> {
+  const lineUserId = lineUserIdFromFirestoreDocId(userId)
+  const fsUserDocId = lineUserFirestoreDocId(lineUserId)
   const userData = userDataOverride ?? await ensureUser(userId)
   const userAttributes = buildAttributeContext(userData)
   const { channelSecret } = await getLineWorkspaceCredentials()
@@ -1207,10 +1237,10 @@ async function handleIncomingText(
       updates[`attributes.${attribute}`] = textContent
       userAttributes[attribute] = textContent
     }
-    await db.collection('users').doc(userId).update(updates)
+    await db.collection('users').doc(fsUserDocId).update(updates)
 
     if (Array.isArray(tagIds) && tagIds.length > 0) {
-      await addTagsToUser(userId, tagIds, 'system', `userInput:${moduleId}`)
+      await addTagsToUser(fsUserDocId, tagIds, 'system', `userInput:${moduleId}`)
     }
 
     const flow = await getFlowByModuleId(moduleId)
@@ -1221,14 +1251,14 @@ async function handleIncomingText(
         hydratedMessages,
         userAttributes,
         options.requestOrigin || '',
-        userId,
+        lineUserId,
         channelSecret,
       )
       await replyMessage(replyToken, lineMessages)
-      await saveOutgoingConversationMessages(userId, lineMessages)
-      await dispatchPostReplyActions(userId, flow.messages)
+      await saveOutgoingConversationMessages(lineUserId, lineMessages)
+      await dispatchPostReplyActions(lineUserId, flow.messages)
       if (sessionId) {
-        enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', moduleId).catch(e =>
+        enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', moduleId).catch(e =>
           console.error('[session] enterModule error:', e),
         )
       }
@@ -1246,7 +1276,7 @@ async function handleIncomingText(
     if (rule) {
       // 貼標（非阻塞，不影響回覆速度）
       if (rule.tagging?.enabled && Array.isArray(rule.tagging?.addTagIds) && rule.tagging.addTagIds.length > 0) {
-        addTagsToUser(userId, rule.tagging.addTagIds, 'rule', rule.id ?? null)
+        addTagsToUser(fsUserDocId, rule.tagging.addTagIds, 'rule', rule.id ?? null)
           .catch(e => console.error('[tagging] autoReply tagging failed:', e))
       }
 
@@ -1259,14 +1289,14 @@ async function handleIncomingText(
               hydratedMessages,
               userAttributes,
               options.requestOrigin || '',
-              userId,
+              lineUserId,
               channelSecret,
             )
             await replyMessage(replyToken, lineMessages)
-            await saveOutgoingConversationMessages(userId, lineMessages)
-            await dispatchPostReplyActions(userId, flow.messages)
+            await saveOutgoingConversationMessages(lineUserId, lineMessages)
+            await dispatchPostReplyActions(lineUserId, flow.messages)
             if (sessionId) {
-              enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', rule.action.moduleId).catch(e =>
+              enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', rule.action.moduleId).catch(e =>
                 console.error('[session] enterModule error:', e),
               )
             }
@@ -1282,7 +1312,7 @@ async function handleIncomingText(
           const actionMessages = buildAutoReplyActionMessages(rule.action, userAttributes)
           if (actionMessages.length > 0) {
             await replyMessage(replyToken, actionMessages)
-            await saveOutgoingConversationMessages(userId, actionMessages)
+            await saveOutgoingConversationMessages(lineUserId, actionMessages)
           }
         }
       }
@@ -1322,7 +1352,7 @@ export async function handlePostbackEvent(
   if (messageTrigger.text) {
     if (messageTrigger.tagIds.length > 0) {
       try {
-        await addTagsToUser(userId, messageTrigger.tagIds, 'system', 'postback:message')
+        await addTagsToUser(lineUserFirestoreDocId(userId), messageTrigger.tagIds, 'system', 'postback:message')
       }
       catch (e) {
         console.error('[tagging] message postback tagging failed:', e)
@@ -1345,7 +1375,7 @@ export async function handlePostbackEvent(
   if (switchTrigger.targetMenuId) {
     if (switchTrigger.tagIds.length > 0) {
       try {
-        await addTagsToUser(userId, switchTrigger.tagIds, 'system', `switchMenu:${switchTrigger.targetMenuId}`)
+        await addTagsToUser(lineUserFirestoreDocId(userId), switchTrigger.tagIds, 'system', `switchMenu:${switchTrigger.targetMenuId}`)
       }
       catch (e) {
         console.error('[tagging] switch menu tagging failed:', e)
@@ -1391,7 +1421,7 @@ export async function handlePostbackEvent(
     const moduleId = trigger.moduleId
     if (trigger.tagIds.length > 0) {
       try {
-        await addTagsToUser(userId, trigger.tagIds, 'system', `postback:${moduleId}`)
+        await addTagsToUser(lineUserFirestoreDocId(userId), trigger.tagIds, 'system', `postback:${moduleId}`)
       }
       catch (e) {
         console.error('[tagging] module postback tagging failed:', e)

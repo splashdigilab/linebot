@@ -2,6 +2,7 @@ import { getDb } from '~~/server/utils/firebase'
 import type { ConversationStatus } from '~~/shared/types/conversation-stats'
 import { STATUS_LABELS } from '~~/shared/types/conversation-stats'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { lineUserFirestoreDocId, lineUserIdFromFirestoreDocId } from '~~/shared/line-workspace'
 
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
@@ -12,7 +13,8 @@ export default defineEventHandler(async (event) => {
   const db = getDb()
 
   // Verify the conversation belongs to this workspace
-  const convRef = db.collection('conversations').doc(userId)
+  const convDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId))
+  const convRef = db.collection('conversations').doc(convDocId)
   const convSnap = await convRef.get()
   if (!convSnap.exists || convSnap.data()?.workspaceId !== workspaceId) {
     throw createError({ statusCode: 404, statusMessage: '找不到此對話' })

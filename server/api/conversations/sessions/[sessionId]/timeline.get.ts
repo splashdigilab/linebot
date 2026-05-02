@@ -5,6 +5,7 @@ import {
   STATUS_LABELS,
 } from '~~/shared/types/conversation-stats'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { lineUserFirestoreDocId } from '~~/shared/line-workspace'
 
 type TimelineItemType = 'message' | 'event'
 
@@ -63,6 +64,7 @@ export default defineEventHandler(async (event) => {
 
   const session = sessionSnap.data()!
   const userId = session.userId as string
+  const convDocId = lineUserFirestoreDocId(userId)
 
   // Fetch events for this session (avoid composite index: sessionId + orderBy timestamp)
   const eventsSnap = await db.collection('conversationEvents')
@@ -75,7 +77,7 @@ export default defineEventHandler(async (event) => {
   const openMs = toMillis(openedAt)
   const closeMs = session.closedAt ? toMillis(closedAt) : Number.POSITIVE_INFINITY
 
-  const msgCol = db.collection('conversations').doc(userId).collection('messages')
+  const msgCol = db.collection('conversations').doc(convDocId).collection('messages')
 
   let messageDocs: FirebaseFirestore.QueryDocumentSnapshot[] = []
   try {

@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
 import type { UserTagDoc, TagLogDoc } from '~~/shared/types/tag-broadcast'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { lineUserFirestoreDocId, lineUserIdFromFirestoreDocId } from '~~/shared/line-workspace'
 
 const FIRESTORE_BATCH_LIMIT = 400
 
@@ -56,8 +57,9 @@ export default defineEventHandler(async (event) => {
   }
 
   for (const userId of userIds) {
+    const fsUserDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId))
     for (const tagId of tagIds) {
-      const docId = `${userId}_${tagId}`
+      const docId = `${fsUserDocId}_${tagId}`
       const ref = db.collection('userTags').doc(docId)
       const snap = await ref.get()
 
@@ -67,7 +69,7 @@ export default defineEventHandler(async (event) => {
       }
 
       const userTagDoc: UserTagDoc = {
-        userId,
+        userId: fsUserDocId,
         tagId,
         workspaceId,
         sourceType: 'manual',
@@ -79,8 +81,9 @@ export default defineEventHandler(async (event) => {
       opsInBatch++
 
       const logDoc: TagLogDoc = {
+        workspaceId,
         action: 'add',
-        userId,
+        userId: fsUserDocId,
         tagId,
         sourceType: 'manual',
         sourceRefId: null,

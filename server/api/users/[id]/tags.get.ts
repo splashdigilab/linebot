@@ -1,5 +1,6 @@
 import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { lineUserFirestoreDocId, lineUserIdFromFirestoreDocId } from '~~/shared/line-workspace'
 
 /**
  * GET /api/users/:id/tags
@@ -23,24 +24,25 @@ import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
 
-  const userId = getRouterParam(event, 'id')
-  if (!userId) throw createError({ statusCode: 400, statusMessage: 'userId is required' })
+  const userIdParam = getRouterParam(event, 'id')
+  if (!userIdParam) throw createError({ statusCode: 400, statusMessage: 'userId is required' })
 
   const db = getDb()
+  const fsUserDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userIdParam))
 
   // Verify the user belongs to this workspace
-  const userSnap = await db.collection('users').doc(userId).get()
+  const userSnap = await db.collection('users').doc(fsUserDocId).get()
   if (!userSnap.exists || userSnap.data()?.workspaceId !== workspaceId) {
     throw createError({ statusCode: 404, statusMessage: '找不到此使用者' })
   }
 
   const userTagsSnap = await db.collection('userTags')
-    .where('userId', '==', userId)
+    .where('userId', '==', fsUserDocId)
     .where('workspaceId', '==', workspaceId)
     .get()
 
   if (userTagsSnap.empty) {
-    return { userId, tags: [] }
+    return { userId: fsUserDocId, tags: [] }
   }
 
   const sortedDocs = [...userTagsSnap.docs].sort((a, b) => {
@@ -69,5 +71,5 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  return { userId, tags }
+  return { userId: fsUserDocId, tags }
 })

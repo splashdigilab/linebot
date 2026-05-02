@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from './firebase'
 import type { UserTagDoc, TagLogDoc, UserTagSourceType } from '~~/shared/types/tag-broadcast'
+import { DEFAULT_LINE_WORKSPACE_ID } from '~~/shared/line-workspace'
 
 export interface TaggingResult {
   added: string[]
@@ -15,12 +16,14 @@ export interface TaggingResult {
  * - 使用 Firestore batch，保證原子性。
  */
 export async function addTagsToUser(
-  userId: string,
+  /** Firestore users 主鍵：`${workspaceId}_${lineUserId}` */
+  userFirestoreDocId: string,
   tagIds: string[],
   sourceType: UserTagSourceType,
   sourceRefId: string | null,
+  workspaceId: string = DEFAULT_LINE_WORKSPACE_ID,
 ): Promise<TaggingResult> {
-  if (!userId || !tagIds.length) return { added: [], skipped: [] }
+  if (!userFirestoreDocId || !tagIds.length) return { added: [], skipped: [] }
 
   const db = getDb()
   const now = FieldValue.serverTimestamp()
@@ -29,7 +32,7 @@ export async function addTagsToUser(
   const batch = db.batch()
 
   for (const tagId of tagIds) {
-    const docId = `${userId}_${tagId}`
+    const docId = `${userFirestoreDocId}_${tagId}`
     const ref = db.collection('userTags').doc(docId)
     const snap = await ref.get()
 
@@ -39,7 +42,8 @@ export async function addTagsToUser(
     }
 
     const userTagDoc: UserTagDoc = {
-      userId,
+      workspaceId,
+      userId: userFirestoreDocId,
       tagId,
       sourceType,
       sourceRefId,
@@ -49,8 +53,9 @@ export async function addTagsToUser(
     batch.set(ref, userTagDoc)
 
     const logDoc: TagLogDoc = {
+      workspaceId,
       action: 'add',
-      userId,
+      userId: userFirestoreDocId,
       tagId,
       sourceType,
       sourceRefId,

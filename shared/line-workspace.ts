@@ -14,3 +14,26 @@ export type LineWorkspaceDoc = {
 }
 
 export const DEFAULT_LINE_WORKSPACE_ID = 'default'
+
+/**
+ * Firestore `users/*`、`conversations/*` 主鍵（與 migrate-add-workspaceId、sync-from-line 一致）。
+ * @param lineUserId LINE `source.userId`（或已是 `default_U…` 主鍵時原樣回傳）
+ */
+export function lineUserFirestoreDocId(
+  lineUserId: string,
+  workspaceId: string = DEFAULT_LINE_WORKSPACE_ID,
+): string {
+  const prefix = `${workspaceId}_`
+  if (lineUserId.startsWith(prefix)) return lineUserId
+  return `${workspaceId}_${lineUserId}`
+}
+
+/** 由 users / conversations 主鍵還原 LINE userId */
+export function lineUserIdFromFirestoreDocId(
+  docId: string,
+  workspaceId: string = DEFAULT_LINE_WORKSPACE_ID,
+): string {
+  const prefix = `${workspaceId}_`
+  if (docId.startsWith(prefix)) return docId.slice(prefix.length)
+  return docId
+}

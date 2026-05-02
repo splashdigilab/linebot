@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
 import type { UserTagDoc, TagLogDoc } from '~~/shared/types/tag-broadcast'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { lineUserFirestoreDocId, lineUserIdFromFirestoreDocId } from '~~/shared/line-workspace'
 
 /**
  * POST /api/users/:id/tags
@@ -23,8 +24,9 @@ import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
 
-  const userId = getRouterParam(event, 'id')
-  if (!userId) throw createError({ statusCode: 400, statusMessage: 'userId is required' })
+  const userIdParam = getRouterParam(event, 'id')
+  if (!userIdParam) throw createError({ statusCode: 400, statusMessage: 'userId is required' })
+  const fsUserDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userIdParam))
 
   const body = await readBody(event)
   const tagIds: string[] = body?.tagIds ?? []
@@ -36,7 +38,7 @@ export default defineEventHandler(async (event) => {
   const db = getDb()
 
   // Verify the user belongs to this workspace
-  const userSnap = await db.collection('users').doc(userId).get()
+  const userSnap = await db.collection('users').doc(fsUserDocId).get()
   if (!userSnap.exists || userSnap.data()?.workspaceId !== workspaceId) {
     throw createError({ statusCode: 404, statusMessage: '找不到此使用者' })
   }
@@ -47,7 +49,7 @@ export default defineEventHandler(async (event) => {
   const batch = db.batch()
 
   for (const tagId of tagIds) {
-    const docId = `${userId}_${tagId}`
+    const docId = `${fsUserDocId}_${tagId}`
     const ref = db.collection('userTags').doc(docId)
     const snap = await ref.get()
 
@@ -57,7 +59,7 @@ export default defineEventHandler(async (event) => {
     }
 
     const userTagDoc: UserTagDoc = {
-      userId,
+      userId: fsUserDocId,
       tagId,
       workspaceId,
       sourceType: 'manual',
@@ -69,8 +71,9 @@ export default defineEventHandler(async (event) => {
 
     // 寫入操作 log
     const logDoc: TagLogDoc = {
+      workspaceId,
       action: 'add',
-      userId,
+      userId: fsUserDocId,
       tagId,
       sourceType: 'manual',
       sourceRefId: null,
@@ -83,5 +86,5 @@ export default defineEventHandler(async (event) => {
   }
 
   await batch.commit()
-  return { userId, added, skipped }
+  return { userId: fsUserDocId, added, skipped }
 })

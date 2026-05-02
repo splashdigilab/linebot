@@ -1,6 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { v4 as uuidv4 } from 'uuid'
 import { getDb } from './firebase'
+import { DEFAULT_LINE_WORKSPACE_ID, lineUserFirestoreDocId, lineUserIdFromFirestoreDocId } from '~~/shared/line-workspace'
 import type {
   ConversationEventType,
   ConversationStatus,
@@ -40,7 +41,9 @@ export async function recordConversationEvent(
  */
 export async function ensureConversationSession(userId: string): Promise<string> {
   const db = getDb()
-  const convRef = db.collection('conversations').doc(userId)
+  const lineUserId = lineUserIdFromFirestoreDocId(userId)
+  const convDocId = lineUserFirestoreDocId(lineUserId)
+  const convRef = db.collection('conversations').doc(convDocId)
   const convSnap = await convRef.get()
   const convData = convSnap.data()
   const now = Date.now()
@@ -56,13 +59,14 @@ export async function ensureConversationSession(userId: string): Promise<string>
         await sessionRef.update({ lastActivityAt: FieldValue.serverTimestamp() })
         return convData.currentSessionId as string
       }
-      await closeConversationSession(convData.currentSessionId as string, userId)
+      await closeConversationSession(convData.currentSessionId as string, lineUserId)
     }
   }
 
   const sessionId = uuidv4()
   await db.collection('conversationSessions').doc(sessionId).set({
-    userId,
+    workspaceId: DEFAULT_LINE_WORKSPACE_ID,
+    userId: lineUserId,
     openedAt: FieldValue.serverTimestamp(),
     closedAt: null,
     lastActivityAt: FieldValue.serverTimestamp(),
@@ -76,8 +80,15 @@ export async function ensureConversationSession(userId: string): Promise<string>
     humanFirstRepliedAt: null,
   })
 
-  await convRef.set({ currentSessionId: sessionId }, { merge: true })
-  await recordConversationEvent(sessionId, userId, 'conversation_opened')
+  await convRef.set(
+    {
+      workspaceId: DEFAULT_LINE_WORKSPACE_ID,
+      userId: lineUserId,
+      currentSessionId: sessionId,
+    },
+    { merge: true },
+  )
+  await recordConversationEvent(sessionId, lineUserId, 'conversation_opened')
 
   return sessionId
 }
@@ -141,15 +152,16 @@ export async function enterModule(
   await sessionRef.update(updates)
 
   if (moduleType === 'live_agent') {
+    const uid = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId))
     await db
       .collection('users')
-      .doc(userId)
+      .doc(uid)
       .update({ activeInput: FieldValue.delete() })
       .catch((e) => console.warn('[session] clear activeInput on live_agent:', e))
   }
-  await recordConversationEvent(sessionId, userId, 'entered_module', { moduleType, moduleId })
+  await recordConversationEvent(sessionId, lineUserIdFromFirestoreDocId(userId), 'entered_module', { moduleType, moduleId })
   if (isNewHandoff) {
-    await recordConversationEvent(sessionId, userId, 'handoff_request')
+    await recordConversationEvent(sessionId, lineUserIdFromFirestoreDocId(userId), 'handoff_request')
   }
 }
 
@@ -181,6 +193,8 @@ export async function recordHumanFirstReply(sessionId: string, userId: string): 
  */
 export async function closeConversationSession(sessionId: string, userId: string): Promise<void> {
   const db = getDb()
+  const lineUserId = lineUserIdFromFirestoreDocId(userId)
+  const convDocId = lineUserFirestoreDocId(lineUserId)
   const sessionRef = db.collection('conversationSessions').doc(sessionId)
   const sessionSnap = await sessionRef.get()
   if (!sessionSnap.exists) return
@@ -193,11 +207,11 @@ export async function closeConversationSession(sessionId: string, userId: string
     closedAt: FieldValue.serverTimestamp(),
     lastActivityAt: FieldValue.serverTimestamp(),
   })
-  await db.collection('conversations').doc(userId).set(
+  await db.collection('conversations').doc(convDocId).set(
     { currentSessionId: null },
     { merge: true },
   )
-  await recordConversationEvent(sessionId, userId, 'conversation_closed')
+  await recordConversationEvent(sessionId, lineUserId, 'conversation_closed')
 }
 
 /**
@@ -221,7 +235,8 @@ export async function shouldSuppressInboundBotAutomationForSession(
 
 export async function onHumanOutgoingMessage(userId: string): Promise<void> {
   const db = getDb()
-  const convSnap = await db.collection('conversations').doc(userId).get()
+  const convDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId))
+  const convSnap = await db.collection('conversations').doc(convDocId).get()
   const sessionId = convSnap.data()?.currentSessionId as string | undefined
   if (!sessionId) return
 

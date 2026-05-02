@@ -3,6 +3,7 @@ import { pushMessage } from '~~/server/utils/line'
 import { saveConversationMessage } from '~~/server/utils/handler'
 import { onHumanOutgoingMessage } from '~~/server/utils/conversation-session'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { lineUserIdFromFirestoreDocId } from '~~/shared/line-workspace'
 
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
@@ -19,6 +20,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: '找不到此使用者' })
   }
 
+  const lineUserId = String(userSnap.data()?.lineUserId || '').trim() || lineUserIdFromFirestoreDocId(userId)
+
   const isHttpUrl = (input: unknown) => /^https?:\/\//i.test(String(input || '').trim())
 
   if (type === 'sticker') {
@@ -28,7 +31,7 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'packageId / stickerId 必須是數字字串' })
     }
     const message = { type: 'sticker' as const, packageId, stickerId }
-    await pushMessage(userId, [message])
+    await pushMessage(lineUserId, [message])
     await saveConversationMessage(userId, 'outgoing', '[貼圖]', {
       messageType: 'sticker',
       payload: message,
@@ -44,7 +47,7 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: '圖片網址格式不正確' })
     }
     const message = { type: 'image' as const, originalContentUrl, previewImageUrl }
-    await pushMessage(userId, [message])
+    await pushMessage(lineUserId, [message])
     await saveConversationMessage(userId, 'outgoing', '[圖片]', {
       messageType: 'image',
       payload: message,
@@ -60,7 +63,7 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: '影片網址格式不正確' })
     }
     const message = { type: 'video' as const, originalContentUrl, previewImageUrl }
-    await pushMessage(userId, [message])
+    await pushMessage(lineUserId, [message])
     await saveConversationMessage(userId, 'outgoing', '[影片]', {
       messageType: 'video',
       payload: message,
@@ -79,7 +82,7 @@ export default defineEventHandler(async (event) => {
       ? Math.round(duration)
       : 5000
     const message = { type: 'audio' as const, originalContentUrl, duration: normalizedDuration }
-    await pushMessage(userId, [message as any])
+    await pushMessage(lineUserId, [message as any])
     await saveConversationMessage(userId, 'outgoing', '[音訊]', {
       messageType: 'audio',
       payload: message,
@@ -98,7 +101,7 @@ export default defineEventHandler(async (event) => {
     // 這裡改為送文字 + 下載連結以確保可送達。
     const message = { type: 'file' as const, originalContentUrl, fileName }
     const fallbackText = `📎 ${fileName}\n${originalContentUrl}`
-    await pushMessage(userId, [{ type: 'text', text: fallbackText } as any])
+    await pushMessage(lineUserId, [{ type: 'text', text: fallbackText } as any])
     await saveConversationMessage(userId, 'outgoing', `[檔案] ${fileName}`, {
       messageType: 'file',
       payload: message,
@@ -111,7 +114,7 @@ export default defineEventHandler(async (event) => {
   if (!text) throw createError({ statusCode: 400, statusMessage: 'text required' })
 
   const message = { type: 'text' as const, text }
-  await pushMessage(userId, [message])
+  await pushMessage(lineUserId, [message])
   await saveConversationMessage(userId, 'outgoing', text, {
     messageType: 'text',
     payload: message,

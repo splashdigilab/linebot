@@ -1,6 +1,7 @@
 import { verifyUriTagToken } from '~~/server/utils/line-action-tag-token'
 import { addTagsToUser } from '~~/server/utils/tagging'
 import { getLineWorkspaceCredentials } from '~~/server/utils/line-workspace-credentials'
+import { lineUserFirestoreDocId } from '~~/shared/line-workspace'
 
 /**
  * GET /api/t/:token
@@ -16,7 +17,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     if (parsed.tagIds.length > 0) {
-      await addTagsToUser(parsed.userId, parsed.tagIds, 'system', 'uri-click')
+      await addTagsToUser(lineUserFirestoreDocId(parsed.userId), parsed.tagIds, 'system', 'uri-click')
     }
   }
   catch (e) {
