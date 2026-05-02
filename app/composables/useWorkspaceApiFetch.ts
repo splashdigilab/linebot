@@ -4,7 +4,7 @@ import { DEFAULT_LINE_WORKSPACE_ID } from '~~/shared/line-workspace'
 
 /**
  * 與 `useWorkspace().apiFetch` 相同：自動帶 Firebase Bearer + workspaceId（GET 用 query、POST 併入 body）。
- * 用於沒有 `/admin/:workspaceId` 路由參數的頁面（例如固定 `default` workspace）。
+ * `workspaceId` 一般由 `useWorkspace()` 從 `/admin/:workspaceId` 路由傳入；預設值僅供可選參數使用。
  */
 export function useWorkspaceApiFetch(workspaceId: MaybeRefOrGetter<string> = DEFAULT_LINE_WORKSPACE_ID) {
   const { $auth } = useNuxtApp()

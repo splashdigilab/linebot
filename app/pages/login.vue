@@ -47,7 +47,7 @@ const errorMsg = ref('')
 
 // Redirect if already logged in
 watchEffect(() => {
-  if (isLoggedIn.value) navigateTo('/admin')
+  if (isLoggedIn.value) navigateTo('/admin/workspaces')
 })
 
 async function handleLogin() {
@@ -55,7 +55,7 @@ async function handleLogin() {
   errorMsg.value = ''
   try {
     await loginWithGoogle()
-    await navigateTo('/admin')
+    await navigateTo('/admin/workspaces')
   }
   catch (e: unknown) {
     const msg = e instanceof Error ? e.message : '登入失敗，請重試'

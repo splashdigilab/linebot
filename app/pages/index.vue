@@ -1,6 +1,6 @@
 <script setup lang="ts">
-// Redirect root to /admin (auth middleware will redirect to /login if not authenticated)
-await navigateTo('/admin', { replace: true })
+// Redirect root to workspace 選擇（auth middleware 未登入會導向 /login）
+await navigateTo('/admin/workspaces', { replace: true })
 </script>
 
 <template>
