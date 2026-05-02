@@ -9,6 +9,18 @@
   flex-shrink: 0;
   position: relative;
   z-index: 10;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Logo、官方帳號、主選單：超出視窗高度時可捲動；底部 footer 固定 */
+.sidebar-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .sidebar-logo {
@@ -48,8 +60,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 0 0.75rem;
-  flex: 1;
+  padding: 0 0.75rem 1rem;
 }
 
 .nav-item {
@@ -79,9 +90,9 @@
 .nav-item .nav-icon { font-size: 1.1rem; width: 20px; text-align: center; }
 
 .sidebar-footer {
+  flex-shrink: 0;
   padding: 1rem 1.25rem 0;
   border-top: 1px solid var(--border);
-  margin-top: auto;
 }
 
 .sidebar-footer-user {

@@ -1,10 +1,42 @@
 import { getDb } from '~~/server/utils/firebase'
 import type { ConversationStatus, InitialHandler } from '~~/shared/types/conversation-stats'
+import { lineUserFirestoreDocId } from '~~/shared/line-workspace'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 const PAGE_SIZE = 30
 const CHUNK = 30
 const FALLBACK_MAX_FETCH = 1000
+const DISPLAY_FALLBACK = 'LINE 用戶'
+
+function uniqueFirestoreUserIds(rawIds: string[], workspaceId: string): string[] {
+  return [...new Set(rawIds.map(uid => lineUserFirestoreDocId(uid, workspaceId)))]
+}
+
+function mapSessionToRow(
+  sessionDocId: string,
+  s: Record<string, unknown>,
+  userMap: Record<string, Record<string, unknown> | undefined>,
+  workspaceId: string,
+) {
+  const fsUid = lineUserFirestoreDocId(String(s.userId || ''), workspaceId)
+  const user = userMap[fsUid] ?? {}
+  const displayName = String(user.displayName || '').trim() || DISPLAY_FALLBACK
+  return {
+    sessionId: sessionDocId,
+    userId: fsUid,
+    displayName,
+    pictureUrl: String(user.pictureUrl || '').trim(),
+    status: s.status,
+    initialHandler: s.initialHandler,
+    currentHandler: s.currentHandler,
+    initialModuleType: s.initialModuleType,
+    currentModuleType: s.currentModuleType,
+    hasHandoff: s.hasHandoff,
+    openedAt: s.openedAt ?? null,
+    closedAt: s.closedAt ?? null,
+    lastActivityAt: s.lastActivityAt ?? null,
+  }
+}
 
 function toMillis(raw: any): number {
   if (!raw) return 0
@@ -63,32 +95,16 @@ export default defineEventHandler(async (event) => {
     const sliced = filtered.slice(offset, offset + limit)
     if (sliced.length === 0) return { sessions: [], total: filtered.length, page, limit, truncated: filtered.length >= FALLBACK_MAX_FETCH }
 
-    const userIds = [...new Set(sliced.map(x => String(x.data.userId || '')).filter(Boolean))]
-    const userMap: Record<string, any> = {}
-    for (let i = 0; i < userIds.length; i += CHUNK) {
-      const chunk = userIds.slice(i, i + CHUNK)
+    const rawUserIds = sliced.map(x => String(x.data.userId || '')).filter(Boolean)
+    const fsUserIds = uniqueFirestoreUserIds(rawUserIds, workspaceId)
+    const userMap: Record<string, Record<string, unknown> | undefined> = {}
+    for (let i = 0; i < fsUserIds.length; i += CHUNK) {
+      const chunk = fsUserIds.slice(i, i + CHUNK)
       const uSnap = await db.collection('users').where('__name__', 'in', chunk).get()
       uSnap.docs.forEach(d => { userMap[d.id] = d.data() })
     }
 
-    const sessions = sliced.map(({ id, data: s }) => {
-      const user = userMap[s.userId] ?? {}
-      return {
-        sessionId: id,
-        userId: s.userId,
-        displayName: user.displayName ?? s.userId,
-        pictureUrl: user.pictureUrl ?? '',
-        status: s.status,
-        initialHandler: s.initialHandler,
-        currentHandler: s.currentHandler,
-        initialModuleType: s.initialModuleType,
-        currentModuleType: s.currentModuleType,
-        hasHandoff: s.hasHandoff,
-        openedAt: s.openedAt ?? null,
-        closedAt: s.closedAt ?? null,
-        lastActivityAt: s.lastActivityAt ?? null,
-      }
-    })
+    const sessions = sliced.map(({ id, data: s }) => mapSessionToRow(id, s, userMap, workspaceId))
 
     return {
       sessions,
@@ -133,34 +149,16 @@ export default defineEventHandler(async (event) => {
     const snap = await ref.get()
     if (snap.empty) return { sessions: [], total, page, limit }
 
-    // Batch-fetch user data
-    const userIds = [...new Set(snap.docs.map(d => d.data().userId as string))]
-    const userMap: Record<string, any> = {}
-    for (let i = 0; i < userIds.length; i += CHUNK) {
-      const chunk = userIds.slice(i, i + CHUNK)
+    const rawUserIds = snap.docs.map(d => String(d.data().userId || '')).filter(Boolean)
+    const fsUserIds = uniqueFirestoreUserIds(rawUserIds, workspaceId)
+    const userMap: Record<string, Record<string, unknown> | undefined> = {}
+    for (let i = 0; i < fsUserIds.length; i += CHUNK) {
+      const chunk = fsUserIds.slice(i, i + CHUNK)
       const uSnap = await db.collection('users').where('__name__', 'in', chunk).get()
       uSnap.docs.forEach(d => { userMap[d.id] = d.data() })
     }
 
-    const sessions = snap.docs.map((d) => {
-      const s = d.data()
-      const user = userMap[s.userId] ?? {}
-      return {
-        sessionId: d.id,
-        userId: s.userId,
-        displayName: user.displayName ?? s.userId,
-        pictureUrl: user.pictureUrl ?? '',
-        status: s.status,
-        initialHandler: s.initialHandler,
-        currentHandler: s.currentHandler,
-        initialModuleType: s.initialModuleType,
-        currentModuleType: s.currentModuleType,
-        hasHandoff: s.hasHandoff,
-        openedAt: s.openedAt ?? null,
-        closedAt: s.closedAt ?? null,
-        lastActivityAt: s.lastActivityAt ?? null,
-      }
-    })
+    const sessions = snap.docs.map(d => mapSessionToRow(d.id, d.data(), userMap, workspaceId))
 
     return { sessions, total, page, limit }
   }

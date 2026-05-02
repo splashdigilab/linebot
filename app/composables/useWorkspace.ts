@@ -1,4 +1,5 @@
 import type { WorkspaceMemberRole } from '~~/shared/types/organization'
+import { useWorkspaceApiFetch } from './useWorkspaceApiFetch'
 
 export interface WorkspaceItem {
   workspaceId: string
@@ -13,7 +14,6 @@ export interface WorkspaceItem {
  */
 export const useWorkspace = () => {
   const route = useRoute()
-  const { $auth } = useNuxtApp()
 
   const workspaceId = computed(() => route.params.workspaceId as string)
 
@@ -29,42 +29,7 @@ export const useWorkspace = () => {
 
   // ── Auth helpers ───────────────────────────────────────────────
 
-  async function getBearer(): Promise<string> {
-    const u = $auth.currentUser
-    if (!u) {
-      await navigateTo('/login')
-      throw new Error('not logged in')
-    }
-    return u.getIdToken()
-  }
-
-  // ── Workspace-aware fetch ──────────────────────────────────────
-
-  async function apiFetch<T>(
-    url: string,
-    options?: Parameters<typeof $fetch>[1],
-  ): Promise<T> {
-    const token = await getBearer()
-    const method = ((options?.method as string) ?? 'GET').toUpperCase()
-    const wid = workspaceId.value
-    const authHeader = { Authorization: `Bearer ${token}` }
-
-    if (method === 'GET' || method === 'HEAD' || method === 'DELETE') {
-      const sep = url.includes('?') ? '&' : '?'
-      return $fetch<T>(`${url}${sep}workspaceId=${wid}`, {
-        ...options,
-        headers: { ...authHeader, ...(options?.headers as object ?? {}) },
-      })
-    }
-
-    return $fetch<T>(url, {
-      ...options,
-      headers: { ...authHeader, ...(options?.headers as object ?? {}) },
-      body: options?.body
-        ? { ...(options.body as object), workspaceId: wid }
-        : { workspaceId: wid },
-    })
-  }
+  const { apiFetch, getBearer } = useWorkspaceApiFetch(() => workspaceId.value)
 
   // ── Load workspace list ────────────────────────────────────────
 

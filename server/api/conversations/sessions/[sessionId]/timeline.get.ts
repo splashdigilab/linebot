@@ -5,7 +5,7 @@ import {
   STATUS_LABELS,
 } from '~~/shared/types/conversation-stats'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
-import { lineUserFirestoreDocId } from '~~/shared/line-workspace'
+import { lineUserFirestoreDocId, lineUserIdFromFirestoreDocId } from '~~/shared/line-workspace'
 
 type TimelineItemType = 'message' | 'event'
 
@@ -64,7 +64,8 @@ export default defineEventHandler(async (event) => {
 
   const session = sessionSnap.data()!
   const userId = session.userId as string
-  const convDocId = lineUserFirestoreDocId(userId)
+  const lineUserId = lineUserIdFromFirestoreDocId(userId)
+  const convDocId = lineUserFirestoreDocId(lineUserId, workspaceId)
 
   // Fetch events for this session (avoid composite index: sessionId + orderBy timestamp)
   const eventsSnap = await db.collection('conversationEvents')

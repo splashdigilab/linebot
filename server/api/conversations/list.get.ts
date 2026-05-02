@@ -1,6 +1,8 @@
 import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
+const DISPLAY_FALLBACK = 'LINE 用戶'
+
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
 
@@ -29,8 +31,8 @@ export default defineEventHandler(async (event) => {
     const user = userMap[d.id] ?? {}
     return {
       userId: d.id,
-      displayName: user.displayName ?? d.id,
-      pictureUrl: user.pictureUrl ?? '',
+      displayName: String(user.displayName || '').trim() || DISPLAY_FALLBACK,
+      pictureUrl: String(user.pictureUrl || '').trim(),
       lastMessage: data.lastMessage ?? '',
       lastDirection: data.lastDirection ?? 'incoming',
       lastMessageAt: data.lastMessageAt ?? null,

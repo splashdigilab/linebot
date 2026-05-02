@@ -2,50 +2,58 @@
   <div class="layout-wrapper">
     <!-- Sidebar -->
     <aside class="sidebar">
-      <div class="sidebar-logo">
-        <span class="logo-icon">💬</span>
-        <div>
-          <span class="logo-text">LINE Bot</span>
-          <span class="logo-sub">管理系統</span>
+      <div class="sidebar-scroll">
+        <div class="sidebar-logo">
+          <span class="logo-icon">💬</span>
+          <div>
+            <span class="logo-text">LINE Bot</span>
+            <span class="logo-sub">管理系統</span>
+          </div>
         </div>
+
+        <!-- Workspace switcher -->
+        <div v-if="workspaceId" class="sidebar-workspace">
+          <div class="sidebar-workspace-label">目前官方帳號</div>
+          <div class="sidebar-workspace-name">{{ currentWorkspaceName }}</div>
+          <NuxtLink
+            v-if="canSwitchWorkspace"
+            to="/admin/workspaces"
+            class="sidebar-workspace-switch"
+          >
+            切換帳號 →
+          </NuxtLink>
+        </div>
+
+        <nav class="sidebar-nav">
+          <NuxtLink
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            class="nav-item"
+            :class="{ active: route.path === item.to }"
+          >
+            <span class="nav-icon">{{ item.icon }}</span>
+            <span>{{ item.label }}</span>
+          </NuxtLink>
+
+          <!-- Settings section (owner/admin only) -->
+          <template v-if="canWrite">
+            <div class="nav-section-label">設定</div>
+            <NuxtLink :to="`/admin/${workspaceId}/settings/members`" class="nav-item" :class="{ active: route.path.includes('/settings/members') }">
+              <span class="nav-icon">👥</span>
+              <span>成員管理</span>
+            </NuxtLink>
+            <NuxtLink :to="`/admin/${workspaceId}/settings/organization`" class="nav-item" :class="{ active: route.path.includes('/settings/organization') }">
+              <span class="nav-icon">🏢</span>
+              <span>組織設定</span>
+            </NuxtLink>
+            <NuxtLink :to="`/admin/${workspaceId}/line-settings`" class="nav-item" :class="{ active: route.path === `/admin/${workspaceId}/line-settings` }">
+              <span class="nav-icon">🔐</span>
+              <span>LINE 連線</span>
+            </NuxtLink>
+          </template>
+        </nav>
       </div>
-
-      <!-- Workspace switcher -->
-      <div v-if="workspaceId" class="sidebar-workspace">
-        <div class="sidebar-workspace-label">目前官方帳號</div>
-        <div class="sidebar-workspace-name">{{ currentWorkspaceName }}</div>
-        <NuxtLink to="/admin/workspaces" class="sidebar-workspace-switch">切換帳號 →</NuxtLink>
-      </div>
-
-      <nav class="sidebar-nav">
-        <NuxtLink
-          v-for="item in navItems"
-          :key="item.to"
-          :to="item.to"
-          class="nav-item"
-          :class="{ active: route.path === item.to }"
-        >
-          <span class="nav-icon">{{ item.icon }}</span>
-          <span>{{ item.label }}</span>
-        </NuxtLink>
-
-        <!-- Settings section (owner/admin only) -->
-        <template v-if="canWrite">
-          <div class="nav-section-label">設定</div>
-          <NuxtLink :to="`/admin/${workspaceId}/settings/members`" class="nav-item" :class="{ active: route.path.includes('/settings/members') }">
-            <span class="nav-icon">👥</span>
-            <span>成員管理</span>
-          </NuxtLink>
-          <NuxtLink :to="`/admin/${workspaceId}/settings/organization`" class="nav-item" :class="{ active: route.path.includes('/settings/organization') }">
-            <span class="nav-icon">🏢</span>
-            <span>組織設定</span>
-          </NuxtLink>
-          <NuxtLink :to="`/admin/${workspaceId}/line-settings`" class="nav-item" :class="{ active: route.path === `/admin/${workspaceId}/line-settings` }">
-            <span class="nav-icon">🔐</span>
-            <span>LINE 連線</span>
-          </NuxtLink>
-        </template>
-      </nav>
 
       <div class="sidebar-footer">
         <div class="sidebar-footer-user">
@@ -73,7 +81,15 @@
 <script setup lang="ts">
 const route = useRoute()
 const { user, logout } = useAuth()
-const { workspaceId, currentRole, currentWorkspaceName, canWrite } = useWorkspace()
+const { workspaceId, currentRole, currentWorkspaceName, canWrite, workspaceList, loadWorkspaceList } = useWorkspace()
+
+const canSwitchWorkspace = computed(() => workspaceList.value.length > 1)
+
+onMounted(async () => {
+  if (!user.value || workspaceList.value.length > 0)
+    return
+  await loadWorkspaceList().catch(() => {})
+})
 
 const ROLE_LABELS: Record<string, string> = {
   owner: '擁有者',
