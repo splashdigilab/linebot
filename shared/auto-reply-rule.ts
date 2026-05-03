@@ -100,6 +100,39 @@ export function matchAutoReplyText(rule: AutoReplyRuleShape, inputText: string):
   return tokens.some((token) => text.includes(token))
 }
 
+/** 數字愈小愈優先；避免「輸入任何內容」因建立時間較新而永遠蓋過精準規則 */
+const AUTO_REPLY_MATCH_PRIORITY: Record<AutoReplyMatchType, number> = {
+  exact: 0,
+  containsAll: 1,
+  containsAny: 2,
+  anyText: 3,
+}
+
+/**
+ * 從已排序的規則列表（例如依 createdAt 新→舊）中，挑出「最該生效」的一條。
+ * 同優先級時保留陣列中較前（較新）者。
+ */
+export function pickBestMatchingAutoReplyRule(
+  rules: AutoReplyRuleShape[],
+  inputText: string,
+  options: { allowAnyText: boolean },
+): AutoReplyRuleShape | null {
+  let best: AutoReplyRuleShape | null = null
+  let bestP = 999
+  for (const rule of rules) {
+    if (!options.allowAnyText && rule.matchType === 'anyText')
+      continue
+    if (!matchAutoReplyText(rule, inputText))
+      continue
+    const p = AUTO_REPLY_MATCH_PRIORITY[rule.matchType]
+    if (p < bestP) {
+      best = rule
+      bestP = p
+    }
+  }
+  return best
+}
+
 export function validateAutoReplyRule(rule: AutoReplyRuleShape): string | null {
   if (!rule.name.trim()) return '請輸入規則名稱'
   if (rule.matchType !== 'anyText' && !rule.keyword.trim()) return '請輸入觸發內容'

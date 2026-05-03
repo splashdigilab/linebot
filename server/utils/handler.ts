@@ -13,7 +13,7 @@ import {
   parseSwitchMenuData,
 } from '~~/shared/action-schema'
 import {
-  matchAutoReplyText,
+  pickBestMatchingAutoReplyRule,
   normalizeAutoReplyAction,
   normalizeAutoReplyRule,
   type AutoReplyRuleShape,
@@ -380,11 +380,7 @@ async function matchAutoReplyRule(
   options: { allowAnyText: boolean } = { allowAnyText: true },
 ): Promise<AutoReplyRuleShape | null> {
   const rules = await loadActiveAutoReplyRules()
-  for (const rule of rules) {
-    if (!options.allowAnyText && rule.matchType === 'anyText') continue
-    if (matchAutoReplyText(rule, inputText)) return rule
-  }
-  return null
+  return pickBestMatchingAutoReplyRule(rules, inputText, options)
 }
 
 function buildAutoReplyActionMessages(
