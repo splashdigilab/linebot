@@ -1170,19 +1170,25 @@ export async function handleMessageEvent(
   const userId = event.source?.userId
   if (!userId) return
 
-  // Establish/extend the conversation session (24h rule)
-  const sessionId = await ensureConversationSession(userId).catch((e) => {
-    console.error('[session] ensureConversationSession error:', e)
-    return null
-  })
-
   if (event.message.type === 'text') {
     const textContent = (event.message as webhook.TextMessageContent).text
     saveConversationMessage(userId, 'incoming', textContent, {
       messageType: 'text',
       payload: { type: 'text', text: textContent },
     }).catch(e => console.error('[conv] save error:', e))
-    await handleIncomingText(userId, textContent, event.replyToken, options, undefined, sessionId)
+
+    // Run session, user data, and rules cache warm-up all in parallel.
+    // preloadedUser is passed to handleIncomingText so it skips the ensureUser call inside.
+    const [sessionId, preloadedUser] = await Promise.all([
+      ensureConversationSession(userId).catch((e) => {
+        console.error('[session] ensureConversationSession error:', e)
+        return null
+      }),
+      ensureUser(userId).catch(() => null),
+      loadActiveAutoReplyRules().catch(() => []),  // warm cache; result discarded
+    ])
+
+    await handleIncomingText(userId, textContent, event.replyToken, options, preloadedUser, sessionId)
   } else {
     const typeLabel = event.message.type === 'image' ? '[圖片]'
       : event.message.type === 'video' ? '[影片]'
@@ -1193,6 +1199,8 @@ export async function handleMessageEvent(
       messageType: event.message.type,
       payload: event.message,
     }).catch(e => console.error('[conv] save error:', e))
+    // Non-text: no bot reply; run in background
+    ensureConversationSession(userId).catch(e => console.error('[session] error:', e))
     ensureUser(userId).catch(e => console.error('[ensureUser] Error:', e))
   }
 }
@@ -1243,11 +1251,13 @@ async function handleIncomingText(
 ): Promise<void> {
   const lineUserId = lineUserIdFromFirestoreDocId(userId)
   const fsUserDocId = lineUserFirestoreDocId(lineUserId)
-  // Run three independent fetches concurrently to minimize total latency
+  // Run all independent fetches concurrently; loadActiveAutoReplyRules warms cache
+  // so the subsequent matchAutoReplyRule call is a near-instant cache hit
   const [userData, { channelSecret }, suppressBotAutomation] = await Promise.all([
     userDataOverride != null ? Promise.resolve(userDataOverride) : ensureUser(userId),
     getLineWorkspaceCredentials(),
     sessionId ? shouldSuppressInboundBotAutomationForSession(sessionId) : Promise.resolve(false),
+    loadActiveAutoReplyRules().catch(() => []),
   ])
   const userAttributes = buildAttributeContext(userData)
   let handledByInput = false
@@ -1354,29 +1364,37 @@ export async function handlePostbackEvent(
   const userId = event.source?.userId
   if (!userId) return
 
-  // Run credentials fetch and session lookup concurrently
-  const [{ channelSecret }, sessionId] = await Promise.all([
+  const data = event.postback.data
+
+  // Parse synchronously upfront so we can preload the right async data in parallel
+  const trigger = parseTriggerModuleData(data)
+  const messageTrigger = parseTriggerMessageData(data)
+
+  // Run session, credentials, and the most likely needed resource all in parallel.
+  // - module trigger: preload the flow document
+  // - message trigger: warm the auto-reply rules cache
+  const [{ channelSecret }, sessionId, preloadedFlow] = await Promise.all([
     getLineWorkspaceCredentials(),
     ensureConversationSession(userId).catch((e) => {
       console.error('[session] postback session error:', e)
       return null
     }),
+    trigger.moduleId
+      ? getFlowByModuleId(trigger.moduleId)
+      : messageTrigger.text
+        ? loadActiveAutoReplyRules().then(() => null)
+        : Promise.resolve(null),
   ])
 
   const suppressBotAutomationPostback = sessionId
     ? await shouldSuppressInboundBotAutomationForSession(sessionId)
     : false
 
-  // Fetch user in background; awaited only when user attributes are needed
+  // Fetch user in background; cache hit likely since ensureUser may have been called above
   const userDataTask = ensureUser(userId).catch(e => {
     console.error('[ensureUser] Error:', e)
     return null
   })
-
-  const data = event.postback.data
-
-  // Handle tagged message action (postback with displayText)
-  const messageTrigger = parseTriggerMessageData(data)
   if (messageTrigger.text) {
     if (messageTrigger.tagIds.length > 0) {
       try {
@@ -1443,8 +1461,7 @@ export async function handlePostbackEvent(
     await userDataTask
     return // Stop further processing
   }
-  // Handle direct module trigger
-  const trigger = parseTriggerModuleData(data)
+  // Handle direct module trigger (trigger was parsed upfront; preloadedFlow was fetched in parallel)
   if (trigger.moduleId && !suppressBotAutomationPostback) {
     const moduleId = trigger.moduleId
     if (trigger.tagIds.length > 0) {
@@ -1455,7 +1472,7 @@ export async function handlePostbackEvent(
         console.error('[tagging] module postback tagging failed:', e)
       }
     }
-    const flow = await getFlowByModuleId(moduleId)
+    const flow = preloadedFlow ?? await getFlowByModuleId(moduleId)
 
     if (flow) {
       if (event.replyToken) {
