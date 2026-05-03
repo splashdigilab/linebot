@@ -36,7 +36,6 @@ import {
 } from '~~/shared/line-workspace'
 
 // ── In-Memory Caching to Reduce DB Latency ──────────────────────────
-const userCheckedCache = new Set<string>()
 
 interface CacheEntry<T> {
   data: T
@@ -45,9 +44,12 @@ interface CacheEntry<T> {
 const flowDocCache = new Map<string, CacheEntry<FlowDoc | null>>()
 const richMessageCache = new Map<string, CacheEntry<any | null>>()
 const autoReplyRuleCache = new Map<string, CacheEntry<AutoReplyRuleShape[]>>()
+const userDocCache = new Map<string, CacheEntry<UserDoc | null>>()
 
 // Cache lifetime in milliseconds (increased to 60s for better hit rate)
 const CACHE_TTL_MS = 60 * 1000
+// Shorter TTL for user docs since activeInput/attributes change more often
+const USER_CACHE_TTL_MS = 30 * 1000
 
 function getCached<T>(map: Map<string, CacheEntry<T>>, key: string): T | undefined {
   const cached = map.get(key)
@@ -161,6 +163,13 @@ async function ensureUser(
   const db = getDb()
   const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId)
   const docId = lineUserFirestoreDocId(lineUserId)
+
+  // Return cached user data when no preloadedProfile is forcing a refresh
+  if (!preloadedProfile) {
+    const cached = getCached(userDocCache, docId)
+    if (cached !== undefined) return cached
+  }
+
   const ref = db.collection('users').doc(docId)
   const snap = await ref.get()
 
@@ -176,13 +185,17 @@ async function ensureUser(
       isBlocked: false,
     }
     await ref.set(newDoc)
+    userDocCache.set(docId, { data: newDoc, expires: Date.now() + USER_CACHE_TTL_MS })
     return newDoc
   }
 
   const data = snap.data() as UserDoc
   if (data.isBlocked) {
     await ref.update({ isBlocked: false, unblockedAt: FieldValue.serverTimestamp() })
+    // Don't cache blocked users — they're edge cases and we want fresh state next time
+    return data
   }
+  userDocCache.set(docId, { data, expires: Date.now() + USER_CACHE_TTL_MS })
   return data
 }
 
@@ -1234,12 +1247,13 @@ async function handleIncomingText(
 ): Promise<void> {
   const lineUserId = lineUserIdFromFirestoreDocId(userId)
   const fsUserDocId = lineUserFirestoreDocId(lineUserId)
-  const userData = userDataOverride ?? await ensureUser(userId)
+  // Run three independent fetches concurrently to minimize total latency
+  const [userData, { channelSecret }, suppressBotAutomation] = await Promise.all([
+    userDataOverride != null ? Promise.resolve(userDataOverride) : ensureUser(userId),
+    getLineWorkspaceCredentials(),
+    sessionId ? shouldSuppressInboundBotAutomationForSession(sessionId) : Promise.resolve(false),
+  ])
   const userAttributes = buildAttributeContext(userData)
-  const { channelSecret } = await getLineWorkspaceCredentials()
-  const suppressBotAutomation = sessionId
-    ? await shouldSuppressInboundBotAutomationForSession(sessionId)
-    : false
   let handledByInput = false
 
   if (!suppressBotAutomation && userData && userData.activeInput && userData.activeInput.expiresAt > Date.now()) {
@@ -1268,8 +1282,9 @@ async function handleIncomingText(
         channelSecret,
       )
       await replyMessage(replyToken, lineMessages)
-      await saveOutgoingConversationMessages(lineUserId, lineMessages)
-      await dispatchPostReplyActions(lineUserId, flow.messages)
+      // Non-blocking: user has already received the reply; save/dispatch in background
+      saveOutgoingConversationMessages(lineUserId, lineMessages).catch(e => console.error('[conv] save error:', e))
+      dispatchPostReplyActions(lineUserId, flow.messages).catch(e => console.error('[postReply] dispatch error:', e))
       if (sessionId) {
         enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', moduleId).catch(e =>
           console.error('[session] enterModule error:', e),
@@ -1306,8 +1321,8 @@ async function handleIncomingText(
               channelSecret,
             )
             await replyMessage(replyToken, lineMessages)
-            await saveOutgoingConversationMessages(lineUserId, lineMessages)
-            await dispatchPostReplyActions(lineUserId, flow.messages)
+            saveOutgoingConversationMessages(lineUserId, lineMessages).catch(e => console.error('[conv] save error:', e))
+            dispatchPostReplyActions(lineUserId, flow.messages).catch(e => console.error('[postReply] dispatch error:', e))
             if (sessionId) {
               enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', rule.action.moduleId).catch(e =>
                 console.error('[session] enterModule error:', e),
@@ -1325,7 +1340,7 @@ async function handleIncomingText(
           const actionMessages = buildAutoReplyActionMessages(rule.action, userAttributes)
           if (actionMessages.length > 0) {
             await replyMessage(replyToken, actionMessages)
-            await saveOutgoingConversationMessages(lineUserId, actionMessages)
+            saveOutgoingConversationMessages(lineUserId, actionMessages).catch(e => console.error('[conv] save error:', e))
           }
         }
       }
@@ -1341,18 +1356,20 @@ export async function handlePostbackEvent(
   const userId = event.source?.userId
   if (!userId) return
 
-  const { channelSecret } = await getLineWorkspaceCredentials()
-
-  const sessionId = await ensureConversationSession(userId).catch((e) => {
-    console.error('[session] postback session error:', e)
-    return null
-  })
+  // Run credentials fetch and session lookup concurrently
+  const [{ channelSecret }, sessionId] = await Promise.all([
+    getLineWorkspaceCredentials(),
+    ensureConversationSession(userId).catch((e) => {
+      console.error('[session] postback session error:', e)
+      return null
+    }),
+  ])
 
   const suppressBotAutomationPostback = sessionId
     ? await shouldSuppressInboundBotAutomationForSession(sessionId)
     : false
 
-  // Fetch user synchronously if needed, but for postback usually background is fine unless updating state
+  // Fetch user in background; awaited only when user attributes are needed
   const userDataTask = ensureUser(userId).catch(e => {
     console.error('[ensureUser] Error:', e)
     return null
@@ -1454,8 +1471,8 @@ export async function handlePostbackEvent(
           channelSecret,
         )
         await replyMessage(event.replyToken, lineMessages)
-        await saveOutgoingConversationMessages(userId, lineMessages)
-        await dispatchPostReplyActions(userId, flow.messages)
+        saveOutgoingConversationMessages(userId, lineMessages).catch(e => console.error('[conv] save error:', e))
+        dispatchPostReplyActions(userId, flow.messages).catch(e => console.error('[postReply] dispatch error:', e))
         if (sessionId) {
           enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', moduleId).catch(e =>
             console.error('[session] enterModule error:', e),
@@ -1492,8 +1509,8 @@ export async function handlePostbackEvent(
           channelSecret,
         )
         await replyMessage(event.replyToken, lineMessages)
-        await saveOutgoingConversationMessages(userId, lineMessages)
-        await dispatchPostReplyActions(userId, flow.messages)
+        saveOutgoingConversationMessages(userId, lineMessages).catch(e => console.error('[conv] save error:', e))
+        dispatchPostReplyActions(userId, flow.messages).catch(e => console.error('[postReply] dispatch error:', e))
         if (sessionId) {
           enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', rule.action.moduleId).catch(e =>
             console.error('[session] enterModule (fallback) error:', e),
@@ -1504,7 +1521,7 @@ export async function handlePostbackEvent(
       const actionMessages = buildAutoReplyActionMessages(rule.action, userAttributes)
       if (actionMessages.length > 0) {
         await replyMessage(event.replyToken, actionMessages)
-        await saveOutgoingConversationMessages(userId, actionMessages)
+        saveOutgoingConversationMessages(userId, actionMessages).catch(e => console.error('[conv] save error:', e))
       }
     }
   }
