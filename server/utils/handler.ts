@@ -1241,7 +1241,7 @@ async function handleIncomingText(
   userId: string,
   textContent: string,
   replyToken: string | undefined,
-  options: { requestOrigin?: string } = {},
+  options: { requestOrigin?: string; allowAnyText?: boolean } = {},
   userDataOverride?: UserDoc | null,
   sessionId?: string | null,
 ): Promise<void> {
@@ -1300,7 +1300,9 @@ async function handleIncomingText(
   }
 
   if (!handledByInput && !suppressBotAutomation) {
-    const rule = await matchAutoReplyRule(textContent)
+    const rule = await matchAutoReplyRule(textContent, {
+      allowAnyText: options.allowAnyText !== false,
+    })
     if (rule) {
       // 貼標（非阻塞，不影響回覆速度）
       if (rule.tagging?.enabled && Array.isArray(rule.tagging?.addTagIds) && rule.tagging.addTagIds.length > 0) {
@@ -1392,7 +1394,7 @@ export async function handlePostbackEvent(
       userId,
       messageTrigger.text,
       event.replyToken,
-      options,
+      { ...options, allowAnyText: false },
       await userDataTask,
       sessionId,
     )
