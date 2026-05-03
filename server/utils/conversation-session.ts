@@ -10,6 +10,38 @@ import type {
 } from '~~/shared/types/conversation-stats'
 import { SESSION_24H_MS } from '~~/shared/types/conversation-stats'
 
+// ── Session In-Memory Cache ───────────────────────────────────────
+// Avoids running a Firestore transaction on every single webhook event.
+// Common path: active session within 24h → return cached ID, update lastActivityAt in background.
+// TTL is intentionally short (10s) to limit stale-status window when admin changes session state.
+
+interface SessionCacheEntry {
+  sessionId: string
+  status: ConversationStatus
+  lastActivityAt: number  // JS ms timestamp
+  cachedAt: number
+}
+const SESSION_CACHE_TTL_MS = 10 * 1000
+const sessionByUser = new Map<string, SessionCacheEntry>()   // lineUserId → entry
+const sessionStatusById = new Map<string, { status: ConversationStatus; cachedAt: number }>() // sessionId → status
+
+export function _updateSessionStatusCache(sessionId: string, status: ConversationStatus) {
+  sessionStatusById.set(sessionId, { status, cachedAt: Date.now() })
+  // Also update per-user cache if it references this session
+  for (const [uid, entry] of sessionByUser) {
+    if (entry.sessionId === sessionId) {
+      sessionByUser.set(uid, { ...entry, status, cachedAt: Date.now() })
+      break
+    }
+  }
+}
+
+export function _invalidateUserSessionCache(lineUserId: string) {
+  const entry = sessionByUser.get(lineUserId)
+  if (entry) sessionStatusById.delete(entry.sessionId)
+  sessionByUser.delete(lineUserId)
+}
+
 // ── Event Recording ───────────────────────────────────────────────
 
 export async function recordConversationEvent(
@@ -82,12 +114,31 @@ export async function ensureConversationSession(userId: string): Promise<string>
   const convRef = db.collection('conversations').doc(convDocId)
   const now = Date.now()
 
+  // ── Fast path: active cached session ─────────────────────────────
+  // For the common case (user messaging within 24h), skip the Firestore transaction entirely.
+  // lastActivityAt is updated in the background so it doesn't block the reply.
+  const cached = sessionByUser.get(lineUserId)
+  if (
+    cached &&
+    now - cached.cachedAt < SESSION_CACHE_TTL_MS &&
+    cached.status !== 'closed' &&
+    now - cached.lastActivityAt < SESSION_24H_MS
+  ) {
+    db.collection('conversationSessions').doc(cached.sessionId)
+      .update({ lastActivityAt: FieldValue.serverTimestamp() })
+      .catch(e => console.warn('[session] bg lastActivityAt update failed:', e))
+    sessionByUser.set(lineUserId, { ...cached, lastActivityAt: now, cachedAt: now })
+    return cached.sessionId
+  }
+
+  // ── Slow path: Firestore transaction ─────────────────────────────
   // Pre-generate the new session ID outside the transaction so tx.set() can reference it.
   const newSessionId = uuidv4()
   const newSessionRef = db.collection('conversationSessions').doc(newSessionId)
 
   let createdNew = false
   let closedOldSessionId: string | null = null
+  let resultStatus: ConversationStatus = 'open'
 
   const resultId = await db.runTransaction(async (tx) => {
     const convSnap = await tx.get(convRef)
@@ -106,6 +157,7 @@ export async function ensureConversationSession(userId: string): Promise<string>
       const lastActivity: number = existingData.lastActivityAt?.toMillis?.() ?? 0
       if (now - lastActivity < SESSION_24H_MS) {
         tx.update(existingRef, { lastActivityAt: FieldValue.serverTimestamp() })
+        resultStatus = existingData.status as ConversationStatus
         return convData!.currentSessionId as string
       }
       // 24h expired — close inline (event recorded outside the tx)
@@ -142,16 +194,26 @@ export async function ensureConversationSession(userId: string): Promise<string>
     return newSessionId
   })
 
-  // Record events and clean up orphans outside the transaction.
+  // Populate both caches with the result of the transaction
+  sessionByUser.set(lineUserId, {
+    sessionId: resultId,
+    status: resultStatus,
+    lastActivityAt: now,
+    cachedAt: now,
+  })
+  sessionStatusById.set(resultId, { status: resultStatus, cachedAt: now })
+
+  // Record events and clean up orphans outside the transaction (non-blocking for stats only).
   if (closedOldSessionId) {
-    await recordConversationEvent(closedOldSessionId, lineUserId, 'conversation_closed')
+    recordConversationEvent(closedOldSessionId, lineUserId, 'conversation_closed')
+      .catch(e => console.warn('[session] close event record failed:', e))
   }
   if (createdNew) {
-    // Event recording and orphan cleanup are independent — run in parallel
-    await Promise.all([
+    // Event recording and orphan cleanup are independent — run in parallel, non-blocking
+    Promise.all([
       recordConversationEvent(newSessionId, lineUserId, 'conversation_opened'),
       closeOrphanedSessions(lineUserId, newSessionId),
-    ])
+    ]).catch(e => console.warn('[session] post-create cleanup failed:', e))
   }
 
   return resultId
@@ -216,6 +278,11 @@ export async function enterModule(
 
   await sessionRef.update(updates)
 
+  // Keep status cache in sync after module entry changes session status
+  if (updates.status) {
+    _updateSessionStatusCache(sessionId, updates.status as ConversationStatus)
+  }
+
   if (moduleType === 'live_agent') {
     const uid = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId))
     await db
@@ -250,6 +317,7 @@ export async function recordHumanFirstReply(sessionId: string, userId: string): 
     currentModuleType: 'live_agent' as ModuleType,
     lastActivityAt: FieldValue.serverTimestamp(),
   })
+  _updateSessionStatusCache(sessionId, 'human_handling')
   await recordConversationEvent(sessionId, userId, 'human_first_reply')
 }
 
@@ -272,6 +340,8 @@ export async function closeConversationSession(sessionId: string, userId: string
     closedAt: FieldValue.serverTimestamp(),
     lastActivityAt: FieldValue.serverTimestamp(),
   })
+  _updateSessionStatusCache(sessionId, 'closed')
+  _invalidateUserSessionCache(lineUserId)
   await db.collection('conversations').doc(convDocId).set(
     { currentSessionId: null },
     { merge: true },
@@ -287,10 +357,19 @@ export async function shouldSuppressInboundBotAutomationForSession(
   sessionId: string | null | undefined,
 ): Promise<boolean> {
   if (!sessionId) return false
+
+  // Use cached status to avoid a redundant DB read (session was just read in ensureConversationSession)
+  const now = Date.now()
+  const cached = sessionStatusById.get(sessionId)
+  if (cached && now - cached.cachedAt < SESSION_CACHE_TTL_MS) {
+    return cached.status === 'pending_human' || cached.status === 'human_handling'
+  }
+
   const db = getDb()
   const snap = await db.collection('conversationSessions').doc(sessionId).get()
   if (!snap.exists) return false
   const status = snap.data()?.status as ConversationStatus | undefined
+  if (status) sessionStatusById.set(sessionId, { status, cachedAt: now })
   return status === 'pending_human' || status === 'human_handling'
 }
 
