@@ -105,14 +105,16 @@ function toConversationText(msg: messagingApi.Message): string {
 
 async function saveOutgoingConversationMessages(userId: string, messages: messagingApi.Message[]): Promise<void> {
   if (!Array.isArray(messages) || messages.length === 0) return
-  for (const msg of messages) {
-    const text = toConversationText(msg)
-    if (!text) continue
-    await saveConversationMessage(userId, 'outgoing', text, {
-      messageType: String((msg as any)?.type || 'message'),
-      payload: msg,
-    })
-  }
+  await Promise.all(
+    messages.map((msg) => {
+      const text = toConversationText(msg)
+      if (!text) return Promise.resolve()
+      return saveConversationMessage(userId, 'outgoing', text, {
+        messageType: String((msg as any)?.type || 'message'),
+        payload: msg,
+      })
+    }),
+  )
 }
 
 function sanitizeForFirestore(value: any): any {
@@ -191,11 +193,13 @@ export async function handleFollowEvent(
   try {
     await ensureUser(userId, preloadedProfile)
     console.log('[webhook] follow ensureUser:', userId)
-    // New follow always starts a fresh session
-    await ensureConversationSession(userId).catch(e =>
-      console.error('[session] follow session error:', e),
-    )
-    await applyPendingClaims(userId)
+    // Session creation and claim application are independent — run in parallel
+    await Promise.all([
+      ensureConversationSession(userId).catch(e =>
+        console.error('[session] follow session error:', e),
+      ),
+      applyPendingClaims(userId),
+    ])
   }
   catch (e) {
     console.error('[webhook] handleFollowEvent error:', e)
@@ -232,42 +236,49 @@ async function applyPendingClaims(userId: string): Promise<void> {
       }
     }
 
-    // 貼標（冪等，已存在自動略過）
-    if (Array.isArray(claim.tagIds) && claim.tagIds.length > 0) {
-      const result = await addTagsToUser(
-        lineUserFirestoreDocId(userId),
-        claim.tagIds,
-        'system',
-        doc.id,
-      )
-      console.log('[follow] tagging result:', result, 'claimId:', doc.id)
+    // 活動下一步動作（同步計算，供下方並行使用）
+    const action = normalizeAutoReplyAction(claim.action, String(claim.moduleId ?? ''))
+
+    // 並行：貼標 + 取 flow（互不依賴）
+    const [taggingResult, flow] = await Promise.all([
+      Array.isArray(claim.tagIds) && claim.tagIds.length > 0
+        ? addTagsToUser(lineUserFirestoreDocId(userId), claim.tagIds, 'system', doc.id)
+        : Promise.resolve(null),
+      action.type === 'module' && action.moduleId
+        ? getFlowByModuleId(action.moduleId)
+        : Promise.resolve(null),
+    ])
+
+    if (taggingResult) {
+      console.log('[follow] tagging result:', taggingResult, 'claimId:', doc.id)
     }
 
-    // 活動下一步動作：module / message / uri（舊資料無 action 時回退 moduleId）
-    const action = normalizeAutoReplyAction(claim.action, String(claim.moduleId ?? ''))
-    if (action.type === 'module' && action.moduleId) {
+    if (action.type === 'module' && flow) {
       try {
-        const flow = await getFlowByModuleId(action.moduleId)
-        if (flow) {
-          const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-          const lineMessages = buildLineMessages(hydratedMessages, {}, '', userId, channelSecret)
-          if (lineMessages.length > 0) {
-            await pushMessage(userId, lineMessages)
-            await saveOutgoingConversationMessages(userId, lineMessages)
-            await dispatchPostReplyActions(userId, flow.messages)
-          }
+        const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
+        const lineMessages = buildLineMessages(hydratedMessages, {}, '', userId, channelSecret)
+        if (lineMessages.length > 0) {
+          // 並行：推播 + 儲存對話訊息（互不依賴）
+          await Promise.all([
+            pushMessage(userId, lineMessages),
+            saveOutgoingConversationMessages(userId, lineMessages),
+          ])
+          await dispatchPostReplyActions(userId, flow.messages)
         }
       }
       catch (e) {
         console.error('[follow] pushMessage module failed:', e)
       }
     }
-    else {
+    else if (action.type !== 'module') {
       const actionMessages = buildAutoReplyActionMessages(action, {})
       if (actionMessages.length > 0) {
         try {
-          await pushMessage(userId, actionMessages)
-          await saveOutgoingConversationMessages(userId, actionMessages)
+          // 並行：推播 + 儲存對話訊息
+          await Promise.all([
+            pushMessage(userId, actionMessages),
+            saveOutgoingConversationMessages(userId, actionMessages),
+          ])
         }
         catch (e) {
           console.error('[follow] pushMessage action failed:', e)
@@ -1192,23 +1203,25 @@ export async function saveConversationMessage(
   const now = FieldValue.serverTimestamp()
   const msgRef = db.collection('conversations').doc(convDocId).collection('messages').doc()
   const payload = sanitizeForFirestore(options?.payload)
-  await msgRef.set({
-    direction,
-    text,
-    timestamp: now,
-    messageType: options?.messageType || 'text',
-    ...(payload !== undefined ? { payload } : {}),
-  })
-  await db.collection('conversations').doc(convDocId).set(
-    {
-      workspaceId: DEFAULT_LINE_WORKSPACE_ID,
-      userId: lineUserId,
-      lastMessage: text,
-      lastDirection: direction,
-      lastMessageAt: now,
-    },
-    { merge: true },
-  )
+  await Promise.all([
+    msgRef.set({
+      direction,
+      text,
+      timestamp: now,
+      messageType: options?.messageType || 'text',
+      ...(payload !== undefined ? { payload } : {}),
+    }),
+    db.collection('conversations').doc(convDocId).set(
+      {
+        workspaceId: DEFAULT_LINE_WORKSPACE_ID,
+        userId: lineUserId,
+        lastMessage: text,
+        lastDirection: direction,
+        lastMessageAt: now,
+      },
+      { merge: true },
+    ),
+  ])
 }
 
 async function handleIncomingText(

@@ -31,12 +31,17 @@ export async function addTagsToUser(
   const skipped: string[] = []
   const batch = db.batch()
 
-  for (const tagId of tagIds) {
-    const docId = `${userFirestoreDocId}_${tagId}`
-    const ref = db.collection('userTags').doc(docId)
-    const snap = await ref.get()
+  const entries = await Promise.all(
+    tagIds.map(async (tagId) => {
+      const docId = `${userFirestoreDocId}_${tagId}`
+      const ref = db.collection('userTags').doc(docId)
+      const snap = await ref.get()
+      return { tagId, ref, exists: snap.exists }
+    }),
+  )
 
-    if (snap.exists) {
+  for (const { tagId, ref, exists } of entries) {
+    if (exists) {
       skipped.push(tagId)
       continue
     }

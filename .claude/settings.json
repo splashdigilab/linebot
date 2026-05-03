@@ -7,7 +7,8 @@
       "Bash(grep -n 'apiFetch\\\\|$fetch\\\\|getBearer\\\\|$auth' '/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/conversations.vue')",
       "Bash(grep -n 'apiFetch\\\\|$fetch\\\\|getBearer\\\\|$auth' '/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/campaigns.vue')",
       "Bash(grep -n 'apiFetch\\\\|$fetch\\\\|getBearer\\\\|$auth' '/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/users.vue')",
-      "Bash(grep -r \"super.admin\\\\|superadmin\\\\|super_admin\" --include=\"*.ts\" --include=\"*.tsx\" --include=\"*.js\" --include=\"*.jsx\" --include=\"*.py\" ! -path \"node_modules/*\" ! -path \".nuxt/*\")"
+      "Bash(grep -r \"super.admin\\\\|superadmin\\\\|super_admin\" --include=\"*.ts\" --include=\"*.tsx\" --include=\"*.js\" --include=\"*.jsx\" --include=\"*.py\" ! -path \"node_modules/*\" ! -path \".nuxt/*\")",
+      "Bash(xargs ls *)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",

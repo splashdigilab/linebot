@@ -57,10 +57,12 @@ async function closeOrphanedSessions(lineUserId: string, currentSessionId: strin
   }
   await batch.commit()
 
-  for (const doc of orphans) {
-    await recordConversationEvent(doc.id, lineUserId, 'conversation_closed')
-      .catch(e => console.warn('[session] orphan close event failed:', doc.id, e))
-  }
+  await Promise.all(
+    orphans.map(doc =>
+      recordConversationEvent(doc.id, lineUserId, 'conversation_closed')
+        .catch(e => console.warn('[session] orphan close event failed:', doc.id, e)),
+    ),
+  )
 }
 
 /**
@@ -145,8 +147,11 @@ export async function ensureConversationSession(userId: string): Promise<string>
     await recordConversationEvent(closedOldSessionId, lineUserId, 'conversation_closed')
   }
   if (createdNew) {
-    await recordConversationEvent(newSessionId, lineUserId, 'conversation_opened')
-    await closeOrphanedSessions(lineUserId, newSessionId)
+    // Event recording and orphan cleanup are independent — run in parallel
+    await Promise.all([
+      recordConversationEvent(newSessionId, lineUserId, 'conversation_opened'),
+      closeOrphanedSessions(lineUserId, newSessionId),
+    ])
   }
 
   return resultId
