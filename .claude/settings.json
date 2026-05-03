@@ -9,7 +9,16 @@
       "Bash(grep -n 'apiFetch\\\\|$fetch\\\\|getBearer\\\\|$auth' '/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/users.vue')",
       "Bash(grep -r \"super.admin\\\\|superadmin\\\\|super_admin\" --include=\"*.ts\" --include=\"*.tsx\" --include=\"*.js\" --include=\"*.jsx\" --include=\"*.py\" ! -path \"node_modules/*\" ! -path \".nuxt/*\")",
       "Bash(xargs ls *)",
-      "Bash(grep -E \"\\\\.\\(js|ts|json\\)$\")"
+      "Bash(grep -E \"\\\\.\\(js|ts|json\\)$\")",
+      "WebSearch",
+      "WebFetch(domain:cjroeser.com)",
+      "WebFetch(domain:developers.line.biz)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.ayrshare.com)",
+      "WebFetch(domain:www.line-community.me)",
+      "WebFetch(domain:bootstrapped.app)",
+      "WebFetch(domain:www.javacodegeeks.com)",
+      "WebFetch(domain:siriwatknp.medium.com)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",
