@@ -60,9 +60,6 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Invalid JSON' })
   }
 
-  // LINE requires HTTP 200 within 2 seconds or it marks the delivery as failed.
-  // Process events in the background AFTER returning 200.
-  // Reply tokens are valid ~30s, so replyMessage() calls remain safe.
   console.log('[webhook] received', payload.events.length, 'event(s):', payload.events.map(e => e.type))
   const tasks = payload.events.map(async (e) => {
     try {
@@ -86,8 +83,7 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  // Fire-and-forget: do NOT await tasks before returning
-  Promise.all(tasks).catch(err => console.error('[webhook] processing error:', err))
+  await Promise.all(tasks)
 
   return { status: 'ok' }
 })

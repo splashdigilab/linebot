@@ -1,13 +1,11 @@
 import { initializeApp, cert } from 'firebase-admin/app'
 import type { App } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
-import { initializeFirestore } from 'firebase-admin/firestore'
+import { getFirestore } from 'firebase-admin/firestore'
 import type { Firestore, CollectionReference, Query, UpdateData } from 'firebase-admin/firestore'
 import { getStorage as getAdminStorage } from 'firebase-admin/storage'
 
 let app: App
-// Cached Firestore instance initialized with REST transport (avoids 4-8s gRPC cold start)
-let db: Firestore
 
 export function getFirebaseAdmin(): App {
   if (!app) {
@@ -21,16 +19,13 @@ export function getFirebaseAdmin(): App {
       }),
       storageBucket: config.firebaseStorageBucket,
     })
-    // preferRest: true switches from gRPC to HTTP/REST, eliminating the 4-8s gRPC
-    // binary cold-start penalty. Must be called immediately after initializeApp().
-    db = initializeFirestore(app, { preferRest: true })
   }
   return app
 }
 
 export function getDb(): Firestore {
-  if (!db) getFirebaseAdmin()
-  return db
+  getFirebaseAdmin()
+  return getFirestore()
 }
 
 export function getFirebaseAuth() {
