@@ -10,6 +10,21 @@
           </div>
         </div>
 
+        <div class="sidebar-workspace">
+          <div class="sidebar-workspace-label">目前官方帳號</div>
+          <div class="sidebar-workspace-name">Super Admin</div>
+          <div class="sidebar-workspace-actions">
+            <NuxtLink to="/admin/workspaces" class="ws-sidebar-switch">
+              <span class="ws-sidebar-switch__icon">💬</span>
+              <span class="ws-sidebar-switch__main">
+                <span class="ws-sidebar-switch__title">回到官方帳號</span>
+                <span class="ws-sidebar-switch__sub">選擇要管理的官方帳號</span>
+              </span>
+              <span class="ws-sidebar-switch__arrow">→</span>
+            </NuxtLink>
+          </div>
+        </div>
+
         <nav class="sidebar-nav">
           <NuxtLink to="/admin/super/organizations" class="nav-item" :class="{ active: route.path.startsWith('/admin/super/organizations') }">
             <span class="nav-icon">🏢</span>
@@ -22,12 +37,6 @@
           <NuxtLink to="/admin/super/users" class="nav-item" :class="{ active: route.path.startsWith('/admin/super/users') }">
             <span class="nav-icon">🛡️</span>
             <span>Super Admin 管理</span>
-          </NuxtLink>
-
-          <div class="nav-section-label">導覽</div>
-          <NuxtLink to="/admin/workspaces" class="nav-item">
-            <span class="nav-icon">↩️</span>
-            <span>回到官方帳號</span>
           </NuxtLink>
         </nav>
       </div>

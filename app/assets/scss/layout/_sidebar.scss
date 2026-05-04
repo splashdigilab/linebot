@@ -29,7 +29,6 @@
   gap: 0.75rem;
   padding: 0 1.25rem 1.5rem;
   border-bottom: 1px solid var(--border);
-  margin-bottom: 1rem;
 }
 
 .sidebar-logo span.logo-icon {
@@ -61,6 +60,14 @@
   flex-direction: column;
   gap: 2px;
   padding: 0 0.75rem 1rem;
+}
+
+.nav-section-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.75rem 1rem 0.25rem;
 }
 
 .nav-item {
@@ -120,4 +127,96 @@
 
 .sidebar-footer-email {
   max-width: 140px;
+}
+
+/* 側欄：目前官方帳號區 */
+.sidebar-workspace {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0.25rem;
+}
+
+.sidebar-workspace-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sidebar-workspace-name {
+  margin-top: 0.2rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-workspace-actions {
+  margin-top: 0.5rem;
+}
+
+/* 與選帳頁 .ws-item 相同語彙：實線框、左圖示、主副標、箭頭（一般後台／Super Admin 側欄共用） */
+.ws-sidebar-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-surface);
+  text-decoration: none;
+  text-align: left;
+  width: 100%;
+  box-sizing: border-box;
+  transition:
+    border-color var(--t-fast, 0.15s ease),
+    background var(--t-fast, 0.15s ease),
+    box-shadow var(--t-fast, 0.15s ease);
+}
+
+.ws-sidebar-switch:hover {
+  border-color: var(--border-active);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-sm);
+}
+
+.ws-sidebar-switch__icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  width: 24px;
+  text-align: center;
+}
+
+.ws-sidebar-switch__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.ws-sidebar-switch__title {
+  display: block;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  line-height: 1.25;
+}
+
+.ws-sidebar-switch__sub {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+
+.ws-sidebar-switch__arrow {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  transition: transform var(--t-fast, 0.15s ease);
+}
+
+.ws-sidebar-switch:hover .ws-sidebar-switch__arrow {
+  transform: translateX(2px);
 }

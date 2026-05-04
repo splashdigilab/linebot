@@ -1,14 +1,30 @@
-import { FieldValue } from 'firebase-admin/firestore'
-import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { FieldValue, type Firestore } from 'firebase-admin/firestore'
+import { requireWorkspaceAccess, invalidateWorkspaceMemberCache } from '~~/server/utils/workspace-auth'
 import { getFirebaseAuth } from '~~/server/utils/firebase'
 import type { WorkspaceMemberRole } from '~~/shared/types/organization'
 
 const VALID_ROLES: WorkspaceMemberRole[] = ['admin', 'agent', 'viewer']
 
+function normalizeEmail(raw: string): string {
+  return String(raw ?? '').trim().toLowerCase()
+}
+
+async function deleteWorkspaceInvitesForEmail(db: Firestore, workspaceId: string, email: string) {
+  const snap = await db.collection('workspaceInvites')
+    .where('workspaceId', '==', workspaceId)
+    .where('email', '==', email)
+    .get()
+  if (snap.empty) return
+  const batch = db.batch()
+  snap.docs.forEach(d => batch.delete(d.ref))
+  await batch.commit()
+}
+
 /**
  * POST /api/admin/workspaces/:workspaceId/members
- * 邀請成員加入 workspace。需 admin 以上角色。
- * owner 角色不可透過此 API 指派（只有 seed script 或 org 建立時可設）。
+ * 邀請成員。需 admin 以上角色。
+ * - 若對方已有 Firebase 帳號：直接建立 workspaceMembers
+ * - 若尚無帳號：寫入 workspaceInvites（email），與組織管理員邀請相同模式，註冊後首次進入後台即轉成成員
  *
  * Body: { email: string, role: 'admin' | 'agent' | 'viewer' }
  */
@@ -23,37 +39,68 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: `role must be one of: ${VALID_ROLES.join(', ')}` })
   }
 
-  // 透過 email 查 Firebase uid
-  let targetUid: string
-  try {
-    const userRecord = await getFirebaseAuth().getUserByEmail(email.trim())
-    targetUid = userRecord.uid
-  } catch {
-    throw createError({ statusCode: 404, statusMessage: `No Firebase account found for email: ${email}` })
-  }
-
-  // 確認尚未是成員
+  const emailNorm = normalizeEmail(email)
   const db = getDb()
-  const memberDocId = `${targetUid}_${workspaceId}`
-  const existing = await db.collection('workspaceMembers').doc(memberDocId).get()
-  if (existing.exists) {
-    throw createError({ statusCode: 409, statusMessage: 'User is already a member of this workspace' })
+
+  const pendingSnap = await db.collection('workspaceInvites')
+    .where('workspaceId', '==', workspaceId)
+    .where('email', '==', emailNorm)
+    .limit(1)
+    .get()
+  if (!pendingSnap.empty) {
+    throw createError({ statusCode: 409, statusMessage: '此 Email 已有待處理的邀請' })
   }
 
-  // 查詢 organizationId
   const workspaceSnap = await db.collection('workspaces').doc(workspaceId).get()
   const organizationId = workspaceSnap.data()?.organizationId ?? null
 
-  await db.collection('workspaceMembers').doc(memberDocId).set({
-    uid: targetUid,
+  let targetUid: string | null = null
+  try {
+    const userRecord = await getFirebaseAuth().getUserByEmail(emailNorm)
+    targetUid = userRecord.uid
+  } catch {
+    targetUid = null
+  }
+
+  if (targetUid) {
+    const memberDocId = `${targetUid}_${workspaceId}`
+    const existing = await db.collection('workspaceMembers').doc(memberDocId).get()
+    if (existing.exists) {
+      throw createError({ statusCode: 409, statusMessage: 'User is already a member of this workspace' })
+    }
+
+    await deleteWorkspaceInvitesForEmail(db, workspaceId, emailNorm)
+
+    await db.collection('workspaceMembers').doc(memberDocId).set({
+      uid: targetUid,
+      workspaceId,
+      organizationId,
+      role,
+      invitedBy: inviterUid,
+      invitedEmail: emailNorm,
+      joinedAt: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
+    })
+    invalidateWorkspaceMemberCache(targetUid, workspaceId)
+
+    return { id: memberDocId, uid: targetUid, workspaceId, role, invitedEmail: emailNorm, pending: false }
+  }
+
+  const ref = await db.collection('workspaceInvites').add({
     workspaceId,
     organizationId,
+    email: emailNorm,
     role,
     invitedBy: inviterUid,
-    invitedEmail: email.trim(),
-    joinedAt: FieldValue.serverTimestamp(),
     createdAt: FieldValue.serverTimestamp(),
   })
 
-  return { id: memberDocId, uid: targetUid, workspaceId, role, invitedEmail: email.trim() }
+  return {
+    id: ref.id,
+    uid: null,
+    workspaceId,
+    role,
+    invitedEmail: emailNorm,
+    pending: true,
+  }
 })

@@ -34,7 +34,7 @@
 
     <template #editor-body>
       <div class="solo-editor-body admin-panel-stack conv-stats-page">
-        <!-- KPI（版型對齊儀表板 index：el-row + el-card + stat-label / stat-value） -->
+        <!-- KPI：el-row + el-card + stat-label / stat-value -->
         <div v-if="kpiLoading" class="tags-loading">
           <div class="spinner" />
           <span>載入中…</span>

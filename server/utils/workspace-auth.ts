@@ -1,5 +1,6 @@
 import type { H3Event } from 'h3'
 import type { DecodedIdToken } from 'firebase-admin/auth'
+import { FieldValue } from 'firebase-admin/firestore'
 import type { WorkspaceMemberRole, OrgMemberRole } from '~~/shared/types/organization'
 import { getFirebaseAuth, getDb } from './firebase'
 
@@ -30,6 +31,10 @@ function getCachedMember(uid: string, workspaceId: string): WorkspaceMemberRole 
 
 function setCachedMember(uid: string, workspaceId: string, role: WorkspaceMemberRole) {
   memberCache.set(`${uid}:${workspaceId}`, { role, expiresAt: Date.now() + CACHE_TTL_MS })
+}
+
+export function invalidateWorkspaceMemberCache(uid: string, workspaceId: string) {
+  memberCache.delete(`${uid}:${workspaceId}`)
 }
 
 // org member cache（email-based：以 email 查詢，不需要 UID）
@@ -125,6 +130,63 @@ export async function getWorkspaceMember(
   return role
 }
 
+/**
+ * 若有 email 對應的 workspaceInvites，建立 workspaceMembers 並刪除邀請（與 orgMembers 邀請模式一致）。
+ */
+export async function materializeWorkspaceInviteIfAny(
+  uid: string,
+  emailNormalized: string,
+  workspaceId: string,
+): Promise<WorkspaceMemberRole | null> {
+  const db = getDb()
+  const invites = await db.collection('workspaceInvites')
+    .where('workspaceId', '==', workspaceId)
+    .where('email', '==', emailNormalized)
+    .limit(1)
+    .get()
+
+  if (invites.empty) return null
+
+  const invDoc = invites.docs[0]
+  const inv = invDoc.data()
+  const role = inv.role as WorkspaceMemberRole
+  const memberRef = db.collection('workspaceMembers').doc(`${uid}_${workspaceId}`)
+  const existingMember = await memberRef.get()
+  if (existingMember.exists) {
+    await invDoc.ref.delete()
+    invalidateWorkspaceMemberCache(uid, workspaceId)
+    return existingMember.data()!.role as WorkspaceMemberRole
+  }
+
+  const organizationIdFromInv = inv.organizationId as string | null | undefined
+  const wsSnap = await db.collection('workspaces').doc(workspaceId).get()
+  const organizationId = organizationIdFromInv !== undefined && organizationIdFromInv !== null
+    ? organizationIdFromInv
+    : (wsSnap.data()?.organizationId ?? null)
+
+  await db.runTransaction(async (tx) => {
+    const mSnap = await tx.get(memberRef)
+    if (mSnap.exists) {
+      tx.delete(invDoc.ref)
+      return
+    }
+    tx.set(memberRef, {
+      uid,
+      workspaceId,
+      organizationId,
+      role,
+      invitedBy: (inv.invitedBy as string) ?? null,
+      invitedEmail: emailNormalized,
+      joinedAt: FieldValue.serverTimestamp(),
+      createdAt: FieldValue.serverTimestamp(),
+    })
+    tx.delete(invDoc.ref)
+  })
+
+  invalidateWorkspaceMemberCache(uid, workspaceId)
+  return role
+}
+
 // ── Core: 查詢 orgMembers（email-based）──────────────────────────
 // 以 Firebase token 的 email 查詢，無需 UID，支援尚未建立帳號的情境
 
@@ -207,13 +269,19 @@ export async function requireWorkspaceAccess(
   let role: WorkspaceMemberRole | null = wsRole
   let isOrgAdmin = false
 
-  // 非 workspace 直接成員 → 改用 email 查 org admin（支援尚未建立帳號的邀請）
+  // 非 workspace 直接成員 → 改用 email 查 org admin（組織管理員可存取組織內全部 workspace）
   if (!role && orgId && token.email) {
     const orgRole = await getOrgMember(token.email, orgId)
     if (orgRole === 'admin') {
       role = 'admin'
       isOrgAdmin = true
     }
+  }
+
+  // 再以 email 邀請（workspaceInvites）轉成正式成員（對方註冊 Firebase 後首次存取即生效）
+  if (!role && token.email) {
+    const emailNorm = token.email.trim().toLowerCase()
+    role = await materializeWorkspaceInviteIfAny(uid, emailNorm, workspaceId)
   }
 
   if (!role) {

@@ -4,7 +4,7 @@ import { createError } from 'h3'
 import { getDb } from './firebase'
 import { replyMessage, pushMessage, getUserProfile, linkRichMenuIdToUser } from './line'
 import { getLineWorkspaceCredentials } from './line-workspace-credentials'
-import { FieldValue } from 'firebase-admin/firestore'
+import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import {
   encodeTriggerMessage,
   encodeTriggerModule,
@@ -1170,11 +1170,14 @@ export async function handleMessageEvent(
   const userId = event.source?.userId
   if (!userId) return
 
+  const lineEventTimestampMs = typeof event.timestamp === 'number' ? event.timestamp : undefined
+
   if (event.message.type === 'text') {
     const textContent = (event.message as webhook.TextMessageContent).text
     saveConversationMessage(userId, 'incoming', textContent, {
       messageType: 'text',
       payload: { type: 'text', text: textContent },
+      lineEventTimestampMs,
     }).catch(e => console.error('[conv] save error:', e))
 
     // Run session, user data, and rules cache warm-up all in parallel.
@@ -1198,6 +1201,7 @@ export async function handleMessageEvent(
     saveConversationMessage(userId, 'incoming', typeLabel, {
       messageType: event.message.type,
       payload: event.message,
+      lineEventTimestampMs,
     }).catch(e => console.error('[conv] save error:', e))
     // Non-text: no bot reply; run in background
     ensureConversationSession(userId).catch(e => console.error('[session] error:', e))
@@ -1212,33 +1216,67 @@ export async function saveConversationMessage(
   options?: {
     messageType?: string
     payload?: unknown
+    /** LINE webhook `event.timestamp`（毫秒），用於來訊時間與「對方曾互動」推定 */
+    lineEventTimestampMs?: number
   },
 ): Promise<void> {
   const db = getDb()
   const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId)
   const convDocId = lineUserFirestoreDocId(lineUserId)
   const now = FieldValue.serverTimestamp()
+  const useLineTs = direction === 'incoming'
+    && options?.lineEventTimestampMs != null
+    && Number.isFinite(Number(options.lineEventTimestampMs))
+  const messageTimestamp = useLineTs
+    ? Timestamp.fromMillis(Number(options!.lineEventTimestampMs))
+    : now
   const msgRef = db.collection('conversations').doc(convDocId).collection('messages').doc()
   const payload = sanitizeForFirestore(options?.payload)
+
+  const convPatch: Record<string, unknown> = {
+    workspaceId: DEFAULT_LINE_WORKSPACE_ID,
+    userId: lineUserId,
+    lastMessage: text,
+    lastDirection: direction,
+    lastMessageAt: now,
+  }
+  if (direction === 'incoming') {
+    convPatch.lastPeerActivityAt = useLineTs
+      ? Timestamp.fromMillis(Number(options!.lineEventTimestampMs))
+      : now
+  }
+
   await Promise.all([
     msgRef.set({
       direction,
       text,
-      timestamp: now,
+      timestamp: messageTimestamp,
       messageType: options?.messageType || 'text',
       ...(payload !== undefined ? { payload } : {}),
     }),
-    db.collection('conversations').doc(convDocId).set(
-      {
-        workspaceId: DEFAULT_LINE_WORKSPACE_ID,
-        userId: lineUserId,
-        lastMessage: text,
-        lastDirection: direction,
-        lastMessageAt: now,
-      },
-      { merge: true },
-    ),
+    db.collection('conversations').doc(convDocId).set(convPatch, { merge: true }),
   ])
+}
+
+/** 使用者 postback 等互動（無寫入一則 incoming 訊息時）仍更新對話上的「對方最後活動」時間，供推定已讀。 */
+export async function bumpConversationPeerActivity(
+  userIdOrDocId: string,
+  lineEventTimestampMs?: number,
+): Promise<void> {
+  const db = getDb()
+  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId)
+  const convDocId = lineUserFirestoreDocId(lineUserId)
+  const at = lineEventTimestampMs != null && Number.isFinite(Number(lineEventTimestampMs))
+    ? Timestamp.fromMillis(Number(lineEventTimestampMs))
+    : FieldValue.serverTimestamp()
+  await db.collection('conversations').doc(convDocId).set(
+    {
+      workspaceId: DEFAULT_LINE_WORKSPACE_ID,
+      userId: lineUserId,
+      lastPeerActivityAt: at,
+    },
+    { merge: true },
+  )
 }
 
 async function handleIncomingText(
@@ -1363,6 +1401,11 @@ export async function handlePostbackEvent(
   console.log('[handlePostbackEvent] event received:', JSON.stringify(event).slice(0, 300))
   const userId = event.source?.userId
   if (!userId) return
+
+  const postbackTs = typeof event.timestamp === 'number' ? event.timestamp : undefined
+  bumpConversationPeerActivity(userId, postbackTs).catch(e =>
+    console.error('[conv] bump lastPeerActivityAt (postback):', e),
+  )
 
   const data = event.postback.data
 

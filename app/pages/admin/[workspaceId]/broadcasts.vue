@@ -21,6 +21,8 @@
           :key="bc.id"
           :title="bc.name"
           :active="selectedId === bc.id"
+          time-in-title-row
+          title-row-chip
           :chip-text="statusLabel(bc.status)"
           :chip-tone="bc.status === 'completed' || bc.status === 'scheduled' ? 'success' : 'neutral'"
           :meta-text="bcMetaText(bc)"

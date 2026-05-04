@@ -1,50 +1,59 @@
 <template>
-  <div class="sa-page">
-    <div class="sa-page-header">
-      <div>
-        <h1 class="sa-page-title">💬 官方帳號管理</h1>
-        <p class="sa-page-caption">管理系統中的所有 LINE 官方帳號（Workspace）。</p>
+  <AdminSplitLayout solo :is-empty="false">
+    <template #editor-header>
+      <AdminSoloPageHeading
+        field-label="Super Admin"
+        title="💬 官方帳號管理"
+        caption="管理系統中的所有 LINE 官方帳號（Workspace）。"
+      />
+      <div class="flex gap-2 admin-header-actions">
+        <el-button type="primary" @click="openCreate">+ 建立官方帳號</el-button>
       </div>
-      <el-button type="primary" @click="openCreate">+ 建立官方帳號</el-button>
-    </div>
+    </template>
 
-    <div class="sa-card">
-      <div class="sa-card-header">
-        <span class="sa-card-title">所有官方帳號</span>
-        <span class="text-xs text-muted">共 {{ workspaces.length }} 筆</span>
+    <template #editor-body>
+      <div class="solo-editor-body admin-panel-stack">
+        <div class="message-card ar-section-card">
+          <div class="message-card-header">
+            <div class="card-header-main">
+              <span class="badge badge-green">所有官方帳號</span>
+            </div>
+            <span class="text-xs text-muted">共 {{ workspaces.length }} 筆</span>
+          </div>
+          <div class="card-section-stack">
+            <el-table v-loading="loading" :data="workspaces" size="small">
+              <el-table-column label="名稱" min-width="160">
+                <template #default="{ row }">{{ row.name }}</template>
+              </el-table-column>
+              <el-table-column label="所屬組織" min-width="150">
+                <template #default="{ row }">
+                  <span v-if="orgNameMap[row.organizationId]" class="text-sm">{{ orgNameMap[row.organizationId] }}</span>
+                  <span v-else class="text-xs text-muted">未指定</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="ID" min-width="220">
+                <template #default="{ row }">
+                  <span class="text-xs text-muted sa-uid-mono">{{ row.id }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="LINE 設定" width="100" align="center">
+                <template #default="{ row }">
+                  <el-tag v-if="row.channelAccessTokenConfigured && row.channelSecretConfigured" type="success" size="small">已設定</el-tag>
+                  <el-tag v-else type="warning" size="small">未完整</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="130" align="right">
+                <template #default="{ row }">
+                  <el-button size="small" plain @click="openEdit(row)">編輯</el-button>
+                  <el-button size="small" plain @click="enterWorkspace(row.id)">進入</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
       </div>
-      <div class="sa-table-wrap">
-        <el-table v-loading="loading" :data="workspaces" size="small">
-          <el-table-column label="名稱" min-width="160">
-            <template #default="{ row }">{{ row.name }}</template>
-          </el-table-column>
-          <el-table-column label="所屬組織" min-width="150">
-            <template #default="{ row }">
-              <span v-if="orgNameMap[row.organizationId]" class="text-sm">{{ orgNameMap[row.organizationId] }}</span>
-              <span v-else class="text-xs text-muted">未指定</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="ID" min-width="220">
-            <template #default="{ row }">
-              <span class="text-xs text-muted" style="font-family: monospace">{{ row.id }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="LINE 設定" width="100" align="center">
-            <template #default="{ row }">
-              <el-tag v-if="row.channelAccessTokenConfigured && row.channelSecretConfigured" type="success" size="small">已設定</el-tag>
-              <el-tag v-else type="warning" size="small">未完整</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="130" align="right">
-            <template #default="{ row }">
-              <el-button size="small" plain @click="openEdit(row)">編輯</el-button>
-              <el-button size="small" plain @click="enterWorkspace(row.id)">進入</el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-    </div>
-  </div>
+    </template>
+  </AdminSplitLayout>
 
   <!-- Create dialog -->
   <el-dialog v-model="showCreate" title="建立官方帳號" width="480px">
@@ -212,7 +221,7 @@ async function saveEdit() {
 }
 
 function enterWorkspace(id: string) {
-  navigateTo(`/admin/${id}`)
+  navigateTo(`/admin/${id}/conversation-stats`)
 }
 
 onMounted(load)

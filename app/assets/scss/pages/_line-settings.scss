@@ -1,4 +1,4 @@
-/* LINE 連線：已儲存 Token／Secret 遮罩（外觀接近輸入框） */
+/* 組織與 LINE 設定頁：已儲存 Token／Secret 遮罩（外觀接近輸入框） */
 .ls-cred-mask {
   display: flex;
   flex-wrap: wrap;
@@ -33,4 +33,13 @@
   font-size: 0.75rem;
   color: var(--text-muted);
   flex-basis: 100%;
+}
+
+/* 組織與官方帳號唯讀區：欄位間與標題／內文間距略鬆（沿用全站 --space-form-field-gap） */
+.card-section-stack.card-section-stack--relaxed-summary {
+  gap: var(--space-form-field-gap);
+}
+
+.card-section-stack.card-section-stack--relaxed-summary .admin-field-group {
+  gap: 0.5rem;
 }

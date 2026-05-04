@@ -4,7 +4,7 @@
       <AdminSoloPageHeading
         field-label="設定"
         title="👥 成員管理"
-        caption="邀請成員加入此官方帳號，並設定其角色與權限。"
+        caption="以 Email 邀請成員（無需對方已註冊 Firebase）；已註冊者會直接加入，尚未註冊者待建立帳號後首次登入即生效。若官方帳號已綁定組織，列表底部會一併列出「組織擁有者（登記）」與「組織管理員」帳號（僅供檢視；變更請由 Super Admin 組織管理處理）。"
       />
       <div class="flex gap-2 admin-header-actions">
         <el-button v-if="canWrite" type="primary" @click="openInvite">邀請成員</el-button>
@@ -27,8 +27,11 @@
             <el-table v-else :data="members" size="small">
               <el-table-column label="Email / UID">
                 <template #default="{ row }">
-                  <div>{{ row.invitedEmail || row.uid }}</div>
-                  <div class="text-xs text-muted">{{ row.uid }}</div>
+                  <div>{{ row.invitedEmail || row.uid || '—' }}</div>
+                  <div v-if="row.pendingInvite" class="text-xs text-muted">待加入（尚未註冊 Firebase）</div>
+                  <div v-else-if="row.readOnly && row.linkedSource === 'org_member'" class="text-xs text-muted">組織管理員（組織內全部官方帳號）</div>
+                  <div v-else-if="row.readOnly && row.linkedSource === 'org_owner'" class="text-xs text-muted">組織擁有者（登記 Email）</div>
+                  <div v-else-if="row.uid" class="text-xs text-muted">{{ row.uid }}</div>
                 </template>
               </el-table-column>
               <el-table-column label="角色" width="120">
@@ -38,19 +41,20 @@
               </el-table-column>
               <el-table-column v-if="canWrite" label="操作" width="160" align="right">
                 <template #default="{ row }">
-                  <template v-if="row.role !== 'owner'">
+                  <template v-if="!row.readOnly && row.role !== 'owner'">
                     <el-select
                       :model-value="row.role"
                       size="small"
                       style="width: 90px; margin-right: 4px"
-                      @change="(val: string) => changeRole(row.uid, val)"
+                      @change="(val: string) => changeRole(row, val)"
                     >
                       <el-option label="管理員" value="admin" />
                       <el-option label="客服" value="agent" />
                       <el-option label="觀察者" value="viewer" />
                     </el-select>
-                    <el-button size="small" type="danger" plain @click="removeMember(row.uid)">移除</el-button>
+                    <el-button size="small" type="danger" plain @click="removeMember(row)">移除</el-button>
                   </template>
+                  <span v-else-if="row.readOnly" class="text-xs text-muted">—</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -65,7 +69,7 @@
     <div class="admin-panel-stack">
       <div class="admin-field-group">
         <AdminFieldLabel text="Email" tight />
-        <el-input v-model="inviteEmail" placeholder="成員的 Firebase 登入 Email" />
+        <el-input v-model="inviteEmail" placeholder="對方 Email（可不已有 Firebase 帳號）" />
       </div>
       <div class="admin-field-group">
         <AdminFieldLabel text="角色" tight />
@@ -102,12 +106,14 @@ const ROLE_LABELS: Record<string, string> = {
   admin: '管理員',
   agent: '客服',
   viewer: '觀察者',
+  org_admin: '組織管理員',
+  org_owner: '組織擁有者（登記）',
 }
 
 function roleLabel(role: string) { return ROLE_LABELS[role] ?? role }
 function roleTagType(role: string) {
-  if (role === 'owner') return 'danger'
-  if (role === 'admin') return 'warning'
+  if (role === 'owner' || role === 'org_owner') return 'danger'
+  if (role === 'admin' || role === 'org_admin') return 'warning'
   if (role === 'agent') return 'success'
   return 'info'
 }
@@ -135,11 +141,19 @@ async function invite() {
   if (!inviteEmail.value.trim()) return showToast('請輸入 Email', 'error')
   inviting.value = true
   try {
-    await apiFetch(`/api/admin/workspaces/${workspaceId.value}/members`, {
-      method: 'POST',
-      body: { email: inviteEmail.value.trim(), role: inviteRole.value },
-    })
-    showToast('已邀請成員', 'success')
+    const res = await apiFetch<{ pending?: boolean }>(
+      `/api/admin/workspaces/${workspaceId.value}/members`,
+      {
+        method: 'POST',
+        body: { email: inviteEmail.value.trim(), role: inviteRole.value },
+      },
+    )
+    showToast(
+      res.pending
+        ? '已送出邀請（對方註冊 Firebase 後首次登入即可加入）'
+        : '已邀請成員',
+      'success',
+    )
     showInvite.value = false
     await load()
   } catch (e: any) {
@@ -149,12 +163,20 @@ async function invite() {
   }
 }
 
-async function changeRole(uid: string, role: string) {
+async function changeRole(row: any, role: string) {
   try {
-    await apiFetch(`/api/admin/workspaces/${workspaceId.value}/members/${uid}`, {
-      method: 'PUT',
-      body: { role },
-    })
+    if (row.pendingInvite && row.inviteId) {
+      await apiFetch(`/api/admin/workspaces/${workspaceId.value}/member-invites/${row.inviteId}`, {
+        method: 'PUT',
+        body: { role },
+      })
+    }
+    else {
+      await apiFetch(`/api/admin/workspaces/${workspaceId.value}/members/${row.uid}`, {
+        method: 'PUT',
+        body: { role },
+      })
+    }
     showToast('角色已更新', 'success')
     await load()
   } catch (e: any) {
@@ -162,13 +184,21 @@ async function changeRole(uid: string, role: string) {
   }
 }
 
-async function removeMember(uid: string) {
-  if (!confirm('確定移除此成員？')) return
+async function removeMember(row: any) {
+  const label = row.pendingInvite ? '此邀請' : '此成員'
+  if (!confirm(`確定移除${label}？`)) return
   try {
-    await apiFetch(`/api/admin/workspaces/${workspaceId.value}/members/${uid}`, {
-      method: 'DELETE',
-    })
-    showToast('已移除成員', 'success')
+    if (row.pendingInvite && row.inviteId) {
+      await apiFetch(`/api/admin/workspaces/${workspaceId.value}/member-invites/${row.inviteId}`, {
+        method: 'DELETE',
+      })
+    }
+    else {
+      await apiFetch(`/api/admin/workspaces/${workspaceId.value}/members/${row.uid}`, {
+        method: 'DELETE',
+      })
+    }
+    showToast(row.pendingInvite ? '已取消邀請' : '已移除成員', 'success')
     await load()
   } catch (e: any) {
     showToast(e?.data?.statusMessage || '移除失敗', 'error')

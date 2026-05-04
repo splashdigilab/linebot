@@ -15,6 +15,8 @@ interface TimelineItem {
   timestamp: any
   // message fields
   direction?: 'incoming' | 'outgoing'
+  /** 出站訊息：對方在 lastPeerActivityAt 之前有互動／來訊時推定已讀（非 LINE 內建已讀） */
+  readByPeer?: boolean
   text?: string
   messageType?: string
   payload?: unknown
@@ -66,6 +68,9 @@ export default defineEventHandler(async (event) => {
   const userId = session.userId as string
   const lineUserId = lineUserIdFromFirestoreDocId(userId)
   const convDocId = lineUserFirestoreDocId(lineUserId, workspaceId)
+
+  const convSnap = await db.collection('conversations').doc(convDocId).get()
+  const peerMs = convSnap.exists ? toMillis(convSnap.data()?.lastPeerActivityAt) : 0
 
   // Fetch events for this session (avoid composite index: sessionId + orderBy timestamp)
   const eventsSnap = await db.collection('conversationEvents')
@@ -127,11 +132,15 @@ export default defineEventHandler(async (event) => {
 
   for (const d of messageDocs) {
     const m = d.data()
+    const direction = m.direction as 'incoming' | 'outgoing' | undefined
+    const msgMs = toMillis(m.timestamp)
+    const readByPeer = direction === 'outgoing' && peerMs > 0 && msgMs > 0 && msgMs <= peerMs
     items.push({
       id: d.id,
       type: 'message',
       timestamp: m.timestamp,
-      direction: m.direction,
+      direction,
+      readByPeer,
       text: m.text,
       messageType: m.messageType,
       payload: m.payload,

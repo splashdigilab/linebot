@@ -19,6 +19,8 @@
           :key="menu.id"
           :title="menu.name"
           :active="selectedId === menu.id"
+          time-in-title-row
+          title-row-chip
           :chip-text="menu.isDefault ? '預設' : ''"
           chip-tone="success"
           :meta-text="`${menu.areas?.length ?? 0} 個區塊`"

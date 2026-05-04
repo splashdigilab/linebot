@@ -26,13 +26,17 @@ export default defineEventHandler(async (event) => {
     }
   }))
 
-  return orgs.map(o => ({
-    id: o.id,
-    name: o.name,
-    plan: o.plan,
-    ownerId: o.ownerId,
-    ownerEmail: emailMap[o.ownerId] ?? o.ownerId,
-    disabled: o.disabled ?? false,
-    createdAt: o.createdAt,
-  }))
+  return orgs.map((o) => {
+    const fromUid = o.ownerId ? (emailMap[o.ownerId] ?? o.ownerId) : ''
+    const fromField = typeof o.ownerEmail === 'string' ? o.ownerEmail : ''
+    return {
+      id: o.id,
+      name: o.name,
+      plan: o.plan,
+      ownerId: o.ownerId ?? null,
+      ownerEmail: (fromField && String(fromField).trim()) || fromUid || '',
+      disabled: o.disabled ?? false,
+      createdAt: o.createdAt,
+    }
+  })
 })

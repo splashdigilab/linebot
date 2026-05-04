@@ -20,6 +20,8 @@
           :key="preset.id"
           :title="preset.name || '(未命名)'"
           :active="selectedId === preset.id"
+          time-in-title-row
+          title-row-chip
           :chip-text="preset.isActive ? '啟用' : '停用'"
           :chip-tone="preset.isActive ? 'success' : 'neutral'"
           :meta-text="getActionSummary(preset)"

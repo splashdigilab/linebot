@@ -110,7 +110,7 @@ const groupedWorkspaces = computed(() => {
 })
 
 async function enter(workspaceId: string) {
-  await navigateTo(`/admin/${workspaceId}`)
+  await navigateTo(`/admin/${workspaceId}/conversation-stats`)
 }
 
 onMounted(async () => {

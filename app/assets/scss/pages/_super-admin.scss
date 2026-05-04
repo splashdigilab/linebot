@@ -6,72 +6,23 @@
   font-weight: 600;
 }
 
-/* 頁面通用容器 */
-.sa-page {
-  padding: 2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  max-width: 1000px;
+/* Super 列表內 monospace ID（取代行內 style） */
+.sa-uid-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-/* 頁頭 */
-.sa-page-header {
+/* 使用者搜尋結果右側按鈕列 */
+.sa-user-actions {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
+  align-items: center;
+  gap: 0.75rem;
   flex-wrap: wrap;
 }
 
-.sa-page-title {
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  margin: 0;
-}
-
-.sa-page-caption {
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  margin: 0.25rem 0 0;
-}
-
-/* 卡片 */
-.sa-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-}
-
-.sa-card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1rem 1.25rem;
-  border-bottom: 1px solid var(--border);
-  gap: 0.75rem;
-}
-
-.sa-card-title {
-  font-size: 0.9rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.sa-card-body {
-  padding: 1.25rem;
-}
-
-/* 表格調整 */
-.sa-table-wrap {
-  overflow-x: auto;
+.sa-search-input {
+  max-width: 360px;
+  flex: 1;
+  min-width: 0;
 }
 
 /* 搜尋列 */
@@ -79,6 +30,12 @@
   display: flex;
   gap: 0.75rem;
   align-items: center;
+  flex-wrap: wrap;
+}
+
+.sa-search-error {
+  margin: 0;
+  color: var(--color-error);
 }
 
 /* 使用者資訊卡（user 頁面） */

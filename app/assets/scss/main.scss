@@ -26,12 +26,12 @@
 
 /* ── Page Splitting ───────────────────────────────────────── */
 @use "./admin/shared";
-@use "./pages/dashboard";
 @use "./pages/richmenu";
 @use "./pages/flow";
 @use "./pages/auto-reply";
 @use "./pages/campaigns";
 @use "./pages/login";
+@use "./pages/liff-lead";
 @use "./pages/workspaces";
 @use "./pages/tags";
 @use "./pages/users";

@@ -1,60 +1,69 @@
 <template>
-  <div class="sa-page">
-    <div class="sa-page-header">
-      <div>
-        <h1 class="sa-page-title">🏢 組織管理</h1>
-        <p class="sa-page-caption">管理系統中的所有組織，包含方案、管理員與停用狀態。</p>
+  <AdminSplitLayout solo :is-empty="false">
+    <template #editor-header>
+      <AdminSoloPageHeading
+        field-label="Super Admin"
+        title="🏢 組織管理"
+        caption="管理系統中的所有組織，包含方案、管理員與停用狀態。"
+      />
+      <div class="flex gap-2 admin-header-actions">
+        <el-button type="primary" @click="openCreate">+ 建立組織</el-button>
       </div>
-      <el-button type="primary" @click="openCreate">+ 建立組織</el-button>
-    </div>
+    </template>
 
-    <div class="sa-card">
-      <div class="sa-card-header">
-        <span class="sa-card-title">所有組織</span>
-        <span class="text-xs text-muted">共 {{ orgs.length }} 筆</span>
+    <template #editor-body>
+      <div class="solo-editor-body admin-panel-stack">
+        <div class="message-card ar-section-card">
+          <div class="message-card-header">
+            <div class="card-header-main">
+              <span class="badge badge-green">所有組織</span>
+            </div>
+            <span class="text-xs text-muted">共 {{ orgs.length }} 筆</span>
+          </div>
+          <div class="card-section-stack">
+            <el-table v-loading="loading" :data="orgs" size="small">
+              <el-table-column label="組織名稱" min-width="160">
+                <template #default="{ row }">
+                  <span :class="{ 'text-muted': row.disabled }">{{ row.name }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="方案" width="100">
+                <template #default="{ row }">
+                  <span :class="`sa-plan-${row.plan}`">{{ PLAN_LABELS[row.plan] ?? row.plan }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="Owner Email" min-width="180">
+                <template #default="{ row }">
+                  <span class="text-sm">{{ row.ownerEmail }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="狀態" width="80">
+                <template #default="{ row }">
+                  <el-tag :type="row.disabled ? 'danger' : 'success'" size="small">
+                    {{ row.disabled ? '停用' : '正常' }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" width="220" align="right">
+                <template #default="{ row }">
+                  <el-button size="small" plain @click="openMembers(row)">管理員</el-button>
+                  <el-button size="small" plain @click="openEdit(row)">編輯</el-button>
+                  <el-button
+                    size="small"
+                    :type="row.disabled ? 'success' : 'warning'"
+                    plain
+                    @click="toggleDisable(row)"
+                  >
+                    {{ row.disabled ? '啟用' : '停用' }}
+                  </el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
       </div>
-      <div class="sa-table-wrap">
-        <el-table v-loading="loading" :data="orgs" size="small">
-          <el-table-column label="組織名稱" min-width="160">
-            <template #default="{ row }">
-              <span :class="{ 'text-muted': row.disabled }">{{ row.name }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="方案" width="100">
-            <template #default="{ row }">
-              <span :class="`sa-plan-${row.plan}`">{{ PLAN_LABELS[row.plan] ?? row.plan }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="Owner Email" min-width="180">
-            <template #default="{ row }">
-              <span class="text-sm">{{ row.ownerEmail }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column label="狀態" width="80">
-            <template #default="{ row }">
-              <el-tag :type="row.disabled ? 'danger' : 'success'" size="small">
-                {{ row.disabled ? '停用' : '正常' }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="220" align="right">
-            <template #default="{ row }">
-              <el-button size="small" plain @click="openMembers(row)">管理員</el-button>
-              <el-button size="small" plain @click="openEdit(row)">編輯</el-button>
-              <el-button
-                size="small"
-                :type="row.disabled ? 'success' : 'warning'"
-                plain
-                @click="toggleDisable(row)"
-              >
-                {{ row.disabled ? '啟用' : '停用' }}
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-    </div>
-  </div>
+    </template>
+  </AdminSplitLayout>
 
   <!-- Create dialog -->
   <el-dialog v-model="showCreate" title="建立組織" width="440px">
@@ -81,7 +90,7 @@
   </el-dialog>
 
   <!-- Edit dialog -->
-  <el-dialog v-model="showEdit" title="編輯組織" width="440px">
+  <el-dialog v-model="showEdit" title="編輯組織" width="480px">
     <div class="admin-panel-stack">
       <div class="admin-field-group">
         <AdminFieldLabel text="組織名稱" tight />
@@ -92,6 +101,13 @@
         <el-select v-model="editForm.plan" style="width: 100%">
           <el-option v-for="p in PLAN_OPTIONS" :key="p.value" :label="p.label" :value="p.value" />
         </el-select>
+      </div>
+      <div class="admin-field-group">
+        <AdminFieldLabel text="擁有者 Email" tight />
+        <el-input v-model="editForm.ownerEmail" placeholder="登記擁有者（小寫正規化儲存）" />
+        <p class="text-xs text-muted">
+          若對方尚無 Firebase，僅更新登記 Email；註冊後下次變更或系統寫入時可帶出 UID。新 Email 若尚非組織管理員，會自動加入 org 管理員。
+        </p>
       </div>
     </div>
     <template #footer>
@@ -185,7 +201,7 @@ const PLAN_OPTIONS = [
 ]
 
 const form = reactive({ name: '', plan: 'free', ownerEmail: '' })
-const editForm = reactive({ name: '', plan: 'free' })
+const editForm = reactive({ name: '', plan: 'free', ownerEmail: '' })
 
 async function load() {
   loading.value = true
@@ -209,6 +225,7 @@ function openEdit(row: any) {
   editTarget.value = row
   editForm.name = row.name
   editForm.plan = row.plan
+  editForm.ownerEmail = row.ownerEmail || ''
   showEdit.value = true
 }
 
@@ -251,11 +268,16 @@ async function createOrg() {
 
 async function saveEdit() {
   if (!editForm.name.trim()) return showToast('組織名稱不能為空', 'error')
+  if (!editForm.ownerEmail.trim()) return showToast('請填寫擁有者 Email', 'error')
   saving.value = true
   try {
     await apiFetch(`/api/admin/super/organizations/${editTarget.value.id}`, {
       method: 'PATCH',
-      body: { name: editForm.name, plan: editForm.plan },
+      body: {
+        name: editForm.name,
+        plan: editForm.plan,
+        ownerEmail: editForm.ownerEmail.trim(),
+      },
     })
     showToast('已更新', 'success')
     showEdit.value = false

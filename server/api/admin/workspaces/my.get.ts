@@ -133,5 +133,44 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // Email 邀請（workspaceInvites）：對方尚未註冊 Firebase 時仍可出現在帳號選擇列表
+  if (email) {
+    const invSnap = await db.collection('workspaceInvites').where('email', '==', email).get()
+    for (const doc of invSnap.docs) {
+      const wid = doc.data().workspaceId as string
+      if (includedWorkspaceIds.has(wid)) continue
+      const wSnap = await db.collection('workspaces').doc(wid).get()
+      if (!wSnap.exists) continue
+      const orgId = wSnap.data()?.organizationId ?? null
+      if (orgId) {
+        const oSnap = await db.collection('organizations').doc(orgId).get()
+        if (!oSnap.exists || oSnap.data()?.disabled === true) continue
+        result.push({
+          workspaceId: wid,
+          name: wSnap.data()?.name ?? wid,
+          role: doc.data().role as string,
+          organizationId: orgId,
+          organizationName: (oSnap.data()?.name as string) ?? orgId,
+          organizationDisabled: false,
+          viaOrgAdmin: false,
+          viaWorkspaceInvite: true,
+        })
+      }
+      else {
+        result.push({
+          workspaceId: wid,
+          name: wSnap.data()?.name ?? wid,
+          role: doc.data().role as string,
+          organizationId: null,
+          organizationName: null,
+          organizationDisabled: false,
+          viaOrgAdmin: false,
+          viaWorkspaceInvite: true,
+        })
+      }
+      includedWorkspaceIds.add(wid)
+    }
+  }
+
   return result
 })

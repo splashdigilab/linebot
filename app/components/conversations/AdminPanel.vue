@@ -2,7 +2,7 @@
   <AdminSplitLayout class="conversations-page" :is-empty="!selectedUserId">
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
-      <span class="split-sidebar-title">💬 對話</span>
+      <span class="split-sidebar-title conv-sidebar-title-row">💬 對話</span>
       <el-button size="small" :loading="listLoading" @click="loadList">重整</el-button>
     </template>
 
@@ -18,7 +18,13 @@
           :class="{ active: activeTab === tab.value }"
           @click="switchTab(tab.value)"
         >
-          {{ tab.value === 'all' ? tab.label : `${tab.label}（${sessionStatusCounts[tab.value]}）` }}
+          {{
+            tab.value === 'all'
+              ? tab.label
+              : tab.value === 'closed'
+                ? tab.label
+                : `${tab.label}（${sessionStatusCounts[tab.value]}）`
+          }}
         </button>
       </div>
       <div class="conv-search-bar">
@@ -39,6 +45,7 @@
             :title="s.displayName"
             :leading-avatar-url="s.pictureUrl"
             show-leading-avatar-fallback
+            time-in-title-row
             :active="selectedSessionId === s.sessionId"
             :meta-text="SESSION_STATUS_LABELS[s.status] || s.status"
             :meta-truncate="true"
@@ -55,6 +62,8 @@
             :title="c.displayName"
             :leading-avatar-url="c.pictureUrl"
             show-leading-avatar-fallback
+            time-in-title-row
+            :show-unread-dot="isConvItemUnread(c)"
             :active="selectedUserId === c.userId && !selectedSessionId"
             :meta-text="(c.lastDirection === 'outgoing' ? '↑ ' : '') + c.lastMessage"
             :meta-truncate="true"
@@ -346,8 +355,12 @@
             </template>
             </div>
                   <div class="conv-bubble-meta">
-                    <span v-if="msg.direction === 'outgoing'" class="conv-bubble-read">Read</span>
                     <span class="conv-bubble-time">{{ formatTime(msg.timestamp) }}</span>
+                    <span
+                      v-if="msg.direction === 'outgoing' && msg.readByPeer"
+                      class="conv-bubble-read"
+                      title="對方有傳訊或點選按鈕後，推定曾看到此則以前的官方訊息；與 LINE App 內建已讀不完全相同。"
+                    >已讀</span>
                   </div>
                 </div>
               </div>
@@ -646,6 +659,124 @@ const props = defineProps<{
 
 const { apiFetch } = props
 
+const route = useRoute()
+const workspaceId = computed(() => String(route.params.workspaceId || ''))
+
+/** 各使用者上次在後台「開啟對話」的時間（ms），存 localStorage，僅影響「全部」列表未讀提示 */
+const convLastReadMs = ref<Record<string, number>>({})
+const pageHasFocus = ref(true)
+const savedDocumentTitle = ref('')
+let listPollTimer: ReturnType<typeof setInterval> | null = null
+
+function convReadStorageKey(): string {
+  const wid = workspaceId.value
+  return wid ? `admin-conv-lastRead:${wid}` : ''
+}
+
+function hydrateConvLastRead() {
+  if (typeof localStorage === 'undefined')
+    return
+  const key = convReadStorageKey()
+  if (!key) {
+    convLastReadMs.value = {}
+    return
+  }
+  try {
+    const raw = localStorage.getItem(key)
+    convLastReadMs.value = raw ? JSON.parse(raw) as Record<string, number> : {}
+  }
+  catch {
+    convLastReadMs.value = {}
+  }
+}
+
+function persistConvLastRead() {
+  if (typeof localStorage === 'undefined')
+    return
+  const key = convReadStorageKey()
+  if (!key)
+    return
+  try {
+    localStorage.setItem(key, JSON.stringify(convLastReadMs.value))
+  }
+  catch {
+    /* quota or private mode */
+  }
+}
+
+function markConversationRead(userId: string) {
+  if (!userId)
+    return
+  convLastReadMs.value = { ...convLastReadMs.value, [userId]: Date.now() }
+  persistConvLastRead()
+}
+
+function messageTimestampToMs(ts: any): number {
+  if (ts == null || ts === '')
+    return 0
+  if (typeof ts === 'number' && Number.isFinite(ts))
+    return ts < 1e11 ? Math.round(ts * 1000) : Math.round(ts)
+  if (typeof ts === 'string') {
+    const d = new Date(ts)
+    const t = d.getTime()
+    return Number.isFinite(t) ? t : 0
+  }
+  if (typeof ts === 'object') {
+    if (typeof ts.toMillis === 'function') {
+      const t = ts.toMillis()
+      return Number.isFinite(t) ? t : 0
+    }
+    if (typeof ts.toDate === 'function') {
+      const d = ts.toDate()
+      const t = d?.getTime?.() ?? NaN
+      return Number.isFinite(t) ? t : 0
+    }
+    const secRaw = ts._seconds ?? ts.seconds
+    if (secRaw !== undefined && secRaw !== null && secRaw !== '') {
+      const sec = typeof secRaw === 'string' ? Number(secRaw) : secRaw
+      const nsRaw = ts._nanoseconds ?? ts.nanoseconds ?? 0
+      const ns = typeof nsRaw === 'string' ? Number(nsRaw) : nsRaw
+      if (Number.isFinite(sec))
+        return sec * 1000 + (Number.isFinite(ns) ? Math.floor(ns / 1e6) : 0)
+    }
+  }
+  return 0
+}
+
+/** 最後一則訊息（含使用者進線、真人、機器人／系統回覆）晚於上次在後台開啟此對話即視為未讀 */
+function isConvItemUnread(c: ConvItem): boolean {
+  const lastMs = messageTimestampToMs(c.lastMessageAt)
+  if (lastMs <= 0)
+    return false
+  const readMs = convLastReadMs.value[c.userId] ?? 0
+  return lastMs > readMs
+}
+
+function applyUnreadDocumentTitle() {
+  if (typeof document === 'undefined' || !savedDocumentTitle.value)
+    return
+  const n = conversations.value.filter(c => isConvItemUnread(c)).length
+  const backgrounded = document.visibilityState === 'hidden' || !pageHasFocus.value
+  if (n > 0 && backgrounded)
+    document.title = `（${n}）${savedDocumentTitle.value}`
+  else
+    document.title = savedDocumentTitle.value
+}
+
+function onWindowFocus() {
+  pageHasFocus.value = true
+  applyUnreadDocumentTitle()
+}
+
+function onWindowBlur() {
+  pageHasFocus.value = false
+  applyUnreadDocumentTitle()
+}
+
+function onVisibilityChange() {
+  applyUnreadDocumentTitle()
+}
+
 // ── Session tab types ─────────────────────────────────────────────
 
 type ConvSessionStatus = 'open' | 'bot_handling' | 'pending_human' | 'human_handling' | 'closed'
@@ -664,11 +795,11 @@ interface SessionItem {
 
 const STATUS_TABS: { value: TabValue; label: string }[] = [
   { value: 'all', label: '全部' },
-  { value: 'open', label: '未首接' },
-  { value: 'bot_handling', label: '機器人' },
   { value: 'pending_human', label: '待真人' },
   { value: 'human_handling', label: '真人處理' },
-  { value: 'closed', label: '已結束' },
+  { value: 'open', label: '未首接' },
+  { value: 'bot_handling', label: '機器人' },
+  { value: 'closed', label: '結束' },
 ]
 
 const SESSION_STATUS_LABELS: Record<ConvSessionStatus, string> = {
@@ -695,6 +826,8 @@ interface MsgItem {
   messageType?: string
   payload?: any
   timestamp: any
+  /** 對方曾來訊／互動後推定已讀（見後端說明） */
+  readByPeer?: boolean
 }
 
 interface SessionTimelineItem {
@@ -703,6 +836,7 @@ interface SessionTimelineItem {
   timestamp: any
   label?: string
   direction?: 'incoming' | 'outgoing'
+  readByPeer?: boolean
   text?: string
   messageType?: string
   payload?: unknown
@@ -913,6 +1047,19 @@ const sessionSidebarItems = computed<SessionItem[]>(() => {
 
 const convSidebarItems = computed<ConvItem[]>(() => filteredConversations.value)
 
+const unreadConvCount = computed(() =>
+  conversations.value.filter(c => isConvItemUnread(c)).length,
+)
+
+watch(unreadConvCount, () => {
+  applyUnreadDocumentTitle()
+})
+
+watch(workspaceId, () => {
+  hydrateConvLastRead()
+  applyUnreadDocumentTitle()
+})
+
 const sidebarItems = computed(() =>
   activeTab.value === 'all' ? convSidebarItems.value : sessionSidebarItems.value,
 )
@@ -943,6 +1090,7 @@ const chatRows = computed<ChatRow[]>(() => {
         messageType: String(item.messageType || 'text'),
         payload: item.payload as any,
         timestamp: item.timestamp,
+        readByPeer: item.readByPeer,
       }
       return { kind: 'msg' as const, key: item.id, msg }
     })
@@ -1004,6 +1152,7 @@ async function selectSession(s: SessionItem) {
     sessionTimelineItems.value = res.items ?? []
     await nextTick()
     scrollToBottom()
+    markConversationRead(s.userId)
   }
   catch {
     sessionTimelineItems.value = []
@@ -1103,6 +1252,7 @@ async function selectUser(c: ConvItem) {
     allTabActiveSession.value = res.activeSession ?? null
     await nextTick()
     scrollToBottom()
+    markConversationRead(c.userId)
   }
   catch {
     showToast('載入訊息失敗', 'error')
@@ -1854,7 +2004,37 @@ function getPayloadSummary(msg: MsgItem): string {
 }
 
 onMounted(() => {
+  if (typeof document !== 'undefined')
+    savedDocumentTitle.value = document.title
+  hydrateConvLastRead()
   loadList()
   loadSupportPresets()
+  listPollTimer = setInterval(() => {
+    if (!listLoading.value)
+      void loadList()
+  }, 30_000)
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', onWindowFocus)
+    window.addEventListener('blur', onWindowBlur)
+  }
+  if (typeof document !== 'undefined')
+    document.addEventListener('visibilitychange', onVisibilityChange)
+  applyUnreadDocumentTitle()
+})
+
+onUnmounted(() => {
+  if (listPollTimer) {
+    clearInterval(listPollTimer)
+    listPollTimer = null
+  }
+  if (typeof window !== 'undefined') {
+    window.removeEventListener('focus', onWindowFocus)
+    window.removeEventListener('blur', onWindowBlur)
+  }
+  if (typeof document !== 'undefined') {
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+    if (savedDocumentTitle.value)
+      document.title = savedDocumentTitle.value
+  }
 })
 </script>

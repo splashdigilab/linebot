@@ -22,6 +22,8 @@
           :key="c.id"
           :title="c.name"
           :active="selectedId === c.id"
+          time-in-title-row
+          title-row-chip
           :chip-text="c.isActive ? '啟用' : '停用'"
           :chip-tone="c.isActive ? 'success' : 'neutral'"
           @select="selectCampaign(c)"
@@ -403,7 +405,7 @@ function cancelEdit() {
 async function submitForm() {
   if (!form.value.name.trim()) return showToast('請輸入活動名稱', 'error')
   if (!effectiveDefaultLiffId.value.trim()) {
-    return showToast('請先到「LINE 連線」設定預設 LIFF', 'error')
+    return showToast('請先到「組織與 LINE」設定預設 LIFF', 'error')
   }
   if (!form.value.tagIds.length) return showToast('請至少選擇一個標籤', 'error')
   if (form.value.action.type === 'module' && !String(form.value.action.moduleId || '').trim()) {

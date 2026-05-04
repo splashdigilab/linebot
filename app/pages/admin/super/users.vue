@@ -1,74 +1,79 @@
 <template>
-  <div class="sa-page">
-    <div class="sa-page-header">
-      <div>
-        <h1 class="sa-page-title">🛡️ Super Admin 管理</h1>
-        <p class="sa-page-caption">搜尋使用者並管理 Super Admin 權限。</p>
-      </div>
-    </div>
+  <AdminSplitLayout solo :is-empty="false">
+    <template #editor-header>
+      <AdminSoloPageHeading
+        field-label="Super Admin"
+        title="🛡️ Super Admin 管理"
+        caption="搜尋使用者並管理 Super Admin 權限。"
+      />
+    </template>
 
-    <!-- Search -->
-    <div class="sa-card">
-      <div class="sa-card-header">
-        <span class="sa-card-title">查詢使用者</span>
-      </div>
-      <div class="sa-card-body">
-        <div class="sa-search-bar">
-          <el-input
-            v-model="searchEmail"
-            placeholder="輸入 Email 搜尋"
-            style="max-width: 360px"
-            clearable
-            @keyup.enter="search"
-          />
-          <el-button type="primary" :loading="searching" @click="search">搜尋</el-button>
-        </div>
-
-        <div v-if="searchError" class="mt-2 text-sm" style="color: var(--color-error)">
-          {{ searchError }}
-        </div>
-
-        <div v-if="foundUser" class="sa-user-result mt-2">
-          <div class="sa-user-info">
-            <span class="sa-user-name">{{ foundUser.displayName || '（無顯示名稱）' }}</span>
-            <span class="sa-user-email">{{ foundUser.email }}</span>
-            <span class="sa-user-uid">UID: {{ foundUser.uid }}</span>
+    <template #editor-body>
+      <div class="solo-editor-body admin-panel-stack">
+        <div class="message-card ar-section-card">
+          <div class="message-card-header">
+            <div class="card-header-main">
+              <span class="badge badge-green">查詢使用者</span>
+            </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap">
-            <el-tag :type="foundUser.isSuperAdmin ? 'danger' : 'info'" size="small">
-              {{ foundUser.isSuperAdmin ? 'Super Admin' : '一般使用者' }}
-            </el-tag>
-            <el-tag v-if="foundUser.disabled" type="warning" size="small">帳號停用</el-tag>
-            <el-button
-              v-if="!foundUser.isSuperAdmin"
-              size="small"
-              type="danger"
-              plain
-              :loading="acting"
-              @click="grantSuperAdmin"
-            >
-              授予 Super Admin
-            </el-button>
-            <el-button
-              v-else
-              size="small"
-              type="warning"
-              plain
-              :loading="acting"
-              @click="revokeSuperAdmin"
-            >
-              撤銷 Super Admin
-            </el-button>
+          <div class="card-section-stack">
+            <div class="sa-search-bar">
+              <el-input
+                v-model="searchEmail"
+                class="sa-search-input"
+                placeholder="輸入 Email 搜尋"
+                clearable
+                @keyup.enter="search"
+              />
+              <el-button type="primary" :loading="searching" @click="search">搜尋</el-button>
+            </div>
+
+            <div v-if="searchError" class="text-sm sa-search-error">
+              {{ searchError }}
+            </div>
+
+            <div v-if="foundUser" class="sa-user-result">
+              <div class="sa-user-info">
+                <span class="sa-user-name">{{ foundUser.displayName || '（無顯示名稱）' }}</span>
+                <span class="sa-user-email">{{ foundUser.email }}</span>
+                <span class="sa-user-uid">UID: {{ foundUser.uid }}</span>
+              </div>
+              <div class="sa-user-actions">
+                <el-tag :type="foundUser.isSuperAdmin ? 'danger' : 'info'" size="small">
+                  {{ foundUser.isSuperAdmin ? 'Super Admin' : '一般使用者' }}
+                </el-tag>
+                <el-tag v-if="foundUser.disabled" type="warning" size="small">帳號停用</el-tag>
+                <el-button
+                  v-if="!foundUser.isSuperAdmin"
+                  size="small"
+                  type="danger"
+                  plain
+                  :loading="acting"
+                  @click="grantSuperAdmin"
+                >
+                  授予 Super Admin
+                </el-button>
+                <el-button
+                  v-else
+                  size="small"
+                  type="warning"
+                  plain
+                  :loading="acting"
+                  @click="revokeSuperAdmin"
+                >
+                  撤銷 Super Admin
+                </el-button>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    </div>
 
-    <!-- Note -->
-    <div class="admin-alert admin-alert--warn">
-      <strong>注意：</strong>Super Admin 授予/撤銷後，該使用者需要重新登入才能生效（Firebase ID token 需刷新）。
-    </div>
-  </div>
+        <div class="admin-alert admin-alert--warn">
+          <strong>注意：</strong>Super Admin 授予/撤銷後，該使用者需要重新登入才能生效（Firebase ID token 需刷新）。
+        </div>
+      </div>
+    </template>
+  </AdminSplitLayout>
 </template>
 
 <script setup lang="ts">

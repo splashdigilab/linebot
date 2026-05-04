@@ -1,6 +1,9 @@
 <template>
-  <div class="liff-lead">
-    <p v-if="phase === 'loading'" class="liff-lead-msg">載入中…</p>
+  <div class="liff-lead" :class="{ 'liff-lead--loading': phase === 'loading' }">
+    <div v-if="phase === 'loading'" class="liff-lead-loading" role="status" aria-live="polite">
+      <span class="liff-lead-spinner" aria-hidden="true" />
+      <p class="liff-lead-loading-text">載入中…</p>
+    </div>
     <p v-else-if="phase === 'need-login'" class="liff-lead-msg">正在前往 LINE 登入…</p>
     <template v-else-if="phase === 'done'">
       <p class="liff-lead-title">綁定完成</p>
@@ -278,65 +281,3 @@ onMounted(async () => {
   }
 })
 </script>
-
-<style scoped>
-.liff-lead {
-  min-height: 100dvh;
-  box-sizing: border-box;
-  padding: 1.5rem;
-  font-family: system-ui, sans-serif;
-  background: #0f1419;
-  color: #e8eaed;
-}
-.liff-lead-title {
-  font-size: 1.125rem;
-  font-weight: 600;
-  margin: 0 0 0.75rem;
-}
-.liff-lead-msg {
-  margin: 0 0 0.75rem;
-  line-height: 1.5;
-}
-.liff-lead-hint {
-  margin: 0 0 1rem;
-  font-size: 0.875rem;
-  color: #9aa0a6;
-  line-height: 1.5;
-}
-.liff-lead-btn {
-  display: inline-block;
-  padding: 0.625rem 1.25rem;
-  background: #06c755;
-  color: #fff;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  border-radius: 0.5rem;
-  text-decoration: none;
-}
-.liff-lead-btn:active {
-  opacity: 0.85;
-}
-.liff-lead-err {
-  color: #f28b82;
-}
-.liff-lead-debug {
-  margin-top: 1rem;
-  border: 1px solid #3c4043;
-  border-radius: 0.5rem;
-  background: #111827;
-  padding: 0.75rem;
-}
-.liff-lead-debug-title {
-  margin: 0 0 0.5rem;
-  font-size: 0.8125rem;
-  color: #9aa0a6;
-}
-.liff-lead-debug-body {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-size: 0.75rem;
-  line-height: 1.4;
-  color: #cfd8dc;
-}
-</style>

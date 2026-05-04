@@ -107,6 +107,30 @@
   min-width: 0;
 }
 
+.split-list-item__avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 紅點留在頭像框內，避免側欄 overflow-x: hidden 裁到圓外 */
+.split-list-item__avatar-wrap.is-unread::after {
+  content: '';
+  position: absolute;
+  top: 0.12rem;
+  right: 0.12rem;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: var(--el-color-danger, #f56c6c);
+  border: 1.5px solid var(--bg-surface, #fff);
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 1;
+}
+
 .split-list-item__avatar {
   width: 2.25rem;
   height: 2.25rem;
@@ -146,12 +170,63 @@
   color: inherit;
 }
 
+/* 標題列右側時間（對話列表等） */
+.split-list-item__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  min-width: 0;
+  width: 100%;
+}
+
+.split-list-item__title-row .split-list-name {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.split-list-item__time {
+  flex-shrink: 0;
+  max-width: 42%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.25;
+  color: var(--text-muted);
+}
+
+/* 標題列右側：啟用／預設等膠囊（與時間同一位置） */
+.split-list-item__title-row .split-list-chip--in-title-row {
+  flex-shrink: 0;
+  align-self: center;
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
 .split-list-meta {
   display: flex;
   align-items: center;
   gap: 0.4rem;
   font-size: 0.7rem;
   color: var(--text-muted);
+}
+
+.split-list-meta.split-list-meta--stacked {
+  display: block;
+  min-width: 0;
+  margin-top: 0.05rem;
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.split-list-meta.split-list-meta--stacked .split-list-meta-text.truncate {
+  display: block;
 }
 
 .split-list-chip {

@@ -22,6 +22,8 @@
           :key="rule.id"
           :title="rule.name || rule.keyword || '(未命名)'"
           :active="selectedId === rule.id"
+          time-in-title-row
+          title-row-chip
           :chip-text="rule.isActive ? '啟用' : '停用'"
           :chip-tone="rule.isActive ? 'success' : 'neutral'"
           :meta-text="getActionSummary(rule)"

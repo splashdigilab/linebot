@@ -10,8 +10,10 @@ export type OrganizationPlan = 'free' | 'starter' | 'pro' | 'enterprise'
 export interface OrganizationDoc {
   name: string
   plan: OrganizationPlan
-  /** Firebase uid of the organization owner */
-  ownerId: string
+  /** 登記擁有者 Email（小寫）；與 ownerId 擇一或並存 */
+  ownerEmail?: string
+  /** Firebase uid；若擁有者尚未註冊則可能缺省 */
+  ownerId?: string
   disabled?: boolean
   createdAt: Timestamp | FieldValue
   updatedAt: Timestamp | FieldValue
@@ -67,5 +69,22 @@ export interface WorkspaceMemberDoc {
   /** 邀請時輸入的 email，供顯示用 */
   invitedEmail: string | null
   joinedAt: Timestamp | FieldValue
+  createdAt: Timestamp | FieldValue
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Collection: workspaceInvites
+//  Doc ID: auto id — 對方尚無 Firebase 帳號時的 email 邀請（首次登入後轉成 workspaceMembers）
+// ═══════════════════════════════════════════════════════════════════
+
+export type WorkspaceInviteRole = 'admin' | 'agent' | 'viewer'
+
+export interface WorkspaceInviteDoc {
+  workspaceId: string
+  organizationId: string | null
+  /** 小寫 email，與 Firebase token.email 比對 */
+  email: string
+  role: WorkspaceInviteRole
+  invitedBy: string
   createdAt: Timestamp | FieldValue
 }

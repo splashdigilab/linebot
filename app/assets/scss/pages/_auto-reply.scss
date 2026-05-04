@@ -141,9 +141,12 @@
   gap: var(--space-form-stack-gap);
 }
 
-.ar-section-card {
-  width: min(780px, 100%);
+/* 與 flow 固定寬 .message-card 併用：設定頁／自動回覆等區塊橫向撐滿編輯區 */
+.message-card.ar-section-card {
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .ar-section-hint {

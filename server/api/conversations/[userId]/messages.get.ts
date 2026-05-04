@@ -4,6 +4,19 @@ import { STATUS_LABELS } from '~~/shared/types/conversation-stats'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import { lineUserFirestoreDocId, lineUserIdFromFirestoreDocId } from '~~/shared/line-workspace'
 
+function toMillis(raw: unknown): number {
+  if (raw == null) return 0
+  if (typeof raw === 'object' && raw !== null && 'toMillis' in raw && typeof (raw as { toMillis: () => number }).toMillis === 'function') {
+    return (raw as { toMillis: () => number }).toMillis()
+  }
+  if (typeof raw === 'object' && raw !== null && 'toDate' in raw && typeof (raw as { toDate: () => Date }).toDate === 'function') {
+    return (raw as { toDate: () => Date }).toDate().getTime()
+  }
+  if (raw instanceof Date) return raw.getTime()
+  const t = new Date(String(raw)).getTime()
+  return Number.isFinite(t) ? t : 0
+}
+
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
 
@@ -25,15 +38,24 @@ export default defineEventHandler(async (event) => {
     .limit(200)
     .get()
 
+  const peerMs = toMillis(convSnap.data()?.lastPeerActivityAt)
+
   // 抓最新 200 筆，再反轉成舊->新，讓前端顯示維持由上到下的時間序
-  const messages = snap.docs.map(d => ({
-    id: d.id,
-    direction: d.data().direction as 'incoming' | 'outgoing',
-    text: d.data().text as string,
-    messageType: (d.data().messageType as string | undefined) ?? 'text',
-    payload: d.data().payload ?? null,
-    timestamp: d.data().timestamp ?? null,
-  })).reverse()
+  const messages = snap.docs.map((d) => {
+    const data = d.data()
+    const direction = data.direction as 'incoming' | 'outgoing'
+    const msgMs = toMillis(data.timestamp)
+    const readByPeer = direction === 'outgoing' && peerMs > 0 && msgMs > 0 && msgMs <= peerMs
+    return {
+      id: d.id,
+      direction,
+      text: data.text as string,
+      messageType: (data.messageType as string | undefined) ?? 'text',
+      payload: data.payload ?? null,
+      timestamp: data.timestamp ?? null,
+      readByPeer,
+    }
+  }).reverse()
 
   const convData = convSnap.data()
   const currentSessionId = convData?.currentSessionId as string | undefined | null
