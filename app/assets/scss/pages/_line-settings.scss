@@ -1,4 +1,8 @@
 /* 組織與 LINE 設定頁：已儲存 Token／Secret 遮罩（外觀接近輸入框） */
+.ls-page-body {
+  padding: 1.5rem;
+}
+
 .ls-cred-mask {
   display: flex;
   flex-wrap: wrap;

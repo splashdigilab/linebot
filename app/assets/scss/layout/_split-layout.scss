@@ -322,7 +322,9 @@
 .split-editor-body {
   flex: 1;
   min-height: 0;         /* allow flex children to control their own scroll */
-  overflow: hidden;      /* children control their own scroll */
+  overflow-y: auto;      /* allow editor body scroll when content exceeds viewport */
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
   padding: 0;
   display: flex;
   flex-direction: column;

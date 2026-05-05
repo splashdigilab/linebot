@@ -13,7 +13,7 @@
     </template>
 
     <template #editor-body>
-      <div class="solo-editor-body admin-panel-stack">
+      <div class="ls-page-body admin-panel-stack">
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
