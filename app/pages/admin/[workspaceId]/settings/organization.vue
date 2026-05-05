@@ -389,6 +389,15 @@ type WebhookVerifyResult = {
   testError?: string
 }
 
+type SaveWorkspaceResponse = {
+  ok: boolean
+  id: string
+  webhookVerification?: {
+    ok: boolean
+    message: string
+  }
+}
+
 const webhookVerifyResult = ref<WebhookVerifyResult | null>(null)
 const verifyingWebhook = ref(false)
 
@@ -491,7 +500,7 @@ async function save() {
     const body: Record<string, unknown> = { defaultLiffId }
     if (t) body.channelAccessToken = t
     if (s) body.channelSecret = s
-    await $fetch('/api/admin/line-workspace', {
+    const data = await $fetch<SaveWorkspaceResponse>('/api/admin/line-workspace', {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}` },
       body: {
@@ -500,10 +509,18 @@ async function save() {
         compareWebhookUrl: suggestedWebhookUrl.value || undefined,
       },
     })
-    showToast('已儲存（已自動測試 Webhook）', 'success')
     await loadWorkspaceList().catch(() => {})
     await load()
     await verifyWebhook(false)
+    if (data.webhookVerification?.ok) {
+      showToast(data.webhookVerification.message, 'success')
+    }
+    else if (data.webhookVerification?.message) {
+      showToast(data.webhookVerification.message, 'error')
+    }
+    else {
+      showToast('已儲存', 'success')
+    }
   }
   catch (e: any) {
     showToast(e?.data?.message || e?.message || '儲存失敗', 'error')
