@@ -17,6 +17,11 @@
           <p>你目前沒有任何官方帳號的存取權限。</p>
           <p class="text-xs text-muted">請聯繫管理員邀請你加入。</p>
         </div>
+        <NuxtLink v-if="isSuperAdmin" to="/admin/super" class="ws-super-admin-link">
+          <span>⚙️</span>
+          <span>Super Admin 後台</span>
+          <span class="ws-item-arrow">→</span>
+        </NuxtLink>
         <div class="ws-select-footer">
           <el-button @click="logout">登出</el-button>
         </div>
@@ -46,12 +51,6 @@
             </div>
           </div>
         </div>
-
-        <NuxtLink v-if="isSuperAdmin" to="/admin/super" class="ws-super-admin-link">
-          <span>⚙️</span>
-          <span>Super Admin 後台</span>
-          <span class="ws-item-arrow">→</span>
-        </NuxtLink>
 
         <div class="ws-select-footer">
           <el-button @click="logout">登出</el-button>
