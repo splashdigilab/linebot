@@ -9,6 +9,13 @@ export interface WorkspaceItem {
   organizationName: string | null
 }
 
+interface OrgAdminEntry { id: string; name: string }
+
+interface MyWorkspacesResponse {
+  workspaces: WorkspaceItem[]
+  orgAdminOf: OrgAdminEntry[]
+}
+
 /**
  * 提供目前作用中的 workspace 上下文，以及自動注入 auth token + workspaceId 的 fetch 工具。
  * workspaceId 來自路由參數 /admin/[workspaceId]/...
@@ -19,6 +26,7 @@ export const useWorkspace = () => {
   const workspaceId = computed(() => route.params.workspaceId as string)
 
   const workspaceList = useState<WorkspaceItem[]>('workspace:list', () => [])
+  const orgAdminOf = useState<OrgAdminEntry[]>('workspace:orgAdminOf', () => [])
   const currentRole = computed<WorkspaceMemberRole | null>(() => {
     const found = workspaceList.value.find(w => w.workspaceId === workspaceId.value)
     return found?.role ?? null
@@ -36,11 +44,12 @@ export const useWorkspace = () => {
 
   async function loadWorkspaceList(): Promise<WorkspaceItem[]> {
     const token = await getBearer()
-    const list = await $fetch<WorkspaceItem[]>('/api/admin/workspaces/my', {
+    const res = await $fetch<MyWorkspacesResponse>('/api/admin/workspaces/my', {
       headers: { Authorization: `Bearer ${token}` },
     })
-    workspaceList.value = list
-    return list
+    workspaceList.value = res.workspaces
+    orgAdminOf.value = res.orgAdminOf
+    return res.workspaces
   }
 
   // ── Role check helpers ─────────────────────────────────────────
@@ -57,6 +66,7 @@ export const useWorkspace = () => {
     currentRole,
     currentWorkspaceName,
     workspaceList,
+    orgAdminOf,
     canWrite,
     isOwner,
     getBearer,

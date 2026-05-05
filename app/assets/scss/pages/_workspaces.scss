@@ -80,6 +80,34 @@
   margin-bottom: 0.35rem;
 }
 
+.ws-group-name {
+  flex: 1;
+}
+
+/* 各 org group 的「+」新增按鈕 */
+.ws-group-add-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+  flex-shrink: 0;
+
+  &:hover {
+    border-color: var(--border-active);
+    color: var(--text-primary);
+    background: var(--bg-elevated);
+  }
+}
+
 .ws-group-items {
   display: flex;
   flex-direction: column;
@@ -175,4 +203,43 @@
 .ws-select-footer {
   display: flex;
   justify-content: center;
+}
+
+/* 組織內無 workspace 時的提示文字 */
+.ws-group-empty {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding: 0.5rem 0.25rem;
+}
+
+/* 新增官方帳號 dialog 內容 */
+.ws-create-dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.ws-quota-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.82rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.75rem;
+}
+
+.ws-quota-label {
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.ws-quota-value {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ws-quota-full {
+  color: var(--color-error);
 }

@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
 import { requireSuperAdmin } from '~~/server/utils/workspace-auth'
 import { getFirebaseAuth } from '~~/server/utils/firebase'
+import { requireWorkspaceQuota } from '~~/server/utils/workspace-quota'
 
 /**
  * POST /api/admin/super/workspaces
@@ -16,6 +17,7 @@ export default defineEventHandler(async (event) => {
 
   if (!name?.trim()) throw createError({ statusCode: 400, statusMessage: 'name is required' })
   if (!ownerEmail?.trim()) throw createError({ statusCode: 400, statusMessage: 'ownerEmail is required' })
+  if (!organizationId) throw createError({ statusCode: 400, statusMessage: '請選擇所屬組織' })
 
   const auth = getFirebaseAuth()
   let ownerUid: string
@@ -26,8 +28,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: '找不到此 Email 的使用者' })
   }
 
+  // 有歸屬組織時才檢查 quota；未歸屬組織的 workspace 由 super admin 自行管控
+  if (organizationId) {
+    await requireWorkspaceQuota(organizationId)
+  }
+
   const workspaceId = uuidv4()
   const db = getDb()
+  const batch = db.batch()
 
   const wsData: Record<string, unknown> = {
     name: String(name).trim(),
@@ -38,9 +46,9 @@ export default defineEventHandler(async (event) => {
   if (channelSecret) wsData.channelSecret = channelSecret
   if (defaultLiffId) wsData.defaultLiffId = defaultLiffId
 
-  await db.collection('workspaces').doc(workspaceId).set(wsData)
+  batch.set(db.collection('workspaces').doc(workspaceId), wsData)
 
-  await db.collection('workspaceMembers').doc(`${ownerUid}_${workspaceId}`).set({
+  batch.set(db.collection('workspaceMembers').doc(`${ownerUid}_${workspaceId}`), {
     uid: ownerUid,
     workspaceId,
     organizationId: organizationId ?? null,
@@ -50,6 +58,8 @@ export default defineEventHandler(async (event) => {
     joinedAt: FieldValue.serverTimestamp(),
     createdAt: FieldValue.serverTimestamp(),
   })
+
+  await batch.commit()
 
   return { id: workspaceId, name: String(name).trim(), ownerUid, ownerEmail: ownerEmail.trim() }
 })

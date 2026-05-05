@@ -28,7 +28,7 @@
               <el-table-column label="所屬組織" min-width="150">
                 <template #default="{ row }">
                   <span v-if="orgNameMap[row.organizationId]" class="text-sm">{{ orgNameMap[row.organizationId] }}</span>
-                  <span v-else class="text-xs text-muted">未指定</span>
+                  <span v-else class="ws-sa-no-org-cell">⚠️ 未指定</span>
                 </template>
               </el-table-column>
               <el-table-column label="ID" min-width="220">
@@ -67,22 +67,16 @@
         <el-input v-model="form.ownerEmail" placeholder="owner@example.com" />
       </div>
       <div class="admin-field-group">
-        <AdminFieldLabel text="所屬組織" tight />
-        <el-select v-model="form.organizationId" placeholder="選填" clearable style="width: 100%">
+        <AdminFieldLabel text="所屬組織（必填）" tight />
+        <el-select
+          v-model="form.organizationId"
+          placeholder="請選擇組織"
+          style="width: 100%"
+          :class="{ 'ws-sa-select-error': createSubmitted && !form.organizationId }"
+        >
           <el-option v-for="org in orgs" :key="org.id" :label="org.name" :value="org.id" />
         </el-select>
-      </div>
-      <div class="admin-field-group">
-        <AdminFieldLabel text="LINE Channel Access Token" tight />
-        <el-input v-model="form.channelAccessToken" type="password" show-password placeholder="選填" />
-      </div>
-      <div class="admin-field-group">
-        <AdminFieldLabel text="LINE Channel Secret" tight />
-        <el-input v-model="form.channelSecret" type="password" show-password placeholder="選填" />
-      </div>
-      <div class="admin-field-group">
-        <AdminFieldLabel text="LIFF ID" tight />
-        <el-input v-model="form.defaultLiffId" placeholder="選填" />
+        <p v-if="createSubmitted && !form.organizationId" class="ws-sa-field-error">請選擇所屬組織</p>
       </div>
     </div>
     <template #footer>
@@ -94,6 +88,9 @@
   <!-- Edit dialog -->
   <el-dialog v-model="showEdit" title="編輯官方帳號" width="440px">
     <div class="admin-panel-stack">
+      <div v-if="!editForm.organizationId" class="ws-sa-no-org-warning">
+        ⚠️ 此帳號尚未歸屬任何組織，org admin 將無法存取，建議補填。
+      </div>
       <div class="admin-field-group">
         <AdminFieldLabel text="帳號名稱" tight />
         <el-input v-model="editForm.name" />
@@ -126,6 +123,7 @@ const orgs = ref<any[]>([])
 const showCreate = ref(false)
 const showEdit = ref(false)
 const editTarget = ref<any>(null)
+const createSubmitted = ref(false)
 
 const orgNameMap = computed<Record<string, string>>(() =>
   Object.fromEntries(orgs.value.map(o => [o.id, o.name])),
@@ -135,9 +133,6 @@ const form = reactive({
   name: '',
   ownerEmail: '',
   organizationId: '',
-  channelAccessToken: '',
-  channelSecret: '',
-  defaultLiffId: '',
 })
 
 const editForm = reactive({ name: '', organizationId: '' })
@@ -160,9 +155,7 @@ function openCreate() {
   form.name = ''
   form.ownerEmail = ''
   form.organizationId = ''
-  form.channelAccessToken = ''
-  form.channelSecret = ''
-  form.defaultLiffId = ''
+  createSubmitted.value = false
   showCreate.value = true
 }
 
@@ -174,8 +167,10 @@ function openEdit(row: any) {
 }
 
 async function createWorkspace() {
+  createSubmitted.value = true
   if (!form.name.trim()) return showToast('請輸入帳號名稱', 'error')
   if (!form.ownerEmail.trim()) return showToast('請輸入 Owner Email', 'error')
+  if (!form.organizationId) return showToast('請選擇所屬組織', 'error')
   saving.value = true
   try {
     await apiFetch('/api/admin/super/workspaces', {
@@ -184,9 +179,6 @@ async function createWorkspace() {
         name: form.name,
         ownerEmail: form.ownerEmail,
         organizationId: form.organizationId || null,
-        channelAccessToken: form.channelAccessToken || undefined,
-        channelSecret: form.channelSecret || undefined,
-        defaultLiffId: form.defaultLiffId || undefined,
       },
     })
     showToast('官方帳號已建立', 'success')

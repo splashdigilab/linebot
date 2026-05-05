@@ -7,6 +7,14 @@ import type { Timestamp, FieldValue } from 'firebase-admin/firestore'
 
 export type OrganizationPlan = 'free' | 'starter' | 'pro' | 'enterprise'
 
+/** 每個方案允許的最大 workspace 數量；enterprise 為無限制 */
+export const PLAN_WORKSPACE_QUOTA: Record<OrganizationPlan, number> = {
+  free: 1,
+  starter: 3,
+  pro: 10,
+  enterprise: Infinity,
+}
+
 export interface OrganizationDoc {
   name: string
   plan: OrganizationPlan

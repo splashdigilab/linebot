@@ -19,7 +19,6 @@ export default defineEventHandler(async (event) => {
   const [memberSnap, inviteSnap, wsSnap] = await Promise.all([
     db.collection('workspaceMembers')
       .where('workspaceId', '==', workspaceId)
-      .orderBy('createdAt', 'asc')
       .get(),
     db.collection('workspaceInvites')
       .where('workspaceId', '==', workspaceId)

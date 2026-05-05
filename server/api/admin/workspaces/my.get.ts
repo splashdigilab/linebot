@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
     orgSnap.forEach(d => {
       orgMap[d.id] = { name: d.data().name ?? d.id, disabled: d.data().disabled === true }
     })
-    return wsSnap.docs.map(d => {
+    const workspaces = wsSnap.docs.map(d => {
       const orgId = d.data().organizationId ?? null
       return {
         workspaceId: d.id,
@@ -44,6 +44,10 @@ export default defineEventHandler(async (event) => {
         viaOrgAdmin: false,
       }
     })
+    const orgAdminOf = orgSnap.docs
+      .filter(d => !d.data().disabled)
+      .map(d => ({ id: d.id, name: d.data().name ?? d.id }))
+    return { workspaces, orgAdminOf }
   }
 
   // ── 一般用戶 ─────────────────────────────────────────────────────
@@ -172,5 +176,9 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  return result
+  const orgAdminOf = adminOrgIds
+    .filter(id => orgMap[id] && !orgMap[id].disabled)
+    .map(id => ({ id, name: orgMap[id].name }))
+
+  return { workspaces: result, orgAdminOf }
 })
