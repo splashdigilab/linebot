@@ -44,6 +44,14 @@
       "collectionGroup": "conversationSessions",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "workspaceId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "conversationSessions",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "workspaceId", "order": "ASCENDING" },
         { "fieldPath": "lastActivityAt", "order": "DESCENDING" }
       ]
@@ -149,6 +157,14 @@
       ]
     },
     {
+      "collectionGroup": "orgMembers",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "orgId", "order": "ASCENDING" },
+        { "fieldPath": "email", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "richmenus",
       "queryScope": "COLLECTION",
       "fields": [
@@ -178,6 +194,14 @@
       "fields": [
         { "fieldPath": "workspaceId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "userTags",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tagId", "order": "ASCENDING" },
+        { "fieldPath": "workspaceId", "order": "ASCENDING" }
       ]
     },
     {
