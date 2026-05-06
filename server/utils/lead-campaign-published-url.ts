@@ -6,6 +6,7 @@ import { getLineWorkspaceCredentials } from '~~/server/utils/line-workspace-cred
 import { normalizeAutoReplyAction } from '~~/shared/auto-reply-rule'
 
 type CampaignForEntryUrl = {
+  workspaceId?: string
   liffId?: string
   campaignCode?: string
   isActive?: boolean
@@ -52,6 +53,7 @@ export async function syncPublishedEntryUrlForCampaign(
   const redirectUrl = String(campaign.redirectUrl || '').trim() || null
 
   const claimDoc: LeadClaimDoc = {
+    workspaceId: String(campaign.workspaceId || '').trim() || 'default',
     campaignId,
     campaignCode,
     tokenHash,

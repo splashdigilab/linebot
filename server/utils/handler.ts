@@ -159,10 +159,11 @@ function buildAttributeContext(userData: UserDoc | null): Record<string, string>
 async function ensureUser(
   userIdOrDocId: string,
   preloadedProfile?: { displayName: string; pictureUrl: string } | null,
+  workspaceId: string = DEFAULT_LINE_WORKSPACE_ID,
 ): Promise<UserDoc | null> {
   const db = getDb()
-  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId)
-  const docId = lineUserFirestoreDocId(lineUserId)
+  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId, workspaceId)
+  const docId = lineUserFirestoreDocId(lineUserId, workspaceId)
 
   // Return cached user data when no preloadedProfile is forcing a refresh
   if (!preloadedProfile) {
@@ -177,7 +178,7 @@ async function ensureUser(
     // Use caller-supplied profile to avoid a redundant LINE API round-trip
     const profile = preloadedProfile ?? await getUserProfile(lineUserId)
     const newDoc: UserDoc = {
-      workspaceId: DEFAULT_LINE_WORKSPACE_ID,
+      workspaceId,
       lineUserId,
       displayName: profile?.displayName ?? lineUserId,
       pictureUrl: profile?.pictureUrl ?? '',
@@ -237,6 +238,7 @@ async function applyPendingClaims(userId: string): Promise<void> {
 
   for (const doc of snap.docs) {
     const claim = doc.data()
+    const claimWorkspaceId = String(claim.workspaceId || '').trim() || DEFAULT_LINE_WORKSPACE_ID
 
     // 逾期檢查：僅舊 claim 含 expiresAt 時有效
     const rawExp = claim.expiresAt
@@ -254,8 +256,18 @@ async function applyPendingClaims(userId: string): Promise<void> {
 
     // 並行：貼標 + 取 flow（互不依賴）
     const [taggingResult, flow] = await Promise.all([
+      ensureUser(userId, undefined, claimWorkspaceId).catch((e) => {
+        console.error('[follow] ensure user for claim workspace failed:', e, 'workspaceId:', claimWorkspaceId)
+        return null
+      }),
       Array.isArray(claim.tagIds) && claim.tagIds.length > 0
-        ? addTagsToUser(lineUserFirestoreDocId(userId), claim.tagIds, 'system', doc.id)
+        ? addTagsToUser(
+            lineUserFirestoreDocId(userId, claimWorkspaceId),
+            claim.tagIds,
+            'system',
+            doc.id,
+            claimWorkspaceId,
+          )
         : Promise.resolve(null),
       action.type === 'module' && action.moduleId
         ? getFlowByModuleId(action.moduleId)
