@@ -1,6 +1,7 @@
 import { validateUploadPayload } from '~~/server/utils/upload-validator'
 
 export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
   const body = await readBody(event)
   const { richMenuId, firestoreId, imageBase64, contentType } = body
 
@@ -14,7 +15,7 @@ export default defineEventHandler(async (event) => {
     allowedCategories: ['image'],
   })
 
-  await uploadRichMenuImage(richMenuId, imageBuffer, normalizedContentType || 'image/png')
+  await uploadRichMenuImage(richMenuId, imageBuffer, normalizedContentType || 'image/png', workspaceId)
 
   const storage = getStorage()
   const bucket = storage.bucket()
@@ -34,10 +35,10 @@ export default defineEventHandler(async (event) => {
     const aliasId = stored?.aliasId ?? `rm${firestoreId.replace(/-/g, '').slice(0, 28)}`
 
     // Delete existing alias first (ignore error if not exists)
-    try { await deleteRichMenuAlias(aliasId) } catch {}
+    try { await deleteRichMenuAlias(aliasId, workspaceId) } catch {}
 
     try {
-      await createRichMenuAlias(richMenuId, aliasId)
+      await createRichMenuAlias(richMenuId, aliasId, workspaceId)
       await updateDoc('richmenus', firestoreId, { aliasId })
       aliasResult = { aliasId }
     } catch (e: any) {

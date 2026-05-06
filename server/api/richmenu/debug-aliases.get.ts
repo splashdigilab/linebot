@@ -2,9 +2,10 @@
  * GET /api/richmenu/debug-aliases
  * Query LINE directly to see what aliases actually exist and what richMenuId they point to.
  */
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
   const db = getDb()
-  const snap = await db.collection('richmenus').get()
+  const snap = await db.collection('richmenus').where('workspaceId', '==', workspaceId).get()
 
   const results = []
 
@@ -14,7 +15,7 @@ export default defineEventHandler(async () => {
 
     let lineStatus: any = null
     try {
-      lineStatus = await getRichMenuAlias(aliasId)
+      lineStatus = await getRichMenuAlias(aliasId, workspaceId)
     } catch (e: any) {
       lineStatus = { error: e.message ?? String(e) }
     }

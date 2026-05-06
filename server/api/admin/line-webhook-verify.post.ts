@@ -1,4 +1,4 @@
-import { requireFirebaseAuth } from '~~/server/utils/admin-auth'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import { getLineWorkspaceCredentials } from '~~/server/utils/line-workspace-credentials'
 import {
   type LineWebhookTestResult,
@@ -44,13 +44,13 @@ export type LineWebhookVerifyResponse = {
  * Body: { compareUrl?: string, runTest?: boolean } — compareUrl 通常為管理後台推算的 `…/webhook`；runTest 預設 true
  */
 export default defineEventHandler(async (event): Promise<LineWebhookVerifyResponse> => {
-  await requireFirebaseAuth(event)
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
 
   const body = await readBody(event).catch(() => ({})) as Record<string, unknown>
   const compareUrl = normalizeWebhookCompareUrl(String(body?.compareUrl ?? ''))
   const runTest = body?.runTest !== false
 
-  const { channelAccessToken } = await getLineWorkspaceCredentials()
+  const { channelAccessToken } = await getLineWorkspaceCredentials(workspaceId)
   const token = String(channelAccessToken || '').trim()
   if (!token) {
     throw createError({

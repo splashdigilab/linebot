@@ -1,10 +1,9 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
-import { requireFirebaseAuth } from '~~/server/utils/admin-auth'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import {
   invalidateLineWorkspaceCredentialsCache,
 } from '~~/server/utils/line-workspace-credentials'
-import { DEFAULT_LINE_WORKSPACE_ID } from '~~/shared/line-workspace'
 import {
   fetchLineWebhookEndpoint,
   postLineWebhookTest,
@@ -50,19 +49,21 @@ function normalizeWebhookUrl(raw: string): string {
  * 傳空字串表示刪除該欄位（改由環境變數補齊）。
  */
 export default defineEventHandler(async (event) => {
-  await requireFirebaseAuth(event)
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const wid = String(workspaceId || '').trim()
+  if (!wid) throw createError({ statusCode: 400, statusMessage: 'workspaceId is required' })
 
   const body = await readBody(event) as PutBody
 
   if (body?.clearWorkspace === true) {
     const db = getDb()
-    await db.collection('workspaces').doc(DEFAULT_LINE_WORKSPACE_ID).delete().catch(() => {})
+    await db.collection('workspaces').doc(wid).delete().catch(() => {})
     invalidateLineWorkspaceCredentialsCache()
-    return { ok: true, cleared: true }
+    return { ok: true, id: wid, cleared: true }
   }
 
   const db = getDb()
-  const ref = db.collection('workspaces').doc(DEFAULT_LINE_WORKSPACE_ID)
+  const ref = db.collection('workspaces').doc(wid)
   const snap = await ref.get()
   const previous = snap.exists ? snap.data() as Record<string, unknown> : null
 
@@ -71,10 +72,10 @@ export default defineEventHandler(async (event) => {
   }
 
   if (body?.name !== undefined) {
-    updates.name = String(body.name).trim() || 'default'
+    updates.name = String(body.name).trim() || wid
   }
   else if (!snap.exists) {
-    updates.name = 'default'
+    updates.name = wid
   }
 
   if (Object.prototype.hasOwnProperty.call(body, 'defaultLiffId')) {
@@ -155,5 +156,5 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  return { ok: true, id: DEFAULT_LINE_WORKSPACE_ID, webhookVerification }
+  return { ok: true, id: wid, webhookVerification }
 })

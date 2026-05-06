@@ -410,6 +410,7 @@ async function verifyWebhook(runTest: boolean) {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: {
+        workspaceId: workspaceId.value,
         compareUrl: suggestedWebhookUrl.value || undefined,
         runTest,
       },
@@ -444,6 +445,7 @@ async function load() {
   try {
     const token = await getBearer()
     const data = await $fetch<WorkspaceGet>('/api/admin/line-workspace', {
+      query: { workspaceId: workspaceId.value },
       headers: { Authorization: `Bearer ${token}` },
     })
     meta.value = data
@@ -504,6 +506,7 @@ async function save() {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}` },
       body: {
+        workspaceId: workspaceId.value,
         ...body,
         verifyWebhookOnSave: true,
         compareWebhookUrl: suggestedWebhookUrl.value || undefined,
@@ -538,7 +541,7 @@ async function clearWorkspace() {
     await $fetch('/api/admin/line-workspace', {
       method: 'PUT',
       headers: { Authorization: `Bearer ${token}` },
-      body: { clearWorkspace: true },
+      body: { workspaceId: workspaceId.value, clearWorkspace: true },
     })
     showToast('已清除儲存的憑證', 'success')
     await load()

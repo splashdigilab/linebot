@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  await setDefaultRichMenu(richMenuId)
+  await setDefaultRichMenu(richMenuId, workspaceId)
 
   const db = getDb()
   const prev = await db.collection('richmenus').where('isDefault', '==', true).get()

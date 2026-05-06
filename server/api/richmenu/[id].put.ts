@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
 
   let newRichMenuId: string
   try {
-    newRichMenuId = await createRichMenu(richMenuPayload)
+    newRichMenuId = await createRichMenu(richMenuPayload, workspaceId)
   } catch (err: any) {
     // Try to read LINE's actual error body from the Response cause
     let lineDetail = ''
@@ -63,15 +63,15 @@ export default defineEventHandler(async (event) => {
       imageBuffer = Buffer.from(arrayBuffer)
       finalContentType = response.headers.get('content-type') || 'image/png'
     } catch (e) {
-      await deleteLineRichMenu(newRichMenuId)
+      await deleteLineRichMenu(newRichMenuId, workspaceId)
       throw createError({ statusCode: 500, statusMessage: 'Failed to fetch existing image from storage' })
     }
   } else {
-    await deleteLineRichMenu(newRichMenuId)
+    await deleteLineRichMenu(newRichMenuId, workspaceId)
     throw createError({ statusCode: 400, statusMessage: 'No image provided and no existing image found' })
   }
 
-  await uploadRichMenuImage(newRichMenuId, imageBuffer, finalContentType)
+  await uploadRichMenuImage(newRichMenuId, imageBuffer, finalContentType, workspaceId)
 
   // 3. Update Alias to point to the NEW richMenuId (delete old → recreate same aliasId)
   try {
@@ -82,7 +82,7 @@ export default defineEventHandler(async (event) => {
 
   // 4. Handle default setting
   if (setAsDefault) {
-    await setDefaultRichMenu(newRichMenuId)
+    await setDefaultRichMenu(newRichMenuId, workspaceId)
     const db = getDb()
     const prev = await db.collection('richmenus').where('isDefault', '==', true).get()
     const batch = db.batch()
@@ -95,7 +95,7 @@ export default defineEventHandler(async (event) => {
   // 5. 從 LINE 刪除舊圖文選單
   if (oldDoc.richMenuId) {
     try {
-      await deleteLineRichMenu(oldDoc.richMenuId)
+      await deleteLineRichMenu(oldDoc.richMenuId, workspaceId)
     } catch (e) {
       console.warn('[richmenu] 無法刪除舊的 LINE 圖文選單:', e)
     }

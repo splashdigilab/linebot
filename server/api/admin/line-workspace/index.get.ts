@@ -1,8 +1,7 @@
 import { getDb } from '~~/server/utils/firebase'
-import { requireFirebaseAuth } from '~~/server/utils/admin-auth'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import { getLineWorkspaceCredentials } from '~~/server/utils/line-workspace-credentials'
 import type { LineWorkspaceDoc } from '~~/shared/line-workspace'
-import { DEFAULT_LINE_WORKSPACE_ID } from '~~/shared/line-workspace'
 
 function secretSuffix(value: unknown): { configured: boolean; suffix: string | null } {
   const v = String(value ?? '').trim()
@@ -17,21 +16,23 @@ function secretSuffix(value: unknown): { configured: boolean; suffix: string | n
  * 回傳目前 workspaces/default 狀態（不含完整 secret／token）。
  */
 export default defineEventHandler(async (event) => {
-  await requireFirebaseAuth(event)
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const wid = String(workspaceId || '').trim()
+  if (!wid) throw createError({ statusCode: 400, statusMessage: 'workspaceId is required' })
 
   const db = getDb()
-  const snap = await db.collection('workspaces').doc(DEFAULT_LINE_WORKSPACE_ID).get()
+  const snap = await db.collection('workspaces').doc(wid).get()
   const saved = snap.exists ? (snap.data() as LineWorkspaceDoc) : null
 
   const access = secretSuffix(saved?.channelAccessToken)
   const secret = secretSuffix(saved?.channelSecret)
 
-  const creds = await getLineWorkspaceCredentials()
+  const creds = await getLineWorkspaceCredentials(wid)
 
   return {
-    id: DEFAULT_LINE_WORKSPACE_ID,
+    id: wid,
     savedInFirestore: snap.exists,
-    name: String(saved?.name ?? '').trim() || 'default',
+    name: String(saved?.name ?? '').trim() || wid,
     defaultLiffId: String(saved?.defaultLiffId ?? '').trim(),
     /** 實際用於 CTA fallback（僅 Firestore） */
     effectiveDefaultLiffId: String(creds.defaultLiffId ?? '').trim(),

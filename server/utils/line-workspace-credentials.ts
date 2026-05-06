@@ -1,6 +1,5 @@
 import { getDb } from './firebase'
 import type { LineWorkspaceDoc } from '~~/shared/line-workspace'
-import { DEFAULT_LINE_WORKSPACE_ID } from '~~/shared/line-workspace'
 
 export type ResolvedLineCredentials = {
   channelAccessToken: string
@@ -11,48 +10,87 @@ export type ResolvedLineCredentials = {
 
 const TTL_MS = 60 * 1000
 
-let cache: (ResolvedLineCredentials & { expiresAt: number }) | null = null
+const cacheByWorkspace = new Map<string, ResolvedLineCredentials & { expiresAt: number }>()
+let workspaceCredentialListCache: Array<{ workspaceId: string; credentials: ResolvedLineCredentials }> | null = null
+let workspaceCredentialListExpiresAt = 0
 
 export function invalidateLineWorkspaceCredentialsCache() {
-  cache = null
+  cacheByWorkspace.clear()
+  workspaceCredentialListCache = null
+  workspaceCredentialListExpiresAt = 0
 }
 
 /**
- * 讀取 LINE Messaging 憑證：僅使用 Firestore `workspaces/default`。
+ * 讀取 LINE Messaging 憑證：僅使用指定 workspace，不再 fallback 到 `workspaces/default`。
  * 結果短暫快取，避免每則 webhook 都打 Firestore。
  */
-export async function getLineWorkspaceCredentials(): Promise<ResolvedLineCredentials> {
+export async function getLineWorkspaceCredentials(workspaceId: string): Promise<ResolvedLineCredentials> {
+  const requestedWorkspaceId = String(workspaceId || '').trim()
+  if (!requestedWorkspaceId) {
+    throw new Error('workspaceId is required for LINE workspace credentials')
+  }
   const now = Date.now()
-  if (cache && cache.expiresAt > now) {
+  const cacheKey = requestedWorkspaceId
+  const cached = cacheByWorkspace.get(cacheKey)
+  if (cached && cached.expiresAt > now) {
     return {
-      channelAccessToken: cache.channelAccessToken,
-      channelSecret: cache.channelSecret,
-      defaultLiffId: cache.defaultLiffId,
+      channelAccessToken: cached.channelAccessToken,
+      channelSecret: cached.channelSecret,
+      defaultLiffId: cached.defaultLiffId,
     }
   }
 
-  let defaultLiffId = ''
-  let channelAccessToken = ''
-  let channelSecret = ''
+  const fromRequested: Partial<ResolvedLineCredentials> = {}
   try {
     const db = getDb()
-    const snap = await db.collection('workspaces').doc(DEFAULT_LINE_WORKSPACE_ID).get()
-    if (snap.exists) {
-      const d = snap.data() as LineWorkspaceDoc
-      channelAccessToken = String(d?.channelAccessToken ?? '').trim()
-      channelSecret = String(d?.channelSecret ?? '').trim()
-      defaultLiffId = String(d?.defaultLiffId ?? '').trim()
+    const requestedSnap = await db.collection('workspaces').doc(requestedWorkspaceId).get()
+    if (requestedSnap.exists) {
+      const d = requestedSnap.data() as LineWorkspaceDoc
+      fromRequested.channelAccessToken = String(d?.channelAccessToken ?? '').trim()
+      fromRequested.channelSecret = String(d?.channelSecret ?? '').trim()
+      fromRequested.defaultLiffId = String(d?.defaultLiffId ?? '').trim()
     }
+
   }
   catch (e) {
-    console.warn('[line-workspace] read workspaces/default failed:', e)
+    console.warn('[line-workspace] read workspace credentials failed:', e)
   }
 
   const resolved: ResolvedLineCredentials = {
-    channelAccessToken,
-    channelSecret,
-    defaultLiffId,
+    channelAccessToken: fromRequested.channelAccessToken || '',
+    channelSecret: fromRequested.channelSecret || '',
+    defaultLiffId: fromRequested.defaultLiffId || '',
   }
-  cache = { ...resolved, expiresAt: now + TTL_MS }
+  cacheByWorkspace.set(cacheKey, { ...resolved, expiresAt: now + TTL_MS })
   return resolved
+}
+
+/**
+ * 列出所有已設定 LINE 憑證的 workspace（供 webhook／token 驗證時比對）。
+ */
+export async function listWorkspaceLineCredentials(): Promise<Array<{ workspaceId: string; credentials: ResolvedLineCredentials }>> {
+  const now = Date.now()
+  if (workspaceCredentialListCache && workspaceCredentialListExpiresAt > now) {
+    return workspaceCredentialListCache
+  }
+
+  const db = getDb()
+  const snap = await db.collection('workspaces').get()
+  const rows: Array<{ workspaceId: string; credentials: ResolvedLineCredentials }> = []
+
+  for (const doc of snap.docs) {
+    const d = doc.data() as LineWorkspaceDoc
+    const credentials: ResolvedLineCredentials = {
+      channelAccessToken: String(d?.channelAccessToken ?? '').trim(),
+      channelSecret: String(d?.channelSecret ?? '').trim(),
+      defaultLiffId: String(d?.defaultLiffId ?? '').trim(),
+    }
+    if (!credentials.channelAccessToken && !credentials.channelSecret && !credentials.defaultLiffId) continue
+    rows.push({ workspaceId: doc.id, credentials })
+    cacheByWorkspace.set(doc.id, { ...credentials, expiresAt: now + TTL_MS })
+  }
+
+  workspaceCredentialListCache = rows
+  workspaceCredentialListExpiresAt = now + TTL_MS
+  return rows
 }

@@ -1,11 +1,13 @@
 import { getLineWorkspaceCredentials } from '~~/server/utils/line-workspace-credentials'
+import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 /**
  * POST /api/richmenu/migrate-aliases
  * Uses raw fetch (not SDK) to expose LINE's actual error body.
  */
-export default defineEventHandler(async () => {
-  const { channelAccessToken: token } = await getLineWorkspaceCredentials()
+export default defineEventHandler(async (event) => {
+  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { channelAccessToken: token } = await getLineWorkspaceCredentials(workspaceId)
 
   const db = getDb()
   const snap = await db.collection('richmenus').get()

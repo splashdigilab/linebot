@@ -2,14 +2,18 @@ import { $fetch } from 'ofetch'
 import { getLineWorkspaceCredentials } from '~~/server/utils/line-workspace-credentials'
 
 // Bot basicId never changes — cache in server memory for 24 hours
-let botInfoCache: { lineOaBasicId: string; expiresAt: number } | null = null
+const botInfoCacheByWorkspace = new Map<string, { lineOaBasicId: string; expiresAt: number }>()
 
 export default defineEventHandler(async (event) => {
-  const { defaultLiffId, channelAccessToken } = await getLineWorkspaceCredentials()
+  const q = getQuery(event)
+  const workspaceId = String(q.workspaceId || '').trim()
+  if (!workspaceId) return { liffId: '', lineOaBasicId: '' }
+  const { defaultLiffId, channelAccessToken } = await getLineWorkspaceCredentials(workspaceId)
 
   let lineOaBasicId = ''
-  if (botInfoCache && botInfoCache.expiresAt > Date.now()) {
-    lineOaBasicId = botInfoCache.lineOaBasicId
+  const cached = botInfoCacheByWorkspace.get(workspaceId)
+  if (cached && cached.expiresAt > Date.now()) {
+    lineOaBasicId = cached.lineOaBasicId
   }
   else if (channelAccessToken) {
     try {
@@ -18,7 +22,10 @@ export default defineEventHandler(async (event) => {
         { headers: { Authorization: `Bearer ${channelAccessToken}` } },
       )
       lineOaBasicId = String(botInfo?.basicId || '').trim()
-      botInfoCache = { lineOaBasicId, expiresAt: Date.now() + 24 * 60 * 60 * 1000 }
+      botInfoCacheByWorkspace.set(workspaceId, {
+        lineOaBasicId,
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+      })
     }
     catch {
       // non-critical — LIFF page degrades gracefully without add-friend link

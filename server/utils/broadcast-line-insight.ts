@@ -63,6 +63,7 @@ function pickUniqueClick(
 
 export async function fetchBroadcastLineInsight(
   campaignId: string,
+  workspaceId: string,
   unit: string | null | undefined,
   startedAt: Date | null,
   completedAt: Date | null,
@@ -80,7 +81,7 @@ export async function fetchBroadcastLineInsight(
   const { from, to } = broadcastInsightQueryRange(startedAt, completedAt)
   console.log(`[broadcast-line-insight] unit="${u}" (len=${u.length}) from=${from} to=${to}`)
   try {
-    const insight = await getInsightClient()
+    const insight = await getInsightClient(workspaceId)
     const res = await insight.getStatisticsPerUnit(u, from, to)
     const imp = pickUniqueImpression(res.overview, res.messages)
     const clk = pickUniqueClick(res.overview, res.clicks)

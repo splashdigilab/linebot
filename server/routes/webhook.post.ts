@@ -1,5 +1,5 @@
 import { verifyLineWebhookSignature } from '../utils/line'
-import { getLineWorkspaceCredentials } from '../utils/line-workspace-credentials'
+import { listWorkspaceLineCredentials } from '../utils/line-workspace-credentials'
 import { handleMessageEvent, handlePostbackEvent, handleFollowEvent, handleUnfollowEvent } from '../utils/handler'
 import type { webhook } from '@line/bot-sdk'
 
@@ -36,10 +36,22 @@ export default defineEventHandler(async (event) => {
 
   const bodyBuf = toRawBodyBuffer(raw)
 
-  const creds = await getLineWorkspaceCredentials()
-  const secretConfigured = Boolean(String(creds.channelSecret || '').trim())
-  const sigOk = bodyBuf.length > 0
-    && await verifyLineWebhookSignature(bodyBuf, signature, { channelSecret: creds.channelSecret })
+  const candidates = await listWorkspaceLineCredentials()
+  let matchedWorkspaceId = ''
+  let matchedSecret = ''
+  if (bodyBuf.length > 0) {
+    for (const row of candidates) {
+      const secret = String(row.credentials.channelSecret || '').trim()
+      if (!secret) continue
+      if (await verifyLineWebhookSignature(bodyBuf, signature, { channelSecret: secret })) {
+        matchedWorkspaceId = row.workspaceId
+        matchedSecret = secret
+        break
+      }
+    }
+  }
+  const secretConfigured = Boolean(matchedSecret)
+  const sigOk = Boolean(matchedWorkspaceId)
 
   if (!sigOk) {
     console.warn('[webhook] signature verify failed', {
@@ -47,6 +59,7 @@ export default defineEventHandler(async (event) => {
       bodyBytes: bodyBuf.length,
       hasSignature: Boolean(String(signature || '').trim()),
       rawType: raw == null ? String(raw) : (raw as any).constructor?.name || typeof raw,
+      workspaceCandidates: candidates.length,
     })
     throw createError({ statusCode: 401, statusMessage: 'Invalid signature' })
   }
@@ -64,18 +77,18 @@ export default defineEventHandler(async (event) => {
   const tasks = payload.events.map(async (e) => {
     try {
       if (e.type === 'message') {
-        await handleMessageEvent(e as webhook.MessageEvent, { requestOrigin })
+        await handleMessageEvent(e as webhook.MessageEvent, { requestOrigin, workspaceId: matchedWorkspaceId })
       }
       else if (e.type === 'postback') {
-        await handlePostbackEvent(e as webhook.PostbackEvent, { requestOrigin })
+        await handlePostbackEvent(e as webhook.PostbackEvent, { requestOrigin, workspaceId: matchedWorkspaceId })
       }
       else if (e.type === 'follow') {
         const userId = (e as webhook.FollowEvent).source?.userId
-        if (userId) await handleFollowEvent(userId)
+        if (userId) await handleFollowEvent(userId, undefined, matchedWorkspaceId)
       }
       else if (e.type === 'unfollow') {
         const userId = (e as webhook.UnfollowEvent).source?.userId
-        if (userId) await handleUnfollowEvent(userId)
+        if (userId) await handleUnfollowEvent(userId, matchedWorkspaceId)
       }
     }
     catch (err) {

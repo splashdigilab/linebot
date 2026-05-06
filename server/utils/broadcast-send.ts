@@ -25,6 +25,8 @@ export async function executeBroadcastSend(id: string): Promise<{
   if (!snap.exists) throw new Error(`Broadcast not found: ${id}`)
 
   const data = snap.data() as BroadcastDoc
+  const workspaceId = String(data.workspaceId || '').trim()
+  if (!workspaceId) throw new Error('Broadcast missing workspaceId')
 
   const blockStatuses = ['processing', 'completed', 'failed']
   if (blockStatuses.includes(data.status)) {
@@ -91,6 +93,7 @@ export async function executeBroadcastSend(id: string): Promise<{
   const { successCount, failedIds, lineAggregationApplied } = await multicastMessage(
     resolvedUserIds,
     messagesForLine as any,
+    workspaceId,
     { customAggregationUnits: [lineUnit] },
   )
 

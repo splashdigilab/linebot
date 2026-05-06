@@ -1,6 +1,6 @@
 import { verifyUriTagToken } from '~~/server/utils/line-action-tag-token'
 import { addTagsToUser } from '~~/server/utils/tagging'
-import { getLineWorkspaceCredentials } from '~~/server/utils/line-workspace-credentials'
+import { listWorkspaceLineCredentials } from '~~/server/utils/line-workspace-credentials'
 import { lineUserFirestoreDocId } from '~~/shared/line-workspace'
 
 /**
@@ -11,13 +11,30 @@ export default defineEventHandler(async (event) => {
   const token = String(getRouterParam(event, 'token') || '')
   if (!token) return sendRedirect(event, '/', 302)
 
-  const { channelSecret: secret } = await getLineWorkspaceCredentials()
-  const parsed = verifyUriTagToken(token, secret)
+  const candidates = await listWorkspaceLineCredentials()
+  let parsed: { targetUrl: string; userId: string; tagIds: string[] } | null = null
+  let matchedWorkspaceId = ''
+  for (const row of candidates) {
+    const secret = String(row.credentials.channelSecret || '').trim()
+    if (!secret) continue
+    const verified = verifyUriTagToken(token, secret)
+    if (verified) {
+      parsed = verified
+      matchedWorkspaceId = row.workspaceId
+      break
+    }
+  }
   if (!parsed) return sendRedirect(event, '/', 302)
 
   try {
     if (parsed.tagIds.length > 0) {
-      await addTagsToUser(lineUserFirestoreDocId(parsed.userId), parsed.tagIds, 'system', 'uri-click')
+      await addTagsToUser(
+        lineUserFirestoreDocId(parsed.userId, matchedWorkspaceId),
+        parsed.tagIds,
+        'system',
+        'uri-click',
+        matchedWorkspaceId,
+      )
     }
   }
   catch (e) {

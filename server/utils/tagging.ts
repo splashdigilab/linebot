@@ -2,7 +2,6 @@ import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from './firebase'
 import type { UserTagDoc, TagLogDoc, UserTagSourceType } from '~~/shared/types/tag-broadcast'
-import { DEFAULT_LINE_WORKSPACE_ID } from '~~/shared/line-workspace'
 
 export interface TaggingResult {
   added: string[]
@@ -21,7 +20,7 @@ export async function addTagsToUser(
   tagIds: string[],
   sourceType: UserTagSourceType,
   sourceRefId: string | null,
-  workspaceId: string = DEFAULT_LINE_WORKSPACE_ID,
+  workspaceId: string,
 ): Promise<TaggingResult> {
   if (!userFirestoreDocId || !tagIds.length) return { added: [], skipped: [] }
 

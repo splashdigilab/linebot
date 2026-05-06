@@ -25,7 +25,8 @@ export async function syncPublishedEntryUrlForCampaign(
   campaignId: string,
   campaign: CampaignForEntryUrl,
 ): Promise<{ publishedCtaUrl: string | null; publishedClaimId: string | null }> {
-  const { defaultLiffId: workspaceDefaultLiff } = await getLineWorkspaceCredentials()
+  const workspaceId = String(campaign.workspaceId || '').trim() || 'default'
+  const { defaultLiffId: workspaceDefaultLiff } = await getLineWorkspaceCredentials(workspaceId)
   const liffId = String(campaign.liffId || '').trim() || String(workspaceDefaultLiff || '').trim()
   const isActive = campaign.isActive !== false
 
@@ -53,7 +54,7 @@ export async function syncPublishedEntryUrlForCampaign(
   const redirectUrl = String(campaign.redirectUrl || '').trim() || null
 
   const claimDoc: LeadClaimDoc = {
-    workspaceId: String(campaign.workspaceId || '').trim() || 'default',
+    workspaceId,
     campaignId,
     campaignCode,
     tokenHash,

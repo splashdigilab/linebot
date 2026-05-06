@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
       800,
     )
 
-    const { userIds, truncated: listTruncated } = await fetchAllFollowerUserIds()
+    const { userIds, truncated: listTruncated } = await fetchAllFollowerUserIds({ workspaceId })
     const slice = userIds.slice(offset, offset + maxFetchProfiles)
     const remaining = Math.max(0, userIds.length - offset - slice.length)
 
@@ -65,7 +65,7 @@ export default defineEventHandler(async (event) => {
       const out: Awaited<ReturnType<typeof getUserProfile>>[] = []
       for (let i = 0; i < ids.length; i += CONCURRENCY) {
         const chunk = ids.slice(i, i + CONCURRENCY)
-        const part = await Promise.all(chunk.map((id) => getUserProfile(id)))
+        const part = await Promise.all(chunk.map((id) => getUserProfile(id, workspaceId)))
         out.push(...part)
       }
       return out

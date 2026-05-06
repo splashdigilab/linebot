@@ -339,6 +339,7 @@ async function loadWorkspaceEffectiveLiff() {
   try {
     const token = await getBearer()
     const data = await $fetch<{ effectiveDefaultLiffId?: string }>('/api/admin/line-workspace', {
+      query: { workspaceId: workspaceId.value },
       headers: { Authorization: `Bearer ${token}` },
     })
     effectiveDefaultLiffId.value = String(data?.effectiveDefaultLiffId ?? '').trim()

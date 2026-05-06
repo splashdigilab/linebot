@@ -44,6 +44,7 @@ export default defineEventHandler(async (event) => {
     preset.tagging,
     presetId,
     requestOrigin,
+    workspaceId,
   )
 
   return { ok: true }

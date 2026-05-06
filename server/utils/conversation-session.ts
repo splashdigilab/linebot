@@ -1,7 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { v4 as uuidv4 } from 'uuid'
 import { getDb } from './firebase'
-import { DEFAULT_LINE_WORKSPACE_ID, lineUserFirestoreDocId, lineUserIdFromFirestoreDocId } from '~~/shared/line-workspace'
+import { lineUserFirestoreDocId, lineUserIdFromFirestoreDocId } from '~~/shared/line-workspace'
 import type {
   ConversationEventType,
   ConversationStatus,
@@ -24,6 +24,12 @@ interface SessionCacheEntry {
 const SESSION_CACHE_TTL_MS = 10 * 1000
 const sessionByUser = new Map<string, SessionCacheEntry>()   // lineUserId → entry
 const sessionStatusById = new Map<string, { status: ConversationStatus; cachedAt: number }>() // sessionId → status
+
+function requireWorkspaceId(workspaceId: string | undefined, context: string): string {
+  const wid = String(workspaceId || '').trim()
+  if (!wid) throw new Error(`workspaceId is required in ${context}`)
+  return wid
+}
 
 export function _updateSessionStatusCache(sessionId: string, status: ConversationStatus) {
   sessionStatusById.set(sessionId, { status, cachedAt: Date.now() })
@@ -68,12 +74,16 @@ export async function recordConversationEvent(
  * Close any non-closed sessions for a user that are not the current active session.
  * Handles orphaned sessions left by race conditions.
  */
-async function closeOrphanedSessions(lineUserId: string, currentSessionId: string): Promise<void> {
+async function closeOrphanedSessions(
+  lineUserId: string,
+  currentSessionId: string,
+  workspaceId: string,
+): Promise<void> {
   const db = getDb()
   const snap = await db
     .collection('conversationSessions')
     .where('userId', '==', lineUserId)
-    .where('workspaceId', '==', DEFAULT_LINE_WORKSPACE_ID)
+    .where('workspaceId', '==', workspaceId)
     .get()
 
   const orphans = snap.docs.filter(d => d.id !== currentSessionId && d.data().status !== 'closed')
@@ -107,10 +117,13 @@ async function closeOrphanedSessions(lineUserId: string, currentSessionId: strin
  * Uses a Firestore transaction to prevent duplicate sessions from concurrent webhook calls.
  * After creating a new session, any orphaned non-closed sessions for the same user are also closed.
  */
-export async function ensureConversationSession(userId: string): Promise<string> {
+export async function ensureConversationSession(
+  userId: string,
+  workspaceId: string,
+): Promise<string> {
   const db = getDb()
-  const lineUserId = lineUserIdFromFirestoreDocId(userId)
-  const convDocId = lineUserFirestoreDocId(lineUserId)
+  const lineUserId = lineUserIdFromFirestoreDocId(userId, workspaceId)
+  const convDocId = lineUserFirestoreDocId(lineUserId, workspaceId)
   const convRef = db.collection('conversations').doc(convDocId)
   const now = Date.now()
 
@@ -170,7 +183,7 @@ export async function ensureConversationSession(userId: string): Promise<string>
     }
 
     tx.set(newSessionRef, {
-      workspaceId: DEFAULT_LINE_WORKSPACE_ID,
+      workspaceId,
       userId: lineUserId,
       openedAt: FieldValue.serverTimestamp(),
       closedAt: null,
@@ -185,7 +198,7 @@ export async function ensureConversationSession(userId: string): Promise<string>
       humanFirstRepliedAt: null,
     })
     tx.set(convRef, {
-      workspaceId: DEFAULT_LINE_WORKSPACE_ID,
+      workspaceId,
       userId: lineUserId,
       currentSessionId: newSessionId,
     }, { merge: true })
@@ -212,7 +225,7 @@ export async function ensureConversationSession(userId: string): Promise<string>
     // Event recording and orphan cleanup are independent — run in parallel, non-blocking
     Promise.all([
       recordConversationEvent(newSessionId, lineUserId, 'conversation_opened'),
-      closeOrphanedSessions(lineUserId, newSessionId),
+      closeOrphanedSessions(lineUserId, newSessionId, workspaceId),
     ]).catch(e => console.warn('[session] post-create cleanup failed:', e))
   }
 
@@ -229,7 +242,9 @@ export async function enterModule(
   userId: string,
   moduleType: ModuleType,
   moduleId?: string,
+  workspaceId?: string,
 ): Promise<void> {
+  const wid = requireWorkspaceId(workspaceId, 'enterModule')
   const db = getDb()
   const sessionRef = db.collection('conversationSessions').doc(sessionId)
   const sessionSnap = await sessionRef.get()
@@ -284,7 +299,7 @@ export async function enterModule(
   }
 
   if (moduleType === 'live_agent') {
-    const uid = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId))
+    const uid = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId, wid), wid)
     await db
       .collection('users')
       .doc(uid)
@@ -373,9 +388,9 @@ export async function shouldSuppressInboundBotAutomationForSession(
   return status === 'pending_human' || status === 'human_handling'
 }
 
-export async function onHumanOutgoingMessage(userId: string): Promise<void> {
+export async function onHumanOutgoingMessage(userId: string, workspaceId: string): Promise<void> {
   const db = getDb()
-  const convDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId))
+  const convDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId, workspaceId), workspaceId)
   const convSnap = await db.collection('conversations').doc(convDocId).get()
   const sessionId = convSnap.data()?.currentSessionId as string | undefined
   if (!sessionId) return

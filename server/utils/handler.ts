@@ -30,7 +30,6 @@ import {
 } from './conversation-session'
 import type { ModuleType } from '~~/shared/types/conversation-stats'
 import {
-  DEFAULT_LINE_WORKSPACE_ID,
   lineUserFirestoreDocId,
   lineUserIdFromFirestoreDocId,
 } from '~~/shared/line-workspace'
@@ -50,6 +49,12 @@ const userDocCache = new Map<string, CacheEntry<UserDoc | null>>()
 const CACHE_TTL_MS = 60 * 1000
 // Shorter TTL for user docs since activeInput/attributes change more often
 const USER_CACHE_TTL_MS = 30 * 1000
+
+function requireWorkspaceId(workspaceId: string | undefined, context: string): string {
+  const wid = String(workspaceId || '').trim()
+  if (!wid) throw createError({ statusCode: 400, statusMessage: `workspaceId is required in ${context}` })
+  return wid
+}
 
 function getCached<T>(map: Map<string, CacheEntry<T>>, key: string): T | undefined {
   const cached = map.get(key)
@@ -107,16 +112,7 @@ function toConversationText(msg: messagingApi.Message): string {
 
 async function saveOutgoingConversationMessages(userId: string, messages: messagingApi.Message[]): Promise<void> {
   if (!Array.isArray(messages) || messages.length === 0) return
-  await Promise.all(
-    messages.map((msg) => {
-      const text = toConversationText(msg)
-      if (!text) return Promise.resolve()
-      return saveConversationMessage(userId, 'outgoing', text, {
-        messageType: String((msg as any)?.type || 'message'),
-        payload: msg,
-      }, DEFAULT_LINE_WORKSPACE_ID)
-    }),
-  )
+  throw new Error(`[deprecated] saveOutgoingConversationMessages requires explicit workspaceId: ${userId} / ${messages.length}`)
 }
 
 function sanitizeForFirestore(value: any): any {
@@ -159,11 +155,12 @@ function buildAttributeContext(userData: UserDoc | null): Record<string, string>
 async function ensureUser(
   userIdOrDocId: string,
   preloadedProfile?: { displayName: string; pictureUrl: string } | null,
-  workspaceId: string = DEFAULT_LINE_WORKSPACE_ID,
+  workspaceId?: string,
 ): Promise<UserDoc | null> {
+  const wid = requireWorkspaceId(workspaceId, 'ensureUser')
   const db = getDb()
-  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId, workspaceId)
-  const docId = lineUserFirestoreDocId(lineUserId, workspaceId)
+  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId, wid)
+  const docId = lineUserFirestoreDocId(lineUserId, wid)
 
   // Return cached user data when no preloadedProfile is forcing a refresh
   if (!preloadedProfile) {
@@ -176,9 +173,9 @@ async function ensureUser(
 
   if (!snap.exists) {
     // Use caller-supplied profile to avoid a redundant LINE API round-trip
-    const profile = preloadedProfile ?? await getUserProfile(lineUserId)
+    const profile = preloadedProfile ?? await getUserProfile(lineUserId, wid)
     const newDoc: UserDoc = {
-      workspaceId,
+      workspaceId: wid,
       lineUserId,
       displayName: profile?.displayName ?? lineUserId,
       pictureUrl: profile?.pictureUrl ?? '',
@@ -203,16 +200,18 @@ async function ensureUser(
 export async function handleFollowEvent(
   userId: string,
   preloadedProfile?: { displayName: string; pictureUrl: string } | null,
+  workspaceId?: string,
 ): Promise<void> {
+  const wid = requireWorkspaceId(workspaceId, 'handleFollowEvent')
   try {
-    await ensureUser(userId, preloadedProfile)
+    await ensureUser(userId, preloadedProfile, wid)
     console.log('[webhook] follow ensureUser:', userId)
     // Session creation and claim application are independent — run in parallel
     await Promise.all([
-      ensureConversationSession(userId).catch(e =>
+      ensureConversationSession(userId, wid).catch(e =>
         console.error('[session] follow session error:', e),
       ),
-      applyPendingClaims(userId),
+      applyPendingClaims(userId, wid),
     ])
   }
   catch (e) {
@@ -224,10 +223,12 @@ export async function handleFollowEvent(
  * follow 事件後，查詢此 userId 已綁定（claimed）但尚未套用的 leadClaim，
  * 依活動快照執行貼標，並選擇性推送機器人模組，最後標記 applied。
  */
-async function applyPendingClaims(userId: string): Promise<void> {
+async function applyPendingClaims(
+  userId: string,
+  workspaceId: string,
+): Promise<void> {
   const db = getDb()
   const now = new Date()
-  const { channelSecret } = await getLineWorkspaceCredentials()
   const campaignWorkspaceCache = new Map<string, string>()
 
   const snap = await db.collection('leadClaims')
@@ -263,7 +264,11 @@ async function applyPendingClaims(userId: string): Promise<void> {
         }
       }
     }
-    if (!claimWorkspaceId) claimWorkspaceId = DEFAULT_LINE_WORKSPACE_ID
+    if (!claimWorkspaceId) {
+      console.warn('[follow] claim missing workspaceId, skipped:', doc.id)
+      continue
+    }
+    const { channelSecret } = await getLineWorkspaceCredentials(claimWorkspaceId)
 
     // 逾期檢查：僅舊 claim 含 expiresAt 時有效
     const rawExp = claim.expiresAt
@@ -280,7 +285,7 @@ async function applyPendingClaims(userId: string): Promise<void> {
     const action = normalizeAutoReplyAction(claim.action, String(claim.moduleId ?? ''))
 
     // 並行：貼標 + 取 flow（互不依賴）
-    const [taggingResult, flow] = await Promise.all([
+    const [, taggingResult, flow] = await Promise.all([
       ensureUser(userId, undefined, claimWorkspaceId).catch((e) => {
         console.error('[follow] ensure user for claim workspace failed:', e, 'workspaceId:', claimWorkspaceId)
         return null
@@ -310,10 +315,10 @@ async function applyPendingClaims(userId: string): Promise<void> {
         if (lineMessages.length > 0) {
           // 並行：推播 + 儲存對話訊息（互不依賴）
           await Promise.all([
-            pushMessage(userId, lineMessages),
+            pushMessage(userId, lineMessages, claimWorkspaceId),
             saveOutgoingConversationMessagesByWorkspace(userId, lineMessages, claimWorkspaceId),
           ])
-          await dispatchPostReplyActions(userId, flow.messages)
+          await dispatchPostReplyActions(userId, flow.messages, claimWorkspaceId)
         }
       }
       catch (e) {
@@ -326,7 +331,7 @@ async function applyPendingClaims(userId: string): Promise<void> {
         try {
           // 並行：推播 + 儲存對話訊息
           await Promise.all([
-            pushMessage(userId, actionMessages),
+            pushMessage(userId, actionMessages, claimWorkspaceId),
             saveOutgoingConversationMessagesByWorkspace(userId, actionMessages, claimWorkspaceId),
           ])
         }
@@ -345,10 +350,13 @@ async function applyPendingClaims(userId: string): Promise<void> {
   }
 }
 
-export async function handleUnfollowEvent(userId: string): Promise<void> {
+export async function handleUnfollowEvent(
+  userId: string,
+  workspaceId: string,
+): Promise<void> {
   try {
     const db = getDb()
-    const docId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId))
+    const docId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId, workspaceId), workspaceId)
     const ref = db.collection('users').doc(docId)
     const snap = await ref.get()
     if (snap.exists) {
@@ -361,11 +369,15 @@ export async function handleUnfollowEvent(userId: string): Promise<void> {
   }
 }
 
-async function dispatchPostReplyActions(userId: string, messages: any[]) {
+async function dispatchPostReplyActions(
+  userId: string,
+  messages: any[],
+  workspaceId: string,
+) {
   const userInputMsg = messages.find((m: any) => m.type === 'userInput')
   if (userInputMsg && userInputMsg.moduleId) {
     const db = getDb()
-    const uid = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId))
+    const uid = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId, workspaceId), workspaceId)
     const tagging = userInputMsg?.tagging
     const tagIds = tagging?.enabled && Array.isArray(tagging?.addTagIds)
       ? tagging.addTagIds.map((item: unknown) => String(item || '').trim()).filter(Boolean)
@@ -460,15 +472,16 @@ export async function pushSupportPresetActionToUser(
   tagging: AutoReplyRuleShape['tagging'],
   presetId: string,
   requestOrigin: string,
+  workspaceId: string,
 ): Promise<void> {
-  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId)
-  const fsUserDocId = lineUserFirestoreDocId(lineUserId)
-  const userData = await ensureUser(userIdOrDocId)
+  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId, workspaceId)
+  const fsUserDocId = lineUserFirestoreDocId(lineUserId, workspaceId)
+  const userData = await ensureUser(userIdOrDocId, undefined, workspaceId)
   const userAttributes = buildAttributeContext(userData)
-  const { channelSecret } = await getLineWorkspaceCredentials()
+  const { channelSecret } = await getLineWorkspaceCredentials(workspaceId)
 
   if (tagging?.enabled && Array.isArray(tagging.addTagIds) && tagging.addTagIds.length > 0) {
-    addTagsToUser(fsUserDocId, tagging.addTagIds, 'manual', presetId).catch((e) => {
+    addTagsToUser(fsUserDocId, tagging.addTagIds, 'manual', presetId, workspaceId).catch((e) => {
       console.error('[supportPreset] tagging failed:', e)
     })
   }
@@ -489,9 +502,9 @@ export async function pushSupportPresetActionToUser(
     if (lineMessages.length === 0) {
       throw createError({ statusCode: 400, statusMessage: '此機器人模組沒有可發送的訊息' })
     }
-    await pushMessage(lineUserId, lineMessages)
-    await saveOutgoingConversationMessages(lineUserId, lineMessages)
-    await dispatchPostReplyActions(lineUserId, flow.messages)
+    await pushMessage(lineUserId, lineMessages, workspaceId)
+    await saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, workspaceId)
+    await dispatchPostReplyActions(lineUserId, flow.messages, workspaceId)
     return
   }
 
@@ -499,8 +512,8 @@ export async function pushSupportPresetActionToUser(
   if (actionMessages.length === 0) {
     throw createError({ statusCode: 400, statusMessage: '無法送出此預存動作' })
   }
-  await pushMessage(lineUserId, actionMessages)
-  await saveOutgoingConversationMessages(lineUserId, actionMessages)
+  await pushMessage(lineUserId, actionMessages, workspaceId)
+  await saveOutgoingConversationMessagesByWorkspace(lineUserId, actionMessages, workspaceId)
 }
 
 function buildRichMessageSnapshot(item: any) {
@@ -1202,10 +1215,12 @@ function buildLineMessages(
 
 export async function handleMessageEvent(
   event: webhook.MessageEvent,
-  options: { requestOrigin?: string } = {},
+  options: { requestOrigin?: string; workspaceId: string },
 ): Promise<void> {
   const userId = event.source?.userId
   if (!userId) return
+  const workspaceId = String(options.workspaceId || '').trim()
+  if (!workspaceId) throw createError({ statusCode: 400, statusMessage: 'workspaceId is required in handleMessageEvent' })
 
   const lineEventTimestampMs = typeof event.timestamp === 'number' ? event.timestamp : undefined
 
@@ -1215,20 +1230,20 @@ export async function handleMessageEvent(
       messageType: 'text',
       payload: { type: 'text', text: textContent },
       lineEventTimestampMs,
-    }).catch(e => console.error('[conv] save error:', e))
+    }, workspaceId).catch(e => console.error('[conv] save error:', e))
 
     // Run session, user data, and rules cache warm-up all in parallel.
     // preloadedUser is passed to handleIncomingText so it skips the ensureUser call inside.
     const [sessionId, preloadedUser] = await Promise.all([
-      ensureConversationSession(userId).catch((e) => {
+      ensureConversationSession(userId, workspaceId).catch((e) => {
         console.error('[session] ensureConversationSession error:', e)
         return null
       }),
-      ensureUser(userId).catch(() => null),
+      ensureUser(userId, undefined, workspaceId).catch(() => null),
       loadActiveAutoReplyRules().catch(() => []),  // warm cache; result discarded
     ])
 
-    await handleIncomingText(userId, textContent, event.replyToken, options, preloadedUser, sessionId)
+    await handleIncomingText(userId, textContent, event.replyToken, options, preloadedUser, sessionId, workspaceId)
   } else {
     const typeLabel = event.message.type === 'image' ? '[圖片]'
       : event.message.type === 'video' ? '[影片]'
@@ -1239,10 +1254,10 @@ export async function handleMessageEvent(
       messageType: event.message.type,
       payload: event.message,
       lineEventTimestampMs,
-    }).catch(e => console.error('[conv] save error:', e))
+    }, workspaceId).catch(e => console.error('[conv] save error:', e))
     // Non-text: no bot reply; run in background
-    ensureConversationSession(userId).catch(e => console.error('[session] error:', e))
-    ensureUser(userId).catch(e => console.error('[ensureUser] Error:', e))
+    ensureConversationSession(userId, workspaceId).catch(e => console.error('[session] error:', e))
+    ensureUser(userId, undefined, workspaceId).catch(e => console.error('[ensureUser] Error:', e))
   }
 }
 
@@ -1256,11 +1271,12 @@ export async function saveConversationMessage(
     /** LINE webhook `event.timestamp`（毫秒），用於來訊時間與「對方曾互動」推定 */
     lineEventTimestampMs?: number
   },
-  workspaceId: string = DEFAULT_LINE_WORKSPACE_ID,
+  workspaceId?: string,
 ): Promise<void> {
+  const wid = requireWorkspaceId(workspaceId, 'saveConversationMessage')
   const db = getDb()
-  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId, workspaceId)
-  const convDocId = lineUserFirestoreDocId(lineUserId, workspaceId)
+  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId, wid)
+  const convDocId = lineUserFirestoreDocId(lineUserId, wid)
   const now = FieldValue.serverTimestamp()
   const useLineTs = direction === 'incoming'
     && options?.lineEventTimestampMs != null
@@ -1272,7 +1288,7 @@ export async function saveConversationMessage(
   const payload = sanitizeForFirestore(options?.payload)
 
   const convPatch: Record<string, unknown> = {
-    workspaceId,
+    workspaceId: wid,
     userId: lineUserId,
     lastMessage: text,
     lastDirection: direction,
@@ -1318,16 +1334,18 @@ async function saveOutgoingConversationMessagesByWorkspace(
 export async function bumpConversationPeerActivity(
   userIdOrDocId: string,
   lineEventTimestampMs?: number,
+  workspaceId?: string,
 ): Promise<void> {
+  const wid = requireWorkspaceId(workspaceId, 'bumpConversationPeerActivity')
   const db = getDb()
-  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId)
-  const convDocId = lineUserFirestoreDocId(lineUserId)
+  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId, wid)
+  const convDocId = lineUserFirestoreDocId(lineUserId, wid)
   const at = lineEventTimestampMs != null && Number.isFinite(Number(lineEventTimestampMs))
     ? Timestamp.fromMillis(Number(lineEventTimestampMs))
     : FieldValue.serverTimestamp()
   await db.collection('conversations').doc(convDocId).set(
     {
-      workspaceId: DEFAULT_LINE_WORKSPACE_ID,
+      workspaceId: wid,
       userId: lineUserId,
       lastPeerActivityAt: at,
     },
@@ -1339,17 +1357,19 @@ async function handleIncomingText(
   userId: string,
   textContent: string,
   replyToken: string | undefined,
-  options: { requestOrigin?: string; allowAnyText?: boolean } = {},
+  options: { requestOrigin?: string; allowAnyText?: boolean; workspaceId?: string } = {},
   userDataOverride?: UserDoc | null,
   sessionId?: string | null,
+  workspaceId?: string,
 ): Promise<void> {
-  const lineUserId = lineUserIdFromFirestoreDocId(userId)
-  const fsUserDocId = lineUserFirestoreDocId(lineUserId)
+  const wid = requireWorkspaceId(workspaceId, 'handleIncomingText')
+  const lineUserId = lineUserIdFromFirestoreDocId(userId, wid)
+  const fsUserDocId = lineUserFirestoreDocId(lineUserId, wid)
   // Run all independent fetches concurrently; loadActiveAutoReplyRules warms cache
   // so the subsequent matchAutoReplyRule call is a near-instant cache hit
   const [userData, { channelSecret }, suppressBotAutomation] = await Promise.all([
-    userDataOverride != null ? Promise.resolve(userDataOverride) : ensureUser(userId),
-    getLineWorkspaceCredentials(),
+    userDataOverride != null ? Promise.resolve(userDataOverride) : ensureUser(userId, undefined, wid),
+    getLineWorkspaceCredentials(wid),
     sessionId ? shouldSuppressInboundBotAutomationForSession(sessionId) : Promise.resolve(false),
     loadActiveAutoReplyRules().catch(() => []),
   ])
@@ -1367,7 +1387,7 @@ async function handleIncomingText(
     await db.collection('users').doc(fsUserDocId).update(updates)
 
     if (Array.isArray(tagIds) && tagIds.length > 0) {
-      await addTagsToUser(fsUserDocId, tagIds, 'system', `userInput:${moduleId}`)
+      await addTagsToUser(fsUserDocId, tagIds, 'system', `userInput:${moduleId}`, wid)
     }
 
     const flow = await getFlowByModuleId(moduleId)
@@ -1381,12 +1401,12 @@ async function handleIncomingText(
         lineUserId,
         channelSecret,
       )
-      await replyMessage(replyToken, lineMessages)
+      await replyMessage(replyToken, lineMessages, wid)
       // Non-blocking: user has already received the reply; save/dispatch in background
-      saveOutgoingConversationMessages(lineUserId, lineMessages).catch(e => console.error('[conv] save error:', e))
-      dispatchPostReplyActions(lineUserId, flow.messages).catch(e => console.error('[postReply] dispatch error:', e))
+      saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, wid).catch(e => console.error('[conv] save error:', e))
+      dispatchPostReplyActions(lineUserId, flow.messages, wid).catch(e => console.error('[postReply] dispatch error:', e))
       if (sessionId) {
-        enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', moduleId).catch(e =>
+        enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', moduleId, wid).catch(e =>
           console.error('[session] enterModule error:', e),
         )
       }
@@ -1406,7 +1426,7 @@ async function handleIncomingText(
     if (rule) {
       // 貼標（非阻塞，不影響回覆速度）
       if (rule.tagging?.enabled && Array.isArray(rule.tagging?.addTagIds) && rule.tagging.addTagIds.length > 0) {
-        addTagsToUser(fsUserDocId, rule.tagging.addTagIds, 'rule', rule.id ?? null)
+        addTagsToUser(fsUserDocId, rule.tagging.addTagIds, 'rule', rule.id ?? null, wid)
           .catch(e => console.error('[tagging] autoReply tagging failed:', e))
       }
 
@@ -1422,11 +1442,11 @@ async function handleIncomingText(
               lineUserId,
               channelSecret,
             )
-            await replyMessage(replyToken, lineMessages)
-            saveOutgoingConversationMessages(lineUserId, lineMessages).catch(e => console.error('[conv] save error:', e))
-            dispatchPostReplyActions(lineUserId, flow.messages).catch(e => console.error('[postReply] dispatch error:', e))
+            await replyMessage(replyToken, lineMessages, wid)
+            saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, wid).catch(e => console.error('[conv] save error:', e))
+            dispatchPostReplyActions(lineUserId, flow.messages, wid).catch(e => console.error('[postReply] dispatch error:', e))
             if (sessionId) {
-              enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', rule.action.moduleId).catch(e =>
+              enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', rule.action.moduleId, wid).catch(e =>
                 console.error('[session] enterModule error:', e),
               )
             }
@@ -1441,8 +1461,8 @@ async function handleIncomingText(
         else {
           const actionMessages = buildAutoReplyActionMessages(rule.action, userAttributes)
           if (actionMessages.length > 0) {
-            await replyMessage(replyToken, actionMessages)
-            saveOutgoingConversationMessages(lineUserId, actionMessages).catch(e => console.error('[conv] save error:', e))
+            await replyMessage(replyToken, actionMessages, wid)
+            saveOutgoingConversationMessagesByWorkspace(lineUserId, actionMessages, wid).catch(e => console.error('[conv] save error:', e))
           }
         }
       }
@@ -1452,14 +1472,16 @@ async function handleIncomingText(
 
 export async function handlePostbackEvent(
   event: webhook.PostbackEvent,
-  options: { requestOrigin?: string } = {},
+  options: { requestOrigin?: string; workspaceId: string },
 ): Promise<void> {
   console.log('[handlePostbackEvent] event received:', JSON.stringify(event).slice(0, 300))
   const userId = event.source?.userId
   if (!userId) return
+  const workspaceId = String(options.workspaceId || '').trim()
+  if (!workspaceId) throw createError({ statusCode: 400, statusMessage: 'workspaceId is required in handlePostbackEvent' })
 
   const postbackTs = typeof event.timestamp === 'number' ? event.timestamp : undefined
-  bumpConversationPeerActivity(userId, postbackTs).catch(e =>
+  bumpConversationPeerActivity(userId, postbackTs, workspaceId).catch(e =>
     console.error('[conv] bump lastPeerActivityAt (postback):', e),
   )
 
@@ -1473,8 +1495,8 @@ export async function handlePostbackEvent(
   // - module trigger: preload the flow document
   // - message trigger: warm the auto-reply rules cache
   const [{ channelSecret }, sessionId, preloadedFlow] = await Promise.all([
-    getLineWorkspaceCredentials(),
-    ensureConversationSession(userId).catch((e) => {
+    getLineWorkspaceCredentials(workspaceId),
+    ensureConversationSession(userId, workspaceId).catch((e) => {
       console.error('[session] postback session error:', e)
       return null
     }),
@@ -1490,14 +1512,14 @@ export async function handlePostbackEvent(
     : false
 
   // Fetch user in background; cache hit likely since ensureUser may have been called above
-  const userDataTask = ensureUser(userId).catch(e => {
+  const userDataTask = ensureUser(userId, undefined, workspaceId).catch(e => {
     console.error('[ensureUser] Error:', e)
     return null
   })
   if (messageTrigger.text) {
     if (messageTrigger.tagIds.length > 0) {
       try {
-        await addTagsToUser(lineUserFirestoreDocId(userId), messageTrigger.tagIds, 'system', 'postback:message')
+        await addTagsToUser(lineUserFirestoreDocId(userId, workspaceId), messageTrigger.tagIds, 'system', 'postback:message', workspaceId)
       }
       catch (e) {
         console.error('[tagging] message postback tagging failed:', e)
@@ -1510,6 +1532,7 @@ export async function handlePostbackEvent(
       { ...options, allowAnyText: false },
       await userDataTask,
       sessionId,
+      workspaceId,
     )
     await userDataTask
     return
@@ -1520,7 +1543,7 @@ export async function handlePostbackEvent(
   if (switchTrigger.targetMenuId) {
     if (switchTrigger.tagIds.length > 0) {
       try {
-        await addTagsToUser(lineUserFirestoreDocId(userId), switchTrigger.tagIds, 'system', `switchMenu:${switchTrigger.targetMenuId}`)
+        await addTagsToUser(lineUserFirestoreDocId(userId, workspaceId), switchTrigger.tagIds, 'system', `switchMenu:${switchTrigger.targetMenuId}`, workspaceId)
       }
       catch (e) {
         console.error('[tagging] switch menu tagging failed:', e)
@@ -1549,7 +1572,7 @@ export async function handlePostbackEvent(
     if (targetDoc.exists && targetDoc.data()?.richMenuId) {
       const lineRichMenuId = targetDoc.data()!.richMenuId
       try {
-        await linkRichMenuIdToUser(userId, lineRichMenuId)
+        await linkRichMenuIdToUser(userId, lineRichMenuId, workspaceId)
         console.log('[switchMenu] Fallback linkRichMenuIdToUser success')
       } catch (e) {
         console.error('[webhook] 連結圖文選單失敗:', e)
@@ -1565,7 +1588,7 @@ export async function handlePostbackEvent(
     const moduleId = trigger.moduleId
     if (trigger.tagIds.length > 0) {
       try {
-        await addTagsToUser(lineUserFirestoreDocId(userId), trigger.tagIds, 'system', `postback:${moduleId}`)
+        await addTagsToUser(lineUserFirestoreDocId(userId, workspaceId), trigger.tagIds, 'system', `postback:${moduleId}`, workspaceId)
       }
       catch (e) {
         console.error('[tagging] module postback tagging failed:', e)
@@ -1584,11 +1607,11 @@ export async function handlePostbackEvent(
           userId,
           channelSecret,
         )
-        await replyMessage(event.replyToken, lineMessages)
-        saveOutgoingConversationMessages(userId, lineMessages).catch(e => console.error('[conv] save error:', e))
-        dispatchPostReplyActions(userId, flow.messages).catch(e => console.error('[postReply] dispatch error:', e))
+        await replyMessage(event.replyToken, lineMessages, workspaceId)
+        saveOutgoingConversationMessagesByWorkspace(userId, lineMessages, workspaceId).catch(e => console.error('[conv] save error:', e))
+        dispatchPostReplyActions(userId, flow.messages, workspaceId).catch(e => console.error('[postReply] dispatch error:', e))
         if (sessionId) {
-          enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', moduleId).catch(e =>
+          enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', moduleId, workspaceId).catch(e =>
             console.error('[session] enterModule error:', e),
           )
         }
@@ -1622,11 +1645,11 @@ export async function handlePostbackEvent(
           userId,
           channelSecret,
         )
-        await replyMessage(event.replyToken, lineMessages)
-        saveOutgoingConversationMessages(userId, lineMessages).catch(e => console.error('[conv] save error:', e))
-        dispatchPostReplyActions(userId, flow.messages).catch(e => console.error('[postReply] dispatch error:', e))
+        await replyMessage(event.replyToken, lineMessages, workspaceId)
+        saveOutgoingConversationMessagesByWorkspace(userId, lineMessages, workspaceId).catch(e => console.error('[conv] save error:', e))
+        dispatchPostReplyActions(userId, flow.messages, workspaceId).catch(e => console.error('[postReply] dispatch error:', e))
         if (sessionId) {
-          enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', rule.action.moduleId).catch(e =>
+          enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', rule.action.moduleId, workspaceId).catch(e =>
             console.error('[session] enterModule (fallback) error:', e),
           )
         }
@@ -1634,8 +1657,8 @@ export async function handlePostbackEvent(
     } else {
       const actionMessages = buildAutoReplyActionMessages(rule.action, userAttributes)
       if (actionMessages.length > 0) {
-        await replyMessage(event.replyToken, actionMessages)
-        saveOutgoingConversationMessages(userId, actionMessages).catch(e => console.error('[conv] save error:', e))
+        await replyMessage(event.replyToken, actionMessages, workspaceId)
+        saveOutgoingConversationMessagesByWorkspace(userId, actionMessages, workspaceId).catch(e => console.error('[conv] save error:', e))
       }
     }
   }

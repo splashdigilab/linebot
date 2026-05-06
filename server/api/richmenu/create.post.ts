@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
 
   let richMenuId: string
   try {
-    richMenuId = await createRichMenu(richMenuPayload)
+    richMenuId = await createRichMenu(richMenuPayload, workspaceId)
   } catch (err: any) {
     let lineDetail = ''
     try {
@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
   }
 
   if (setAsDefault) {
-    await setDefaultRichMenu(richMenuId)
+    await setDefaultRichMenu(richMenuId, workspaceId)
     const db = getDb()
     const prev = await db.collection('richmenus').where('isDefault', '==', true).get()
     const batch = db.batch()

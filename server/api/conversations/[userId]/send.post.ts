@@ -31,12 +31,12 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'packageId / stickerId 必須是數字字串' })
     }
     const message = { type: 'sticker' as const, packageId, stickerId }
-    await pushMessage(lineUserId, [message])
+    await pushMessage(lineUserId, [message], workspaceId)
     await saveConversationMessage(userId, 'outgoing', '[貼圖]', {
       messageType: 'sticker',
       payload: message,
-    })
-    onHumanOutgoingMessage(userId).catch(e => console.error('[session] onHumanOutgoing error:', e))
+    }, workspaceId)
+    onHumanOutgoingMessage(userId, workspaceId).catch(e => console.error('[session] onHumanOutgoing error:', e))
     return { ok: true }
   }
 
@@ -47,12 +47,12 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: '圖片網址格式不正確' })
     }
     const message = { type: 'image' as const, originalContentUrl, previewImageUrl }
-    await pushMessage(lineUserId, [message])
+    await pushMessage(lineUserId, [message], workspaceId)
     await saveConversationMessage(userId, 'outgoing', '[圖片]', {
       messageType: 'image',
       payload: message,
-    })
-    onHumanOutgoingMessage(userId).catch(e => console.error('[session] onHumanOutgoing error:', e))
+    }, workspaceId)
+    onHumanOutgoingMessage(userId, workspaceId).catch(e => console.error('[session] onHumanOutgoing error:', e))
     return { ok: true }
   }
 
@@ -63,12 +63,12 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: '影片網址格式不正確' })
     }
     const message = { type: 'video' as const, originalContentUrl, previewImageUrl }
-    await pushMessage(lineUserId, [message])
+    await pushMessage(lineUserId, [message], workspaceId)
     await saveConversationMessage(userId, 'outgoing', '[影片]', {
       messageType: 'video',
       payload: message,
-    })
-    onHumanOutgoingMessage(userId).catch(e => console.error('[session] onHumanOutgoing error:', e))
+    }, workspaceId)
+    onHumanOutgoingMessage(userId, workspaceId).catch(e => console.error('[session] onHumanOutgoing error:', e))
     return { ok: true }
   }
 
@@ -82,12 +82,12 @@ export default defineEventHandler(async (event) => {
       ? Math.round(duration)
       : 5000
     const message = { type: 'audio' as const, originalContentUrl, duration: normalizedDuration }
-    await pushMessage(lineUserId, [message as any])
+    await pushMessage(lineUserId, [message as any], workspaceId)
     await saveConversationMessage(userId, 'outgoing', '[音訊]', {
       messageType: 'audio',
       payload: message,
-    })
-    onHumanOutgoingMessage(userId).catch(e => console.error('[session] onHumanOutgoing error:', e))
+    }, workspaceId)
+    onHumanOutgoingMessage(userId, workspaceId).catch(e => console.error('[session] onHumanOutgoing error:', e))
     return { ok: true }
   }
 
@@ -101,12 +101,12 @@ export default defineEventHandler(async (event) => {
     // 這裡改為送文字 + 下載連結以確保可送達。
     const message = { type: 'file' as const, originalContentUrl, fileName }
     const fallbackText = `📎 ${fileName}\n${originalContentUrl}`
-    await pushMessage(lineUserId, [{ type: 'text', text: fallbackText } as any])
+    await pushMessage(lineUserId, [{ type: 'text', text: fallbackText } as any], workspaceId)
     await saveConversationMessage(userId, 'outgoing', `[檔案] ${fileName}`, {
       messageType: 'file',
       payload: message,
-    })
-    onHumanOutgoingMessage(userId).catch(e => console.error('[session] onHumanOutgoing error:', e))
+    }, workspaceId)
+    onHumanOutgoingMessage(userId, workspaceId).catch(e => console.error('[session] onHumanOutgoing error:', e))
     return { ok: true }
   }
 
@@ -114,12 +114,12 @@ export default defineEventHandler(async (event) => {
   if (!text) throw createError({ statusCode: 400, statusMessage: 'text required' })
 
   const message = { type: 'text' as const, text }
-  await pushMessage(lineUserId, [message])
+  await pushMessage(lineUserId, [message], workspaceId)
   await saveConversationMessage(userId, 'outgoing', text, {
     messageType: 'text',
     payload: message,
-  })
-  onHumanOutgoingMessage(userId).catch(e => console.error('[session] onHumanOutgoing error:', e))
+  }, workspaceId)
+  onHumanOutgoingMessage(userId, workspaceId).catch(e => console.error('[session] onHumanOutgoing error:', e))
 
   return { ok: true }
 })

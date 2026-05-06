@@ -11,42 +11,47 @@ function lineMulticastErrorDetail(err: unknown): string {
 
 type MessagingBundle = {
   token: string
+  workspaceId: string
   client: line.messagingApi.MessagingApiClient
   blob: line.messagingApi.MessagingApiBlobClient
 }
 
-let _messaging: MessagingBundle | null = null
-let _insight: { token: string; client: line.insight.InsightClient } | null = null
+const _messagingByWorkspace = new Map<string, MessagingBundle>()
+const _insightByWorkspace = new Map<string, { token: string; client: line.insight.InsightClient }>()
 
-async function getMessagingBundle(): Promise<MessagingBundle> {
-  const { channelAccessToken } = await getLineWorkspaceCredentials()
+async function getMessagingBundle(workspaceId: string): Promise<MessagingBundle> {
+  const wid = String(workspaceId || '').trim()
+  if (!wid) throw new Error('workspaceId is required')
+  const { channelAccessToken } = await getLineWorkspaceCredentials(wid)
   const token = String(channelAccessToken || '').trim()
-  if (!token) throw new Error('LINE channel access token is not set in Firestore workspaces/default')
+  if (!token) throw new Error(`LINE channel access token is not set in Firestore workspaces/${wid}`)
 
-  if (!_messaging || _messaging.token !== token) {
-    _messaging = {
+  const current = _messagingByWorkspace.get(wid)
+  if (!current || current.token !== token) {
+    const next = {
       token,
+      workspaceId: wid,
       client: new line.messagingApi.MessagingApiClient({ channelAccessToken: token }),
       blob: new line.messagingApi.MessagingApiBlobClient({ channelAccessToken: token }),
     }
+    _messagingByWorkspace.set(wid, next)
+    return next
   }
-  return _messaging
+  return current
 }
 
 type VerifyLineWebhookSignatureOpts = {
   /** 若已讀過憑證可傳入，避免 webhook 重複打 Firestore／快取邏輯 */
-  channelSecret?: string
+  channelSecret: string
 }
 
 /** Verify x-line-signature（憑證來自 Firestore）。`body` 須與請求位元組一致（勿用 JSON.parse 後再 stringify）。 */
 export async function verifyLineWebhookSignature(
   body: string | Buffer,
   signature: string,
-  opts?: VerifyLineWebhookSignatureOpts,
+  opts: VerifyLineWebhookSignatureOpts,
 ): Promise<boolean> {
-  const secret = opts?.channelSecret !== undefined
-    ? String(opts.channelSecret || '').trim()
-    : String((await getLineWorkspaceCredentials()).channelSecret || '').trim()
+  const secret = String(opts.channelSecret || '').trim()
   if (!secret) return false
   const sig = String(signature || '').trim()
   if (!sig) return false
@@ -65,38 +70,48 @@ export async function verifyLineWebhookSignature(
 }
 
 /** LINE Insight（開封／官方互動統計） */
-export async function getInsightClient(): Promise<line.insight.InsightClient> {
-  const { channelAccessToken } = await getLineWorkspaceCredentials()
+export async function getInsightClient(workspaceId: string): Promise<line.insight.InsightClient> {
+  const wid = String(workspaceId || '').trim()
+  if (!wid) throw new Error('workspaceId is required')
+  const { channelAccessToken } = await getLineWorkspaceCredentials(wid)
   const token = String(channelAccessToken || '').trim()
   if (!token) throw new Error('LINE channel access token is not set')
 
-  if (!_insight || _insight.token !== token) {
-    _insight = {
+  const current = _insightByWorkspace.get(wid)
+  if (!current || current.token !== token) {
+    const next = {
       token,
       client: new line.insight.InsightClient({ channelAccessToken: token }),
     }
+    _insightByWorkspace.set(wid, next)
+    return next.client
   }
-  return _insight.client
+  return current.client
 }
 
 /** Reply to a LINE event's replyToken */
 export async function replyMessage(
   replyToken: string,
   messages: line.messagingApi.Message[],
+  workspaceId: string,
 ) {
-  const { client } = await getMessagingBundle()
+  const { client } = await getMessagingBundle(workspaceId)
   return client.replyMessage({ replyToken, messages })
 }
 
 /** Push a message to a LINE userId */
-export async function pushMessage(userId: string, messages: line.messagingApi.Message[]) {
-  const { client } = await getMessagingBundle()
+export async function pushMessage(
+  userId: string,
+  messages: line.messagingApi.Message[],
+  workspaceId: string,
+) {
+  const { client } = await getMessagingBundle(workspaceId)
   return client.pushMessage({ to: userId, messages })
 }
 
 /** 建立圖文選單並回傳 richMenuId */
-export async function createRichMenu(richMenu: line.messagingApi.RichMenuRequest) {
-  const { client } = await getMessagingBundle()
+export async function createRichMenu(richMenu: line.messagingApi.RichMenuRequest, workspaceId: string) {
+  const { client } = await getMessagingBundle(workspaceId)
   const res = await client.createRichMenu(richMenu)
   return res.richMenuId
 }
@@ -106,20 +121,21 @@ export async function uploadRichMenuImage(
   richMenuId: string,
   imageBuffer: Buffer,
   contentType: 'image/jpeg' | 'image/png',
+  workspaceId: string,
 ) {
-  const { blob } = await getMessagingBundle()
+  const { blob } = await getMessagingBundle(workspaceId)
   return blob.setRichMenuImage(richMenuId, new Blob([imageBuffer], { type: contentType }))
 }
 
 /** 將指定圖文選單設為全體使用者的預設選單 */
-export async function setDefaultRichMenu(richMenuId: string) {
-  const { client } = await getMessagingBundle()
+export async function setDefaultRichMenu(richMenuId: string, workspaceId: string) {
+  const { client } = await getMessagingBundle(workspaceId)
   return client.setDefaultRichMenu(richMenuId)
 }
 
 /** 從 LINE 刪除圖文選單 */
-export async function deleteLineRichMenu(richMenuId: string) {
-  const { client } = await getMessagingBundle()
+export async function deleteLineRichMenu(richMenuId: string, workspaceId: string) {
+  const { client } = await getMessagingBundle(workspaceId)
   return client.deleteRichMenu(richMenuId)
 }
 
@@ -135,9 +151,10 @@ export type MulticastOptions = {
 export async function multicastMessage(
   userIds: string[],
   messages: line.messagingApi.Message[],
+  workspaceId: string,
   options?: MulticastOptions,
 ): Promise<{ successCount: number; failedIds: string[]; lineAggregationApplied: boolean }> {
-  const { client } = await getMessagingBundle()
+  const { client } = await getMessagingBundle(workspaceId)
   const BATCH_SIZE = 500
   let successCount = 0
   const failedIds: string[] = []
@@ -199,8 +216,11 @@ const LINE_MESSAGING_ORIGIN = 'https://api.line.me/v2'
 export async function fetchAllFollowerUserIds(options?: {
   /** 最多收集幾個 userId（避免極大帳號一次佔滿記憶體） */
   maxIds?: number
+  workspaceId: string
 }): Promise<{ userIds: string[]; truncated: boolean }> {
-  const { channelAccessToken } = await getLineWorkspaceCredentials()
+  const wid = String(options?.workspaceId || '').trim()
+  if (!wid) throw new Error('workspaceId is required')
+  const { channelAccessToken } = await getLineWorkspaceCredentials(wid)
   const token = String(channelAccessToken || '').trim()
   if (!token) throw new Error('LINE_CHANNEL_ACCESS_TOKEN is not set')
 
@@ -245,9 +265,9 @@ export async function fetchAllFollowerUserIds(options?: {
 }
 
 /** Get user profile */
-export async function getUserProfile(userId: string) {
+export async function getUserProfile(userId: string, workspaceId: string) {
   try {
-    const { client } = await getMessagingBundle()
+    const { client } = await getMessagingBundle(workspaceId)
     return await client.getProfile(userId)
   }
   catch {
@@ -256,36 +276,49 @@ export async function getUserProfile(userId: string) {
 }
 
 /** 將指定圖文選單連結至使用者 */
-export async function linkRichMenuIdToUser(userId: string, richMenuId: string) {
-  const { client } = await getMessagingBundle()
+export async function linkRichMenuIdToUser(
+  userId: string,
+  richMenuId: string,
+  workspaceId: string,
+) {
+  const { client } = await getMessagingBundle(workspaceId)
   return client.linkRichMenuIdToUser(userId, richMenuId)
 }
 
 /** 建立圖文選單別名（供 LINE 原生 richmenuswitch 瞬間切換） */
-export async function createRichMenuAlias(richMenuId: string, richMenuAliasId: string) {
-  const { client } = await getMessagingBundle()
+export async function createRichMenuAlias(
+  richMenuId: string,
+  richMenuAliasId: string,
+  workspaceId: string,
+) {
+  const { client } = await getMessagingBundle(workspaceId)
   return client.createRichMenuAlias({ richMenuId, richMenuAliasId })
 }
 
 /** 刪除圖文選單別名 */
-export async function deleteRichMenuAlias(richMenuAliasId: string) {
-  const { client } = await getMessagingBundle()
+export async function deleteRichMenuAlias(richMenuAliasId: string, workspaceId: string) {
+  const { client } = await getMessagingBundle(workspaceId)
   try {
     return await client.deleteRichMenuAlias(richMenuAliasId)
-  } catch {
+  }
+  catch {
     // Ignore if alias doesn't exist
   }
 }
 
 /** 更新圖文選單別名指向新的 richMenuId。
  *  LINE 無直接更新 API，故採刪除後重建。 */
-export async function updateRichMenuAlias(richMenuId: string, richMenuAliasId: string) {
-  await deleteRichMenuAlias(richMenuAliasId)
-  return createRichMenuAlias(richMenuId, richMenuAliasId)
+export async function updateRichMenuAlias(
+  richMenuId: string,
+  richMenuAliasId: string,
+  workspaceId: string,
+) {
+  await deleteRichMenuAlias(richMenuAliasId, workspaceId)
+  return createRichMenuAlias(richMenuId, richMenuAliasId, workspaceId)
 }
 
 /** 自 LINE 取得圖文選單別名詳情 */
-export async function getRichMenuAlias(richMenuAliasId: string) {
-  const { client } = await getMessagingBundle()
+export async function getRichMenuAlias(richMenuAliasId: string, workspaceId: string) {
+  const { client } = await getMessagingBundle(workspaceId)
   return client.getRichMenuAlias(richMenuAliasId)
 }

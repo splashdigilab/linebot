@@ -72,6 +72,7 @@ export default defineEventHandler(async (event) => {
           }
         : await fetchBroadcastLineInsight(
             id,
+            String(data.workspaceId || '').trim(),
             data.lineAggregationUnit ?? null,
             startedAt,
             completedAt,

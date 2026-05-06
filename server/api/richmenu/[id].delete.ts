@@ -11,7 +11,7 @@ export default defineEventHandler(async (event) => {
   // 先刪除圖文選單別名（釋出 alias ID）
   if (menu.aliasId) {
     try {
-      await deleteRichMenuAlias(menu.aliasId)
+      await deleteRichMenuAlias(menu.aliasId, workspaceId)
     } catch (e) {
       console.warn('[richmenu/delete] Failed to delete alias:', e)
     }
@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
 
   // 從 LINE 刪除圖文選單
   try {
-    await deleteLineRichMenu(menu.richMenuId)
+    await deleteLineRichMenu(menu.richMenuId, workspaceId)
   } catch (e) {
     console.warn('[richmenu/delete] LINE delete failed:', e)
   }

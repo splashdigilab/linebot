@@ -75,6 +75,11 @@ export default defineEventHandler(async (event) => {
   }
 
   // 並行：Firestore 更新 + 查詢是否已加好友（兩者互不依賴）
+  const claimWorkspaceId = String(claim.workspaceId || '').trim()
+  if (!claimWorkspaceId) {
+    throw createError({ statusCode: 409, statusMessage: 'Claim missing workspaceId' })
+  }
+
   const [, followProfile] = await Promise.all([
     doc.ref.update({
       lineUserId,
@@ -82,7 +87,7 @@ export default defineEventHandler(async (event) => {
       claimedAt: FieldValue.serverTimestamp(),
       appliedAt: null,
     }),
-    getUserProfile(lineUserId),
+    getUserProfile(lineUserId, claimWorkspaceId),
   ])
 
   // 若使用者已加官方帳號為好友，立即套用貼標與推播，無需等待 follow webhook
@@ -90,7 +95,10 @@ export default defineEventHandler(async (event) => {
   let immediatelyApplied = false
   if (followProfile) {
     try {
-      await handleFollowEvent(lineUserId, followProfile)
+      await handleFollowEvent(lineUserId, {
+        displayName: String(followProfile.displayName || ''),
+        pictureUrl: String(followProfile.pictureUrl || ''),
+      }, claimWorkspaceId)
       immediatelyApplied = true
     }
     catch (e) {

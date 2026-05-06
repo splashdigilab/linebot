@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
   }, { merge: true })
 
   invalidateLineWorkspaceCredentialsCache()
-  const check = await getLineWorkspaceCredentials()
+  const check = await getLineWorkspaceCredentials(DEFAULT_LINE_WORKSPACE_ID)
 
   return {
     ok: true,
