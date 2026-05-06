@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
   const db = getDb()
 
   // Verify the conversation belongs to this workspace
-  const convDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId))
+  const convDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId, workspaceId), workspaceId)
   const convRef = db.collection('conversations').doc(convDocId)
   const convSnap = await convRef.get()
   if (!convSnap.exists || convSnap.data()?.workspaceId !== workspaceId) {

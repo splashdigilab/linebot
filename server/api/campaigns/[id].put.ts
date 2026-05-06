@@ -57,6 +57,7 @@ export default defineEventHandler(async (event) => {
 
   const merged = { ...snap.data(), ...updates }
   const urlRes = await syncPublishedEntryUrlForCampaign(db, id, {
+    workspaceId,
     liffId: String(merged.liffId ?? ''),
     campaignCode: String(merged.campaignCode ?? ''),
     isActive: merged.isActive !== false,

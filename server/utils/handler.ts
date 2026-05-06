@@ -114,7 +114,7 @@ async function saveOutgoingConversationMessages(userId: string, messages: messag
       return saveConversationMessage(userId, 'outgoing', text, {
         messageType: String((msg as any)?.type || 'message'),
         payload: msg,
-      })
+      }, DEFAULT_LINE_WORKSPACE_ID)
     }),
   )
 }
@@ -228,6 +228,7 @@ async function applyPendingClaims(userId: string): Promise<void> {
   const db = getDb()
   const now = new Date()
   const { channelSecret } = await getLineWorkspaceCredentials()
+  const campaignWorkspaceCache = new Map<string, string>()
 
   const snap = await db.collection('leadClaims')
     .where('lineUserId', '==', userId)
@@ -238,7 +239,31 @@ async function applyPendingClaims(userId: string): Promise<void> {
 
   for (const doc of snap.docs) {
     const claim = doc.data()
-    const claimWorkspaceId = String(claim.workspaceId || '').trim() || DEFAULT_LINE_WORKSPACE_ID
+    let claimWorkspaceId = String(claim.workspaceId || '').trim()
+    if (!claimWorkspaceId && claim.campaignId) {
+      const campaignId = String(claim.campaignId || '').trim()
+      if (campaignId) {
+        const cached = campaignWorkspaceCache.get(campaignId)
+        if (cached) {
+          claimWorkspaceId = cached
+        }
+        else {
+          try {
+            const campaignSnap = await db.collection('leadCampaigns').doc(campaignId).get()
+            const wid = String(campaignSnap.data()?.workspaceId || '').trim()
+            if (wid) {
+              claimWorkspaceId = wid
+              campaignWorkspaceCache.set(campaignId, wid)
+              await doc.ref.set({ workspaceId: wid }, { merge: true })
+            }
+          }
+          catch (e) {
+            console.warn('[follow] resolve campaign workspace failed:', e, 'campaignId:', campaignId)
+          }
+        }
+      }
+    }
+    if (!claimWorkspaceId) claimWorkspaceId = DEFAULT_LINE_WORKSPACE_ID
 
     // 逾期檢查：僅舊 claim 含 expiresAt 時有效
     const rawExp = claim.expiresAt
@@ -286,7 +311,7 @@ async function applyPendingClaims(userId: string): Promise<void> {
           // 並行：推播 + 儲存對話訊息（互不依賴）
           await Promise.all([
             pushMessage(userId, lineMessages),
-            saveOutgoingConversationMessages(userId, lineMessages),
+            saveOutgoingConversationMessagesByWorkspace(userId, lineMessages, claimWorkspaceId),
           ])
           await dispatchPostReplyActions(userId, flow.messages)
         }
@@ -302,7 +327,7 @@ async function applyPendingClaims(userId: string): Promise<void> {
           // 並行：推播 + 儲存對話訊息
           await Promise.all([
             pushMessage(userId, actionMessages),
-            saveOutgoingConversationMessages(userId, actionMessages),
+            saveOutgoingConversationMessagesByWorkspace(userId, actionMessages, claimWorkspaceId),
           ])
         }
         catch (e) {
@@ -1231,10 +1256,11 @@ export async function saveConversationMessage(
     /** LINE webhook `event.timestamp`（毫秒），用於來訊時間與「對方曾互動」推定 */
     lineEventTimestampMs?: number
   },
+  workspaceId: string = DEFAULT_LINE_WORKSPACE_ID,
 ): Promise<void> {
   const db = getDb()
-  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId)
-  const convDocId = lineUserFirestoreDocId(lineUserId)
+  const lineUserId = lineUserIdFromFirestoreDocId(userIdOrDocId, workspaceId)
+  const convDocId = lineUserFirestoreDocId(lineUserId, workspaceId)
   const now = FieldValue.serverTimestamp()
   const useLineTs = direction === 'incoming'
     && options?.lineEventTimestampMs != null
@@ -1246,7 +1272,7 @@ export async function saveConversationMessage(
   const payload = sanitizeForFirestore(options?.payload)
 
   const convPatch: Record<string, unknown> = {
-    workspaceId: DEFAULT_LINE_WORKSPACE_ID,
+    workspaceId,
     userId: lineUserId,
     lastMessage: text,
     lastDirection: direction,
@@ -1268,6 +1294,24 @@ export async function saveConversationMessage(
     }),
     db.collection('conversations').doc(convDocId).set(convPatch, { merge: true }),
   ])
+}
+
+async function saveOutgoingConversationMessagesByWorkspace(
+  userId: string,
+  messages: messagingApi.Message[],
+  workspaceId: string,
+): Promise<void> {
+  if (!Array.isArray(messages) || messages.length === 0) return
+  await Promise.all(
+    messages.map((msg) => {
+      const text = toConversationText(msg)
+      if (!text) return Promise.resolve()
+      return saveConversationMessage(userId, 'outgoing', text, {
+        messageType: String((msg as any)?.type || 'message'),
+        payload: msg,
+      }, workspaceId)
+    }),
+  )
 }
 
 /** 使用者 postback 等互動（無寫入一則 incoming 訊息時）仍更新對話上的「對方最後活動」時間，供推定已讀。 */
