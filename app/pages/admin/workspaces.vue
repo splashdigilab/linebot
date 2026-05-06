@@ -130,6 +130,10 @@ const loading = ref(true)
 const workspaceList = ref<WorkspaceItem[]>([])
 const isSuperAdmin = ref(false)
 
+const visibleWorkspaceList = computed(() =>
+  workspaceList.value.filter(ws => ws.workspaceId !== 'default'),
+)
+
 const ROLE_LABELS: Record<string, string> = {
   owner: '擁有者',
   admin: '管理員',
@@ -153,7 +157,7 @@ const groupedWorkspaces = computed<OrgGroup[]>(() => {
   const groups: Record<string, OrgGroup> = {}
 
   // 從 workspace 列表建立群組
-  for (const ws of workspaceList.value) {
+  for (const ws of visibleWorkspaceList.value) {
     const key = ws.organizationId ?? '__none__'
     if (!groups[key]) {
       const orgId = ws.organizationId ?? null
@@ -263,8 +267,8 @@ onMounted(async () => {
     workspaceList.value = list
     isSuperAdmin.value = tokenResult?.claims.superAdmin === true
 
-    if (!isSuperAdmin.value && list.length === 1 && orgAdminOf.value.length === 0) {
-      await enter(list[0].workspaceId)
+    if (!isSuperAdmin.value && visibleWorkspaceList.value.length === 1 && orgAdminOf.value.length === 0) {
+      await enter(visibleWorkspaceList.value[0].workspaceId)
     }
   }
   catch {

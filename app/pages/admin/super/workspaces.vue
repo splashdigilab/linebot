@@ -18,10 +18,10 @@
             <div class="card-header-main">
               <span class="badge badge-green">所有官方帳號</span>
             </div>
-            <span class="text-xs text-muted">共 {{ workspaces.length }} 筆</span>
+            <span class="text-xs text-muted">共 {{ visibleWorkspaces.length }} 筆</span>
           </div>
           <div class="card-section-stack">
-            <el-table v-loading="loading" :data="workspaces" size="small">
+            <el-table v-loading="loading" :data="visibleWorkspaces" size="small">
               <el-table-column label="名稱" min-width="160">
                 <template #default="{ row }">{{ row.name }}</template>
               </el-table-column>
@@ -127,6 +127,10 @@ const createSubmitted = ref(false)
 
 const orgNameMap = computed<Record<string, string>>(() =>
   Object.fromEntries(orgs.value.map(o => [o.id, o.name])),
+)
+
+const visibleWorkspaces = computed(() =>
+  workspaces.value.filter(w => String(w?.id || '').trim() !== 'default'),
 )
 
 const form = reactive({
