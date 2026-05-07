@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
 
   const userIdParam = getRouterParam(event, 'id')
   if (!userIdParam) throw createError({ statusCode: 400, statusMessage: 'userId is required' })
-  const fsUserDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userIdParam))
+  const fsUserDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userIdParam, workspaceId), workspaceId)
 
   const body = await readBody(event)
   const tagIds: string[] = body?.tagIds ?? []

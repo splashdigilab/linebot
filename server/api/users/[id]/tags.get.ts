@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
   if (!userIdParam) throw createError({ statusCode: 400, statusMessage: 'userId is required' })
 
   const db = getDb()
-  const fsUserDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userIdParam))
+  const fsUserDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userIdParam, workspaceId), workspaceId)
 
   // Verify the user belongs to this workspace
   const userSnap = await db.collection('users').doc(fsUserDocId).get()
