@@ -58,6 +58,7 @@ export async function syncPublishedEntryUrlForCampaign(
     campaignId,
     campaignCode,
     tokenHash,
+    sharedEntry: true,
     lineUserId: null,
     status: 'pending',
     tagIds: Array.isArray(campaign.tagIds) ? campaign.tagIds.map(String).filter(Boolean) : [],

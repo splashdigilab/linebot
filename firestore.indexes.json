@@ -157,6 +157,22 @@
       ]
     },
     {
+      "collectionGroup": "leadClaims",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "tokenHash", "order": "ASCENDING" },
+        { "fieldPath": "sharedEntry", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "leadClaims",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "campaignId", "order": "ASCENDING" },
+        { "fieldPath": "lineUserId", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "orgMembers",
       "queryScope": "COLLECTION",
       "fields": [

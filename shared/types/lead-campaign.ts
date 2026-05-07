@@ -28,7 +28,7 @@ export interface LeadCampaignDoc {
   endsAt?: string | null
   /** 完成綁定後轉址的網址（選填；留空則停留在 LIFF 頁） */
   redirectUrl?: string | null
-  /** 儲存活動後自動產生的活動進入網址（含一次性 ct） */
+  /** 儲存活動後自動產生的活動進入網址（含 ct；新版為可多人共用的入口 token） */
   publishedCtaUrl?: string | null
   publishedClaimId?: string | null
   createdAt: Timestamp | FieldValue
@@ -52,8 +52,15 @@ export interface LeadClaimDoc {
   workspaceId: string
   campaignId: string
   campaignCode: string
-  /** SHA-256(rawToken) hex，原始 token 不存 DB */
+  /** SHA-256(rawToken) hex；原始 token 不入庫。共用進入網址時，網址參數只對應模板列，每人實際綁定列為另一組雜湊。 */
   tokenHash: string
+  /**
+   * 由後台「同步活動進入網址」產生的模板列：同一網址可給多人用，lineUserId 永遠為 null。
+   * 實際綁定為每人一筆子列（無此欄或 false）。
+   */
+  sharedEntry?: boolean
+  /** 由 shared 模板拆出之使用者列時，指向模板文件 ID。 */
+  linkedTemplateClaimId?: string
   /** LIFF 完成後填入的 LINE userId */
   lineUserId: string | null
   status: LeadClaimStatus
