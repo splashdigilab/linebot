@@ -4,6 +4,7 @@ import { getDb } from './firebase'
 import { wrapBroadcastMessagesForClickTracking } from './broadcast-click-track'
 import { multicastMessage } from './line'
 import { broadcastAggregationUnit } from '~~/shared/broadcast-insight'
+import { lineUserIdFromFirestoreDocId } from '~~/shared/line-workspace'
 import { resolveAudienceUserIds } from './audience'
 import type { BroadcastDoc, BroadcastDeliveryDoc, AudienceFilter } from '~~/shared/types/tag-broadcast'
 
@@ -89,9 +90,17 @@ export async function executeBroadcastSend(id: string): Promise<{
     console.warn('[broadcast/send] PUBLIC_BASE_URL（或舊名 LINE_IMAGEMAP_BASE_URL／CLICK_TRACKING_BASE_URL）未設定，推播 URI 點擊不會寫入 broadcastClickLogs')
   }
 
+  const recipients = resolvedUserIds
+    .map((docId) => ({
+      docId,
+      lineUserId: String(lineUserIdFromFirestoreDocId(docId, workspaceId) || '').trim(),
+    }))
+    .filter((r) => Boolean(r.lineUserId))
+  const lineUserIds = recipients.map((r) => r.lineUserId)
+
   const lineUnit = broadcastAggregationUnit(id)
   const { successCount, failedIds, lineAggregationApplied } = await multicastMessage(
-    resolvedUserIds,
+    lineUserIds,
     messagesForLine as any,
     workspaceId,
     { customAggregationUnits: [lineUnit] },
@@ -117,11 +126,11 @@ export async function executeBroadcastSend(id: string): Promise<{
   const failedSet = new Set(failedIds)
   const sentAt = FieldValue.serverTimestamp()
 
-  for (const userId of resolvedUserIds) {
-    const isFailed = failedSet.has(userId)
+  for (const r of recipients) {
+    const isFailed = failedSet.has(r.lineUserId)
     const deliveryDoc: BroadcastDeliveryDoc = {
       campaignId: id,
-      userId,
+      userId: r.docId,
       deliveryStatus: isFailed ? 'failed' : 'sent',
       failureReason: isFailed ? 'LINE multicast failed' : null,
       sentAt: isFailed ? null : sentAt,
