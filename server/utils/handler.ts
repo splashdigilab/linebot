@@ -1212,6 +1212,30 @@ function buildLineMessages(
   })
 }
 
+export async function renderModuleToLineMessages(
+  moduleId: string,
+  options: {
+    workspaceId: string
+    requestOrigin?: string
+    userId?: string
+    attributes?: Record<string, string>
+  },
+): Promise<{ flow: FlowDoc; lineMessages: messagingApi.Message[] } | null> {
+  const wid = requireWorkspaceId(options.workspaceId, 'renderModuleToLineMessages')
+  const flow = await getFlowByModuleId(moduleId)
+  if (!flow) return null
+  const { channelSecret } = await getLineWorkspaceCredentials(wid)
+  const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
+  const lineMessages = buildLineMessages(
+    hydratedMessages,
+    options.attributes ?? {},
+    options.requestOrigin || '',
+    options.userId || '',
+    channelSecret,
+  )
+  return { flow, lineMessages }
+}
+
 
 export async function handleMessageEvent(
   event: webhook.MessageEvent,

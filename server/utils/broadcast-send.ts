@@ -3,10 +3,25 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from './firebase'
 import { wrapBroadcastMessagesForClickTracking } from './broadcast-click-track'
 import { multicastMessage } from './line'
+import { renderModuleToLineMessages } from './handler'
 import { broadcastAggregationUnit } from '~~/shared/broadcast-insight'
+import { parseTriggerModuleData } from '~~/shared/action-schema'
 import { lineUserIdFromFirestoreDocId } from '~~/shared/line-workspace'
 import { resolveAudienceUserIds } from './audience'
 import type { BroadcastDoc, BroadcastDeliveryDoc, AudienceFilter } from '~~/shared/types/tag-broadcast'
+
+function extractTriggerModuleId(messages: any[]): string {
+  if (!Array.isArray(messages) || messages.length !== 1) return ''
+  const first = messages[0] as Record<string, any>
+  if (!first || first.type !== 'template') return ''
+  const template = first.template as Record<string, any>
+  if (!template || template.type !== 'buttons') return ''
+  const actions = Array.isArray(template.actions) ? template.actions : []
+  if (actions.length !== 1) return ''
+  const action = actions[0] as Record<string, any>
+  if (!action || action.type !== 'postback' || typeof action.data !== 'string') return ''
+  return parseTriggerModuleData(action.data).moduleId
+}
 
 /**
  * 核心推播發送邏輯（共用於 /api/broadcast/:id/send 及排程觸發）
@@ -82,9 +97,22 @@ export async function executeBroadcastSend(id: string): Promise<{
 
   // ── 呼叫 LINE multicast API ──────────────────────────────────────
   const clickOrigin = String(runtimeConfig.clickTrackingBaseUrl || '').trim().replace(/\/$/, '')
+  const triggerModuleId = extractTriggerModuleId(data.messages)
+  let outboundMessages = data.messages
+  if (triggerModuleId) {
+    const rendered = await renderModuleToLineMessages(triggerModuleId, {
+      workspaceId,
+      requestOrigin: clickOrigin,
+    })
+    if (!rendered || rendered.lineMessages.length === 0) {
+      throw new Error(`Broadcast module not found or empty: ${triggerModuleId}`)
+    }
+    outboundMessages = rendered.lineMessages as any[]
+  }
+
   const messagesForLine = clickOrigin.startsWith('http')
-    ? wrapBroadcastMessagesForClickTracking(data.messages, id, clickOrigin)
-    : data.messages
+    ? wrapBroadcastMessagesForClickTracking(outboundMessages, id, clickOrigin)
+    : outboundMessages
 
   if (!clickOrigin.startsWith('http')) {
     console.warn('[broadcast/send] PUBLIC_BASE_URL（或舊名 LINE_IMAGEMAP_BASE_URL／CLICK_TRACKING_BASE_URL）未設定，推播 URI 點擊不會寫入 broadcastClickLogs')
