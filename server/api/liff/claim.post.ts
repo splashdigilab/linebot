@@ -40,6 +40,23 @@ function buildUserClaimFromTemplate(
   }
 }
 
+function buildUserClaimTemplatePatch(
+  template: DocumentData,
+  templateRef: DocumentReference,
+): Partial<LeadClaimDoc> {
+  return {
+    workspaceId: String(template.workspaceId || '').trim(),
+    campaignId: String(template.campaignId || '').trim(),
+    campaignCode: String(template.campaignCode || ''),
+    linkedTemplateClaimId: templateRef.id,
+    tagIds: Array.isArray(template.tagIds) ? template.tagIds.map(String).filter(Boolean) : [],
+    moduleId: template.moduleId != null ? String(template.moduleId) : null,
+    action: template.action ?? null,
+    redirectUrl: template.redirectUrl != null ? template.redirectUrl : null,
+    expiresAt: template.expiresAt ?? null,
+  }
+}
+
 /**
  * POST /api/liff/claim
  *
@@ -105,6 +122,11 @@ export default defineEventHandler(async (event) => {
     let userSnap = await userRef.get()
     if (!userSnap.exists) {
       await userRef.set(buildUserClaimFromTemplate(templateData, templateSnap.ref, lineUserId))
+      userSnap = await userRef.get()
+    }
+    else {
+      // 同一使用者重複進入時，需同步最新活動模板，避免沿用舊的觸發設定。
+      await userRef.set(buildUserClaimTemplatePatch(templateData, templateSnap.ref), { merge: true })
       userSnap = await userRef.get()
     }
     doc = userSnap
