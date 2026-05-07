@@ -132,6 +132,40 @@ function buildDebugInfo(extra: Record<string, unknown>) {
   } catch (e) { return `buildDebugInfo failed: ${String(e)}` }
 }
 
+function isLikelyLineClientUserAgent() {
+  if (typeof navigator === 'undefined') return false
+  return /Line\//i.test(navigator.userAgent)
+}
+
+function buildLineAppOpenUrl(liffId: string) {
+  if (!liffId || typeof window === 'undefined') return ''
+  const currentUrl = new URL(window.location.href)
+  const deepLink = new URL(`line://app/${liffId}`)
+  currentUrl.searchParams.forEach((value, key) => deepLink.searchParams.set(key, value))
+  return deepLink.toString()
+}
+
+async function tryOpenInLineAppBeforeInit(liffId: string) {
+  if (typeof window === 'undefined' || typeof sessionStorage === 'undefined') return
+  if (!liffId) return
+  if (isLikelyLineClientUserAgent()) return
+
+  // Avoid repeated deep-link attempts in the same browser tab/session.
+  const markerKey = `line_app_open_attempted:${liffId}`
+  if (sessionStorage.getItem(markerKey) === '1') return
+  sessionStorage.setItem(markerKey, '1')
+
+  const deepLinkUrl = buildLineAppOpenUrl(liffId)
+  if (!deepLinkUrl) return
+
+  const beforeHidden = document.hidden
+  window.location.href = deepLinkUrl
+
+  // If LINE app can't be opened, page stays visible and continues web LIFF flow.
+  await new Promise(resolve => setTimeout(resolve, 800))
+  if (!beforeHidden && !document.hidden) return
+}
+
 onMounted(async () => {
   const ctx: Record<string, unknown> = { v: 6 }
 
@@ -201,6 +235,8 @@ onMounted(async () => {
     debugInfo.value = buildDebugInfo({ reason: 'missing_liff_id', mergedParsed: parsed, ...ctx })
     return
   }
+
+  await tryOpenInLineAppBeforeInit(liffId)
 
   // --- Step 3: Await LIFF SDK (已與 Step 2 並行載入) ---
   const liffMod = await liffImportPromise
