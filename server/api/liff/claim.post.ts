@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { FieldValue } from 'firebase-admin/firestore'
-import type { DocumentData, DocumentReference, DocumentSnapshot } from 'firebase-admin/firestore'
+import type { DocumentData, DocumentReference } from 'firebase-admin/firestore'
 import type { LeadClaimDoc } from '~~/shared/types/lead-campaign'
 import { getUserProfile } from '~~/server/utils/line'
 import { handleFollowEvent } from '~~/server/utils/handler'
@@ -99,7 +99,8 @@ export default defineEventHandler(async (event) => {
     .limit(1)
     .get()
 
-  let doc: DocumentSnapshot
+  let claimData: DocumentData
+  let claimRef: DocumentReference
   if (!sharedSnap.empty) {
     const templateSnap = sharedSnap.docs[0]
     if (!templateSnap) {
@@ -121,17 +122,19 @@ export default defineEventHandler(async (event) => {
     }
 
     const userRef = db.collection('leadClaims').doc(sharedUserClaimDocId(campaignId, lineUserId))
-    let userSnap = await userRef.get()
+    const userSnap = await userRef.get()
+    claimRef = userRef
     if (!userSnap.exists) {
-      await userRef.set(buildUserClaimFromTemplate(templateData, templateSnap.ref, lineUserId))
-      userSnap = await userRef.get()
+      const newDoc = buildUserClaimFromTemplate(templateData, templateSnap.ref, lineUserId)
+      await userRef.set(newDoc)
+      claimData = newDoc
     }
     else {
       // 同一使用者重複進入時，需同步最新活動模板，避免沿用舊的觸發設定。
-      await userRef.set(buildUserClaimTemplatePatch(templateData, templateSnap.ref), { merge: true })
-      userSnap = await userRef.get()
+      const patch = buildUserClaimTemplatePatch(templateData, templateSnap.ref)
+      await userRef.set(patch, { merge: true })
+      claimData = { ...userSnap.data()!, ...patch }
     }
-    doc = userSnap
   }
   else {
     const legacySnap = await db.collection('leadClaims')
@@ -146,15 +149,12 @@ export default defineEventHandler(async (event) => {
     if (!d) {
       throw createError({ statusCode: 404, statusMessage: 'Claim not found or invalid token' })
     }
-    doc = d
+    claimRef = d.ref
+    claimData = d.data()!
   }
 
-  if (!doc.exists) {
-    throw createError({ statusCode: 404, statusMessage: 'Claim not found or invalid token' })
-  }
-
-  const claim = doc.data()!
-  const docRef = doc.ref
+  const claim = claimData
+  const docRef = claimRef
 
   // 若已完成（applied），同一使用者可重新觸發貼標與模組；不同使用者則拒絕
   if (claim.status === 'applied') {
@@ -197,29 +197,21 @@ export default defineEventHandler(async (event) => {
 
   // 若使用者已加官方帳號為好友，立即套用貼標與推播，無需等待 follow webhook
   // 傳入已取得的 profile，避免 ensureUser 內重複呼叫 LINE API
+  // resolveLineOaBasicId 與 handleFollowEvent 互不依賴，並行執行
   let immediatelyApplied = false
-  if (followProfile) {
-    try {
-      await handleFollowEvent(lineUserId, {
-        displayName: String(followProfile.displayName || ''),
-        pictureUrl: String(followProfile.pictureUrl || ''),
-      }, claimWorkspaceId)
-      immediatelyApplied = true
-    }
-    catch (e) {
-      console.error('[liff/claim] immediate apply failed:', e)
-    }
-  }
+  const [, lineOaBasicId] = await Promise.all([
+    followProfile
+      ? handleFollowEvent(lineUserId, {
+          displayName: String(followProfile.displayName || ''),
+          pictureUrl: String(followProfile.pictureUrl || ''),
+        }, claimWorkspaceId)
+          .then(() => { immediatelyApplied = true })
+          .catch(e => console.error('[liff/claim] immediate apply failed:', e))
+      : Promise.resolve(),
+    resolveLineOaBasicId(claimWorkspaceId).catch(() => ''),
+  ])
 
   const redirectUrl = String(claim.redirectUrl || '').trim() || undefined
-
-  let lineOaBasicId = ''
-  try {
-    lineOaBasicId = await resolveLineOaBasicId(claimWorkspaceId)
-  }
-  catch {
-    // non-critical — LIFF 仍可完成綁定，僅略過開啟對話連結
-  }
 
   console.log('[liff/claim] claimed:', docRef.id, 'userId:', lineUserId, 'immediatelyApplied:', immediatelyApplied)
   return {
