@@ -285,7 +285,7 @@ async function applyPendingClaims(
     const action = normalizeAutoReplyAction(claim.action, String(claim.moduleId ?? ''))
 
     // 並行：貼標 + 取 flow（互不依賴）
-    const [, taggingResult, flow] = await Promise.all([
+    const [userData, taggingResult, flow] = await Promise.all([
       ensureUser(userId, undefined, claimWorkspaceId).catch((e) => {
         console.error('[follow] ensure user for claim workspace failed:', e, 'workspaceId:', claimWorkspaceId)
         return null
@@ -303,6 +303,7 @@ async function applyPendingClaims(
         ? getFlowByModuleId(action.moduleId)
         : Promise.resolve(null),
     ])
+    const userAttributes = buildAttributeContext(userData)
 
     if (taggingResult) {
       console.log('[follow] tagging result:', taggingResult, 'claimId:', doc.id)
@@ -311,7 +312,13 @@ async function applyPendingClaims(
     if (action.type === 'module' && flow) {
       try {
         const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-        const lineMessages = buildLineMessages(hydratedMessages, {}, '', userId, channelSecret)
+        const lineMessages = buildLineMessages(
+          hydratedMessages,
+          userAttributes,
+          '',
+          userId,
+          channelSecret,
+        )
         if (lineMessages.length > 0) {
           // 並行：推播 + 儲存對話訊息（互不依賴）
           await Promise.all([
@@ -326,7 +333,7 @@ async function applyPendingClaims(
       }
     }
     else if (action.type !== 'module') {
-      const actionMessages = buildAutoReplyActionMessages(action, {})
+      const actionMessages = buildAutoReplyActionMessages(action, userAttributes)
       if (actionMessages.length > 0) {
         try {
           // 並行：推播 + 儲存對話訊息
