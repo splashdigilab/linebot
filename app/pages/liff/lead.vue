@@ -142,6 +142,14 @@ function finishInLineClientWithoutCampaignRedirect(liff: {
   }, chat || addFriendUrl.value ? 650 : 200)
 }
 
+function goToChatOrAddFriendByLocation() {
+  if (typeof window === 'undefined') return
+  const chat = buildOaChatDeepLink(oaBasicId.value)
+  const target = chat || addFriendUrl.value
+  if (!target) return
+  window.location.href = target
+}
+
 // ── URL parsing helpers ──────────────────────────────────────────────────
 
 function mergeParsedLead(
@@ -352,8 +360,14 @@ onMounted(async () => {
     if (String(res.lineOaBasicId || '').trim())
       applyKnownOaBasicId(String(res.lineOaBasicId))
 
+    // LINE app 內但非 LIFF in-client 容器時，isInClient() 可能是 false；
+    // 這時改用 location 跳轉對話，避免使用者卡在完成頁。
     if (liff.isInClient()) {
       finishInLineClientWithoutCampaignRedirect(liff)
+      return
+    }
+    if (isLikelyLineClientUserAgent()) {
+      goToChatOrAddFriendByLocation()
       return
     }
 
