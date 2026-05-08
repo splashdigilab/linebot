@@ -4,6 +4,7 @@ import type { DocumentData, DocumentReference, DocumentSnapshot } from 'firebase
 import type { LeadClaimDoc } from '~~/shared/types/lead-campaign'
 import { getUserProfile } from '~~/server/utils/line'
 import { handleFollowEvent } from '~~/server/utils/handler'
+import { resolveLineOaBasicId } from '~~/server/utils/line-oa-basic-id'
 
 function sharedUserClaimDocId(campaignId: string, lineUserId: string): string {
   return createHash('sha256').update(`lead_shared|${campaignId}|${lineUserId}`).digest('hex')
@@ -76,6 +77,7 @@ function buildUserClaimTemplatePatch(
  *   ok: true
  *   campaignCode: string
  *   redirectUrl?: string         // 活動設定的完成後轉址網址（有設定才有此欄位）
+ *   lineOaBasicId?: string       // 官方帳號 basicId，供前端開啟對話／加好友 deeplink（活動進入網址未帶 workspace 時仍可取得）
  *   immediatelyApplied?: true    // 使用者已加好友，本次立即完成貼標
  * }
  */
@@ -211,6 +213,20 @@ export default defineEventHandler(async (event) => {
 
   const redirectUrl = String(claim.redirectUrl || '').trim() || undefined
 
+  let lineOaBasicId = ''
+  try {
+    lineOaBasicId = await resolveLineOaBasicId(claimWorkspaceId)
+  }
+  catch {
+    // non-critical — LIFF 仍可完成綁定，僅略過開啟對話連結
+  }
+
   console.log('[liff/claim] claimed:', docRef.id, 'userId:', lineUserId, 'immediatelyApplied:', immediatelyApplied)
-  return { ok: true, campaignCode: claim.campaignCode, immediatelyApplied, redirectUrl }
+  return {
+    ok: true,
+    campaignCode: claim.campaignCode,
+    immediatelyApplied,
+    redirectUrl,
+    ...(lineOaBasicId ? { lineOaBasicId } : {}),
+  }
 })

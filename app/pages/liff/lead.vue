@@ -55,6 +55,8 @@ const doneMessage = ref('')
 const debugInfo = ref('')
 const needAddFriend = ref(false)
 const addFriendUrl = ref('')
+/**  Official Account `basicId`（例：@abc），用於對話 deeplink／加好友連結 */
+const oaBasicId = ref('')
 
 // ── localStorage: claim params (survives LINE OAuth redirect) ────────────
 const LEAD_KEY = 'liff_lead_params'
@@ -95,6 +97,49 @@ function loadConfigCache(): { liffId: string; lineOaBasicId: string } | null {
 function saveConfigCache(cfg: { liffId: string; lineOaBasicId: string }) {
   if (typeof localStorage === 'undefined') return
   try { localStorage.setItem(CFG_KEY, JSON.stringify({ ...cfg, cachedAt: Date.now() })) } catch {}
+}
+
+function applyKnownOaBasicId(basicIdRaw: string) {
+  const id = String(basicIdRaw || '').trim()
+  if (!id) return
+  oaBasicId.value = id
+  if (!addFriendUrl.value)
+    addFriendUrl.value = `https://line.me/R/ti/p/${encodeURIComponent(id)}`
+}
+
+/** LINE 對話視窗 deeplink（與 OA 開聊／未加好友時亦會引導加好友） — 見 Messaging API URL scheme「oaMessage」 */
+function buildOaChatDeepLink(basicIdRaw: string) {
+  const id = String(basicIdRaw || '').trim()
+  if (!id) return ''
+  return `https://line.me/R/oaMessage/${encodeURIComponent(id)}/`
+}
+
+/**
+ * 未設定完成後轉址時：在 LINE App（in-app LIFF）內優先開啟與官方帳號的對話，再關閉 LIFF。
+ * external browser 或非 LINE 環境不可用 closeWindow／openWindow。
+ */
+function finishInLineClientWithoutCampaignRedirect(liff: {
+  isInClient: () => boolean
+  openWindow: (p: { url: string; external?: boolean }) => unknown
+  closeWindow: () => void
+}) {
+  if (!liff.isInClient())
+    return
+  const chat = buildOaChatDeepLink(oaBasicId.value)
+  try {
+    if (chat)
+      liff.openWindow({ url: chat, external: false })
+    else if (addFriendUrl.value)
+      liff.openWindow({ url: addFriendUrl.value, external: false })
+  }
+  catch { /* LINE 環境異常時仍嘗試關閉 */ }
+
+  window.setTimeout(() => {
+    try {
+      liff.closeWindow()
+    }
+    catch { /* noop */ }
+  }, chat || addFriendUrl.value ? 650 : 200)
 }
 
 // ── URL parsing helpers ──────────────────────────────────────────────────
@@ -201,7 +246,7 @@ onMounted(async () => {
   const cachedCfg = loadConfigCache()
   if (cachedCfg) {
     if (!liffId) liffId = cachedCfg.liffId
-    if (cachedCfg.lineOaBasicId) addFriendUrl.value = `https://line.me/R/ti/p/${encodeURIComponent(cachedCfg.lineOaBasicId)}`
+    if (cachedCfg.lineOaBasicId) applyKnownOaBasicId(cachedCfg.lineOaBasicId)
     ctx.liffIdSource = liffId === cachedCfg.liffId ? 'cache' : 'url_or_params'
   }
 
@@ -211,7 +256,7 @@ onMounted(async () => {
       const cfg = await $fetch<{ liffId: string; lineOaBasicId: string }>('/api/liff/config')
       liffId = cfg?.liffId || ''
       if (cfg) saveConfigCache(cfg)
-      if (cfg?.lineOaBasicId) addFriendUrl.value = `https://line.me/R/ti/p/${encodeURIComponent(cfg.lineOaBasicId)}`
+      if (cfg?.lineOaBasicId) applyKnownOaBasicId(cfg.lineOaBasicId)
       ctx.liffIdSource = 'api'
     }
     catch (e) {
@@ -223,7 +268,7 @@ onMounted(async () => {
     // Have liffId — refresh config cache in background without blocking
     $fetch<{ liffId: string; lineOaBasicId: string }>('/api/liff/config').then((cfg) => {
       if (cfg) saveConfigCache(cfg)
-      if (cfg?.lineOaBasicId && !addFriendUrl.value) addFriendUrl.value = `https://line.me/R/ti/p/${encodeURIComponent(cfg.lineOaBasicId)}`
+      if (cfg?.lineOaBasicId && !oaBasicId.value) applyKnownOaBasicId(cfg.lineOaBasicId)
     }).catch(() => {})
     ctx.liffIdSource = ctx.liffIdSource || 'url_or_params'
   }
@@ -287,7 +332,13 @@ onMounted(async () => {
   // --- Step 7: Claim ---
   try {
     const profile = await liff.getProfile()
-    const res = await $fetch<{ ok?: boolean; immediatelyApplied?: boolean; campaignCode?: string; redirectUrl?: string }>(
+    const res = await $fetch<{
+      ok?: boolean
+      immediatelyApplied?: boolean
+      campaignCode?: string
+      redirectUrl?: string
+      lineOaBasicId?: string
+    }>(
       '/api/liff/claim',
       { method: 'POST', body: { rawToken: ct, lineUserId: profile.userId } },
     )
@@ -298,11 +349,18 @@ onMounted(async () => {
       return
     }
 
+    if (String(res.lineOaBasicId || '').trim())
+      applyKnownOaBasicId(String(res.lineOaBasicId))
+
+    if (liff.isInClient()) {
+      finishInLineClientWithoutCampaignRedirect(liff)
+      return
+    }
+
     phase.value = 'done'
     if (res.immediatelyApplied) {
       doneMessage.value = '已將你的 LINE 與活動綁定。'
       needAddFriend.value = false
-      if (liff.isInClient()) setTimeout(() => liff.closeWindow(), 2000)
     }
     else {
       doneMessage.value = '已將你的 LINE 與活動綁定。'
