@@ -320,12 +320,12 @@ async function applyPendingClaims(
           channelSecret,
         )
         if (lineMessages.length > 0) {
-          // 並行：推播 + 儲存對話訊息（互不依賴）
+          // 並行：推播 + 儲存對話訊息 + dispatchPostReplyActions（三者互不依賴）
           await Promise.all([
             pushMessage(userId, lineMessages, claimWorkspaceId),
             saveOutgoingConversationMessagesByWorkspace(userId, lineMessages, claimWorkspaceId),
+            dispatchPostReplyActions(userId, flow.messages, claimWorkspaceId),
           ])
-          await dispatchPostReplyActions(userId, flow.messages, claimWorkspaceId)
         }
       }
       catch (e) {

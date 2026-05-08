@@ -346,11 +346,23 @@ onMounted(async () => {
       campaignCode?: string
       redirectUrl?: string
       lineOaBasicId?: string
+      workspaceId?: string
     }>(
       '/api/liff/claim',
       { method: 'POST', body: { rawToken: ct, lineUserId: profile.userId } },
     )
     clearLeadParams()
+
+    // 使用者已加好友：在背景發出 apply 請求完成貼標與推播，不阻塞 UI
+    // keepalive: true 確保頁面跳轉或 LIFF 關閉後請求仍能在背景完成
+    if (res.immediatelyApplied && res.workspaceId) {
+      fetch('/api/liff/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lineUserId: profile.userId, workspaceId: res.workspaceId }),
+        keepalive: true,
+      }).catch(() => {})
+    }
 
     if (res.redirectUrl) {
       window.location.href = res.redirectUrl

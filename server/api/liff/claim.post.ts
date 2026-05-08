@@ -3,7 +3,6 @@ import { FieldValue } from 'firebase-admin/firestore'
 import type { DocumentData, DocumentReference } from 'firebase-admin/firestore'
 import type { LeadClaimDoc } from '~~/shared/types/lead-campaign'
 import { getUserProfile } from '~~/server/utils/line'
-import { handleFollowEvent } from '~~/server/utils/handler'
 import { resolveLineOaBasicId } from '~~/server/utils/line-oa-basic-id'
 
 function sharedUserClaimDocId(campaignId: string, lineUserId: string): string {
@@ -195,21 +194,10 @@ export default defineEventHandler(async (event) => {
     getUserProfile(lineUserId, claimWorkspaceId),
   ])
 
-  // 若使用者已加官方帳號為好友，立即套用貼標與推播，無需等待 follow webhook
-  // 傳入已取得的 profile，避免 ensureUser 內重複呼叫 LINE API
-  // resolveLineOaBasicId 與 handleFollowEvent 互不依賴，並行執行
-  let immediatelyApplied = false
-  const [, lineOaBasicId] = await Promise.all([
-    followProfile
-      ? handleFollowEvent(lineUserId, {
-          displayName: String(followProfile.displayName || ''),
-          pictureUrl: String(followProfile.pictureUrl || ''),
-        }, claimWorkspaceId)
-          .then(() => { immediatelyApplied = true })
-          .catch(e => console.error('[liff/claim] immediate apply failed:', e))
-      : Promise.resolve(),
-    resolveLineOaBasicId(claimWorkspaceId).catch(() => ''),
-  ])
+  // 若使用者已加好友，標記為 immediatelyApplied（樂觀）
+  // 實際貼標與模組推播由前端背景呼叫 /api/liff/apply 完成，避免 LINE pushMessage API 阻塞回應
+  const immediatelyApplied = !!followProfile
+  const lineOaBasicId = await resolveLineOaBasicId(claimWorkspaceId).catch(() => '')
 
   const redirectUrl = String(claim.redirectUrl || '').trim() || undefined
 
@@ -220,5 +208,7 @@ export default defineEventHandler(async (event) => {
     immediatelyApplied,
     redirectUrl,
     ...(lineOaBasicId ? { lineOaBasicId } : {}),
+    // 前端用於背景呼叫 /api/liff/apply（已加好友才需要）
+    ...(immediatelyApplied ? { workspaceId: claimWorkspaceId } : {}),
   }
 })
