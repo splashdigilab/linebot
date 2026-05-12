@@ -41,15 +41,28 @@ export const useWorkspace = () => {
   const { apiFetch, getBearer } = useWorkspaceApiFetch(() => workspaceId.value)
 
   // ── Load workspace list ────────────────────────────────────────
+  // in-flight dedup：避免 layout + page 同時 onMounted 並行打 `/api/admin/workspaces/my`
+  // 模組級單例：所有元件共用同一個進行中的 Promise
+  const inFlight = useState<Promise<WorkspaceItem[]> | null>('workspace:loadInFlight', () => null)
 
   async function loadWorkspaceList(): Promise<WorkspaceItem[]> {
-    const token = await getBearer()
-    const res = await $fetch<MyWorkspacesResponse>('/api/admin/workspaces/my', {
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    workspaceList.value = res.workspaces
-    orgAdminOf.value = res.orgAdminOf
-    return res.workspaces
+    if (inFlight.value) return inFlight.value
+    const task = (async () => {
+      try {
+        const token = await getBearer()
+        const res = await $fetch<MyWorkspacesResponse>('/api/admin/workspaces/my', {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        workspaceList.value = res.workspaces
+        orgAdminOf.value = res.orgAdminOf
+        return res.workspaces
+      }
+      finally {
+        inFlight.value = null
+      }
+    })()
+    inFlight.value = task
+    return task
   }
 
   // ── Role check helpers ─────────────────────────────────────────

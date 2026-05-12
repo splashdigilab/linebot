@@ -7,21 +7,30 @@ function stripFlowTriggers(flow: Record<string, unknown>) {
   return rest
 }
 
+// 系統模組顯示順序（避免依賴 createdAt 的微小時差）
+const SYSTEM_MODULE_ORDER = ['welcome', 'live_agent'] as const
+
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
 
   // Auto-create system modules if missing (transparent fix for all existing workspaces)
   await seedWorkspaceSystemModules(getDb(), workspaceId)
 
-  const allFlows = await listDocs('flows', (ref) =>
-    ref.where('workspaceId', '==', workspaceId).orderBy('createdAt', 'asc'),
+  // 使用 DESC 以對齊 firestore.indexes.json 中既有的 (workspaceId ASC + createdAt DESC) 複合索引
+  const allFlows = await listDocs<Record<string, unknown>>('flows', (ref) =>
+    ref.where('workspaceId', '==', workspaceId).orderBy('createdAt', 'desc'),
   )
 
-  // System modules first, then regular flows (newest first)
-  const systemFlows = allFlows.filter((f: Record<string, unknown>) => f.isSystem)
-  const regularFlows = allFlows.filter((f: Record<string, unknown>) => !f.isSystem).reverse()
+  // 系統模組依固定順序排序；一般流程已是新→舊
+  const systemFlows = allFlows
+    .filter((f) => f.isSystem)
+    .sort((a, b) => {
+      const ai = SYSTEM_MODULE_ORDER.indexOf(a.moduleType as typeof SYSTEM_MODULE_ORDER[number])
+      const bi = SYSTEM_MODULE_ORDER.indexOf(b.moduleType as typeof SYSTEM_MODULE_ORDER[number])
+      return (ai === -1 ? Number.MAX_SAFE_INTEGER : ai)
+        - (bi === -1 ? Number.MAX_SAFE_INTEGER : bi)
+    })
+  const regularFlows = allFlows.filter((f) => !f.isSystem)
 
-  return [...systemFlows, ...regularFlows].map((flow: Record<string, unknown>) =>
-    stripFlowTriggers(flow),
-  )
+  return [...systemFlows, ...regularFlows].map(stripFlowTriggers)
 })

@@ -456,7 +456,7 @@ async function loadData() {
   try {
     const [bcs, tagOk, flowList] = await Promise.all([
       apiFetch<any[]>('/api/broadcast/list'),
-      loadTagOptions(workspaceId.value, { status: 'active' }),
+      loadTagOptions({ status: 'active' }),
       apiFetch<any[]>('/api/flow/list').catch(() => []),
     ])
     broadcasts.value = bcs ?? []

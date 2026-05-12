@@ -118,6 +118,7 @@
 
 <script setup lang="ts">
 import type { WorkspaceItem } from '~~/app/composables/useWorkspace'
+import { DEFAULT_LINE_WORKSPACE_ID } from '~~/shared/line-workspace'
 
 definePageMeta({ middleware: 'auth', layout: false })
 useHead({ title: '選擇官方帳號 — LINE Bot 管理系統' })
@@ -130,9 +131,18 @@ const loading = ref(true)
 const workspaceList = ref<WorkspaceItem[]>([])
 const isSuperAdmin = ref(false)
 
-const visibleWorkspaceList = computed(() =>
-  workspaceList.value.filter(ws => ws.workspaceId !== 'default'),
-)
+/**
+ * 預設只隱藏舊版單一 OA 的 `default` workspace；但若使用者完全沒有其他
+ * workspace、也不是任何組織的 admin，仍顯示 default 作為唯一入口，
+ * 避免把唯一一筆權限藏掉導致看到「沒有任何官方帳號的存取權限」。
+ */
+const visibleWorkspaceList = computed(() => {
+  const nonDefault = workspaceList.value.filter(ws => ws.workspaceId !== DEFAULT_LINE_WORKSPACE_ID)
+  if (nonDefault.length === 0 && orgAdminOf.value.length === 0) {
+    return workspaceList.value
+  }
+  return nonDefault
+})
 
 const ROLE_LABELS: Record<string, string> = {
   owner: '擁有者',

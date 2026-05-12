@@ -323,13 +323,13 @@ async function syncFromLine() {
           'success',
         )
         if (res.listTruncated) showToast('LINE 回傳的好友清單已達上限截斷，請洽開發者調高 maxIds', 'warning')
-        await loadData()
+        await refreshUsersOnly()
         return
       }
     }
     if (lastRemaining > 0) {
       showToast(`已處理 ${totalProcessed} 筆，尚有約 ${lastRemaining} 位未寫入，請再按一次「從 LINE 同步好友」`, 'warning')
-      await loadData()
+      await refreshUsersOnly()
     }
   }
   catch (e: any) {
@@ -348,6 +348,12 @@ async function loadData() {
   ])
   if (!uOk) showToast('載入會員失敗', 'error')
   if (!tOk) showToast('載入標籤失敗', 'error')
+}
+
+/** tag 增刪操作後只重抓 users，標籤不會變動，避免每次都重複拉 `/api/tag/list` */
+async function refreshUsersOnly() {
+  const ok = await loadUsers({ limit: 500 })
+  if (!ok) showToast('載入會員失敗', 'error')
 }
 
 function openBatchTag(mode: 'add' | 'remove') {
@@ -373,7 +379,7 @@ async function submitBatch() {
     showToast(`完成！已影響 ${count} 筆紀錄 ✅`, 'success')
     batchDialogVisible.value = false
     selectedIds.value = []
-    await loadData()
+    await refreshUsersOnly()
   }
   catch (e: any) {
     showToast(e?.data?.statusMessage || '操作失敗', 'error')
@@ -399,7 +405,7 @@ async function addUserTags() {
     })
     showToast('標籤已加入 ✅', 'success')
     addTagIds.value = []
-    await loadData()
+    await refreshUsersOnly()
     const updated = allUsers.value.find((u) => u.id === dialogUser.value!.id)
     if (updated) dialogUser.value = JSON.parse(JSON.stringify(updated))
   }
@@ -415,7 +421,7 @@ async function removeUserTag(userId: string, tagId: string) {
   try {
     await apiFetch(`/api/users/${userId}/tags/${tagId}`, { method: 'DELETE' })
     showToast('標籤已移除', 'success')
-    await loadData()
+    await refreshUsersOnly()
     const updated = allUsers.value.find((u) => u.id === userId)
     if (updated) dialogUser.value = JSON.parse(JSON.stringify(updated))
   }

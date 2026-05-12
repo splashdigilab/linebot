@@ -219,7 +219,7 @@ const filteredTags = computed(() => {
 })
 
 async function refreshTags() {
-  const ok = await loadTags(workspaceId.value)
+  const ok = await loadTags()
   if (!ok) showToast('載入標籤失敗', 'error')
 }
 

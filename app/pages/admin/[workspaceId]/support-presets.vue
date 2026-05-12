@@ -210,7 +210,7 @@ async function loadModules() {
 onMounted(() => {
   loadPresets()
   loadModules()
-  loadTags(workspaceId.value, { status: 'active' })
+  loadTags({ status: 'active' })
 })
 
 function selectPreset(preset: any) {

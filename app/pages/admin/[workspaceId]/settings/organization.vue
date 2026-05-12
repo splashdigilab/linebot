@@ -464,6 +464,7 @@ async function load() {
 }
 
 async function reloadAll() {
+  // loadWorkspaceList 有 in-flight dedup，與 layout 同時觸發時只會發 1 次
   await loadWorkspaceList().catch(() => {})
   await load()
 }
@@ -557,7 +558,7 @@ async function clearWorkspace() {
 onMounted(async () => {
   refreshSuggestedWebhookUrl()
   refreshSuggestedLiffEndpointUrl()
-  await loadWorkspaceList().catch(() => {})
+  // workspaceList 由 layout (default.vue) 的 onMounted 負責載入；此頁只需載入 LINE 憑證 meta
   await load()
 })
 </script>

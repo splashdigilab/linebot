@@ -269,7 +269,7 @@ async function loadModules() {
 onMounted(() => {
   loadRules()
   loadModules()
-  loadTags(workspaceId.value, { status: 'active' })
+  loadTags({ status: 'active' })
 })
 
 // ── Select / Create ───────────────────────────────────────
