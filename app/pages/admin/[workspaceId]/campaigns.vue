@@ -313,6 +313,9 @@ const defaultForm = () => ({
   isActive: true,
 })
 const form = ref(defaultForm())
+const { markClean, confirmLeaveIfDirty } = useUnsavedChanges({
+  getSnapshot: () => form.value,
+})
 const campaignActionTypeOptions = [
   { value: 'none', label: '不觸發動作' },
   { value: 'uri', label: '開啟網址' },
@@ -357,7 +360,8 @@ onMounted(() => {
 })
 
 // ── Select / Create ───────────────────────────────────────
-function selectCampaign(c: any) {
+function selectCampaign(c: any, opts?: { skipDiscardConfirm?: boolean }) {
+  if (!opts?.skipDiscardConfirm && !confirmLeaveIfDirty()) return
   isCreating.value = false
   selectedId.value = c.id
   ctaUrl.value = String(c.publishedCtaUrl || '')
@@ -380,25 +384,30 @@ function selectCampaign(c: any) {
     isActive: c.isActive !== false,
   }
   loadStats()
+  markClean()
 }
 
 function openCreate() {
+  if (!confirmLeaveIfDirty()) return
   isCreating.value = true
   selectedId.value = null
   ctaUrl.value = ''
   stats.value = null
   form.value = defaultForm()
+  markClean()
 }
 
 function cancelEdit() {
+  if (!confirmLeaveIfDirty()) return
   if (selectedCampaign.value) {
-    selectCampaign(selectedCampaign.value)
+    selectCampaign(selectedCampaign.value, { skipDiscardConfirm: true })
     isCreating.value = false
   }
   else {
     isCreating.value = false
     selectedId.value = null
     form.value = defaultForm()
+    markClean()
   }
 }
 
@@ -447,7 +456,7 @@ async function submitForm() {
       showToast('活動已建立', 'success')
       await loadCampaigns()
       const created = campaigns.value.find(c => c.id === res.id) ?? campaigns.value[0]
-      if (created) selectCampaign(created)
+      if (created) selectCampaign(created, { skipDiscardConfirm: true })
       isCreating.value = false
     }
     else {
@@ -455,7 +464,7 @@ async function submitForm() {
       showToast('活動已更新', 'success')
       await loadCampaigns()
       const updated = campaigns.value.find(c => c.id === selectedId.value)
-      if (updated) selectCampaign(updated)
+      if (updated) selectCampaign(updated, { skipDiscardConfirm: true })
       else await loadStats()
     }
   }
@@ -475,6 +484,7 @@ async function deleteCampaign() {
     selectedId.value = null
     isCreating.value = false
     form.value = defaultForm()
+    markClean()
     await loadCampaigns()
   }
   catch {

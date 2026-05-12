@@ -211,6 +211,10 @@ definePageMeta({ middleware: 'auth', layout: 'default' })
 
 const { apiFetch } = useWorkspace()
 
+const { markClean, confirmLeaveIfDirty } = useUnsavedChanges({
+  getSnapshot: () => form.value,
+})
+
 type LocalSelectedFile = {
   file: File
   dataUrl: string
@@ -395,22 +399,12 @@ onBeforeUnmount(() => {
 })
 
 // ── Select / Create ───────────────────────────────────────────
-const originalFormString = ref('')
-function hasUnsavedChanges() {
-  return originalFormString.value !== '' && JSON.stringify(form.value) !== originalFormString.value
-}
-
-function confirmDiscardChanges() {
-  if (!hasUnsavedChanges()) return true
-  return window.confirm('您有未儲存的變更，離開將會遺失目前編輯內容，確定繼續嗎？')
-}
-
 function openCreate() {
-  if (!confirmDiscardChanges()) return
+  if (!confirmLeaveIfDirty()) return
   selectedId.value = null
   isCreating.value = true
   form.value = defaultForm()
-  originalFormString.value = JSON.stringify(form.value)
+  markClean()
 }
 
 function buildFormFromMenu(menu: any) {
@@ -498,28 +492,28 @@ function buildFormFromMenu(menu: any) {
   }
 }
 
-function selectMenu(menu: any) {
-  if (!confirmDiscardChanges()) return
+function selectMenu(menu: any, opts?: { skipDiscardConfirm?: boolean }) {
+  if (!opts?.skipDiscardConfirm && !confirmLeaveIfDirty()) return
   selectedId.value = menu.id
   isCreating.value = false
   form.value = buildFormFromMenu(menu)
-  originalFormString.value = JSON.stringify(form.value)
+  markClean()
 }
 
 function cancelEdit() {
-  if (!confirmDiscardChanges()) return
+  if (!confirmLeaveIfDirty()) return
   if (selectedMenu.value) {
     const current = selectedMenu.value
     selectedId.value = current.id
     isCreating.value = false
     form.value = buildFormFromMenu(current)
-    originalFormString.value = JSON.stringify(form.value)
+    markClean()
     return
   }
   isCreating.value = false
   selectedId.value = null
   form.value = defaultForm()
-  originalFormString.value = JSON.stringify(form.value)
+  markClean()
 }
 
 async function onRichMenuImageSelected(payload: LocalSelectedFile) {
@@ -735,10 +729,10 @@ async function submitForm() {
     if (isCreating.value) {
       isCreating.value = false
       const latest = menus.value.find((menu) => menu.id === createdFirestoreId) ?? menus.value[0]
-      if (latest) selectMenu(latest)
+      if (latest) selectMenu(latest, { skipDiscardConfirm: true })
     } else if (selectedId.value) {
       const next = menus.value.find((menu) => menu.id === selectedId.value)
-      if (next) selectMenu(next)
+      if (next) selectMenu(next, { skipDiscardConfirm: true })
     }
   }
   catch (e: any) {
@@ -773,7 +767,7 @@ async function deleteMenu() {
     selectedId.value = null
     isCreating.value = false
     form.value = defaultForm()
-    originalFormString.value = JSON.stringify(form.value)
+    markClean()
     await loadMenus()
   }
   catch {

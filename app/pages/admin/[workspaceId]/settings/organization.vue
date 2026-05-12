@@ -297,6 +297,14 @@ const form = ref({
   channelSecret: '',
 })
 
+const { markClean, confirmLeaveIfDirty } = useUnsavedChanges({
+  getSnapshot: () => ({
+    defaultLiffId: form.value.defaultLiffId.trim(),
+    channelAccessToken: form.value.channelAccessToken.trim(),
+    channelSecret: form.value.channelSecret.trim(),
+  }),
+})
+
 const maskDots = '••••••••••••'
 
 const accessTokenInputRef = ref<{ focus: () => void } | null>(null)
@@ -454,6 +462,7 @@ async function load() {
     form.value.channelSecret = ''
     accessTokenReveal.value = false
     secretReveal.value = false
+    markClean()
   }
   catch (e: any) {
     showToast(e?.data?.message || e?.message || '載入失敗', 'error')
@@ -464,6 +473,7 @@ async function load() {
 }
 
 async function reloadAll() {
+  if (!confirmLeaveIfDirty()) return
   // loadWorkspaceList 有 in-flight dedup，與 layout 同時觸發時只會發 1 次
   await loadWorkspaceList().catch(() => {})
   await load()

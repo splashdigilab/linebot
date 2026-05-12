@@ -343,6 +343,9 @@ const defaultForm = () => ({
   scheduleAt: '',
 })
 const form = ref(defaultForm())
+const { markClean, confirmLeaveIfDirty } = useUnsavedChanges({
+  getSnapshot: () => form.value,
+})
 
 const flowOptions = computed(() =>
   (flows.value ?? []).map((f) => ({ id: f.id, name: f.name || f.id })),
@@ -435,6 +438,7 @@ async function loadFormFromId(id: string): Promise<boolean> {
   const full = await fetchBroadcastDetail(id)
   if (!full) return false
   loadFormFromItem(full)
+  markClean()
   return true
 }
 
@@ -482,13 +486,16 @@ async function loadReport() {
 }
 
 function openCreate() {
+  if (!confirmLeaveIfDirty()) return
   isCreating.value = true
   selectedId.value = null
   report.value = null
   form.value = defaultForm()
+  markClean()
 }
 
-async function selectItem(item: any) {
+async function selectItem(item: any, opts?: { skipDiscardConfirm?: boolean }) {
+  if (!opts?.skipDiscardConfirm && !confirmLeaveIfDirty()) return
   isCreating.value = false
   selectedId.value = item.id
   report.value = null
@@ -503,6 +510,7 @@ async function selectItem(item: any) {
 }
 
 async function cancelEdit() {
+  if (!confirmLeaveIfDirty()) return
   if (selectedId.value) {
     await loadFormFromId(selectedId.value)
     isCreating.value = false
@@ -511,6 +519,7 @@ async function cancelEdit() {
     isCreating.value = false
     selectedId.value = null
     form.value = defaultForm()
+    markClean()
   }
 }
 
@@ -582,7 +591,7 @@ async function confirmSend() {
     validateDialogVisible.value = false
     await loadData()
     const found = broadcasts.value.find((b) => b.id === selectedId.value)
-    if (found) await selectItem(found)
+    if (found) await selectItem(found, { skipDiscardConfirm: true })
   }
   catch (e: any) {
     showToast(e?.data?.statusMessage || '發送失敗', 'error')

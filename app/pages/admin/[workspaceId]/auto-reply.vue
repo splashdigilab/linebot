@@ -232,6 +232,9 @@ const defaultForm = () => ({
   tagging: normalizeAutoReplyTagging(null),
 })
 const form = ref(defaultForm())
+const { markClean, confirmLeaveIfDirty } = useUnsavedChanges({
+  getSnapshot: () => form.value,
+})
 
 const triggerModeOptions = [
   { value: 'containsAny', label: '包含任一' },
@@ -273,7 +276,8 @@ onMounted(() => {
 })
 
 // ── Select / Create ───────────────────────────────────────
-function selectRule(rule: any) {
+function selectRule(rule: any, opts?: { skipDiscardConfirm?: boolean }) {
+  if (!opts?.skipDiscardConfirm && !confirmLeaveIfDirty()) return
   isCreating.value = false
   selectedId.value = rule.id
   const normalized = normalizeAutoReplyRule(rule)
@@ -285,22 +289,27 @@ function selectRule(rule: any) {
     isActive: normalized.isActive,
     tagging: normalized.tagging,
   }
+  markClean()
 }
 
 function openCreate() {
+  if (!confirmLeaveIfDirty()) return
   isCreating.value = true
   selectedId.value = null
   form.value = defaultForm()
+  markClean()
 }
 
 function cancelEdit() {
+  if (!confirmLeaveIfDirty()) return
   if (selectedRule.value) {
-    selectRule(selectedRule.value)
+    selectRule(selectedRule.value, { skipDiscardConfirm: true })
     isCreating.value = false
   } else {
     isCreating.value = false
     selectedId.value = null
     form.value = defaultForm()
+    markClean()
   }
 }
 
@@ -326,7 +335,7 @@ async function submitForm() {
       showToast('規則已建立 ✅', 'success')
       await loadRules()
       const newRule = rules.value.find(r => r.id === res.id) ?? rules.value[0]
-      if (newRule) selectRule(newRule)
+      if (newRule) selectRule(newRule, { skipDiscardConfirm: true })
       isCreating.value = false
     } else {
       await apiFetch(`/api/auto-reply/${selectedId.value}`, {
@@ -335,6 +344,7 @@ async function submitForm() {
       })
       showToast('規則已更新 ✅', 'success')
       await loadRules()
+      markClean()
     }
   } catch {
     showToast('儲存失敗', 'error')
@@ -352,6 +362,7 @@ async function deleteRule() {
     selectedId.value = null
     isCreating.value = false
     form.value = defaultForm()
+    markClean()
     await loadRules()
   } catch {
     showToast('刪除失敗', 'error')

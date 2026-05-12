@@ -186,6 +186,9 @@ const defaultForm = () => ({
   tagging: normalizeAutoReplyTagging(null),
 })
 const form = ref(defaultForm())
+const { markClean, confirmLeaveIfDirty } = useUnsavedChanges({
+  getSnapshot: () => form.value,
+})
 
 const presetActionTypeOptions = [
   { value: 'uri', label: '開啟網址' },
@@ -213,7 +216,8 @@ onMounted(() => {
   loadTags({ status: 'active' })
 })
 
-function selectPreset(preset: any) {
+function selectPreset(preset: any, opts?: { skipDiscardConfirm?: boolean }) {
+  if (!opts?.skipDiscardConfirm && !confirmLeaveIfDirty()) return
   isCreating.value = false
   selectedId.value = preset.id
   const normalized = normalizeSupportPreset(preset)
@@ -223,22 +227,27 @@ function selectPreset(preset: any) {
     isActive: normalized.isActive,
     tagging: normalized.tagging,
   }
+  markClean()
 }
 
 function openCreate() {
+  if (!confirmLeaveIfDirty()) return
   isCreating.value = true
   selectedId.value = null
   form.value = defaultForm()
+  markClean()
 }
 
 function cancelEdit() {
+  if (!confirmLeaveIfDirty()) return
   if (selectedPreset.value) {
-    selectPreset(selectedPreset.value)
+    selectPreset(selectedPreset.value, { skipDiscardConfirm: true })
     isCreating.value = false
   } else {
     isCreating.value = false
     selectedId.value = null
     form.value = defaultForm()
+    markClean()
   }
 }
 
@@ -263,7 +272,7 @@ async function submitForm() {
       showToast('預存已建立 ✅', 'success')
       await loadPresets()
       const created = presets.value.find(p => p.id === res.id) ?? presets.value[0]
-      if (created) selectPreset(created)
+      if (created) selectPreset(created, { skipDiscardConfirm: true })
       isCreating.value = false
     } else {
       await apiFetch(`/api/support-preset/${selectedId.value}`, {
@@ -272,6 +281,7 @@ async function submitForm() {
       })
       showToast('預存已更新 ✅', 'success')
       await loadPresets()
+      markClean()
     }
   } catch {
     showToast('儲存失敗', 'error')
@@ -288,6 +298,7 @@ async function deletePreset() {
     selectedId.value = null
     isCreating.value = false
     form.value = defaultForm()
+    markClean()
     await loadPresets()
   } catch {
     showToast('刪除失敗', 'error')

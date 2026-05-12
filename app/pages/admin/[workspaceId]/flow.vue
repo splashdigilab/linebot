@@ -760,6 +760,9 @@ const defaultForm = () => ({
   moduleType: 'bot_flow' as ModuleType,
 })
 const form = ref(defaultForm())
+const { markClean, confirmLeaveIfDirty } = useUnsavedChanges({
+  getSnapshot: () => form.value,
+})
 
 const selectedFlow = computed(() => flows.value.find(f => f.id === selectedId.value) ?? null)
 const isSystemFlow = computed(() => selectedFlow.value?.isSystem === true)
@@ -880,7 +883,8 @@ function normalizeWorkspaceModuleType(raw: ModuleType | undefined): ModuleType {
   return raw === 'system_notice' ? 'system_notice' : 'bot_flow'
 }
 
-function selectFlow(flow: any) {
+function selectFlow(flow: any, opts?: { skipDiscardConfirm?: boolean }) {
+  if (!opts?.skipDiscardConfirm && !confirmLeaveIfDirty()) return
   isCreating.value = false
   selectedId.value = flow.id
   const rawType = (flow.moduleType ?? 'bot_flow') as ModuleType
@@ -889,6 +893,7 @@ function selectFlow(flow: any) {
     messages: normalizeMessages(JSON.parse(JSON.stringify(flow.messages ?? []))),
     moduleType: flow.isSystem ? rawType : normalizeWorkspaceModuleType(rawType),
   }
+  markClean()
 }
 
 async function seedSystemModules() {
@@ -913,19 +918,23 @@ async function seedSystemModules() {
 }
 
 function openCreate() {
+  if (!confirmLeaveIfDirty()) return
   isCreating.value = true
   selectedId.value = null
   form.value = defaultForm()
+  markClean()
 }
 
 function cancelEdit() {
+  if (!confirmLeaveIfDirty()) return
   if (selectedFlow.value) {
-    selectFlow(selectedFlow.value)
+    selectFlow(selectedFlow.value, { skipDiscardConfirm: true })
     isCreating.value = false
   } else {
     isCreating.value = false
     selectedId.value = null
     form.value = defaultForm()
+    markClean()
   }
 }
 
@@ -1302,7 +1311,7 @@ async function submitForm() {
       showToast('模組已建立 ✅', 'success')
       await loadFlows()
       const newFlow = flows.value.find(f => f.id === res.id) ?? flows.value[0]
-      if (newFlow) selectFlow(newFlow)
+      if (newFlow) selectFlow(newFlow, { skipDiscardConfirm: true })
       isCreating.value = false
     } else {
       await apiFetch(`/api/flow/${selectedId.value}`, {
@@ -1317,6 +1326,7 @@ async function submitForm() {
       })
       showToast('模組已更新 ✅', 'success')
       await loadFlows()
+      markClean()
     }
   } catch (error: any) {
     showToast(error?.data?.statusMessage || '儲存失敗', 'error')
@@ -1332,6 +1342,7 @@ async function deleteFlow() {
     showToast('已刪除', 'success')
     selectedId.value = null
     form.value = defaultForm()
+    markClean()
     await loadFlows()
   } catch {
     showToast('刪除失敗', 'error')
