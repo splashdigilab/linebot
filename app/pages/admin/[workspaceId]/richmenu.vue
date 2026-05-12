@@ -362,6 +362,12 @@ function onSelectRichMenuLayout(layoutId: string) {
   applyRichMenuLayout(layoutId as RichLayoutId)
 }
 
+/** LINE 與 upload-validator 僅接受 jpeg / png；沿用原始檔位元組，避免 canvas 轉 PNG 暴肥導致儲存失敗 */
+function normalizeRichMenuImageContentType(mime: string): string {
+  const t = (mime || '').trim().toLowerCase()
+  return t === 'image/png' ? 'image/png' : 'image/jpeg'
+}
+
 // ── Fetch ─────────────────────────────────────────────────────
 async function loadMenus() {
   loading.value = true
@@ -537,25 +543,11 @@ async function onRichMenuImageSelected(payload: LocalSelectedFile) {
   form.value.previewUrl = payload.objectUrl
   applyRichMenuLayout(form.value.layoutId)
 
-  const img = new Image()
-  img.onload = () => {
-    const canvas = document.createElement('canvas')
-    canvas.width = W
-    canvas.height = H
-    const ctx = canvas.getContext('2d')
-    if (!ctx) {
-      showToast('圖片處理失敗，請重試', 'error')
-      return
-    }
-    ctx.drawImage(img, 0, 0)
-    const pngDataUrl = canvas.toDataURL('image/png')
-    form.value.contentType = 'image/png'
-    form.value.imageBase64 = pngDataUrl.split(',')[1] ?? ''
-  }
-  img.onerror = () => {
-    showToast('圖片處理失敗，請重試', 'error')
-  }
-  img.src = payload.dataUrl
+  const comma = payload.dataUrl.indexOf(',')
+  form.value.imageBase64 = comma >= 0 ? payload.dataUrl.slice(comma + 1) : payload.dataUrl
+  form.value.contentType = normalizeRichMenuImageContentType(
+    payload.contentType || payload.file.type,
+  )
 }
 
 function addArea() {
