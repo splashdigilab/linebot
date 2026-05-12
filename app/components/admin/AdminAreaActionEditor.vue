@@ -8,7 +8,7 @@
       <div class="admin-field-group">
         <AdminFieldLabel text="動作類型" tight />
         <el-select
-          v-model="action.type"
+          :model-value="String(action?.type || 'uri')"
           class="admin-w-full control-full"
           :disabled="disabled"
           @change="onTypeChange"
@@ -23,14 +23,24 @@
       <template v-if="action.type === 'uri'">
         <div class="admin-field-group">
           <AdminFieldLabel text="網址" tight />
-          <el-input v-model="action.uri" placeholder="https://..." :disabled="disabled" />
+          <el-input
+            :model-value="String(action?.uri || '')"
+            placeholder="https://..."
+            :disabled="disabled"
+            @update:model-value="(v) => patchAction({ uri: v })"
+          />
         </div>
       </template>
 
       <template v-if="action.type === 'message'">
         <div class="admin-field-group">
           <AdminFieldLabel text="回覆文字" tight />
-          <el-input v-model="action.text" placeholder="輸入代發文字" :disabled="disabled" />
+          <el-input
+            :model-value="String(action?.text || '')"
+            placeholder="輸入代發文字"
+            :disabled="disabled"
+            @update:model-value="(v) => patchAction({ text: v })"
+          />
         </div>
       </template>
 
@@ -38,10 +48,11 @@
         <div class="admin-field-group">
           <AdminFieldLabel :text="moduleLabel" tight />
           <el-select
-            v-model="action.moduleId"
+            :model-value="String(action?.moduleId || '')"
             class="admin-w-full control-full"
             :placeholder="modulePlaceholder"
             :disabled="disabled"
+            @update:model-value="(v) => patchAction({ moduleId: v })"
           >
             <el-option
               v-for="mod in moduleOptions"
@@ -57,10 +68,11 @@
         <div class="admin-field-group">
           <AdminFieldLabel :text="switchLabel" tight />
           <el-select
-            v-model="action.data"
+            :model-value="String(action?.data || '')"
             class="admin-w-full control-full"
             :placeholder="switchPlaceholder"
             :disabled="disabled"
+            @update:model-value="(v) => patchAction({ data: v })"
           >
             <el-option
               v-for="menu in availableMenuOptions"
@@ -76,25 +88,27 @@
         <div class="admin-field-group">
           <AdminFieldLabel text="啟用貼標" tight />
           <el-switch
-            v-model="ensureTaggingState().enabled"
+            :model-value="Boolean(taggingSnapshot().enabled)"
             active-text="啟用"
             inactive-text="停用"
             class="ar-status-switch"
             :disabled="disabled || !isTaggableAction"
+            @update:model-value="onTaggingEnabledChange"
           />
         </div>
         <div v-if="!isTaggableAction" class="text-xs text-muted">
           此動作類型目前不支援貼標。
         </div>
-        <div v-if="ensureTaggingState().enabled" class="admin-field-group">
+        <div v-if="taggingSnapshot().enabled" class="admin-field-group">
           <el-select
-            v-model="ensureTaggingState().addTagIds"
+            :model-value="taggingSnapshot().addTagIds"
             class="admin-w-full control-full"
             multiple
             collapse-tags
             collapse-tags-tooltip
             placeholder="選擇要貼的標籤"
             :disabled="disabled || !isTaggableAction"
+            @update:model-value="onTaggingIdsChange"
           >
             <el-option
               v-for="tag in tagOptions"
@@ -113,6 +127,8 @@
 </template>
 
 <script setup lang="ts">
+import { computed, watch } from 'vue'
+
 type EditorOption = { id: string; name: string }
 type TagOption = { id: string; name: string; color?: string }
 
@@ -165,7 +181,7 @@ const emit = defineEmits<{
 const action = computed(() => props.modelValue)
 
 const availableMenuOptions = computed(() =>
-  (props.menuOptions || []).filter((menu) => menu.id !== props.excludeMenuId)
+  (props.menuOptions || []).filter((menu) => menu.id !== props.excludeMenuId),
 )
 
 const isTaggableAction = computed(() =>
@@ -173,35 +189,59 @@ const isTaggableAction = computed(() =>
   && props.taggableActionTypes.includes(String(action.value?.type || '')),
 )
 
-function onTypeChange() {
+function patchAction(partial: Partial<ActionShape>) {
+  emit('update:modelValue', { ...props.modelValue, ...partial } as ActionShape)
+}
+
+function taggingSnapshot(): { enabled: boolean; addTagIds: string[] } {
+  const t = props.modelValue?.tagging
+  if (!t || typeof t !== 'object') return { enabled: false, addTagIds: [] }
+  return {
+    enabled: Boolean(t.enabled),
+    addTagIds: Array.isArray(t.addTagIds) ? t.addTagIds.map(String) : [],
+  }
+}
+
+function onTypeChange(nextType: string | number | boolean | Record<string, unknown> | unknown[]) {
   if (props.disabled) return
-  const nextType = action.value?.type || 'uri'
+  const t = String(nextType || 'uri')
   emit('update:modelValue', {
-    ...action.value,
-    type: nextType,
+    ...props.modelValue,
+    type: t,
     uri: '',
     text: '',
     moduleId: '',
     data: '',
     tagging: { enabled: false, addTagIds: [] },
+  } as ActionShape)
+}
+
+function onTaggingEnabledChange(enabled: boolean) {
+  if (props.disabled || !isTaggableAction.value) return
+  const prev = taggingSnapshot()
+  patchAction({
+    tagging: {
+      enabled,
+      addTagIds: enabled ? prev.addTagIds : [],
+    },
   })
 }
 
-function ensureTaggingState() {
-  if (!action.value.tagging || typeof action.value.tagging !== 'object') {
-    action.value.tagging = { enabled: false, addTagIds: [] }
-  }
-  if (!Array.isArray(action.value.tagging.addTagIds)) {
-    action.value.tagging.addTagIds = []
-  }
-  return action.value.tagging as { enabled: boolean; addTagIds: string[] }
+function onTaggingIdsChange(ids: string[]) {
+  if (props.disabled || !isTaggableAction.value) return
+  patchAction({
+    tagging: {
+      ...taggingSnapshot(),
+      addTagIds: Array.isArray(ids) ? ids.map(String) : [],
+    },
+  })
 }
 
 watch(isTaggableAction, (supported) => {
   if (!supported) {
-    const tagging = ensureTaggingState()
-    tagging.enabled = false
-    tagging.addTagIds = []
+    const snap = taggingSnapshot()
+    if (snap.enabled || snap.addTagIds.length > 0)
+      patchAction({ tagging: { enabled: false, addTagIds: [] } })
   }
 }, { immediate: true })
 </script>

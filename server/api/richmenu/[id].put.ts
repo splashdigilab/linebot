@@ -73,11 +73,21 @@ export default defineEventHandler(async (event) => {
 
   await uploadRichMenuImage(newRichMenuId, imageBuffer, finalContentType, workspaceId)
 
-  // 3. Update Alias to point to the NEW richMenuId (delete old → recreate same aliasId)
+  // 3. Update Alias to point to the NEW richMenuId（刪除別名後重建同 aliasId）
+  // 若此步失敗仍繼續刪舊選單，會造成別名指向已刪除的 richMenuId，richmenuswitch 全面失效。
   try {
-    await updateRichMenuAlias(newRichMenuId, aliasId)
-  } catch (e) {
-    console.warn('[richmenu/put] Failed to update alias:', e)
+    await updateRichMenuAlias(newRichMenuId, aliasId, workspaceId)
+  }
+  catch (e) {
+    console.error('[richmenu/put] Failed to update alias:', e)
+    try {
+      await deleteLineRichMenu(newRichMenuId, workspaceId)
+    }
+    catch (delErr) {
+      console.warn('[richmenu/put] rollback: could not delete new LINE rich menu:', delErr)
+    }
+    const msg = e instanceof Error ? e.message : String(e)
+    throw createError({ statusCode: 502, statusMessage: `更新圖文選單別名失敗，已中止變更：${msg}` })
   }
 
   // 4. Handle default setting
