@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { requireSuperAdmin } from '~~/server/utils/workspace-auth'
 import { getFirebaseAuth } from '~~/server/utils/firebase'
 import { requireWorkspaceQuota } from '~~/server/utils/workspace-quota'
+import { addSystemModulesToBatch } from '~~/server/utils/workspace-system-modules'
 
 /**
  * POST /api/admin/super/workspaces
@@ -58,6 +59,8 @@ export default defineEventHandler(async (event) => {
     joinedAt: FieldValue.serverTimestamp(),
     createdAt: FieldValue.serverTimestamp(),
   })
+
+  addSystemModulesToBatch(db, batch, workspaceId)
 
   await batch.commit()
 

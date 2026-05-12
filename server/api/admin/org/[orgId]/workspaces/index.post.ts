@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getFirebaseAuth, getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceQuota } from '~~/server/utils/workspace-quota'
+import { addSystemModulesToBatch } from '~~/server/utils/workspace-system-modules'
 
 /**
  * POST /api/admin/org/:orgId/workspaces
@@ -71,6 +72,8 @@ export default defineEventHandler(async (event) => {
     joinedAt: FieldValue.serverTimestamp(),
     createdAt: FieldValue.serverTimestamp(),
   })
+
+  addSystemModulesToBatch(db, batch, workspaceId)
 
   await batch.commit()
 

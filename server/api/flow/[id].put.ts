@@ -15,8 +15,7 @@ export default defineEventHandler(async (event) => {
 
   const existing = await getDoc<{ isSystem?: boolean; moduleType?: ModuleType; workspaceId?: string }>('flows', id)
   if (!existing) throw createError({ statusCode: 404, statusMessage: '找不到此模組' })
-  const isGlobalSystem = existing.isSystem === true
-  if (!isGlobalSystem && existing.workspaceId !== workspaceId) {
+  if (existing.workspaceId !== workspaceId) {
     throw createError({ statusCode: 404, statusMessage: '找不到此模組' })
   }
 

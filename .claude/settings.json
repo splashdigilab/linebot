@@ -18,7 +18,9 @@
       "WebFetch(domain:www.line-community.me)",
       "WebFetch(domain:bootstrapped.app)",
       "WebFetch(domain:www.javacodegeeks.com)",
-      "WebFetch(domain:siriwatknp.medium.com)"
+      "WebFetch(domain:siriwatknp.medium.com)",
+      "Read(//Users/kevin/Downloads/**)",
+      "Bash(node -e ' *)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",

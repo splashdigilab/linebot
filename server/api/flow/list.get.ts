@@ -1,5 +1,5 @@
-import { getDoc } from '~~/server/utils/firebase'
-import { SYSTEM_MODULE_IDS } from '~~/shared/types/conversation-stats'
+import { getDb } from '~~/server/utils/firebase'
+import { seedWorkspaceSystemModules } from '~~/server/utils/workspace-system-modules'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 function stripFlowTriggers(flow: Record<string, unknown>) {
@@ -9,25 +9,19 @@ function stripFlowTriggers(flow: Record<string, unknown>) {
 
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
-  const workspaceFlows = await listDocs('flows', (ref) =>
-    ref.where('workspaceId', '==', workspaceId).orderBy('createdAt', 'desc'),
+
+  // Auto-create system modules if missing (transparent fix for all existing workspaces)
+  await seedWorkspaceSystemModules(getDb(), workspaceId)
+
+  const allFlows = await listDocs('flows', (ref) =>
+    ref.where('workspaceId', '==', workspaceId).orderBy('createdAt', 'asc'),
   )
 
-  // 系統模組（歡迎／真人）為全站共用文件，沒有 workspaceId；仍應出現在目前 workspace 的流程列表
-  const systemIds = [SYSTEM_MODULE_IDS.welcome, SYSTEM_MODULE_IDS.live_agent] as const
-  const systemFlows: Record<string, unknown>[] = []
-  for (const sid of systemIds) {
-    const doc = await getDoc('flows', sid)
-    if (doc) systemFlows.push(stripFlowTriggers(doc as Record<string, unknown>))
-  }
+  // System modules first, then regular flows (newest first)
+  const systemFlows = allFlows.filter((f: Record<string, unknown>) => f.isSystem)
+  const regularFlows = allFlows.filter((f: Record<string, unknown>) => !f.isSystem).reverse()
 
-  const systemIdSet = new Set(systemFlows.map(f => f.id as string))
-  const merged = [
-    ...systemFlows,
-    ...workspaceFlows
-      .filter((f: { id: string }) => !systemIdSet.has(f.id))
-      .map((flow: Record<string, unknown>) => stripFlowTriggers(flow)),
-  ]
-
-  return merged
+  return [...systemFlows, ...regularFlows].map((flow: Record<string, unknown>) =>
+    stripFlowTriggers(flow),
+  )
 })
