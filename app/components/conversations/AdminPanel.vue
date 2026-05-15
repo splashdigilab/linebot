@@ -179,8 +179,9 @@
             <template v-else-if="getLineRichImageUrl(msg)">
               <el-image
                 class="conv-inline-image conv-inline-image--line-rich"
+                :style="getLineRichImageFrameStyle(msg)"
                 :src="getLineRichImageUrl(msg)"
-                fit="cover"
+                fit="contain"
                 :preview-src-list="[getLineRichImageUrl(msg)]"
                 :preview-teleported="true"
               />
@@ -541,8 +542,14 @@
           <div
             v-if="mediaForm.originalContentUrl"
             class="fuz-preview conv-quick-preview-zone"
+            :style="quickMediaFrameStyle"
           >
-            <img :src="mediaForm.originalContentUrl" alt="image-preview" class="fuz-preview-img" />
+            <img
+              :src="mediaForm.originalContentUrl"
+              alt="image-preview"
+              class="fuz-preview-img"
+              @load="onQuickImageLoad"
+            />
             <div class="fuz-preview-overlay">
               <el-button size="small" type="primary" :disabled="sending || quickMediaUploading" @click="triggerQuickPick('image')">
                 更換圖片
@@ -581,8 +588,15 @@
           <div
             v-if="mediaForm.originalContentUrl"
             class="fuz-preview conv-quick-preview-zone"
+            :style="quickMediaFrameStyle"
           >
-            <video :src="mediaForm.originalContentUrl" class="fuz-preview-img" controls preload="metadata" />
+            <video
+              :src="mediaForm.originalContentUrl"
+              class="fuz-preview-img"
+              controls
+              preload="metadata"
+              @loadedmetadata="onQuickVideoMetadata"
+            />
             <div class="fuz-preview-overlay">
               <el-button size="small" type="primary" :disabled="sending || quickMediaUploading" @click="triggerQuickPick('video')">
                 更換影片
@@ -651,6 +665,7 @@ import {
   VIDEO_ACCEPT_ATTR,
   VIDEO_MAX_BYTES,
 } from '~~/shared/upload-rules'
+import { lineAspectRatioToCss } from '~~/shared/media-preview'
 
 /** 與 `useWorkspace().apiFetch` 相同簽章，由路由頁注入（含 workspaceId）。 */
 const props = defineProps<{
@@ -929,6 +944,16 @@ const imageMaxKb = Math.floor(IMAGE_MAX_BYTES / 1024)
 const videoMaxMb = Math.floor(VIDEO_MAX_BYTES / (1024 * 1024))
 const audioMaxMb = Math.floor(AUDIO_MAX_BYTES / (1024 * 1024))
 const structuredCarouselPage = ref<Record<string, number>>({})
+
+const quickMediaUrl = computed(() => String(mediaForm.value.originalContentUrl || '').trim())
+const quickMediaKind = computed(() => (quickSendType.value === 'video' ? 'video' : 'image') as 'image' | 'video')
+const {
+  frameStyle: quickMediaFrameStyle,
+  onImageLoad: onQuickImageLoad,
+  onVideoMetadata: onQuickVideoMetadata,
+} = useMediaPreviewDimensions(quickMediaUrl, quickMediaKind, {
+  maxHeight: '320px',
+})
 
 const activeSupportPresets = computed(() =>
   supportPresetsRaw.value.filter((p: any) => p.isActive !== false),
@@ -1918,6 +1943,27 @@ function getLineRichImageUrl(msg: MsgItem): string {
       .every((item: any) => item?.position === 'absolute' && item?.action)
   if (!imageNode?.url || !overlayOnly) return ''
   return String(imageNode.url).trim()
+}
+
+function getLineRichImageFrameStyle(msg: MsgItem): Record<string, string> {
+  const type = getMessageType(msg)
+  const payload = msg?.payload || {}
+  if (type === 'imagemap') {
+    const w = Number(payload?.baseSize?.width || 0)
+    const h = Number(payload?.baseSize?.height || 0)
+    if (w > 0 && h > 0) return { aspectRatio: `${w} / ${h}` }
+  }
+  if (type === 'flex') {
+    const rootContents = payload?.contents
+    const bubble = rootContents?.type === 'carousel' && Array.isArray(rootContents?.contents)
+      ? rootContents.contents[0]
+      : rootContents
+    const bodyContents = Array.isArray(bubble?.body?.contents) ? bubble.body.contents : []
+    const imageNode = bodyContents.find((item: any) => item?.type === 'image')
+    const css = lineAspectRatioToCss(imageNode?.aspectRatio)
+    if (css) return { aspectRatio: css }
+  }
+  return {}
 }
 
 function getVideoPreviewImageUrl(msg: MsgItem): string {

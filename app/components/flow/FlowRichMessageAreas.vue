@@ -12,13 +12,14 @@
       :allow-remove="isCustomLayout"
       :show-bounds="isCustomLayout"
       :min-bounds-size="RICH_MESSAGE_MIN_BOUNDS"
-      :base-width="RICH_MESSAGE_CANVAS_SIZE"
-      :base-height="RICH_MESSAGE_CANVAS_SIZE"
+      :base-width="canvasSize.width"
+      :base-height="canvasSize.height"
       :area-colors="areaColors"
       :drag-area-index="areaDragState?.areaIndex ?? null"
       :overlap-set="customOverlapSet"
       :guide-lines="areaGuideLines"
       :canvas-style="richMessageCanvasStyle"
+      :canvas-image-url="String(msg.heroImageUrl || '').trim() || undefined"
       :set-canvas-ref="setRichMessageCanvasRef"
       @add="addCustomArea"
       @remove="removeCustomArea"
@@ -50,7 +51,9 @@ import {
   type RichLayoutId,
 } from '~~/shared/rich-layout-presets'
 import {
-  RICH_MESSAGE_CANVAS_SIZE,
+  getRichMessageCanvasSize,
+} from '~~/shared/line-image-spec'
+import {
   RICH_MESSAGE_MIN_BOUNDS,
   normalizeRichMessageActions,
   newRichMessageAction,
@@ -92,6 +95,11 @@ const customAreas = computed(() => props.msg.actions as RichMessageEditorAction[
 
 const isCustomLayout = computed(() => props.msg.layoutId === 'custom')
 
+const canvasSize = computed(() => getRichMessageCanvasSize(
+  Number(props.msg?.heroImageWidth) || undefined,
+  Number(props.msg?.heroImageHeight) || undefined,
+))
+
 const {
   dragState: areaDragState,
   guideLines: areaGuideLines,
@@ -103,8 +111,8 @@ const {
 } = useAreaEditor<RichMessageEditorAction>({
   areas: customAreas,
   canvasRef: customCanvasRef,
-  canvasWidth: () => RICH_MESSAGE_CANVAS_SIZE,
-  canvasHeight: () => RICH_MESSAGE_CANVAS_SIZE,
+  canvasWidth: () => canvasSize.value.width,
+  canvasHeight: () => canvasSize.value.height,
   minSize: RICH_MESSAGE_MIN_BOUNDS,
   snapPx: 8,
   enableSnap: true,
@@ -115,11 +123,12 @@ const {
 })
 
 const richMessageCanvasStyle = computed(() => {
-  const url = props.msg.heroImageUrl
+  const { width, height } = canvasSize.value
   const d = areaDragState.value
   return {
-    paddingBottom: '100%',
-    ...(url ? { backgroundImage: `url(${url})` } : {}),
+    aspectRatio: `${width} / ${height}`,
+    width: '100%',
+    minHeight: '180px',
     cursor: d?.type === 'move' ? 'grabbing' : 'default',
     userSelect: d ? 'none' : 'auto',
   }
@@ -134,10 +143,15 @@ function switchPresetToCustom() {
   const prevLayout = props.msg.layoutId as RichLayoutId
   const next = props.msg.actions.map((action: RichMessageEditorAction, idx: number) => ({
     ...action,
-    bounds: presetBoundsToCanvas(prevLayout, idx),
+    bounds: presetBoundsToCanvas(prevLayout, idx, canvasSize.value.width, canvasSize.value.height),
   }))
   props.msg.layoutId = 'custom'
-  props.msg.actions = normalizeRichMessageActions('custom', next)
+  props.msg.actions = normalizeRichMessageActions(
+    'custom',
+    next,
+    Number(props.msg?.heroImageWidth) || undefined,
+    Number(props.msg?.heroImageHeight) || undefined,
+  )
 }
 
 function addCustomArea() {
@@ -148,7 +162,15 @@ function addCustomArea() {
   }
   props.msg.actions = normalizeRichMessageActions(
     'custom',
-    [...props.msg.actions, newRichMessageAction('', props.msg.actions.length, true)],
+    [...props.msg.actions, newRichMessageAction(
+      '',
+      props.msg.actions.length,
+      true,
+      canvasSize.value.width,
+      canvasSize.value.height,
+    )],
+    Number(props.msg?.heroImageWidth) || undefined,
+    Number(props.msg?.heroImageHeight) || undefined,
   )
 }
 
@@ -158,6 +180,8 @@ function removeCustomArea(index: number) {
   props.msg.actions = normalizeRichMessageActions(
     'custom',
     props.msg.actions.filter((_: any, idx: number) => idx !== index),
+    Number(props.msg?.heroImageWidth) || undefined,
+    Number(props.msg?.heroImageHeight) || undefined,
   )
 }
 
@@ -165,7 +189,11 @@ function clampCustomArea(index: number) {
   if (!isCustomLayout.value) return
   const action = props.msg.actions[index]
   if (!action?.bounds) return
-  action.bounds = clampRichMessageBounds(action.bounds)
+  action.bounds = clampRichMessageBounds(
+    action.bounds,
+    canvasSize.value.width,
+    canvasSize.value.height,
+  )
 }
 
 function actionError(action: RichMessageEditorAction) {

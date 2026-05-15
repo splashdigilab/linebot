@@ -11,7 +11,11 @@
         @click="emit('select', layout.id)"
       >
         <span class="admin-layout-name">{{ layout.label }}</span>
-        <span class="admin-layout-preview" :class="`preview-${layout.id}`">
+        <span
+          class="admin-layout-preview"
+          :class="[`preview-${layout.id}`, { 'admin-layout-preview--has-bg': Boolean(backgroundUrl) }]"
+          :style="previewBackgroundStyle"
+        >
           <span
             v-for="cell in layout.cells"
             :key="cell"
@@ -35,9 +39,21 @@ const props = withDefaults(defineProps<{
   layouts: LayoutOption[]
   selectedId: string
   flat?: boolean
+  backgroundUrl?: string
 }>(), {
   title: '圖文樣式',
   flat: false,
+  backgroundUrl: '',
+})
+
+const previewBackgroundStyle = computed(() => {
+  const url = String(props.backgroundUrl || '').trim()
+  if (!url) return {}
+  return {
+    backgroundImage: `url(${url})`,
+    backgroundSize: 'cover',
+    backgroundPosition: 'center',
+  }
 })
 
 const emit = defineEmits<{

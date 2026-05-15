@@ -20,6 +20,7 @@ import {
 } from '~~/shared/auto-reply-rule'
 import { RICH_LAYOUT_PRESETS } from '~~/shared/rich-layout-presets'
 import { normalizeRichMessageActions } from '~~/shared/rich-message-editor-helpers'
+import { resolveRichMessageFromImageSize } from '~~/shared/line-image-spec'
 import { createImagemapImageToken } from './line-imagemap-image-token'
 import { createUriTagToken } from './line-action-tag-token'
 import { addTagsToUser } from './tagging'
@@ -531,6 +532,8 @@ function buildRichMessageSnapshot(item: any) {
       : []
   return {
     layoutId: item?.layoutId || 'custom',
+    heroImageWidth: Number(item?.heroImageWidth) || undefined,
+    heroImageHeight: Number(item?.heroImageHeight) || undefined,
     transparentBackground: Boolean(item?.transparentBackground),
     altText: item?.altText || '',
     heroImageUrl: item?.heroImageUrl || '',
@@ -585,8 +588,6 @@ async function hydrateRichMessageRefs(messages: any[]): Promise<any[]> {
     return msg
   })
 }
-
-const RICH_MESSAGE_LINE_CANVAS = 1040
 
 function resolveRichMessageLayoutId(raw: unknown): string {
   const id = typeof raw === 'string' && raw.trim() ? raw.trim() : 'single'
@@ -663,12 +664,15 @@ function resolveUriWithTagging(input: {
   return `${publicBase}/api/t/${encodeURIComponent(token)}`
 }
 
-function clampImagemapArea(bounds: { x: number; y: number; width: number; height: number }) {
-  const max = RICH_MESSAGE_LINE_CANVAS
-  const x = Math.max(0, Math.min(max, Math.floor(Number(bounds.x) || 0)))
-  const y = Math.max(0, Math.min(max, Math.floor(Number(bounds.y) || 0)))
-  const w = Math.max(1, Math.min(max - x, Math.floor(Number(bounds.width) || 0)))
-  const h = Math.max(1, Math.min(max - y, Math.floor(Number(bounds.height) || 0)))
+function clampImagemapArea(
+  bounds: { x: number; y: number; width: number; height: number },
+  maxW: number,
+  maxH: number,
+) {
+  const x = Math.max(0, Math.min(maxW, Math.floor(Number(bounds.x) || 0)))
+  const y = Math.max(0, Math.min(maxH, Math.floor(Number(bounds.y) || 0)))
+  const w = Math.max(1, Math.min(maxW - x, Math.floor(Number(bounds.width) || 0)))
+  const h = Math.max(1, Math.min(maxH - y, Math.floor(Number(bounds.height) || 0)))
   return { x, y, width: w, height: h }
 }
 
@@ -681,6 +685,8 @@ function buildRichMessageLineMessage(input: {
   altText: string
   heroImageUrl: string
   layoutId: unknown
+  heroImageWidth?: number
+  heroImageHeight?: number
   actions: any[]
   attributes: Record<string, string>
   transparentBackground: boolean
@@ -689,7 +695,13 @@ function buildRichMessageLineMessage(input: {
   channelSecret: string
 }): messagingApi.Message {
   const layoutId = resolveRichMessageLayoutId(input.layoutId)
-  const normalized = normalizeRichMessageActions(layoutId, input.actions)
+  const aspect = resolveRichMessageFromImageSize(input.heroImageWidth, input.heroImageHeight)
+  const normalized = normalizeRichMessageActions(
+    layoutId,
+    input.actions,
+    input.heroImageWidth,
+    input.heroImageHeight,
+  )
   const hasModule = normalized.some((a: any) => a?.type === 'module')
   const hasTaggedMessage = normalized.some((a: any) => a?.type === 'message' && extractTagIdsFromAction(a).length > 0)
   const publicBase = resolveLineImagemapPublicBase(input.publicBaseOverride || '')
@@ -714,7 +726,7 @@ function buildRichMessageLineMessage(input: {
         .map((a: any) => {
           const b = a.bounds
           if (!b) return null
-          const area = clampImagemapArea(b)
+          const area = clampImagemapArea(b, aspect.canvasWidth, aspect.canvasHeight)
           if (a.type === 'uri') {
             return {
               type: 'uri',
@@ -741,7 +753,7 @@ function buildRichMessageLineMessage(input: {
           type: 'imagemap',
           baseUrl,
           altText: renderWithAttributes(input.altText, input.attributes).slice(0, 400),
-          baseSize: { width: RICH_MESSAGE_LINE_CANVAS, height: RICH_MESSAGE_LINE_CANVAS },
+          baseSize: { width: aspect.canvasWidth, height: aspect.canvasHeight },
           actions,
         } as messagingApi.Message
       }
@@ -752,6 +764,8 @@ function buildRichMessageLineMessage(input: {
     altText: input.altText,
     heroImageUrl: input.heroImageUrl,
     layoutId: input.layoutId,
+    heroImageWidth: input.heroImageWidth,
+    heroImageHeight: input.heroImageHeight,
     actions: input.actions,
     attributes: input.attributes,
     transparentBackground: input.transparentBackground,
@@ -766,6 +780,8 @@ function buildRichMessageFlexMessage(input: {
   altText: string
   heroImageUrl: string
   layoutId: unknown
+  heroImageWidth?: number
+  heroImageHeight?: number
   actions: any[]
   attributes: Record<string, string>
   transparentBackground?: boolean
@@ -774,10 +790,18 @@ function buildRichMessageFlexMessage(input: {
   channelSecret: string
 }): messagingApi.FlexMessage {
   const layoutId = resolveRichMessageLayoutId(input.layoutId)
-  const normalized = normalizeRichMessageActions(layoutId, input.actions)
+  const aspect = resolveRichMessageFromImageSize(input.heroImageWidth, input.heroImageHeight)
+  const normalized = normalizeRichMessageActions(
+    layoutId,
+    input.actions,
+    input.heroImageWidth,
+    input.heroImageHeight,
+  )
   const imageUrl = renderWithAttributes(input.heroImageUrl, input.attributes)
-  const c = RICH_MESSAGE_LINE_CANVAS
-  const pct = (px: number) => `${(px / c) * 100}%`
+  const canvasW = aspect.canvasWidth
+  const canvasH = aspect.canvasHeight
+  const pctW = (px: number) => `${(px / canvasW) * 100}%`
+  const pctH = (px: number) => `${(px / canvasH) * 100}%`
   const transparent = Boolean(input.transparentBackground)
 
   const overlayBoxes = normalized
@@ -831,10 +855,10 @@ function buildRichMessageFlexMessage(input: {
         type: 'box',
         layout: 'vertical',
         position: 'absolute',
-        offsetTop: pct(b.y),
-        offsetStart: pct(b.x),
-        width: pct(b.width),
-        height: pct(b.height),
+        offsetTop: pctH(b.y),
+        offsetStart: pctW(b.x),
+        width: pctW(b.width),
+        height: pctH(b.height),
         action: flexAction,
         ...(transparent ? { backgroundColor: '#00000000' } : {}),
         contents: [{ type: 'filler', flex: 1 }],
@@ -853,8 +877,8 @@ function buildRichMessageFlexMessage(input: {
         type: 'image',
         url: imageUrl,
         size: 'full',
-        aspectRatio: '1:1',
-        aspectMode: 'cover',
+        aspectRatio: aspect.lineAspectRatio,
+        aspectMode: 'fit',
         gravity: 'center',
         // Flex 圖片預設會在 PNG 透明處疊白底；設為全透明才會透出聊天室背景（與 Imagemap 行為較接近）
         ...(transparent ? { backgroundColor: '#00000000' } : {}),
@@ -1018,10 +1042,16 @@ function buildLineMessages(
         return { ...col, actions }
       })
       if (!columns.length) return []
+      const carouselAspect = String(msg.imageAspectRatio || '').trim() === 'square' ? 'square' : 'rectangle'
       return [{
         type: 'template',
         altText: renderWithAttributes(msg.altText || '輪播訊息', attributes).slice(0, 400),
-        template: { type: 'carousel', columns },
+        template: {
+          type: 'carousel',
+          columns,
+          imageAspectRatio: carouselAspect,
+          imageSize: 'cover',
+        },
       } as messagingApi.TemplateMessage]
     }
 
@@ -1094,6 +1124,8 @@ function buildLineMessages(
           altText: msg.altText,
           heroImageUrl: msg.heroImageUrl,
           layoutId: msg.layoutId,
+          heroImageWidth: Number(msg.heroImageWidth) || undefined,
+          heroImageHeight: Number(msg.heroImageHeight) || undefined,
           actions,
           attributes,
           transparentBackground: Boolean(msg.transparentBackground),
@@ -1129,6 +1161,8 @@ function buildLineMessages(
           altText: payload.altText,
           heroImageUrl: payload.heroImageUrl,
           layoutId: payload.layoutId,
+          heroImageWidth: Number(payload.heroImageWidth) || undefined,
+          heroImageHeight: Number(payload.heroImageHeight) || undefined,
           actions,
           attributes,
           transparentBackground: Boolean(payload.transparentBackground),

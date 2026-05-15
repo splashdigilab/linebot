@@ -1,4 +1,4 @@
-/* ── FlowUploadZone（與 .upload-zone 組合使用）────────────────── */
+/* ── FlowUploadZone ─────────────────────────────────────────────────── */
 .fuz-zone {
   min-height: 120px;
   display: flex;
@@ -21,10 +21,7 @@
   margin: 0 auto 0.5rem;
 }
 
-.fuz-icon {
-  font-size: 1.8rem;
-  display: block;
-}
+.fuz-icon { font-size: 1.8rem; display: block; }
 
 .fuz-label {
   font-size: 0.875rem;
@@ -38,24 +35,85 @@
   opacity: 0.7;
 }
 
-.fuz-upload-btn {
-  margin-top: 0.1rem;
+.fuz-upload-btn { margin-top: 0.1rem; }
+
+/* ── 固定比例框 ──────────────────────────────────────────────────────── *
+ *                                                                        *
+ *  HTML 結構（兩層）：                                                    *
+ *    <div :style="frameWrapperStyle">   ← 外層：width 限制，max-width:100% *
+ *      <div class="fuz-frame"           ← 內層：width:100% + aspect-ratio  *
+ *           :style="frameInnerStyle">                                    *
+ *        <img class="fuz-frame__media"> ← position:absolute; cover       *
+ *      </div>                                                            *
+ *    </div>                                                              *
+ *                                                                        *
+ *  原理：                                                                 *
+ *    - 外層固定像素寬度後，內層 width:100% 等於確定的像素值                   *
+ *    - aspect-ratio 從「內層自身寬度」算出高度，完全正確                      *
+ *    - 無需 padding-top（padding% 以父寬計算，外層寬≠父寬時計算錯誤）         *
+ *                                                                        *
+ *  注意：.fuz-frame 不可在此設 height / min-height，否則與 padding-top 衝突    *
+ * ──────────────────────────────────────────────────────────────────── */
+.fuz-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  background: var(--bg-muted, #eef1f5);
+  display: block;
+  /* width 與 padding-top 由 :style 的 frameInnerStyle 注入 */
 }
 
+/* 媒體（圖片 / 影片）：絕對填滿 + object-fit:cover */
+.fuz-frame__media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+}
+
+/* 空框：絕對填滿，虛線邊框，可點擊上傳 */
+.fuz-frame-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  cursor: pointer;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: transparent;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.fuz-frame-empty:hover {
+  border-color: var(--color-line);
+  background: var(--color-line-glow);
+}
+
+/* ── 自由比例預覽（影片播放器、普通圖片）──────────────────────────────── *
+ *  圖片為 in-flow，height:auto 自然撐開容器。                              *
+ * ──────────────────────────────────────────────────────────────────── */
 .fuz-preview {
   position: relative;
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: #000;
+  background: var(--bg-muted, #eef1f5);
+  width: 100%;
+  max-width: 100%;
 }
 
 .fuz-preview-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
   display: block;
+  width: 100%;
+  height: auto;
+  vertical-align: middle;
 }
 
+/* ── hover 覆蓋層（更換按鈕）──────────────────────────────────────────── */
 .fuz-preview-overlay {
   position: absolute;
   inset: 0;
@@ -65,8 +123,15 @@
   justify-content: center;
   opacity: 0;
   transition: opacity 0.2s;
+  z-index: 2;
+  pointer-events: none;
 }
 
-.fuz-preview:hover .fuz-preview-overlay {
+.fuz-preview-overlay .el-button {
+  pointer-events: auto;
+}
+
+.fuz-preview:hover .fuz-preview-overlay,
+.fuz-frame:hover .fuz-preview-overlay {
   opacity: 1;
 }

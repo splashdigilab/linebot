@@ -323,6 +323,11 @@
   background: #fff;
   display: grid;
   gap: 1px;
+  overflow: hidden;
+}
+
+.admin-layout-preview--has-bg .admin-layout-cell {
+  background: rgba(255, 255, 255, 0.42);
 }
 
 .admin-layout-cell {

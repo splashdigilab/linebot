@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody(event)
-  const { name, layoutId, transparentBackground, altText, heroImageUrl, actions, isActive } = body
+  const { name, layoutId, heroImageWidth, heroImageHeight, transparentBackground, altText, heroImageUrl, actions, isActive } = body
 
   const updates: Record<string, unknown> = {}
   if (name !== undefined) {
@@ -24,6 +24,12 @@ export default defineEventHandler(async (event) => {
     updates.name = String(name).trim()
   }
   if (layoutId !== undefined) updates.layoutId = layoutId
+  if (heroImageWidth !== undefined) {
+    updates.heroImageWidth = Number(heroImageWidth) > 0 ? Number(heroImageWidth) : undefined
+  }
+  if (heroImageHeight !== undefined) {
+    updates.heroImageHeight = Number(heroImageHeight) > 0 ? Number(heroImageHeight) : undefined
+  }
   if (transparentBackground !== undefined) updates.transparentBackground = Boolean(transparentBackground)
   if (altText !== undefined) {
     if (!String(altText).trim()) throw createError({ statusCode: 400, statusMessage: 'altText is required' })

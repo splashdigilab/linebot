@@ -173,18 +173,32 @@
               </div>
 
               <!-- Video -->
-              <div v-else-if="msg.type === 'video'" class="message-video-wrap">
-                <div class="admin-field-group">
-                  <AdminFieldLabel>
-                    預覽圖片 <span class="text-muted">(長寬大小與影片一樣)</span>
-                  </AdminFieldLabel>
-                  <FlowUploadZone v-model="msg.previewImageUrl" type="image" label="點擊上傳預覽圖" hint="建議與影片同尺寸" />
-                </div>
+              <div v-else-if="msg.type === 'video'" class="message-video-wrap admin-field-stack">
                 <div class="admin-field-group">
                   <AdminFieldLabel>
                     影片檔案 <span class="text-muted">(大小不可超過 5 MB)</span>
                   </AdminFieldLabel>
-                  <FlowUploadZone v-model="msg.originalContentUrl" type="video" label="點擊上傳影片" hint="須符合 LINE 影片規範" />
+                  <FlowUploadZone
+                    v-model="msg.originalContentUrl"
+                    type="video"
+                    label="點擊上傳影片"
+                    hint="須符合 LINE 影片規範"
+                    @video-sized="(size) => { applyVideoSize(msg, size); void ensureVideoDimensions(msg) }"
+                    @update:model-value="(v) => { if (!v) { msg.videoWidth = undefined; msg.videoHeight = undefined } else { void ensureVideoDimensions(msg) } }"
+                  />
+                </div>
+                <div v-if="String(msg.originalContentUrl || '').trim()" class="admin-field-group">
+                  <AdminFieldLabel>
+                    預覽圖片 <span class="text-muted">(長寬比例須與影片一致)</span>
+                  </AdminFieldLabel>
+                  <FlowUploadZone
+                    :key="videoPreviewFrameKey(msg)"
+                    v-model="msg.previewImageUrl"
+                    type="image"
+                    label="點擊上傳預覽圖"
+                    hint="請先上傳影片；封面將依影片比例顯示"
+                    :preview-frame="videoPreviewFrame(msg.videoWidth, msg.videoHeight, msg.originalContentUrl)"
+                  />
                 </div>
               </div>
 
@@ -265,16 +279,10 @@
                       v-model="msg.heroImageUrl"
                       type="image"
                       appearance="simple"
-                      hint="JPG / PNG · 最大 500KB（建議 1040x1040）"
+                      hint="JPG / PNG · 最大 500KB · 依上傳圖片比例顯示"
+                      @image-sized="(size) => applyRichMessageHeroSize(msg, size)"
                     />
                   </div>
-                  <AdminLayoutPresetPicker
-                    flat
-                    title="圖文樣式"
-                    :layouts="RICH_LAYOUT_PRESETS"
-                    :selected-id="msg.layoutId"
-                    @select="(layoutId) => selectInlineRichMessageLayout(msg, String(layoutId))"
-                  />
                   <FlowRichMessageAreas
                     v-if="String(msg.heroImageUrl || '').trim()"
                     :msg="msg"
@@ -285,6 +293,13 @@
                     :show-action-cards="false"
                     :show-header="false"
                     :flat="true"
+                  />
+                  <AdminLayoutPresetPicker
+                    flat
+                    title="圖文樣式"
+                    :layouts="RICH_LAYOUT_PRESETS"
+                    :selected-id="msg.layoutId"
+                    @select="(layoutId) => selectInlineRichMessageLayout(msg, String(layoutId))"
                   />
                 </div>
               </FlowMessageCardShell>
@@ -528,9 +543,23 @@
                       />
                     </div>
                   </div>
-                  <div v-if="msg.type === 'imageCarousel'" class="text-xs text-muted">
-                    圖片長度不可超過寬度的 3 倍，小於 500 KB，建議每張比例相同
+                  <div v-if="msg.type === 'carousel'" class="admin-field-group">
+                    <AdminFieldLabel text="縮圖比例" tight />
+                    <el-select v-model="msg.imageAspectRatio" size="small" class="control-full">
+                      <el-option
+                        v-for="opt in CAROUSEL_IMAGE_ASPECT_OPTIONS"
+                        :key="opt.id"
+                        :label="opt.label"
+                        :value="opt.id"
+                      />
+                    </el-select>
+                    <p class="text-xs text-muted">
+                      LINE 輪播僅支援橫式 1.51:1 或正方形 1:1；上傳圖超出部分會置中裁切
+                    </p>
                   </div>
+                  <p v-if="msg.type === 'imageCarousel'" class="text-xs text-muted">
+                    固定 1:1 正方形顯示，超出部分會置中裁切
+                  </p>
                 </div>
               </FlowMessageCardShell>
 
@@ -556,7 +585,13 @@
                       <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(Number(ci), 1)">✕</el-button>
                     </div>
                     <div class="carousel-sub-body admin-field-stack">
-                      <FlowUploadZone v-model="col.thumbnailImageUrl" type="image" label="上傳縮圖" preview-height="140px" />
+                      <FlowUploadZone
+                        v-model="col.thumbnailImageUrl"
+                        type="image"
+                        label="上傳縮圖"
+                        class="carousel-sub-media-upload"
+                        :preview-frame="carouselPreviewFrame(msg)"
+                      />
                       <div class="admin-field-group">
                         <AdminFieldLabel tight>
                           標題 <span class="text-muted">(必填，最多 80 字)</span>
@@ -635,7 +670,13 @@
                       <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(Number(ci), 1)">✕</el-button>
                     </div>
                     <div class="carousel-sub-body">
-                      <FlowUploadZone v-model="col.imageUrl" type="image" label="上傳" preview-height="160px" />
+                      <FlowUploadZone
+                        v-model="col.imageUrl"
+                        type="image"
+                        label="上傳"
+                        class="carousel-sub-media-upload"
+                        :preview-frame="{ widthRatio: 1, heightRatio: 1, fit: 'cover' }"
+                      />
                       <div class="carousel-actions carousel-actions-top-gap">
                         <FlowActionEditor
                           :action="col.action"
@@ -688,6 +729,12 @@ import {
   RICH_LAYOUT_PRESETS,
   type RichLayoutId,
 } from '~~/shared/rich-layout-presets'
+import {
+  CAROUSEL_IMAGE_ASPECT_OPTIONS,
+  DEFAULT_CAROUSEL_IMAGE_ASPECT_RATIO,
+  resolveCarouselImageAspectRatio,
+} from '~~/shared/line-image-spec'
+import { loadImageNaturalSize, loadVideoNaturalSize, simplifyAspectRatio } from '~~/shared/media-preview'
 import {
   createRichMessageActions,
   normalizeRichMessageActions,
@@ -893,7 +940,19 @@ function selectFlow(flow: any, opts?: { skipDiscardConfirm?: boolean }) {
     messages: normalizeMessages(JSON.parse(JSON.stringify(flow.messages ?? []))),
     moduleType: flow.isSystem ? rawType : normalizeWorkspaceModuleType(rawType),
   }
+  void hydrateMediaDimensionsInForm()
   markClean()
+}
+
+async function hydrateMediaDimensionsInForm() {
+  for (const msg of form.value.messages) {
+    if (msg?.type === 'richMessage') {
+      await ensureRichMessageHeroDimensions(msg)
+    }
+    if (msg?.type === 'video') {
+      await ensureVideoDimensions(msg)
+    }
+  }
 }
 
 async function seedSystemModules() {
@@ -950,13 +1009,21 @@ function addMessage(type: string) {
   } else if (type === 'image') {
     form.value.messages.push({ type: 'image', originalContentUrl: '', previewImageUrl: '' })
   } else if (type === 'video') {
-    form.value.messages.push({ type: 'video', originalContentUrl: '', previewImageUrl: '' })
+    form.value.messages.push({
+      type: 'video',
+      originalContentUrl: '',
+      previewImageUrl: '',
+      videoWidth: undefined,
+      videoHeight: undefined,
+    })
   } else if (type === 'richMessage') {
     form.value.messages.push({
       type: 'richMessage',
       altText: '',
       transparentBackground: false,
       heroImageUrl: '',
+      heroImageWidth: undefined,
+      heroImageHeight: undefined,
       layoutId: 'single' as RichLayoutId,
       actions: createRichMessageActions('single'),
     })
@@ -970,6 +1037,7 @@ function addMessage(type: string) {
     form.value.messages.push({
       type: 'carousel',
       altText: '',
+      imageAspectRatio: DEFAULT_CAROUSEL_IMAGE_ASPECT_RATIO,
       columns: [newCarouselColumn()],
     })
   } else if (type === 'imageCarousel') {
@@ -1051,6 +1119,8 @@ function normalizeRichMessageItem(item: any) {
     id: item?.id || '',
     name: item?.name || '',
     layoutId,
+    heroImageWidth: Number(item?.heroImageWidth) || undefined,
+    heroImageHeight: Number(item?.heroImageHeight) || undefined,
     transparentBackground: Boolean(item?.transparentBackground),
     altText: item?.altText || '',
     heroImageUrl: item?.heroImageUrl || '',
@@ -1095,7 +1165,84 @@ function selectInlineRichMessageLayout(msg: any, layoutId: string) {
   const nextLayout = layoutId as RichLayoutId
   if (msg.layoutId === nextLayout) return
   msg.layoutId = nextLayout
-  msg.actions = normalizeRichMessageActions(nextLayout, msg.actions || [])
+  msg.actions = normalizeRichMessageActions(
+    nextLayout,
+    msg.actions || [],
+    Number(msg.heroImageWidth) || undefined,
+    Number(msg.heroImageHeight) || undefined,
+  )
+}
+
+function applyRichMessageHeroSize(msg: any, size: { width: number; height: number }) {
+  msg.heroImageWidth = size.width
+  msg.heroImageHeight = size.height
+  msg.actions = normalizeRichMessageActions(
+    msg.layoutId || 'single',
+    msg.actions || [],
+    size.width,
+    size.height,
+  )
+}
+
+async function ensureRichMessageHeroDimensions(msg: any) {
+  if (Number(msg?.heroImageWidth) > 0 && Number(msg?.heroImageHeight) > 0) return
+  const url = String(msg?.heroImageUrl || '').trim()
+  if (!url) return
+  try {
+    const size = await loadImageNaturalSize(url)
+    applyRichMessageHeroSize(msg, size)
+  }
+  catch {
+    /* ignore */
+  }
+}
+
+function applyVideoSize(msg: any, size: { width: number; height: number }) {
+  const rawW = Number(size?.width)
+  const rawH = Number(size?.height)
+  if (!(rawW > 0 && rawH > 0)) return
+  const { width, height } = simplifyAspectRatio(rawW, rawH)
+  msg.videoWidth = width
+  msg.videoHeight = height
+}
+
+function videoPreviewFrameKey(msg: any) {
+  const w = Number(msg?.videoWidth) || 0
+  const h = Number(msg?.videoHeight) || 0
+  return `${String(msg?.originalContentUrl || '')}:${w}x${h}`
+}
+
+function videoPreviewFrame(
+  videoWidth: unknown,
+  videoHeight: unknown,
+  originalContentUrl: unknown,
+) {
+  if (!String(originalContentUrl || '').trim()) return 'natural' as const
+  const rawW = Number(videoWidth)
+  const rawH = Number(videoHeight)
+  if (rawW > 0 && rawH > 0) {
+    const { width, height } = simplifyAspectRatio(rawW, rawH)
+    return { widthRatio: width, heightRatio: height, fit: 'cover' as const }
+  }
+  return { widthRatio: 16, heightRatio: 9, fit: 'cover' as const }
+}
+
+async function ensureVideoDimensions(msg: any) {
+  if (Number(msg?.videoWidth) > 0 && Number(msg?.videoHeight) > 0) return
+  const url = String(msg?.originalContentUrl || '').trim()
+  if (!url) return
+  try {
+    const size = await loadVideoNaturalSize(url)
+    applyVideoSize(msg, size)
+  }
+  catch {
+    /* ignore */
+  }
+}
+
+function carouselPreviewFrame(msg: any) {
+  const { width, height } = resolveCarouselImageAspectRatio(msg?.imageAspectRatio)
+  return { widthRatio: width, heightRatio: height, fit: 'cover' as const }
 }
 
 function richMessageRefPreview(msg: any) {
@@ -1383,14 +1530,29 @@ function normalizeMessages(messages: any[]) {
         ...msg,
         altText: msg.altText || '',
         transparentBackground: Boolean(msg.transparentBackground),
+        heroImageWidth: Number(msg.heroImageWidth) || undefined,
+        heroImageHeight: Number(msg.heroImageHeight) || undefined,
         heroImageUrl: msg.heroImageUrl || '',
         layoutId,
         actions: normalizeRichMessageActions(
           layoutId,
           Array.isArray(msg.actions) && msg.actions.length > 0
             ? msg.actions
-            : createRichMessageActions(layoutId),
+            : createRichMessageActions(
+                layoutId,
+                Number(msg.heroImageWidth) || undefined,
+                Number(msg.heroImageHeight) || undefined,
+              ),
+          Number(msg.heroImageWidth) || undefined,
+          Number(msg.heroImageHeight) || undefined,
         ),
+      }
+    }
+
+    if (msg.type === 'carousel') {
+      return {
+        ...msg,
+        imageAspectRatio: msg.imageAspectRatio === 'square' ? 'square' : 'rectangle',
       }
     }
 
@@ -1540,6 +1702,8 @@ function validateMessages(messages: any[]): string | null {
       if (msg.columns.length < 1) return '輪播訊息：至少要有 1 個欄位'
       if (msg.columns.length > 10) return '輪播訊息：最多 10 個欄位'
       for (const col of msg.columns) {
+        if (!col?.thumbnailImageUrl?.trim()) return '輪播訊息：每個欄位都需要縮圖'
+        if (!col?.title?.trim()) return '輪播訊息：標題為必填'
         if (!Array.isArray(col?.actions) || col.actions.length < 1) {
           return '輪播訊息：每個欄位至少要有 1 個按鈕'
         }

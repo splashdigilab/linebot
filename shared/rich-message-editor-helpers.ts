@@ -4,8 +4,12 @@ import {
   getPresetBoundsPct,
   type RichLayoutId,
 } from './rich-layout-presets'
+import {
+  getRichMessageCanvasSize,
+  RICH_MESSAGE_CANVAS_WIDTH,
+} from './line-image-spec'
 
-export const RICH_MESSAGE_CANVAS_SIZE = 1040
+export const RICH_MESSAGE_CANVAS_SIZE = RICH_MESSAGE_CANVAS_WIDTH
 export const RICH_MESSAGE_MIN_BOUNDS = 80
 
 export type RichMessageActionType = 'uri' | 'message' | 'module'
@@ -32,36 +36,46 @@ export type RichMessageEditorAction = {
 
 export function clampRichMessageBounds(
   bounds: RichMessageAreaBounds,
-  canvas = RICH_MESSAGE_CANVAS_SIZE,
+  canvasW = RICH_MESSAGE_CANVAS_SIZE,
+  canvasH = RICH_MESSAGE_CANVAS_SIZE,
   minSize = RICH_MESSAGE_MIN_BOUNDS,
 ): RichMessageAreaBounds {
-  const width = Math.max(minSize, Math.min(canvas, bounds.width))
-  const height = Math.max(minSize, Math.min(canvas, bounds.height))
-  const x = Math.max(0, Math.min(canvas - width, bounds.x))
-  const y = Math.max(0, Math.min(canvas - height, bounds.y))
+  const width = Math.max(minSize, Math.min(canvasW, bounds.width))
+  const height = Math.max(minSize, Math.min(canvasH, bounds.height))
+  const x = Math.max(0, Math.min(canvasW - width, bounds.x))
+  const y = Math.max(0, Math.min(canvasH - height, bounds.y))
   return { x, y, width, height }
 }
 
-export function presetBoundsToCanvas(layoutId: RichLayoutId, idx: number): RichMessageAreaBounds {
+export function presetBoundsToCanvas(
+  layoutId: RichLayoutId,
+  idx: number,
+  canvasW = RICH_MESSAGE_CANVAS_SIZE,
+  canvasH = RICH_MESSAGE_CANVAS_SIZE,
+): RichMessageAreaBounds {
   const b = getPresetBoundsPct(layoutId, idx)
   return clampRichMessageBounds({
-    x: Math.round((b.x / 100) * RICH_MESSAGE_CANVAS_SIZE),
-    y: Math.round((b.y / 100) * RICH_MESSAGE_CANVAS_SIZE),
-    width: Math.round((b.w / 100) * RICH_MESSAGE_CANVAS_SIZE),
-    height: Math.round((b.h / 100) * RICH_MESSAGE_CANVAS_SIZE),
-  })
+    x: Math.round((b.x / 100) * canvasW),
+    y: Math.round((b.y / 100) * canvasH),
+    width: Math.round((b.w / 100) * canvasW),
+    height: Math.round((b.h / 100) * canvasH),
+  }, canvasW, canvasH)
 }
 
-export function defaultBoundsByIndex(index: number): RichMessageAreaBounds {
-  const width = 320
-  const height = 240
+export function defaultBoundsByIndex(
+  index: number,
+  canvasW = RICH_MESSAGE_CANVAS_SIZE,
+  canvasH = RICH_MESSAGE_CANVAS_SIZE,
+): RichMessageAreaBounds {
+  const width = Math.min(320, Math.floor(canvasW * 0.31))
+  const height = Math.min(240, Math.floor(canvasH * 0.23))
   const cols = 2
   const gap = 40
   const col = index % cols
   const row = Math.floor(index / cols)
   return {
-    x: 120 + col * (width + gap),
-    y: 120 + row * (height + gap),
+    x: Math.min(canvasW - width, 120 + col * (width + gap)),
+    y: Math.min(canvasH - height, 120 + row * (height + gap)),
     width,
     height,
   }
@@ -71,6 +85,8 @@ export function newRichMessageAction(
   slot: string,
   index: number,
   withBounds: boolean,
+  canvasW = RICH_MESSAGE_CANVAS_SIZE,
+  canvasH = RICH_MESSAGE_CANVAS_SIZE,
 ): RichMessageEditorAction {
   return {
     slot,
@@ -79,24 +95,32 @@ export function newRichMessageAction(
     text: '',
     moduleId: '',
     tagging: { enabled: false, addTagIds: [] },
-    ...(withBounds ? { bounds: defaultBoundsByIndex(index) } : {}),
+    ...(withBounds ? { bounds: defaultBoundsByIndex(index, canvasW, canvasH) } : {}),
   }
 }
 
-export function createRichMessageActions(layoutId: string): RichMessageEditorAction[] {
+export function createRichMessageActions(
+  layoutId: string,
+  heroImageWidth?: number,
+  heroImageHeight?: number,
+): RichMessageEditorAction[] {
+  const { width: canvasW, height: canvasH } = getRichMessageCanvasSize(heroImageWidth, heroImageHeight)
   if (layoutId === 'custom') {
-    return [newRichMessageAction('A', 0, true)]
+    return [newRichMessageAction('A', 0, true, canvasW, canvasH)]
   }
   const count = RICH_LAYOUT_PRESETS.find((item) => item.id === layoutId)?.cells ?? 1
   return ACTION_SLOT_LABELS.slice(0, count).map((slot, idx) =>
-    newRichMessageAction(slot, idx, false),
+    newRichMessageAction(slot, idx, false, canvasW, canvasH),
   )
 }
 
 export function normalizeRichMessageActions(
   layoutId: string,
   actions: any[],
+  heroImageWidth?: number,
+  heroImageHeight?: number,
 ): RichMessageEditorAction[] {
+  const { width: canvasW, height: canvasH } = getRichMessageCanvasSize(heroImageWidth, heroImageHeight)
   const max =
     layoutId === 'custom'
       ? Math.max(
@@ -127,8 +151,12 @@ export function normalizeRichMessageActions(
       },
       bounds:
         layoutId === 'custom'
-          ? clampRichMessageBounds(source.bounds || defaultBoundsByIndex(idx))
-          : presetBoundsToCanvas(layoutId as RichLayoutId, idx),
+          ? clampRichMessageBounds(
+              source.bounds || defaultBoundsByIndex(idx, canvasW, canvasH),
+              canvasW,
+              canvasH,
+            )
+          : presetBoundsToCanvas(layoutId as RichLayoutId, idx, canvasW, canvasH),
     } as RichMessageEditorAction
   })
 }
@@ -136,8 +164,10 @@ export function normalizeRichMessageActions(
 export function serializeRichMessageActionsForApi(
   layoutId: string,
   actions: RichMessageEditorAction[],
+  heroImageWidth?: number,
+  heroImageHeight?: number,
 ) {
-  return normalizeRichMessageActions(layoutId, actions).map((action) => ({
+  return normalizeRichMessageActions(layoutId, actions, heroImageWidth, heroImageHeight).map((action) => ({
     slot: action.slot,
     type: action.type,
     uri: action.uri,

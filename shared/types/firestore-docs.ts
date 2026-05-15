@@ -73,6 +73,8 @@ export interface RichMessageDoc {
   workspaceId: string
   name: string
   layoutId: string
+  heroImageWidth?: number
+  heroImageHeight?: number
   transparentBackground: boolean
   altText: string
   heroImageUrl: string

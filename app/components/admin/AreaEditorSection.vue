@@ -8,6 +8,12 @@
 
     <div class="admin-area-editor-stack">
       <div v-if="showCanvas" :ref="setCanvasRef" class="canvas-wrap" :style="canvasStyle">
+        <img
+          v-if="canvasImageUrl"
+          :src="canvasImageUrl"
+          class="canvas-bg"
+          alt=""
+        >
         <div
           v-for="(area, index) in areas"
           :key="index"
@@ -170,6 +176,7 @@ const props = withDefaults(defineProps<{
   overlapSet: Set<number>
   guideLines: Array<{ type: 'h' | 'v'; pos: number }>
   canvasStyle: Record<string, string>
+  canvasImageUrl?: string
   setCanvasRef?: (el: HTMLElement | null) => void
 }>(), {
   showCanvas: true,

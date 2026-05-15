@@ -494,6 +494,9 @@
 }
 
 /* ─── Video Specific ────────────────────────────────────── */
+.message-video-wrap .fuz-frame-host {
+  width: 100%;
+}
 
 .fuz-hint-text {
   font-size: 0.75rem;
@@ -559,6 +562,11 @@
 /* Sub-card content area stretch */
 .carousel-sub-body {
   flex: 1;
+}
+
+/* 輪播卡片縮圖：在 body padding 內撐滿可用寬度 */
+.carousel-sub-body > .carousel-sub-media-upload .fuz-frame-host {
+  width: 100%;
 }
 
 /* ─── Rich Message layout picker sub-card ──────────────── */

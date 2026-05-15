@@ -9,7 +9,7 @@ import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
   const body = await readBody(event)
-  const { name, layoutId, transparentBackground, altText, heroImageUrl, actions, isActive } = body
+  const { name, layoutId, heroImageWidth, heroImageHeight, transparentBackground, altText, heroImageUrl, actions, isActive } = body
 
   if (!name?.trim()) {
     throw createError({ statusCode: 400, statusMessage: 'name is required' })
@@ -34,6 +34,8 @@ export default defineEventHandler(async (event) => {
   const doc = await createDoc('richMessages', id, {
     name: String(name).trim(),
     layoutId: typeof layoutId === 'string' ? layoutId : 'custom',
+    heroImageWidth: Number(heroImageWidth) > 0 ? Number(heroImageWidth) : undefined,
+    heroImageHeight: Number(heroImageHeight) > 0 ? Number(heroImageHeight) : undefined,
     transparentBackground: Boolean(transparentBackground),
     altText: String(altText).trim(),
     heroImageUrl: typeof heroImageUrl === 'string' ? heroImageUrl.trim() : '',

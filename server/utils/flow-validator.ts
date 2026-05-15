@@ -97,6 +97,8 @@ function validateCarousel(msg: any): void {
   if (msg.columns.length > 10) fail('輪播訊息：最多 10 個欄位')
 
   for (const col of msg.columns) {
+    if (!String(col?.thumbnailImageUrl || '').trim()) fail('輪播訊息：每個欄位都需要縮圖')
+    if (!String(col?.title || '').trim()) fail('輪播訊息：標題為必填')
     if (!Array.isArray(col?.actions) || col.actions.length < 1) {
       fail('輪播訊息：每個欄位至少要有 1 個按鈕')
     }

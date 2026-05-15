@@ -130,6 +130,7 @@
               :overlap-set="overlapSet"
               :guide-lines="guideLines"
               :canvas-style="richMenuCanvasStyle"
+              :canvas-image-url="form.previewUrl || undefined"
               :set-canvas-ref="setRichMenuCanvasRef"
               @start-drag="startDrag"
               @start-resize="startResize"
@@ -296,12 +297,13 @@ const {
 })
 
 const richMenuCanvasStyle = computed(() => {
-  const ratio = (Number(form.value.height) / Number(form.value.width)) * 100
-  const url = form.value.previewUrl
+  const w = Math.max(1, Number(form.value.width) || 2500)
+  const h = Math.max(1, Number(form.value.height) || 843)
   const d = dragState.value
   return {
-    paddingBottom: `${Number.isFinite(ratio) ? ratio : 0}%`,
-    ...(url ? { backgroundImage: `url(${url})` } : {}),
+    aspectRatio: `${w} / ${h}`,
+    width: '100%',
+    minHeight: '120px',
     userSelect: d ? 'none' : 'auto',
     cursor: d?.type === 'move' ? 'grabbing' : 'default',
   }
