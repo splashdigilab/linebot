@@ -283,7 +283,7 @@
         </ul>
       </div>
       <div v-else class="bc-validate-ok">
-        <p v-if="isScheduleSubmit && form.scheduleAt" class="tags-hint">
+        <p v-if="dialogIsSchedule && form.scheduleAt" class="tags-hint">
           將排程於 {{ formatScheduleLabel(form.scheduleAt) }} 自動發送（不會立即送出）。
         </p>
         <div class="bc-stats-row">
@@ -320,11 +320,13 @@
 import type { UnifiedAction } from '~~/shared/action-schema'
 import { normalizeUnifiedAction, validateUnifiedAction } from '~~/shared/action-schema'
 import { parseLineMessagesToUnifiedAction, unifiedActionToLineMessages } from '~~/shared/broadcast-content'
+import {
+  localDateTimeInputToUtcIso,
+  validateFutureScheduleLocalInput,
+} from '~~/shared/broadcast-schedule-time'
 import { parseFirestoreDate } from '~~/shared/firestore-date'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
-
-const BROADCAST_SCHEDULE_MIN_LEAD_MS = 60_000
 
 /** 排程：不可選今天以前的日期 */
 function disabledPastDate(d: Date) {
@@ -342,6 +344,12 @@ function formatScheduleLabel(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleString('zh-TW')
+}
+
+function scheduleAtForApi(): string {
+  const iso = localDateTimeInputToUtcIso(form.value.scheduleAt)
+  if (!iso) throw new Error('invalid scheduleAt')
+  return iso
 }
 
 const { workspaceId, apiFetch } = useWorkspace()
@@ -365,6 +373,8 @@ const isCreating = ref(false)
 const validateDialogVisible = ref(false)
 const validateLoading = ref(false)
 const validateResult = ref<any>(null)
+/** 開啟驗證視窗當下鎖定的送出意圖（避免對話框開啟後切換 radio 誤觸立即發送） */
+const pendingSubmitMode = ref<'now' | 'schedule'>('now')
 const report = ref<any>(null)
 const { toasts, showToast } = useAdminToast()
 
@@ -404,8 +414,11 @@ const importUserIds = computed(() =>
 )
 
 const isScheduleSubmit = computed(() => form.value.scheduleMode === 'schedule')
-const validateDialogTitle = computed(() => (isScheduleSubmit.value ? '排程前確認' : '發送前確認'))
-const confirmSubmitLabel = computed(() => (isScheduleSubmit.value ? '確認排程' : '確認發送'))
+const dialogIsSchedule = computed(() =>
+  validateDialogVisible.value ? pendingSubmitMode.value === 'schedule' : isScheduleSubmit.value,
+)
+const validateDialogTitle = computed(() => (dialogIsSchedule.value ? '排程前確認' : '發送前確認'))
+const confirmSubmitLabel = computed(() => (dialogIsSchedule.value ? '確認排程' : '確認發送'))
 const headerSubmitLabel = computed(() => (isScheduleSubmit.value ? '驗證並排程' : '驗證並發送'))
 
 // ── 工具函式 ─────────────────────────────────────────────────────────
@@ -484,7 +497,7 @@ async function loadFormFromId(id: string): Promise<boolean> {
   return true
 }
 
-function validateForm(): string | null {
+function validateForm(options?: { requireScheduleTime?: boolean }): string | null {
   if (!form.value.name.trim()) return '請填寫推播名稱'
   if (form.value.audienceType === 'tags' && !form.value.tagIds.length) return '請至少選擇一個標籤'
   if (form.value.audienceType === 'import' && !importUserIds.value.length) return '請輸入至少一個 LINE User ID'
@@ -492,11 +505,10 @@ function validateForm(): string | null {
   if (actionErr) return actionErr
   const msgs = buildMessages()
   if (!msgs.length) return '請設定訊息內容'
-  if (form.value.scheduleMode === 'schedule') {
-    if (!form.value.scheduleAt) return '請選擇排程時間'
-    const t = new Date(form.value.scheduleAt)
-    if (Number.isNaN(t.getTime())) return '排程時間格式不正確'
-    if (t.getTime() <= Date.now() + BROADCAST_SCHEDULE_MIN_LEAD_MS) return '排程時間須至少一分鐘後'
+  const needScheduleTime = options?.requireScheduleTime ?? false
+  if (needScheduleTime) {
+    const scheduleErr = validateFutureScheduleLocalInput(form.value.scheduleAt)
+    if (scheduleErr) return scheduleErr
   }
   return null
 }
@@ -514,7 +526,7 @@ function buildSaveBody(): Record<string, unknown> {
     && form.value.scheduleAt
 
   if (keepScheduled) {
-    body.scheduleAt = form.value.scheduleAt
+    body.scheduleAt = scheduleAtForApi()
   }
   else if (!isCreating.value) {
     body.scheduleAt = null
@@ -586,9 +598,12 @@ async function cancelEdit() {
   }
 }
 
-async function saveDraft() {
-  const err = validateForm()
-  if (err) return showToast(err, 'error')
+async function saveDraft(): Promise<boolean> {
+  const err = validateForm({ requireScheduleTime: false })
+  if (err) {
+    showToast(err, 'error')
+    return false
+  }
   saving.value = true
   try {
     const body = buildSaveBody()
@@ -609,9 +624,11 @@ async function saveDraft() {
         showToast('已儲存但載入內容失敗，請重新點選該推播', 'error')
       }
     }
+    return true
   }
   catch (e: any) {
     showToast(e?.data?.statusMessage || '儲存失敗', 'error')
+    return false
   }
   finally {
     saving.value = false
@@ -619,12 +636,16 @@ async function saveDraft() {
 }
 
 async function openValidateDialog() {
-  const err = validateForm()
+  pendingSubmitMode.value = form.value.scheduleMode
+
+  const err = validateForm({
+    requireScheduleTime: pendingSubmitMode.value === 'schedule',
+  })
   if (err) return showToast(err, 'error')
 
   // 先儲存草稿確保最新內容已同步
-  await saveDraft()
-  if (!selectedId.value) return
+  const saved = await saveDraft()
+  if (!saved || !selectedId.value) return
 
   validateDialogVisible.value = true
   validateLoading.value = true
@@ -643,7 +664,7 @@ async function openValidateDialog() {
 
 async function confirmSend() {
   if (!selectedId.value) return
-  if (form.value.scheduleMode === 'schedule') {
+  if (pendingSubmitMode.value === 'schedule') {
     await confirmSchedule()
   }
   else {
@@ -653,16 +674,22 @@ async function confirmSend() {
 
 async function confirmSchedule() {
   if (!selectedId.value || !form.value.scheduleAt) return
+  const scheduleErr = validateFutureScheduleLocalInput(form.value.scheduleAt)
+  if (scheduleErr) return showToast(scheduleErr, 'error')
+
   sending.value = true
   try {
-    await apiFetch(`/api/broadcast/${selectedId.value}`, {
-      method: 'PUT',
+    const scheduleAtIso = scheduleAtForApi()
+    await apiFetch(`/api/broadcast/${selectedId.value}/schedule`, {
+      method: 'POST',
       body: {
-        ...buildSaveBody(),
-        scheduleAt: form.value.scheduleAt,
+        name: form.value.name.trim(),
+        audienceSource: buildAudienceSource(),
+        messages: buildMessages(),
+        scheduleAt: scheduleAtIso,
       },
     })
-    showToast(`已排程，將於 ${formatScheduleLabel(form.value.scheduleAt)} 自動發送 ✅`, 'success')
+    showToast(`已排程，將於 ${formatScheduleLabel(scheduleAtIso)} 自動發送 ✅`, 'success')
     validateDialogVisible.value = false
     await loadData()
     const found = broadcasts.value.find((b) => b.id === selectedId.value)

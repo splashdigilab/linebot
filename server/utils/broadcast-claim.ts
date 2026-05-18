@@ -34,6 +34,10 @@ export async function claimBroadcastForSend(
       if (data.status !== 'draft') {
         throw new Error(`Cannot send broadcast with status: ${data.status}`)
       }
+      const pendingAt = broadcastScheduleAtToDate(data.scheduleAt as Timestamp | Date | null)
+      if (pendingAt && pendingAt.getTime() > Date.now()) {
+        throw new Error('此推播已設定未來排程時間，請使用排程流程或先清除排程')
+      }
     }
     else {
       if (data.status !== 'scheduled') {

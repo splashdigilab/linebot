@@ -1,7 +1,31 @@
 import type { Timestamp } from 'firebase-admin/firestore'
+import { BROADCAST_SCHEDULE_MIN_LEAD_MS } from '~~/shared/broadcast-schedule-time'
 
-/** 與 Cron 每分鐘觸發對齊：排程時間至少需晚於現在此秒數 */
-export const BROADCAST_SCHEDULE_MIN_LEAD_MS = 60_000
+export { BROADCAST_SCHEDULE_MIN_LEAD_MS }
+
+/** 無時區字串視為 Asia/Taipei 牆上時間（與後台 date-picker 一致） */
+const TAIPEI_OFFSET_MS = 8 * 60 * 60 * 1000
+
+const NAIVE_LOCAL_DATETIME_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
+
+function parseNaiveDateTimeAsTaipei(value: string): Date | null {
+  const m = NAIVE_LOCAL_DATETIME_RE.exec(value.trim())
+  if (!m) return null
+  const year = Number(m[1])
+  const month = Number(m[2])
+  const day = Number(m[3])
+  const hour = Number(m[4])
+  const minute = Number(m[5])
+  const second = Number(m[6] ?? '0')
+  if ([year, month, day, hour, minute, second].some((n) => Number.isNaN(n))) return null
+  const utcMs = Date.UTC(year, month - 1, day, hour, minute, second) - TAIPEI_OFFSET_MS
+  const d = new Date(utcMs)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function hasExplicitTimezone(value: string): boolean {
+  return /[zZ]$/.test(value) || /[+-]\d{2}:?\d{2}$/.test(value)
+}
 
 export type BroadcastScheduleParseResult =
   | { ok: true; date: Date }
@@ -15,6 +39,14 @@ export function broadcastScheduleAtToDate(value: unknown): Date | null {
   const ts = value as Timestamp
   if (typeof ts.toDate === 'function') {
     const d = ts.toDate()
+    return Number.isNaN(d.getTime()) ? null : d
+  }
+  if (typeof value === 'string') {
+    const s = value.trim()
+    if (NAIVE_LOCAL_DATETIME_RE.test(s) && !hasExplicitTimezone(s)) {
+      return parseNaiveDateTimeAsTaipei(s)
+    }
+    const d = new Date(s)
     return Number.isNaN(d.getTime()) ? null : d
   }
   const d = new Date(String(value))

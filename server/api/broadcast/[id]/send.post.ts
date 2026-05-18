@@ -1,4 +1,5 @@
 import { executeBroadcastSend } from '~~/server/utils/broadcast-send'
+import { broadcastScheduleAtToDate } from '~~/server/utils/broadcast-schedule'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import { getDoc } from '~~/server/utils/firebase'
 import type { BroadcastDoc } from '~~/shared/types/tag-broadcast'
@@ -16,6 +17,21 @@ export default defineEventHandler(async (event) => {
   const doc = await getDoc<BroadcastDoc>('broadcasts', id)
   if (!doc || doc.workspaceId !== workspaceId) {
     throw createError({ statusCode: 404, statusMessage: 'Broadcast not found' })
+  }
+
+  if (doc.status === 'scheduled') {
+    throw createError({
+      statusCode: 409,
+      statusMessage: '此推播已排程，請等候自動發送，或先取消排程',
+    })
+  }
+
+  const scheduledAt = broadcastScheduleAtToDate(doc.scheduleAt)
+  if (scheduledAt && scheduledAt.getTime() > Date.now()) {
+    throw createError({
+      statusCode: 409,
+      statusMessage: '此推播已設定未來排程時間，請使用「驗證並排程」或先取消排程',
+    })
   }
 
   try {
