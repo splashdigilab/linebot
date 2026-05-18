@@ -17,14 +17,43 @@
       </div>
       <div v-else class="split-list">
         <AdminSplitListItem
-          v-for="flow in flows"
+          v-for="flow in systemFlows"
           :key="flow.id"
-          :title="(flow.isSystem ? '🔒 ' : '') + flow.name"
+          :title="`🔒 ${flow.name}`"
           :active="selectedId === flow.id"
           :meta-text="MODULE_TYPE_LABELS[flow.moduleType] ?? '機器人流程'"
           chip-tone="neutral"
           @select="selectFlow(flow)"
         />
+        <div
+          v-for="(flow, flowIndex) in regularFlows"
+          :key="flow.id"
+          class="flow-sidebar-row"
+          :class="{
+            'flow-sidebar-row--dragging': flowListDragIndex === flowIndex,
+            'flow-sidebar-row--drag-over': flowListDragOverIndex === flowIndex && flowListDragIndex !== flowIndex,
+          }"
+          @dragover.prevent="onFlowListDragOver($event, flowIndex)"
+          @dragenter.prevent
+          @dragleave="onFlowListDragLeave"
+          @drop="onFlowListDrop($event, flowIndex)"
+        >
+          <span
+            class="drag-handle flow-sidebar-drag-handle"
+            draggable="true"
+            aria-label="拖曳調整順序"
+            @dragstart.stop="onFlowListDragStart($event, flowIndex)"
+            @dragend.stop="onFlowListDragEnd"
+          >⠿</span>
+          <AdminSplitListItem
+            class="flow-sidebar-row__item"
+            :title="flow.name"
+            :active="selectedId === flow.id"
+            :meta-text="MODULE_TYPE_LABELS[flow.moduleType] ?? '機器人流程'"
+            chip-tone="neutral"
+            @select="selectFlow(flow)"
+          />
+        </div>
       </div>
     </template>
 
@@ -65,6 +94,9 @@
       <div class="flex gap-1 admin-header-actions">
         <el-button v-if="!isCreating && selectedFlow && !isSystemFlow" type="danger" @click="deleteFlow">
           🗑️ 刪除
+        </el-button>
+        <el-button v-if="!isCreating && selectedFlow" :loading="duplicating" @click="duplicateFlow">
+          📋 複製
         </el-button>
         <el-button @click="cancelEdit">取消</el-button>
         <el-button type="primary" :loading="saving" @click="submitForm">
@@ -756,6 +788,7 @@ const flows = ref<any[]>([])
 const richMessages = ref<any[]>([])
 const loading = ref(true)
 const saving = ref(false)
+const duplicating = ref(false)
 const seeding = ref(false)
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
@@ -776,6 +809,10 @@ const colDragOverIndex = ref<number | null>(null)
 const qrDragMsgIndex = ref<number | null>(null)
 const qrDragIndex = ref<number | null>(null)
 const qrDragOverIndex = ref<number | null>(null)
+
+// Sidebar flow list drag and drop
+const flowListDragIndex = ref<number | null>(null)
+const flowListDragOverIndex = ref<number | null>(null)
 
 const messageRenderKeys = new WeakMap<object, string>()
 let messageRenderKeySeq = 0
@@ -812,6 +849,8 @@ const { markClean, confirmLeaveIfDirty } = useUnsavedChanges({
 })
 
 const selectedFlow = computed(() => flows.value.find(f => f.id === selectedId.value) ?? null)
+const systemFlows = computed(() => flows.value.filter((f) => f.isSystem))
+const regularFlows = computed(() => flows.value.filter((f) => !f.isSystem))
 const isSystemFlow = computed(() => selectedFlow.value?.isSystem === true)
 const BUILTIN_VARIABLE_LABELS: Record<string, string> = {
   displayName: '聯絡人名稱（使用者名字）',
@@ -924,6 +963,64 @@ async function loadRichMessages() {
 onMounted(async () => {
   await Promise.all([loadFlows(), loadRichMessages(), loadTags({ status: 'active' })])
 })
+
+function setRegularFlowsOrder(nextRegular: any[]) {
+  flows.value = [...systemFlows.value, ...nextRegular]
+}
+
+// ── Sidebar flow list drag and drop ───────────────────
+function onFlowListDragStart(e: DragEvent, index: number) {
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.dropEffect = 'move'
+    e.dataTransfer.setData('text/plain', index.toString())
+  }
+  requestAnimationFrame(() => {
+    flowListDragIndex.value = index
+  })
+}
+
+function onFlowListDragEnd() {
+  flowListDragIndex.value = null
+  flowListDragOverIndex.value = null
+}
+
+function onFlowListDragOver(_e: DragEvent, index: number) {
+  if (flowListDragIndex.value !== null) {
+    flowListDragOverIndex.value = index
+  }
+}
+
+function onFlowListDragLeave() {
+  flowListDragOverIndex.value = null
+}
+
+async function onFlowListDrop(e: DragEvent, dropIndex: number) {
+  e.preventDefault()
+  if (flowListDragIndex.value === null) return
+
+  const fromIndex = resolveDraggedIndex(e, flowListDragIndex.value)
+  flowListDragIndex.value = null
+  flowListDragOverIndex.value = null
+  if (fromIndex === null || fromIndex === dropIndex) return
+
+  const nextRegular = [...regularFlows.value]
+  const [moved] = nextRegular.splice(fromIndex, 1)
+  nextRegular.splice(dropIndex, 0, moved)
+
+  const previousFlows = [...flows.value]
+  setRegularFlowsOrder(nextRegular)
+
+  try {
+    await apiFetch('/api/flow/reorder', {
+      method: 'POST',
+      body: { orderedIds: nextRegular.map((f) => f.id) },
+    })
+  } catch {
+    flows.value = previousFlows
+    showToast('排序儲存失敗', 'error')
+  }
+}
 
 // ── Select / Create ───────────────────────────────────
 function normalizeWorkspaceModuleType(raw: ModuleType | undefined): ModuleType {
@@ -1493,6 +1590,45 @@ async function deleteFlow() {
     await loadFlows()
   } catch {
     showToast('刪除失敗', 'error')
+  }
+}
+
+async function duplicateFlow() {
+  const sourceName = form.value.name.trim()
+  if (!sourceName) return showToast('請輸入模組名稱', 'error')
+
+  const messages = normalizeMessages(form.value.messages)
+  if (!messages.length) return showToast('請至少新增一則回覆訊息', 'error')
+  if (messages.length > FLOW_MESSAGE_LIMIT) {
+    return showToast(`單一模組最多只能儲存 ${FLOW_MESSAGE_LIMIT} 則訊息`, 'error')
+  }
+
+  const validationError = validateMessages(messages)
+  if (validationError) return showToast(validationError, 'error')
+
+  const moduleType = isSystemFlow.value
+    ? 'bot_flow'
+    : normalizeWorkspaceModuleType(form.value.moduleType)
+
+  duplicating.value = true
+  try {
+    const res = await apiFetch<any>('/api/flow/create', {
+      method: 'POST',
+      body: {
+        name: `${sourceName} (複製)`,
+        messages,
+        isActive: true,
+        moduleType,
+      },
+    })
+    showToast('模組已複製 ✅', 'success')
+    await loadFlows()
+    const newFlow = flows.value.find(f => f.id === res.id) ?? flows.value[0]
+    if (newFlow) selectFlow(newFlow, { skipDiscardConfirm: true })
+  } catch (error: any) {
+    showToast(error?.data?.statusMessage || '複製失敗', 'error')
+  } finally {
+    duplicating.value = false
   }
 }
 

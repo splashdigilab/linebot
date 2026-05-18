@@ -43,6 +43,8 @@ export interface FlowDoc {
   moduleType: ModuleType
   /** true = 系統預設模組，不可刪除 */
   isSystem: boolean
+  /** 一般模組列表排序（越小越靠前）；系統模組可忽略 */
+  sortOrder?: number
   createdAt: Timestamp | FieldValue
 }
 

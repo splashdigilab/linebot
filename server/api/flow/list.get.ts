@@ -1,4 +1,5 @@
 import { getDb } from '~~/server/utils/firebase'
+import { sortRegularFlows } from '~~/server/utils/flow-sort'
 import { seedWorkspaceSystemModules } from '~~/server/utils/workspace-system-modules'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
@@ -30,7 +31,7 @@ export default defineEventHandler(async (event) => {
       return (ai === -1 ? Number.MAX_SAFE_INTEGER : ai)
         - (bi === -1 ? Number.MAX_SAFE_INTEGER : bi)
     })
-  const regularFlows = allFlows.filter((f) => !f.isSystem)
+  const regularFlows = sortRegularFlows(allFlows.filter((f) => !f.isSystem))
 
   return [...systemFlows, ...regularFlows].map(stripFlowTriggers)
 })

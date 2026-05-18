@@ -460,6 +460,37 @@
   gap: 0.25rem;
 }
 
+/* ─── Sidebar module list reorder ─────────────────────── */
+.flow-sidebar-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  transition: outline-color 0.15s, opacity 0.15s;
+}
+
+.flow-sidebar-row--dragging {
+  opacity: 0.45;
+}
+
+.flow-sidebar-row--drag-over {
+  outline: 2px solid var(--color-line);
+  outline-offset: -2px;
+}
+
+.flow-sidebar-drag-handle {
+  align-self: center;
+  flex-shrink: 0;
+  padding: 0 0.05rem 0 0.15rem;
+}
+
+.flow-sidebar-row__item.split-list-item {
+  flex: 1;
+  min-width: 0;
+  padding-left: 0.35rem;
+}
+
 /* ─── Drag Handle ──────────────────────────────────────── */
 .drag-handle {
   display: flex;

@@ -4,6 +4,7 @@ import {
   assertValidFlowMessages,
   assertValidFlowName,
 } from '~~/server/utils/flow-validator'
+import { nextFlowSortOrder } from '~~/server/utils/flow-sort'
 import { WORKSPACE_FLOW_MODULE_TYPES, type ModuleType } from '~~/shared/types/conversation-stats'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
@@ -19,6 +20,10 @@ export default defineEventHandler(async (event) => {
     ? moduleType
     : 'bot_flow'
 
+  const existingRegular = await listDocs<Record<string, unknown>>('flows', (ref) =>
+    ref.where('workspaceId', '==', workspaceId),
+  ).then((rows) => rows.filter((f) => !f.isSystem))
+
   const id = uuidv4()
   const doc = await createDoc('flows', id, {
     name: validName,
@@ -27,6 +32,7 @@ export default defineEventHandler(async (event) => {
     moduleType: resolvedModuleType,
     isSystem: false,
     workspaceId,
+    sortOrder: nextFlowSortOrder(existingRegular),
     createdAt: FieldValue.serverTimestamp(),
   })
 
