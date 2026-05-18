@@ -624,23 +624,12 @@ async function cancelEdit() {
   }
 }
 
-type LocalScheduleSnapshot = { mode: 'schedule'; at: string }
-
-async function saveDraft(opts?: { preserveLocalSchedule?: boolean }): Promise<boolean> {
+async function saveDraft(): Promise<boolean> {
   const err = validateForm({ requireScheduleTime: false })
   if (err) {
     showToast(err, 'error')
     return false
   }
-
-  /** 驗證並排程前會先存草稿；PUT 會送 scheduleAt:null，重載後若不還原則確認排程會讀到空字串而無反應 */
-  const scheduleSnap: LocalScheduleSnapshot | null =
-    opts?.preserveLocalSchedule
-    && form.value.scheduleMode === 'schedule'
-    && form.value.scheduleAt
-      ? { mode: 'schedule', at: form.value.scheduleAt }
-      : null
-
   saving.value = true
   try {
     const body = buildSaveBody()
@@ -661,12 +650,6 @@ async function saveDraft(opts?: { preserveLocalSchedule?: boolean }): Promise<bo
         showToast('已儲存但載入內容失敗，請重新點選該推播', 'error')
       }
     }
-
-    if (scheduleSnap) {
-      form.value.scheduleMode = scheduleSnap.mode
-      form.value.scheduleAt = scheduleSnap.at
-    }
-
     return true
   }
   catch (e: any) {
@@ -683,35 +666,45 @@ function closeValidateDialog() {
   confirmDialogError.value = ''
 }
 
-function resetPendingValidateContext() {
-  pendingScheduleAtLocal.value = ''
-  pendingBroadcastId.value = null
-  confirmDialogError.value = ''
-}
-
 async function openValidateDialog() {
-  resetPendingValidateContext()
-  pendingSubmitMode.value = form.value.scheduleMode
+  // 在任何 async 動作之前先把當下表單狀態完整擷取，避免後續重載覆蓋
+  const capturedMode = form.value.scheduleMode as 'now' | 'schedule'
+  const capturedScheduleAt = String(form.value.scheduleAt || '').trim()
+  const capturedName = form.value.name.trim()
+  const capturedAudienceSource = buildAudienceSource()
+  const capturedMessages = buildMessages()
 
-  const err = validateForm({
-    requireScheduleTime: pendingSubmitMode.value === 'schedule',
-  })
+  const err = validateForm({ requireScheduleTime: capturedMode === 'schedule' })
   if (err) return showToast(err, 'error')
 
-  // 先儲存草稿確保最新內容已同步（排程模式須保留本地選擇的時間，避免重載後確認排程無效）
-  const saved = await saveDraft({ preserveLocalSchedule: pendingSubmitMode.value === 'schedule' })
-  if (!saved || !selectedId.value) return
-
-  pendingBroadcastId.value = selectedId.value
-
-  if (pendingSubmitMode.value === 'schedule') {
-    await nextTick()
-    pendingScheduleAtLocal.value = String(form.value.scheduleAt || '').trim()
-    if (!pendingScheduleAtLocal.value) {
-      showToast('排程時間遺失，請重新選擇排程時間後再試', 'error')
+  // 若是新建中，先建立草稿取得 ID（不帶 scheduleAt，之後由確認排程統一寫入）
+  if (isCreating.value) {
+    saving.value = true
+    try {
+      const created = await apiFetch<any>('/api/broadcast/create', {
+        method: 'POST',
+        body: { name: capturedName, audienceSource: capturedAudienceSource, messages: capturedMessages },
+      })
+      await loadData()
+      selectedId.value = created.id
+      isCreating.value = false
+      markClean()
+    }
+    catch (e: any) {
+      showToast(e?.data?.statusMessage || '建立推播失敗', 'error')
       return
     }
+    finally {
+      saving.value = false
+    }
   }
+
+  if (!selectedId.value) return
+
+  confirmDialogError.value = ''
+  pendingSubmitMode.value = capturedMode
+  pendingScheduleAtLocal.value = capturedScheduleAt
+  pendingBroadcastId.value = selectedId.value
 
   validateDialogVisible.value = true
   validateLoading.value = true
@@ -730,29 +723,22 @@ async function openValidateDialog() {
 
 async function onConfirmDialogSubmit() {
   confirmDialogError.value = ''
-  try {
-    if (pendingSubmitMode.value === 'schedule') {
-      await confirmSchedule()
-    }
-    else {
-      await confirmSendNow()
-    }
+  if (pendingSubmitMode.value === 'schedule') {
+    await confirmSchedule()
   }
-  catch (e: unknown) {
-    const msg = apiErrorMessage(e, '操作失敗')
-    confirmDialogError.value = msg
-    showToast(msg, 'error')
+  else {
+    await confirmSendNow()
   }
 }
 
 async function confirmSchedule() {
-  const id = pendingBroadcastId.value || selectedId.value
+  const id = pendingBroadcastId.value
+  const scheduleAtLocal = pendingScheduleAtLocal.value
+
   if (!id) {
     confirmDialogError.value = '推播 ID 遺失，請關閉視窗後重試'
     return
   }
-
-  const scheduleAtLocal = pendingScheduleAtLocal.value || String(form.value.scheduleAt || '').trim()
   if (!scheduleAtLocal) {
     confirmDialogError.value = '排程時間遺失，請關閉視窗後重新選擇排程時間'
     return
@@ -761,43 +747,28 @@ async function confirmSchedule() {
   const scheduleErr = validateFutureScheduleLocalInput(scheduleAtLocal)
   if (scheduleErr) {
     confirmDialogError.value = scheduleErr
-    showToast(scheduleErr, 'error')
     return
   }
 
   const scheduleAtIso = scheduleAtForApi(scheduleAtLocal)
   if (!scheduleAtIso) {
-    confirmDialogError.value = '排程時間格式無效'
+    confirmDialogError.value = '排程時間格式無效，請重新選擇'
     return
-  }
-
-  const scheduleBody = {
-    name: form.value.name.trim(),
-    audienceSource: buildAudienceSource(),
-    messages: buildMessages(),
-    scheduleAt: scheduleAtIso,
   }
 
   sending.value = true
   try {
-    try {
-      await apiFetch(`/api/broadcast/${id}/schedule`, {
-        method: 'POST',
-        body: scheduleBody,
-      })
-    }
-    catch (e: unknown) {
-      // 舊版後端尚未部署 /schedule 時，改走 PUT 設定排程
-      if (!isNotFoundApiError(e)) throw e
-      await apiFetch(`/api/broadcast/${id}`, {
-        method: 'PUT',
-        body: scheduleBody,
-      })
-    }
-
+    await apiFetch(`/api/broadcast/${id}/schedule`, {
+      method: 'POST',
+      body: {
+        name: form.value.name.trim(),
+        audienceSource: buildAudienceSource(),
+        messages: buildMessages(),
+        scheduleAt: scheduleAtIso,
+      },
+    })
     showToast(`已排程，將於 ${formatScheduleLabel(scheduleAtIso)} 自動發送 ✅`, 'success')
     closeValidateDialog()
-    resetPendingValidateContext()
     await loadData()
     selectedId.value = id
     const found = broadcasts.value.find((b) => b.id === id)
@@ -807,7 +778,6 @@ async function confirmSchedule() {
     const msg = apiErrorMessage(e, '排程失敗')
     confirmDialogError.value = msg
     showToast(msg, 'error')
-    throw e
   }
   finally {
     sending.value = false
@@ -825,7 +795,6 @@ async function confirmSendNow() {
     const res = await apiFetch<any>(`/api/broadcast/${id}/send`, { method: 'POST' })
     showToast(`發送完成 ✅ 成功 ${res.sentCount} / 失敗 ${res.failedCount}`, 'success')
     closeValidateDialog()
-    resetPendingValidateContext()
     await loadData()
     selectedId.value = id
     const found = broadcasts.value.find((b) => b.id === id)
@@ -835,7 +804,6 @@ async function confirmSendNow() {
     const msg = apiErrorMessage(e, '發送失敗')
     confirmDialogError.value = msg
     showToast(msg, 'error')
-    throw e
   }
   finally {
     sending.value = false
