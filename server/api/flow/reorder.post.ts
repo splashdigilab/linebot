@@ -2,7 +2,7 @@ import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const body = await readBody(event)
   const orderedIds = body?.orderedIds
 

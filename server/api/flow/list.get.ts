@@ -12,7 +12,7 @@ function stripFlowTriggers(flow: Record<string, unknown>) {
 const SYSTEM_MODULE_ORDER = ['welcome', 'live_agent'] as const
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
 
   // Auto-create system modules if missing (transparent fix for all existing workspaces)
   await seedWorkspaceSystemModules(getDb(), workspaceId)

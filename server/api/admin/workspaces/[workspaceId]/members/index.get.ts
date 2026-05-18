@@ -10,7 +10,7 @@ function normEmail(e: string | undefined | null): string {
  * 列出 workspace 成員、待加入邀請，以及（若 workspace 有綁組織）組織層級的擁有者登記與組織管理員（僅顯示、不可在此頁變更）。
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
 
   const db = getDb()
   const auth = getFirebaseAuth()

@@ -66,11 +66,23 @@ export const useWorkspace = () => {
   }
 
   // ── Role check helpers ─────────────────────────────────────────
+  // canManageSettings：成員、LINE 憑證等 workspace 設定
+  // canOperate：客服營運（對話、模組、推播等）— 不含觀察者
+  // canWrite：同 canManageSettings（保留舊名稱相容）
 
-  const canWrite = computed(() => {
+  const canManageSettings = computed(() => {
     const r = currentRole.value
     return r === 'owner' || r === 'admin'
   })
+
+  const canOperate = computed(() => {
+    const r = currentRole.value
+    return r === 'owner' || r === 'admin' || r === 'agent'
+  })
+
+  const isViewer = computed(() => currentRole.value === 'viewer')
+
+  const canWrite = canManageSettings
 
   const isOwner = computed(() => currentRole.value === 'owner')
 
@@ -80,6 +92,9 @@ export const useWorkspace = () => {
     currentWorkspaceName,
     workspaceList,
     orgAdminOf,
+    canManageSettings,
+    canOperate,
+    isViewer,
     canWrite,
     isOwner,
     getBearer,

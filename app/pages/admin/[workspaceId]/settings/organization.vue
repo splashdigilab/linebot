@@ -216,7 +216,7 @@
 <script setup lang="ts">
 import type { WorkspaceMemberRole } from '~~/shared/types/organization'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ middleware: ['auth', 'workspace-settings'], layout: 'default' })
 
 useHead({
   title: '組織與 LINE — LINE Bot 管理系統',

@@ -28,7 +28,7 @@ function validateCampaign(body: any): string | null {
 }
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const body = await readBody(event)
   const error = validateCampaign(body)
   if (error) throw createError({ statusCode: 400, statusMessage: error })

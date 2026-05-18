@@ -22,7 +22,7 @@ import { lineUserFirestoreDocId, lineUserIdFromFirestoreDocId } from '~~/shared/
  * }
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
 
   const userIdParam = getRouterParam(event, 'id')
   if (!userIdParam) throw createError({ statusCode: 400, statusMessage: 'userId is required' })

@@ -1,7 +1,7 @@
 import { validateUploadPayload } from '~~/server/utils/upload-validator'
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const body = await readBody(event)
   const { richMenuId, firestoreId, imageBase64, contentType } = body
 

@@ -9,7 +9,7 @@ import type { BroadcastDoc } from '~~/shared/types/tag-broadcast'
  * Response: Array<BroadcastDoc & { id: string }>（不含 messages、不含 audienceSnapshot.resolvedUserIds；編輯內容請 GET /api/broadcast/:id）
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
 
   const query = getQuery(event)
   const statusFilter = query.status as string | undefined

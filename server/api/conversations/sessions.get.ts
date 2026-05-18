@@ -49,7 +49,7 @@ function toMillis(raw: any): number {
 }
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
   const query = getQuery(event)
   const db = getDb()
 

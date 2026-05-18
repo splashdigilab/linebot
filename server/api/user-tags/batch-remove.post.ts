@@ -25,7 +25,7 @@ const FIRESTORE_BATCH_LIMIT = 400
  * }
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
 
   const body = await readBody(event)
   const userIds: string[] = body?.userIds ?? []

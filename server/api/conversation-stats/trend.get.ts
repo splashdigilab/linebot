@@ -19,7 +19,7 @@ function bucketKey(date: Date, granularity: TrendGranularity): string {
 }
 
 export default defineEventHandler(async (event): Promise<{ buckets: TrendBucket[] }> => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
   const query = getQuery(event)
   const granularity: TrendGranularity =
     query.granularity === 'week' || query.granularity === 'month'

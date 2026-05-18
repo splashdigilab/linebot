@@ -4,7 +4,7 @@ import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 const DISPLAY_FALLBACK = 'LINE 用戶'
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
 
   const db = getDb()
 

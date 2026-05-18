@@ -7,7 +7,7 @@
         caption="以 Email 邀請成員（無需對方已註冊 Firebase）；已註冊者會直接加入，尚未註冊者待建立帳號後首次登入即生效。若官方帳號已綁定組織，列表底部會一併列出「組織擁有者（登記）」與「組織管理員」帳號（僅供檢視；變更請由 Super Admin 組織管理處理）。"
       />
       <div class="flex gap-2 admin-header-actions">
-        <el-button v-if="canWrite" type="primary" @click="openInvite">邀請成員</el-button>
+        <el-button v-if="canManageSettings" type="primary" @click="openInvite">邀請成員</el-button>
       </div>
     </template>
 
@@ -39,7 +39,7 @@
                   <el-tag :type="roleTagType(row.role)" size="small">{{ roleLabel(row.role) }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column v-if="canWrite" label="操作" width="160" align="right">
+              <el-table-column v-if="canManageSettings" label="操作" width="160" align="right">
                 <template #default="{ row }">
                   <template v-if="!row.readOnly && row.role !== 'owner'">
                     <el-select
@@ -92,7 +92,7 @@ definePageMeta({ middleware: 'auth', layout: 'default' })
 useHead({ title: '成員管理 — LINE Bot 管理系統' })
 
 const { showToast } = useAdminToast()
-const { workspaceId, apiFetch, canWrite } = useWorkspace()
+const { workspaceId, apiFetch, canManageSettings } = useWorkspace()
 
 const loading = ref(false)
 const members = ref<any[]>([])

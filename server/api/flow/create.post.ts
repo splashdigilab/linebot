@@ -9,7 +9,7 @@ import { WORKSPACE_FLOW_MODULE_TYPES, type ModuleType } from '~~/shared/types/co
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const body = await readBody(event)
   const { name, messages, isActive, moduleType } = body
 

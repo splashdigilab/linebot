@@ -12,7 +12,7 @@ import { lineUserFirestoreDocId, lineUserIdFromFirestoreDocId } from '~~/shared/
  * Response: { success: true, userId: string, tagId: string }
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
 
   const userIdParam = getRouterParam(event, 'id')
   const tagId = getRouterParam(event, 'tagId')

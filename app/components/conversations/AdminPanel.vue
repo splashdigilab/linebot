@@ -673,6 +673,7 @@ const props = defineProps<{
 }>()
 
 const { apiFetch } = props
+const { assertCanOperate } = useAdminOperateGuard()
 
 const route = useRoute()
 const workspaceId = computed(() => String(route.params.workspaceId || ''))
@@ -1231,6 +1232,7 @@ async function loadSupportPresets() {
 }
 
 async function sendSupportPreset() {
+  if (!assertCanOperate()) return
   const presetId = pendingSupportPresetId.value
   if (!presetId || !selectedUserId.value || !selectedUser.value) return
   sending.value = true
@@ -1288,6 +1290,7 @@ async function selectUser(c: ConvItem) {
 }
 
 async function send() {
+  if (!assertCanOperate()) return
   if (!selectedUserId.value) return
   sending.value = true
   try {
@@ -1522,6 +1525,7 @@ function onQuickSendCommand(command: string | number | object) {
 }
 
 async function sendQuickMedia() {
+  if (!assertCanOperate()) return
   if (!selectedUserId.value || !canSendQuickMedia.value) return
   const body: Record<string, any> = {
     type: quickSendType.value,
@@ -1615,6 +1619,7 @@ function appendEmoji(emoji: string) {
 }
 
 async function sendSticker(packageId: string, sid: string) {
+  if (!assertCanOperate()) return
   if (!selectedUserId.value) {
     showToast('請先選擇一位使用者', 'error')
     return

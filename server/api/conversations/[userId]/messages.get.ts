@@ -18,7 +18,7 @@ function toMillis(raw: unknown): number {
 }
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
 
   const userId = getRouterParam(event, 'userId')
   if (!userId) throw createError({ statusCode: 400, statusMessage: 'userId required' })

@@ -12,7 +12,7 @@ import type { BroadcastDoc } from '~~/shared/types/tag-broadcast'
  * 預設會省略 resolvedUserIds，避免單次回應過大。
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
 
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id is required' })

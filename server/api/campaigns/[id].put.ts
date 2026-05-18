@@ -24,7 +24,7 @@ function validateCampaign(body: any): string | null {
 }
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const id = getRouterParam(event, 'id')!
   const body = await readBody(event)
   const error = validateCampaign(body)

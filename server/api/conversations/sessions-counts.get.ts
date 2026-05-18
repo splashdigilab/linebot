@@ -11,7 +11,7 @@ const STATUSES: ConversationStatus[] = [
 ]
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
   const db = getDb()
 
   const counts = {} as Record<ConversationStatus, number>

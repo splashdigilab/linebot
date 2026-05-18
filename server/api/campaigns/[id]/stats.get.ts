@@ -6,7 +6,7 @@
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
   const campaignId = getRouterParam(event, 'id')!
   const db = getDb()
 

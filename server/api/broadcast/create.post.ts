@@ -19,7 +19,7 @@ import type { BroadcastDoc, BroadcastAudienceSource } from '~~/shared/types/tag-
  * Response: BroadcastDoc & { id: string }
  */
 export default defineEventHandler(async (event) => {
-  const { uid, workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { uid, workspaceId } = await requireWorkspaceAccess(event, 'agent')
 
   const body = await readBody(event)
   const { name, audienceSource, messages, scheduleAt } = body

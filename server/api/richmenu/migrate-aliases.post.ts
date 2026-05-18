@@ -6,11 +6,11 @@ import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
  * Uses raw fetch (not SDK) to expose LINE's actual error body.
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const { channelAccessToken: token } = await getLineWorkspaceCredentials(workspaceId)
 
   const db = getDb()
-  const snap = await db.collection('richmenus').get()
+  const snap = await db.collection('richmenus').where('workspaceId', '==', workspaceId).get()
 
   const results: any[] = []
 

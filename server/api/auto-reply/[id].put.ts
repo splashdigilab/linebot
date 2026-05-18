@@ -5,7 +5,7 @@ import {
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const id = getRouterParam(event, 'id')!
   const rawBody = await readBody(event)
   const body = normalizeAutoReplyRule(rawBody)

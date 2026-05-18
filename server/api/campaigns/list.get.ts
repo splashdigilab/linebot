@@ -1,7 +1,7 @@
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
   const db = getDb()
   const snap = await db.collection('leadCampaigns')
     .where('workspaceId', '==', workspaceId)

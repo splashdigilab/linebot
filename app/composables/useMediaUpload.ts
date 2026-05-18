@@ -30,6 +30,10 @@ const MAX_BYTES_BY_KIND: Record<UploadMediaKind, number> = {
 }
 
 export function useMediaUpload() {
+  const route = useRoute()
+  const workspaceId = computed(() => route.params.workspaceId as string)
+  const { apiFetch } = useWorkspaceApiFetch(() => workspaceId.value)
+
   function validateFile(file: File, kind: UploadMediaKind): { ok: boolean, message: string } {
     const allowTypes = new Set(MIME_TYPES_BY_KIND[kind])
     if (!allowTypes.has(file.type)) {
@@ -52,7 +56,7 @@ export function useMediaUpload() {
 
   async function uploadToStorage(file: File): Promise<string> {
     const base64 = await readAsDataUrl(file)
-    const res = await $fetch<{ imageUrl: string, url?: string }>('/api/upload', {
+    const res = await apiFetch<{ imageUrl: string, url?: string }>('/api/upload', {
       method: 'POST',
       body: { fileBase64: base64, contentType: file.type },
     })

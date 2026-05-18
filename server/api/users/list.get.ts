@@ -23,7 +23,7 @@ import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
  * }
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
 
   const query = getQuery(event)
   const tagIdsParam = query.tagIds as string | undefined

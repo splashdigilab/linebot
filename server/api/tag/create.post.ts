@@ -21,7 +21,7 @@ const VALID_CATEGORIES: TagCategory[] = ['member_status', 'interest', 'behavior'
  * Response: TagDoc & { id: string }
  */
 export default defineEventHandler(async (event) => {
-  const { uid, workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { uid, workspaceId } = await requireWorkspaceAccess(event, 'agent')
 
   const body = await readBody(event)
   const { code, name, category, color = '#6B7280', description = '' } = body

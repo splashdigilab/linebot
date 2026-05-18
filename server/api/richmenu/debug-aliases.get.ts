@@ -3,7 +3,7 @@
  * Query LINE directly to see what aliases actually exist and what richMenuId they point to.
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const db = getDb()
   const snap = await db.collection('richmenus').where('workspaceId', '==', workspaceId).get()
 

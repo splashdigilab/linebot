@@ -25,6 +25,27 @@
   gap: var(--space-form-stack-gap);
 }
 
+.split-layout--readonly {
+  .split-sidebar-header .el-button,
+  .split-empty-state .el-button,
+  .admin-header-actions .el-button--primary,
+  .admin-header-actions .el-button--danger {
+    display: none !important;
+  }
+}
+
+.main-content:has(.admin-viewer-banner) {
+  .admin-header-actions .el-button--primary,
+  .users-batch-bar .el-button--primary,
+  .solo-editor-body .el-button--primary,
+  .solo-editor-body .el-button--danger,
+  .tags-page-card .el-button--primary,
+  .tags-page-card .el-button--danger,
+  .conversations-page .el-button--primary {
+    display: none !important;
+  }
+}
+
 .split-sidebar {
   width: 240px;
   flex-shrink: 0;

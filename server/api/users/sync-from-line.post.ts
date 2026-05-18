@@ -18,7 +18,7 @@ import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
  *   lineFollowerTotal, offset, processed, remaining, listTruncated, profileFailures
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
 
   try {
     const body = (await readBody(event).catch(() => ({}))) as {

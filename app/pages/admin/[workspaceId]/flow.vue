@@ -3,7 +3,9 @@
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
       <span class="split-sidebar-title">🤖 機器人模組</span>
-      <el-button type="primary" size="small" @click="openCreate">➕ 新增</el-button>
+      <AdminOperateGate>
+        <el-button type="primary" size="small" @click="openCreate">➕ 新增</el-button>
+      </AdminOperateGate>
     </template>
 
     <!-- ── Sidebar List ── -->
@@ -13,7 +15,9 @@
       </div>
       <div v-else-if="!flows.length" class="split-sidebar-empty">
         <span>尚無模組</span>
-        <el-button size="small" type="primary" plain @click="openCreate">立即建立</el-button>
+        <AdminOperateGate>
+          <el-button size="small" type="primary" plain @click="openCreate">立即建立</el-button>
+        </AdminOperateGate>
       </div>
       <div v-else class="split-list">
         <AdminSplitListItem
@@ -62,7 +66,9 @@
       <span class="empty-icon">🤖</span>
       <h3>選擇一個模組開始編輯</h3>
       <p>或點擊左側「➕ 新增」建立一個全新的回覆模組</p>
-      <el-button type="primary" @click="openCreate">建立模組</el-button>
+      <AdminOperateGate>
+        <el-button type="primary" @click="openCreate">建立模組</el-button>
+      </AdminOperateGate>
     </template>
 
     <!-- ── Editor Header ── -->
@@ -92,16 +98,18 @@
         </el-select>
       </div>
       <div class="flex gap-1 admin-header-actions">
-        <el-button v-if="!isCreating && selectedFlow && !isSystemFlow" type="danger" @click="deleteFlow">
-          🗑️ 刪除
-        </el-button>
-        <el-button v-if="!isCreating && selectedFlow" :loading="duplicating" @click="duplicateFlow">
-          📋 複製
-        </el-button>
+        <AdminOperateGate>
+          <el-button v-if="!isCreating && selectedFlow && !isSystemFlow" type="danger" @click="deleteFlow">
+            🗑️ 刪除
+          </el-button>
+          <el-button v-if="!isCreating && selectedFlow" :loading="duplicating" @click="duplicateFlow">
+            📋 複製
+          </el-button>
+          <el-button type="primary" :loading="saving" @click="submitForm">
+            {{ isCreating ? '建立模組' : '儲存變更' }}
+          </el-button>
+        </AdminOperateGate>
         <el-button @click="cancelEdit">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitForm">
-          {{ isCreating ? '建立模組' : '儲存變更' }}
-        </el-button>
       </div>
     </template>
 
@@ -782,6 +790,7 @@ import {
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 const { apiFetch } = useWorkspace()
+const { canOperate, guardOperate } = useAdminOperateGuard()
 
 // ── State ─────────────────────────────────────────────
 const flows = ref<any[]>([])
@@ -997,6 +1006,7 @@ function onFlowListDragLeave() {
 
 async function onFlowListDrop(e: DragEvent, dropIndex: number) {
   e.preventDefault()
+  if (!canOperate.value) return
   if (flowListDragIndex.value === null) return
 
   const fromIndex = resolveDraggedIndex(e, flowListDragIndex.value)
@@ -1074,11 +1084,13 @@ async function seedSystemModules() {
 }
 
 function openCreate() {
-  if (!confirmLeaveIfDirty()) return
-  isCreating.value = true
-  selectedId.value = null
-  form.value = defaultForm()
-  markClean()
+  guardOperate(() => {
+    if (!confirmLeaveIfDirty()) return
+    isCreating.value = true
+    selectedId.value = null
+    form.value = defaultForm()
+    markClean()
+  })
 }
 
 function cancelEdit() {
@@ -1530,6 +1542,10 @@ function onQrDrop(e: DragEvent, msgIndex: number, dropIndex: number) {
 
 // ── Save / Delete ─────────────────────────────────────
 async function submitForm() {
+  if (!canOperate.value) {
+    showToast('觀察者無法執行此操作', 'warning')
+    return
+  }
   if (!form.value.name) return showToast('請輸入模組名稱', 'error')
   if (!form.value.messages.length) return showToast('請至少新增一則回覆訊息', 'error')
   if (form.value.messages.length > FLOW_MESSAGE_LIMIT) {
@@ -1580,6 +1596,7 @@ async function submitForm() {
 }
 
 async function deleteFlow() {
+  if (!canOperate.value) return showToast('觀察者無法執行此操作', 'warning')
   if (!selectedId.value || !confirm(`確定刪除「${form.value.name}」？`)) return
   try {
     await apiFetch(`/api/flow/${selectedId.value}`, { method: 'DELETE' })
@@ -1594,6 +1611,7 @@ async function deleteFlow() {
 }
 
 async function duplicateFlow() {
+  if (!canOperate.value) return showToast('觀察者無法執行此操作', 'warning')
   const sourceName = form.value.name.trim()
   if (!sourceName) return showToast('請輸入模組名稱', 'error')
 

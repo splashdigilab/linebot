@@ -5,6 +5,16 @@
   overflow: hidden;
 }
 
+.admin-viewer-banner {
+  margin-bottom: 0.75rem;
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-md, 8px);
+  background: var(--el-color-info-light-9, #f4f4f5);
+  color: var(--el-text-color-regular);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
 .main-content {
   flex: 1;
   min-height: 0;         /* allow flex child to shrink below content size */

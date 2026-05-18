@@ -30,7 +30,7 @@ function firestoreTimeToDate(v: unknown): Date | null {
  * - lineUniqueClick：LINE 聚合「訊息內網址點擊」人數（與自架追蹤不同）
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
 
   const id = getRouterParam(event, 'id')
   if (!id) throw createError({ statusCode: 400, statusMessage: 'id is required' })

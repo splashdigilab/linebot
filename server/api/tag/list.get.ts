@@ -10,7 +10,7 @@ import type { TagDoc } from '~~/shared/types/tag-broadcast'
  * Response: TagDoc & { id: string }[]
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
 
   const query = getQuery(event)
   const statusFilter = query.status as string | undefined

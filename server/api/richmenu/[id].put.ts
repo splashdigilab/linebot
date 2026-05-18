@@ -3,7 +3,7 @@ import { validateUploadPayload } from '~~/server/utils/upload-validator'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const firestoreId = getRouterParam(event, 'id')
   if (!firestoreId) throw createError({ statusCode: 400, statusMessage: 'id is required' })
 

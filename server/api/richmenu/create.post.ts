@@ -4,7 +4,7 @@ import type { messagingApi } from '@line/bot-sdk'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const body = await readBody(event)
   const { name, size, areas, chatBarText, selected, setAsDefault } = body
 

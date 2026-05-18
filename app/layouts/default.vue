@@ -40,7 +40,7 @@
           </NuxtLink>
 
           <!-- Settings section (owner/admin only) -->
-          <template v-if="canWrite">
+          <template v-if="canManageSettings">
             <div class="nav-section-label">設定</div>
             <NuxtLink :to="`/admin/${workspaceId}/settings/members`" class="nav-item" :class="{ active: route.path.includes('/settings/members') }">
               <span class="nav-icon">👥</span>
@@ -80,6 +80,9 @@
 
     <!-- Page Content -->
     <main class="main-content">
+      <div v-if="isViewer" class="admin-viewer-banner" role="status">
+        觀察者模式：僅能檢視資料，無法新增、儲存或發送。
+      </div>
       <slot />
     </main>
   </div>
@@ -88,7 +91,7 @@
 <script setup lang="ts">
 const route = useRoute()
 const { user, logout } = useAuth()
-const { workspaceId, currentRole, currentWorkspaceName, canWrite, workspaceList, loadWorkspaceList } = useWorkspace()
+const { workspaceId, currentRole, currentWorkspaceName, canManageSettings, isViewer, workspaceList, loadWorkspaceList } = useWorkspace()
 const { checkIsSuperAdmin, isSuperAdmin } = useSuperAdmin()
 
 const canSwitchWorkspace = computed(() => workspaceList.value.length > 1)

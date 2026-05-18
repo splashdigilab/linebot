@@ -1,5 +1,5 @@
 <template>
-  <div class="split-layout" :class="{ 'split-layout--solo': solo }">
+  <div class="split-layout" :class="{ 'split-layout--solo': solo, 'split-layout--readonly': !canOperate }">
     <!-- ── Left Sidebar ─────────────────────────────── -->
     <aside v-if="!solo" class="split-sidebar">
       <div class="split-sidebar-header">
@@ -33,7 +33,9 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
+const { canOperate } = useWorkspace()
+
 defineProps({
   /** 隱藏左側欄，右側編輯區全寬（標籤／會員等列表頁與 split-editor 視覺一致） */
   solo: {
