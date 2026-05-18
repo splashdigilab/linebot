@@ -8,6 +8,7 @@ import { broadcastAggregationUnit } from '~~/shared/broadcast-insight'
 import { parseTriggerModuleData } from '~~/shared/action-schema'
 import { lineUserIdFromFirestoreDocId } from '~~/shared/line-workspace'
 import { resolveAudienceUserIds } from './audience'
+import { claimBroadcastForSend, type BroadcastSendSource } from './broadcast-claim'
 import type { BroadcastDoc, BroadcastDeliveryDoc, AudienceFilter } from '~~/shared/types/tag-broadcast'
 
 function extractTriggerModuleId(messages: any[]): string {
@@ -23,31 +24,32 @@ function extractTriggerModuleId(messages: any[]): string {
   return parseTriggerModuleData(action.data).moduleId
 }
 
+export type ExecuteBroadcastSendOptions = {
+  /** manual：後台立即發送（僅 draft）；scheduler：Cron 到期排程 */
+  source?: BroadcastSendSource
+}
+
 /**
  * 核心推播發送邏輯（共用於 /api/broadcast/:id/send 及排程觸發）
  */
-export async function executeBroadcastSend(id: string): Promise<{
+export async function executeBroadcastSend(
+  id: string,
+  options: ExecuteBroadcastSendOptions = {},
+): Promise<{
   success: boolean
   campaignId: string
   totalCount: number
   sentCount: number
   failedCount: number
 }> {
+  const source = options.source ?? 'manual'
   const runtimeConfig = useRuntimeConfig()
   const db = getDb()
   const ref = db.collection('broadcasts').doc(id)
-  const snap = await ref.get()
 
-  if (!snap.exists) throw new Error(`Broadcast not found: ${id}`)
-
-  const data = snap.data() as BroadcastDoc
+  const data = await claimBroadcastForSend(id, source)
   const workspaceId = String(data.workspaceId || '').trim()
   if (!workspaceId) throw new Error('Broadcast missing workspaceId')
-
-  const blockStatuses = ['processing', 'completed', 'failed']
-  if (blockStatuses.includes(data.status)) {
-    throw new Error(`Cannot send broadcast with status: ${data.status}`)
-  }
 
   if (!data.messages?.length) {
     throw new Error('No messages to send')
@@ -84,15 +86,13 @@ export async function executeBroadcastSend(id: string): Promise<{
     throw new Error('Resolved audience is empty')
   }
 
-  // ── 標記為 processing，寫入快照 ───────────────────────────────────
-  const startedAt = FieldValue.serverTimestamp()
+  // ── 寫入受眾快照（status 已在 claim 時改為 processing）────────────
+  const snapshotAt = FieldValue.serverTimestamp()
   await ref.update({
-    status: 'processing',
-    startedAt,
     totalCount: resolvedUserIds.length,
     'audienceSnapshot.resolvedUserIds': resolvedUserIds,
     'audienceSnapshot.estimatedCount': resolvedUserIds.length,
-    updatedAt: startedAt,
+    updatedAt: snapshotAt,
   })
 
   // ── 呼叫 LINE multicast API ──────────────────────────────────────

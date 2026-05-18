@@ -68,12 +68,14 @@
             plain
             @click="cancelBroadcast"
           >
-            取消推播
+            {{ selectedItem.status === 'scheduled' ? '取消排程' : '取消推播' }}
           </el-button>
           <el-button @click="cancelEdit">取消</el-button>
-          <el-button :loading="saving" @click="saveDraft">儲存草稿</el-button>
+          <el-button :loading="saving" @click="saveDraft">
+            {{ selectedItem?.status === 'scheduled' ? '儲存變更' : '儲存草稿' }}
+          </el-button>
           <el-button type="primary" :loading="validating" @click="openValidateDialog">
-            驗證並發送
+            {{ headerSubmitLabel }}
           </el-button>
         </template>
       </div>
@@ -193,6 +195,12 @@
                 value-format="YYYY-MM-DDTHH:mm:ss"
                 :disabled-date="disabledPastDate"
               />
+              <p v-if="selectedItem?.status === 'scheduled'" class="tags-hint">
+                已排程，到期後由系統自動發送。可修改內容與時間後按「儲存變更」，或按「取消排程」。
+              </p>
+              <p v-else class="tags-hint">
+                確認排程後不會立即發送；受眾名單於排程時間到時計算。
+              </p>
             </div>
           </div>
         </div>
@@ -263,7 +271,7 @@
   </AdminSplitLayout>
 
   <!-- 驗證 / 發送確認 Dialog -->
-  <el-dialog v-model="validateDialogVisible" class="bc-dialog-validate" title="發送前確認" width="440px">
+  <el-dialog v-model="validateDialogVisible" class="bc-dialog-validate" :title="validateDialogTitle" width="440px">
     <div v-if="validateLoading" class="bc-validate-loading">
       <div class="spinner" />
       <span>分析受眾中…</span>
@@ -275,6 +283,9 @@
         </ul>
       </div>
       <div v-else class="bc-validate-ok">
+        <p v-if="isScheduleSubmit && form.scheduleAt" class="tags-hint">
+          將排程於 {{ formatScheduleLabel(form.scheduleAt) }} 自動發送（不會立即送出）。
+        </p>
         <div class="bc-stats-row">
           <div class="bc-stat-box">
             <div class="bc-stat-label">預估發送人數</div>
@@ -297,7 +308,7 @@
         :loading="sending"
         @click="confirmSend"
       >
-        確認發送
+        {{ confirmSubmitLabel }}
       </el-button>
     </template>
   </el-dialog>
@@ -313,11 +324,24 @@ import { parseFirestoreDate } from '~~/shared/firestore-date'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
+const BROADCAST_SCHEDULE_MIN_LEAD_MS = 60_000
+
 /** 排程：不可選今天以前的日期 */
 function disabledPastDate(d: Date) {
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   return d < today
+}
+
+function formatDateForPicker(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
+function formatScheduleLabel(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString('zh-TW')
 }
 
 const { workspaceId, apiFetch } = useWorkspace()
@@ -379,6 +403,11 @@ const importUserIds = computed(() =>
   form.value.importText.split('\n').map((l) => l.trim()).filter(Boolean),
 )
 
+const isScheduleSubmit = computed(() => form.value.scheduleMode === 'schedule')
+const validateDialogTitle = computed(() => (isScheduleSubmit.value ? '排程前確認' : '發送前確認'))
+const confirmSubmitLabel = computed(() => (isScheduleSubmit.value ? '確認排程' : '確認發送'))
+const headerSubmitLabel = computed(() => (isScheduleSubmit.value ? '驗證並排程' : '驗證並發送'))
+
 // ── 工具函式 ─────────────────────────────────────────────────────────
 function statusLabel(s: string) {
   const map: Record<string, string> = {
@@ -430,8 +459,10 @@ function loadFormFromItem(item: any) {
     tagIds: src.tagIds ?? [],
     importText: (src.importedUserIds ?? []).join('\n'),
     contentAction: parseLineMessagesToUnifiedAction(item.messages ?? []) as UnifiedAction,
-    scheduleMode: item.scheduleAt ? 'schedule' : 'now',
-    scheduleAt: item.scheduleAt ? (parseFirestoreDate(item.scheduleAt)?.toISOString() ?? '') : '',
+    scheduleMode: item.status === 'scheduled' || item.scheduleAt ? 'schedule' : 'now',
+    scheduleAt: item.scheduleAt
+      ? formatDateForPicker(parseFirestoreDate(item.scheduleAt) ?? new Date())
+      : '',
   }
 }
 
@@ -461,8 +492,34 @@ function validateForm(): string | null {
   if (actionErr) return actionErr
   const msgs = buildMessages()
   if (!msgs.length) return '請設定訊息內容'
-  if (form.value.scheduleMode === 'schedule' && !form.value.scheduleAt) return '請選擇排程時間'
+  if (form.value.scheduleMode === 'schedule') {
+    if (!form.value.scheduleAt) return '請選擇排程時間'
+    const t = new Date(form.value.scheduleAt)
+    if (Number.isNaN(t.getTime())) return '排程時間格式不正確'
+    if (t.getTime() <= Date.now() + BROADCAST_SCHEDULE_MIN_LEAD_MS) return '排程時間須至少一分鐘後'
+  }
   return null
+}
+
+function buildSaveBody(): Record<string, unknown> {
+  const body: Record<string, unknown> = {
+    name: form.value.name.trim(),
+    audienceSource: buildAudienceSource(),
+    messages: buildMessages(),
+  }
+  const keepScheduled =
+    !isCreating.value
+    && selectedItem.value?.status === 'scheduled'
+    && form.value.scheduleMode === 'schedule'
+    && form.value.scheduleAt
+
+  if (keepScheduled) {
+    body.scheduleAt = form.value.scheduleAt
+  }
+  else if (!isCreating.value) {
+    body.scheduleAt = null
+  }
+  return body
 }
 
 // ── API 操作 ─────────────────────────────────────────────────────────
@@ -534,12 +591,7 @@ async function saveDraft() {
   if (err) return showToast(err, 'error')
   saving.value = true
   try {
-    const body = {
-      name: form.value.name.trim(),
-      audienceSource: buildAudienceSource(),
-      messages: buildMessages(),
-      scheduleAt: form.value.scheduleMode === 'schedule' ? form.value.scheduleAt : undefined,
-    }
+    const body = buildSaveBody()
     if (isCreating.value) {
       const created = await apiFetch<any>('/api/broadcast/create', { method: 'POST', body })
       showToast('草稿已建立 ✅', 'success')
@@ -550,7 +602,8 @@ async function saveDraft() {
     }
     else {
       await apiFetch(`/api/broadcast/${selectedId.value}`, { method: 'PUT', body })
-      showToast('草稿已儲存 ✅', 'success')
+      const savedScheduled = selectedItem.value?.status === 'scheduled' && body.scheduleAt
+      showToast(savedScheduled ? '排程已更新 ✅' : '草稿已儲存 ✅', 'success')
       await loadData()
       if (selectedId.value && !(await loadFormFromId(selectedId.value))) {
         showToast('已儲存但載入內容失敗，請重新點選該推播', 'error')
@@ -590,6 +643,41 @@ async function openValidateDialog() {
 
 async function confirmSend() {
   if (!selectedId.value) return
+  if (form.value.scheduleMode === 'schedule') {
+    await confirmSchedule()
+  }
+  else {
+    await confirmSendNow()
+  }
+}
+
+async function confirmSchedule() {
+  if (!selectedId.value || !form.value.scheduleAt) return
+  sending.value = true
+  try {
+    await apiFetch(`/api/broadcast/${selectedId.value}`, {
+      method: 'PUT',
+      body: {
+        ...buildSaveBody(),
+        scheduleAt: form.value.scheduleAt,
+      },
+    })
+    showToast(`已排程，將於 ${formatScheduleLabel(form.value.scheduleAt)} 自動發送 ✅`, 'success')
+    validateDialogVisible.value = false
+    await loadData()
+    const found = broadcasts.value.find((b) => b.id === selectedId.value)
+    if (found) await selectItem(found, { skipDiscardConfirm: true })
+  }
+  catch (e: any) {
+    showToast(e?.data?.statusMessage || '排程失敗', 'error')
+  }
+  finally {
+    sending.value = false
+  }
+}
+
+async function confirmSendNow() {
+  if (!selectedId.value) return
   sending.value = true
   try {
     const res = await apiFetch<any>(`/api/broadcast/${selectedId.value}/send`, { method: 'POST' })
@@ -608,10 +696,12 @@ async function confirmSend() {
 }
 
 async function cancelBroadcast() {
-  if (!selectedId.value || !confirm('確定要取消這則推播？')) return
+  const isScheduled = selectedItem.value?.status === 'scheduled'
+  const msg = isScheduled ? '確定要取消這則排程？' : '確定要取消這則推播？'
+  if (!selectedId.value || !confirm(msg)) return
   try {
     await apiFetch(`/api/broadcast/${selectedId.value}/cancel`, { method: 'POST' })
-    showToast('已取消推播', 'success')
+    showToast(isScheduled ? '已取消排程' : '已取消推播', 'success')
     await loadData()
     if (selectedId.value) await loadFormFromId(selectedId.value)
   }

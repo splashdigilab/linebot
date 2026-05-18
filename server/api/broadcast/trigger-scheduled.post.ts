@@ -65,7 +65,7 @@ export default defineEventHandler(async (event) => {
   for (const doc of snap.docs) {
     const id = doc.id
     try {
-      const result = await executeBroadcastSend(id)
+      const result = await executeBroadcastSend(id, { source: 'scheduler' })
       results.push({ id, success: result.success })
       console.log(`[trigger-scheduled] ✓ ${id} sentCount=${result.sentCount}`)
     }

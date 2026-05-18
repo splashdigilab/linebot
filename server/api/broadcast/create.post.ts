@@ -13,7 +13,7 @@ import type { BroadcastDoc, BroadcastAudienceSource } from '~~/shared/types/tag-
  *   name: string
  *   audienceSource: BroadcastAudienceSource
  *   messages: any[]           // LINE messagingApi.Message[]
- *   scheduleAt?: string       // ISO 8601，省略則為草稿等待手動發送
+ *   scheduleAt 請勿於建立時帶入；排程請在建立後以 PUT 設定
  * }
  *
  * Response: BroadcastDoc & { id: string }
@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
   const { uid, workspaceId } = await requireWorkspaceAccess(event, 'agent')
 
   const body = await readBody(event)
-  const { name, audienceSource, messages, scheduleAt } = body
+  const { name, audienceSource, messages } = body
 
   if (!name || !audienceSource || !messages?.length) {
     throw createError({ statusCode: 400, statusMessage: 'name, audienceSource, messages are required' })
@@ -39,7 +39,7 @@ export default defineEventHandler(async (event) => {
   const doc: BroadcastDoc = {
     workspaceId,
     name,
-    status: scheduleAt ? 'scheduled' : 'draft',
+    status: 'draft',
     channel: 'line',
     audienceSource,
     audienceSnapshot: {
@@ -48,7 +48,7 @@ export default defineEventHandler(async (event) => {
       estimatedCount: 0,
     },
     messages,
-    scheduleAt: scheduleAt ? (new Date(scheduleAt) as any) : null,
+    scheduleAt: null,
     startedAt: null,
     completedAt: null,
     totalCount: 0,

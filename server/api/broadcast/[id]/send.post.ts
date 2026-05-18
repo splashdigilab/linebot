@@ -19,11 +19,14 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    return await executeBroadcastSend(id)
+    return await executeBroadcastSend(id, { source: 'manual' })
   }
   catch (e: any) {
     const msg = String(e?.message ?? e)
     if (msg.includes('not found')) throw createError({ statusCode: 404, statusMessage: msg })
+    if (msg.includes('已排程')) {
+      throw createError({ statusCode: 409, statusMessage: msg })
+    }
     if (msg.includes('Cannot send') || msg.includes('No messages') || msg.includes('audience')) {
       throw createError({ statusCode: 400, statusMessage: msg })
     }

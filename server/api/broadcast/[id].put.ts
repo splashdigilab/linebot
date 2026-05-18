@@ -1,4 +1,5 @@
 import { FieldValue } from 'firebase-admin/firestore'
+import { assertFutureBroadcastScheduleAt } from '~~/server/utils/broadcast-schedule'
 import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
@@ -34,7 +35,7 @@ export default defineEventHandler(async (event) => {
   if (current.workspaceId !== workspaceId) {
     throw createError({ statusCode: 404, statusMessage: 'Broadcast not found' })
   }
-  const lockedStatuses = ['processing', 'completed', 'failed']
+  const lockedStatuses = ['processing', 'completed', 'failed', 'cancelled']
   if (lockedStatuses.includes(current.status)) {
     throw createError({ statusCode: 409, statusMessage: `Cannot edit a broadcast with status: ${current.status}` })
   }
@@ -52,7 +53,7 @@ export default defineEventHandler(async (event) => {
       updates.status = 'draft'
     }
     else {
-      updates.scheduleAt = new Date(body.scheduleAt)
+      updates.scheduleAt = assertFutureBroadcastScheduleAt(body.scheduleAt)
       updates.status = 'scheduled'
     }
   }
