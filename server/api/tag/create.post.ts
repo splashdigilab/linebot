@@ -2,7 +2,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
-import type { TagDoc, TagCategory } from '~~/shared/types/tag-broadcast'
+import type { TagDoc, TagCategory, TagStatus } from '~~/shared/types/tag-broadcast'
 
 const VALID_CATEGORIES: TagCategory[] = ['member_status', 'interest', 'behavior', 'activity', 'custom']
 
@@ -24,7 +24,8 @@ export default defineEventHandler(async (event) => {
   const { uid, workspaceId } = await requireWorkspaceAccess(event, 'agent')
 
   const body = await readBody(event)
-  const { code, name, category, color = '#6B7280', description = '' } = body
+  const { code, name, category, color = '#6B7280', description = '', status: statusInput } = body
+  const status: TagStatus = statusInput === 'inactive' ? 'inactive' : 'active'
 
   if (!code || !name || !category) {
     throw createError({ statusCode: 400, statusMessage: 'code, name, category are required' })
@@ -55,7 +56,7 @@ export default defineEventHandler(async (event) => {
     category,
     color,
     description,
-    status: 'active',
+    status,
     createdBy: uid,
     createdAt: now,
     updatedAt: now,

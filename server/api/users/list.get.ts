@@ -1,43 +1,51 @@
 import { getDb } from '~~/server/utils/firebase'
+import { parseAdminListPagination } from '~~/server/utils/admin-pagination'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+
+const CHUNK = 30
+const FETCH_BATCH = 120
+const MAX_SEARCH_SCAN = 5000
+
+type UserBase = {
+  id: string
+  displayName: string
+  pictureUrl: string
+  createdAt: unknown
+  isBlocked: boolean
+}
+
+function matchesSearch(user: UserBase, searchRaw: string): boolean {
+  if (!searchRaw) return true
+  const name = (user.displayName ?? '').toLowerCase()
+  return name.includes(searchRaw) || user.id.toLowerCase().includes(searchRaw)
+}
 
 /**
  * GET /api/users/list
  * 取得會員列表，含每位用戶的標籤資訊
  *
  * Query:
- *   tagIds  - 以逗號分隔的 tagId，只回傳擁有其中任一標籤的用戶
- *   limit   - 最多幾筆（預設 200）
+ *   tagIds   - 以逗號分隔的 tagId，只回傳擁有其中任一標籤的用戶
+ *   search   - 顯示名稱或 userId 關鍵字（不分大小寫）
+ *   page     - 頁碼（預設 1）
+ *   limit    - 每頁筆數（預設 50，上限 100）
  *
- * Response:
- * {
- *   users: Array<{
- *     id: string        // LINE userId
- *     displayName: string
- *     pictureUrl: string
- *     createdAt: Timestamp
- *     tagIds: string[]
- *     tags: Array<{ id, code, name, category, color }>
- *   }>
- *   total: number
- * }
+ * Response: { users, total, page, limit }
  */
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
 
   const query = getQuery(event)
   const tagIdsParam = query.tagIds as string | undefined
-  const limitParam = Math.min(parseInt((query.limit as string) || '500'), 800)
+  const searchRaw = String(query.search || '').trim().toLowerCase()
+  const { page, limit, offset } = parseAdminListPagination(query)
 
   const db = getDb()
 
-  // ── Step 1: 若有 tagIds filter，先取出符合的 userId 集合 ──────────
   let filterUserIds: Set<string> | null = null
-
   if (tagIdsParam) {
     const tagIds = tagIdsParam.split(',').filter(Boolean)
     if (tagIds.length > 0) {
-      // Firestore `in` 最多 30 個值，先取前 30
       const snap = await db.collection('userTags')
         .where('workspaceId', '==', workspaceId)
         .where('tagId', 'in', tagIds.slice(0, 30))
@@ -46,34 +54,26 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // ── Step 2: 取用戶列表 ───────────────────────────────────────────
-  const usersSnap = await db.collection('users')
-    .where('workspaceId', '==', workspaceId)
-    .orderBy('createdAt', 'desc')
-    .limit(Math.min(limitParam * 3, 1500))
-    .get()
+  const users = await fetchUserPage({
+    db,
+    workspaceId,
+    offset,
+    limit,
+    filterUserIds,
+    searchRaw,
+  })
 
-  let users = usersSnap.docs
-    .filter((d) => d.data().isBlocked !== true)
-    .slice(0, limitParam)
-    .map((d) => ({
-      id: d.id,
-      displayName: d.data().displayName ?? d.id,
-      pictureUrl: d.data().pictureUrl ?? '',
-      createdAt: d.data().createdAt ?? null,
-      isBlocked: false,
-    }))
+  const total = await countMatchingUsers({
+    db,
+    workspaceId,
+    filterUserIds,
+    searchRaw,
+  })
 
-  if (filterUserIds !== null) {
-    users = users.filter((u) => filterUserIds!.has(u.id))
-  }
+  if (!users.length) return { users: [], total, page, limit }
 
-  if (!users.length) return { users: [], total: 0 }
-
-  // ── Step 3: 批次取得 userTags ────────────────────────────────────
   const userIds = users.map((u) => u.id)
   const allUserTags: Array<{ userId: string; tagId: string }> = []
-  const CHUNK = 30
 
   for (let i = 0; i < userIds.length; i += CHUNK) {
     const chunk = userIds.slice(i, i + CHUNK)
@@ -83,14 +83,12 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // userId -> tagIds[]
   const userTagMap: Record<string, string[]> = {}
   for (const ut of allUserTags) {
     if (!userTagMap[ut.userId]) userTagMap[ut.userId] = []
     userTagMap[ut.userId].push(ut.tagId)
   }
 
-  // ── Step 4: 批次取得標籤詳情 ─────────────────────────────────────
   const allTagIds = [...new Set(allUserTags.map((ut) => ut.tagId))]
   const tagMap: Record<string, any> = {}
 
@@ -104,7 +102,6 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // ── Step 5: 組合結果 ──────────────────────────────────────────────
   const enriched = users.map((user) => {
     const tagIds = userTagMap[user.id] ?? []
     return {
@@ -120,5 +117,108 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  return { users: enriched, total: enriched.length }
+  return { users: enriched, total, page, limit }
 })
+
+async function fetchUserPage(opts: {
+  db: FirebaseFirestore.Firestore
+  workspaceId: string
+  offset: number
+  limit: number
+  filterUserIds: Set<string> | null
+  searchRaw: string
+}): Promise<UserBase[]> {
+  const { db, workspaceId, offset, limit, filterUserIds, searchRaw } = opts
+  const collected: UserBase[] = []
+  let skipped = 0
+  let firestoreOffset = 0
+  let scanned = 0
+
+  while (collected.length < limit && scanned < MAX_SEARCH_SCAN) {
+    const snap = await db.collection('users')
+      .where('workspaceId', '==', workspaceId)
+      .orderBy('createdAt', 'desc')
+      .offset(firestoreOffset)
+      .limit(FETCH_BATCH)
+      .get()
+
+    if (snap.empty) break
+    scanned += snap.size
+    firestoreOffset += snap.size
+
+    for (const d of snap.docs) {
+      if (d.data().isBlocked === true) continue
+      const user: UserBase = {
+        id: d.id,
+        displayName: d.data().displayName ?? d.id,
+        pictureUrl: d.data().pictureUrl ?? '',
+        createdAt: d.data().createdAt ?? null,
+        isBlocked: false,
+      }
+      if (filterUserIds && !filterUserIds.has(user.id)) continue
+      if (!matchesSearch(user, searchRaw)) continue
+      if (skipped < offset) {
+        skipped++
+        continue
+      }
+      collected.push(user)
+      if (collected.length >= limit) break
+    }
+
+    if (snap.size < FETCH_BATCH) break
+  }
+
+  return collected
+}
+
+async function countMatchingUsers(opts: {
+  db: FirebaseFirestore.Firestore
+  workspaceId: string
+  filterUserIds: Set<string> | null
+  searchRaw: string
+}): Promise<number> {
+  const { db, workspaceId, filterUserIds, searchRaw } = opts
+
+  if (!searchRaw && !filterUserIds) {
+    const snap = await db.collection('users')
+      .where('workspaceId', '==', workspaceId)
+      .count()
+      .get()
+    return snap.data().count
+  }
+
+  let count = 0
+  let firestoreOffset = 0
+  let scanned = 0
+
+  while (scanned < MAX_SEARCH_SCAN) {
+    const snap = await db.collection('users')
+      .where('workspaceId', '==', workspaceId)
+      .orderBy('createdAt', 'desc')
+      .offset(firestoreOffset)
+      .limit(FETCH_BATCH)
+      .get()
+
+    if (snap.empty) break
+    scanned += snap.size
+    firestoreOffset += snap.size
+
+    for (const d of snap.docs) {
+      if (d.data().isBlocked === true) continue
+      const user: UserBase = {
+        id: d.id,
+        displayName: d.data().displayName ?? d.id,
+        pictureUrl: d.data().pictureUrl ?? '',
+        createdAt: d.data().createdAt ?? null,
+        isBlocked: false,
+      }
+      if (filterUserIds && !filterUserIds.has(user.id)) continue
+      if (!matchesSearch(user, searchRaw)) continue
+      count++
+    }
+
+    if (snap.size < FETCH_BATCH) break
+  }
+
+  return count
+}

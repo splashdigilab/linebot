@@ -1,13 +1,42 @@
-import { listDocs } from '~~/server/utils/firebase'
+import { getDb, listDocs } from '~~/server/utils/firebase'
+import { parseAdminListPagination, paginateArray } from '~~/server/utils/admin-pagination'
+import { memberCountsForTagIds } from '~~/server/utils/tag-member-count'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import type { TagDoc } from '~~/shared/types/tag-broadcast'
+
+type TagRow = TagDoc & { id: string; memberCount?: number }
+
+function filterTags(
+  tags: TagRow[],
+  opts: {
+    statusFilter?: string
+    categoryFilter?: string
+    searchRaw?: string
+  },
+): TagRow[] {
+  let result = tags
+  if (opts.statusFilter) result = result.filter((t) => t.status === opts.statusFilter)
+  if (opts.categoryFilter) result = result.filter((t) => t.category === opts.categoryFilter)
+  if (opts.searchRaw) {
+    result = result.filter(
+      (t) =>
+        t.name?.toLowerCase().includes(opts.searchRaw!)
+        || t.code?.toLowerCase().includes(opts.searchRaw!),
+    )
+  }
+  return result
+}
 
 /**
  * GET /api/tag/list
  * Query: ?status=active|inactive  (省略則回傳全部)
  * Query: ?category=interest|behavior|...
+ * Query: ?search=關鍵字（名稱或 code，不分大小寫）
+ * Query: ?includeMemberCount=1  (附加 memberCount；分頁時僅計算該頁標籤)
+ * Query: ?page=1&limit=50  (分頁模式，回傳 { items, total, page, limit })
  *
- * Response: TagDoc & { id: string }[]
+ * 無 page/limit：Response: TagRow[]
+ * 有 page/limit：Response: { items: TagRow[], total, page, limit }
  */
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
@@ -15,16 +44,33 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const statusFilter = query.status as string | undefined
   const categoryFilter = query.category as string | undefined
+  const searchRaw = String(query.search || '').trim().toLowerCase()
+  const includeMemberCount = query.includeMemberCount === '1' || query.includeMemberCount === 'true'
+  const { page, limit, offset, paginate } = parseAdminListPagination(query)
 
-  // 只用 orderBy('createdAt')，避免與 where 組合而需要 Firestore 複合索引；
-  // 標籤數量通常不大，status / category 在記憶體篩選即可。
   const tags = await listDocs<TagDoc>('tags', (ref) =>
     ref.where('workspaceId', '==', workspaceId).orderBy('createdAt', 'desc'),
   )
 
-  let result = tags
-  if (statusFilter) result = result.filter((t) => t.status === statusFilter)
-  if (categoryFilter) result = result.filter((t) => t.category === categoryFilter)
+  const filtered = filterTags(tags, { statusFilter, categoryFilter, searchRaw })
 
-  return result
+  const attachMemberCounts = async (rows: TagRow[]) => {
+    if (!includeMemberCount || !rows.length) return rows
+    const db = getDb()
+    const counts = await memberCountsForTagIds(db, workspaceId, rows.map((t) => t.id))
+    return rows.map((tag) => ({
+      ...tag,
+      memberCount: counts[tag.id] ?? 0,
+    }))
+  }
+
+  if (!paginate) {
+    return attachMemberCounts(filtered)
+  }
+
+  const total = filtered.length
+  const pageItems = paginateArray(filtered, offset, limit)
+  const items = await attachMemberCounts(pageItems)
+
+  return { items, total, page, limit }
 })

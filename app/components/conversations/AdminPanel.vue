@@ -3,7 +3,7 @@
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
       <span class="split-sidebar-title conv-sidebar-title-row">💬 對話</span>
-      <el-button size="small" :loading="listLoading" @click="loadList">重整</el-button>
+      <el-button size="small" :loading="listLoading" @click="loadList(true)">重整</el-button>
     </template>
 
     <!-- ── Sidebar List ── -->
@@ -30,13 +30,18 @@
       <div class="conv-search-bar">
         <el-input v-model="searchText" placeholder="搜尋名稱…" clearable size="small" />
       </div>
-      <div v-if="listLoading" class="split-sidebar-loading">
+      <div v-if="listLoading && !sidebarItems.length" class="split-sidebar-loading">
         <div class="spinner" />
       </div>
       <div v-else-if="!sidebarItems.length" class="split-sidebar-empty">
         <span>{{ searchText ? '無符合結果' : '尚無對話紀錄' }}</span>
       </div>
-      <div v-else class="split-list">
+      <div
+        v-else
+        ref="sidebarListEl"
+        class="split-list"
+        @scroll.passive="onSidebarListScroll"
+      >
         <!-- Session-based view (status tabs) -->
         <template v-if="activeTab !== 'all'">
           <AdminSplitListItem
@@ -72,6 +77,10 @@
             @select="selectUser(c)"
           />
         </template>
+        <div v-if="listLoadingMore" class="conv-list-load-more">
+          <div class="spinner" />
+          <span>載入更多…</span>
+        </div>
       </div>
     </template>
 
@@ -902,7 +911,13 @@ type StructuredMessagePreview = {
 const { toasts, showToast } = useAdminToast()
 const { uploadToStorage, validateFile } = useMediaUpload()
 
+const CONV_LIST_PAGE_SIZE = 30
+
 const listLoading = ref(false)
+const listLoadingMore = ref(false)
+const listHasMore = ref(false)
+const listPage = ref(1)
+const sidebarListEl = ref<HTMLElement | null>(null)
 const msgLoading = ref(false)
 const sending = ref(false)
 const conversations = ref<ConvItem[]>([])
@@ -1059,19 +1074,13 @@ const pickerModes: Array<{
   },
 ]
 
-const filteredConversations = computed(() => {
-  if (!searchText.value.trim()) return conversations.value
-  const kw = searchText.value.toLowerCase()
-  return conversations.value.filter(c => c.displayName.toLowerCase().includes(kw))
-})
-
 const sessionSidebarItems = computed<SessionItem[]>(() => {
   const kw = searchText.value.toLowerCase().trim()
-  if (!kw) return sessions.value
+  if (!kw || activeTab.value === 'all') return sessions.value
   return sessions.value.filter(s => s.displayName.toLowerCase().includes(kw))
 })
 
-const convSidebarItems = computed<ConvItem[]>(() => filteredConversations.value)
+const convSidebarItems = computed<ConvItem[]>(() => conversations.value)
 
 const unreadConvCount = computed(() =>
   conversations.value.filter(c => isConvItemUnread(c)).length,
@@ -1137,7 +1146,7 @@ async function switchTab(tab: TabValue) {
   allTabActiveSession.value = null
   sessionTimelineItems.value = []
   sessionMeta.value = null
-  await loadList()
+  await loadList(true)
   if (tab === 'all' && selectedUserId.value && selectedUser.value) {
     await selectUser(selectedUser.value)
   }
@@ -1191,27 +1200,96 @@ async function selectSession(s: SessionItem) {
 
 const canSend = computed(() => !!inputText.value.trim())
 
-async function loadList() {
-  listLoading.value = true
+async function loadList(reset = true) {
+  if (reset) {
+    if (listLoading.value) return
+    listLoading.value = true
+    listPage.value = 1
+    listHasMore.value = false
+    conversations.value = []
+    sessions.value = []
+  }
+  else {
+    if (listLoadingMore.value || listLoading.value || !listHasMore.value) return
+    listLoadingMore.value = true
+  }
+
+  const page = listPage.value
+
   try {
     if (activeTab.value === 'all') {
-      const res = await apiFetch<{ conversations: ConvItem[] }>('/api/conversations/list')
-      conversations.value = res.conversations
-    } else {
-      const res = await apiFetch<{ sessions: SessionItem[] }>('/api/conversations/sessions', {
-        params: { status: activeTab.value, limit: 100 },
+      const res = await apiFetch<{
+        conversations: ConvItem[]
+        total: number
+        hasMore: boolean
+      }>('/api/conversations/list', {
+        params: {
+          page,
+          limit: CONV_LIST_PAGE_SIZE,
+          search: searchText.value.trim() || undefined,
+        },
       })
-      sessions.value = res.sessions
+      const chunk = res.conversations ?? []
+      conversations.value = reset ? chunk : [...conversations.value, ...chunk]
+      listHasMore.value = Boolean(res.hasMore)
+    }
+    else {
+      const res = await apiFetch<{
+        sessions: SessionItem[]
+        total: number
+        hasMore: boolean
+      }>('/api/conversations/sessions', {
+        params: {
+          status: activeTab.value,
+          page,
+          limit: CONV_LIST_PAGE_SIZE,
+        },
+      })
+      const chunk = res.sessions ?? []
+      sessions.value = reset ? chunk : [...sessions.value, ...chunk]
+      listHasMore.value = Boolean(res.hasMore)
     }
   }
   catch {
+    if (reset) {
+      conversations.value = []
+      sessions.value = []
+    }
     showToast('載入對話列表失敗', 'error')
   }
   finally {
     listLoading.value = false
+    listLoadingMore.value = false
   }
   await loadSessionCounts()
 }
+
+async function loadMoreList() {
+  if (!listHasMore.value || listLoading.value || listLoadingMore.value) return
+  listPage.value += 1
+  await loadList(false)
+}
+
+function onSidebarListScroll() {
+  const el = sidebarListEl.value
+  if (!el) return
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 80)
+    void loadMoreList()
+}
+
+async function refreshListQuiet() {
+  if (sidebarListEl.value && sidebarListEl.value.scrollTop > 80) {
+    await loadSessionCounts()
+    return
+  }
+  await loadList(true)
+}
+
+let searchListTimer: ReturnType<typeof setTimeout> | null = null
+watch(searchText, () => {
+  if (searchListTimer) clearTimeout(searchListTimer)
+  searchListTimer = setTimeout(() => void loadList(true), 300)
+})
 
 async function loadSessionCounts() {
   try {
@@ -1343,7 +1421,7 @@ async function reloadSessionTimeline() {
 async function reloadAfterOutgoing() {
   if (selectedSessionId.value) {
     await reloadSessionTimeline()
-    await loadList()
+    await refreshListQuiet()
   }
   else if (selectedUser.value) {
     await selectUser(selectedUser.value)
@@ -1366,7 +1444,7 @@ async function closeSelectedSession() {
       await reloadSessionTimeline()
     else if (selectedUser.value)
       await selectUser(selectedUser.value)
-    await loadList()
+    await refreshListQuiet()
   }
   catch (e: any) {
     showToast(e?.data?.statusMessage || '結束會話失敗', 'error')
@@ -2058,11 +2136,11 @@ onMounted(() => {
   if (typeof document !== 'undefined')
     savedDocumentTitle.value = document.title
   hydrateConvLastRead()
-  loadList()
+  loadList(true)
   loadSupportPresets()
   listPollTimer = setInterval(() => {
-    if (!listLoading.value)
-      void loadList()
+    if (!listLoading.value && !listLoadingMore.value)
+      void refreshListQuiet()
   }, 30_000)
   if (typeof window !== 'undefined') {
     window.addEventListener('focus', onWindowFocus)

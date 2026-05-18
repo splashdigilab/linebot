@@ -1,6 +1,11 @@
-import { getDb } from '~~/server/utils/firebase'
+import { getDb, listDocs } from '~~/server/utils/firebase'
 import { sortRegularFlows } from '~~/server/utils/flow-sort'
 import { seedWorkspaceSystemModules } from '~~/server/utils/workspace-system-modules'
+import {
+  buildPaginatedListResult,
+  isPaginatedListQuery,
+} from '~~/server/utils/paginated-collection-list'
+import { parseAdminListPagination } from '~~/server/utils/admin-pagination'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
 function stripFlowTriggers(flow: Record<string, unknown>) {
@@ -8,30 +13,48 @@ function stripFlowTriggers(flow: Record<string, unknown>) {
   return rest
 }
 
-// 系統模組顯示順序（避免依賴 createdAt 的微小時差）
 const SYSTEM_MODULE_ORDER = ['welcome', 'live_agent'] as const
 
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
+  const query = getQuery(event)
 
-  // Auto-create system modules if missing (transparent fix for all existing workspaces)
   await seedWorkspaceSystemModules(getDb(), workspaceId)
 
-  // 使用 DESC 以對齊 firestore.indexes.json 中既有的 (workspaceId ASC + createdAt DESC) 複合索引
-  const allFlows = await listDocs<Record<string, unknown>>('flows', (ref) =>
+  const allFlows = await listDocs<Record<string, unknown>>('flows', ref =>
     ref.where('workspaceId', '==', workspaceId).orderBy('createdAt', 'desc'),
   )
 
-  // 系統模組依固定順序排序；一般流程已是新→舊
   const systemFlows = allFlows
-    .filter((f) => f.isSystem)
+    .filter(f => f.isSystem)
     .sort((a, b) => {
       const ai = SYSTEM_MODULE_ORDER.indexOf(a.moduleType as typeof SYSTEM_MODULE_ORDER[number])
       const bi = SYSTEM_MODULE_ORDER.indexOf(b.moduleType as typeof SYSTEM_MODULE_ORDER[number])
       return (ai === -1 ? Number.MAX_SAFE_INTEGER : ai)
         - (bi === -1 ? Number.MAX_SAFE_INTEGER : bi)
     })
-  const regularFlows = sortRegularFlows(allFlows.filter((f) => !f.isSystem))
+    .map(stripFlowTriggers)
 
-  return [...systemFlows, ...regularFlows].map(stripFlowTriggers)
+  const regularFlows = sortRegularFlows(allFlows.filter(f => !f.isSystem)).map(stripFlowTriggers)
+
+  if (!isPaginatedListQuery(query)) {
+    return [...systemFlows, ...regularFlows]
+  }
+
+  const { page, limit, offset } = parseAdminListPagination(query)
+  const total = systemFlows.length + regularFlows.length
+  const systemCount = systemFlows.length
+
+  let items: Record<string, unknown>[]
+  if (page === 1) {
+    const regularLimit = Math.max(0, limit - systemCount)
+    items = [...systemFlows, ...regularFlows.slice(0, regularLimit)]
+  }
+  else {
+    const regularOffset = offset - systemCount
+    items = regularFlows.slice(regularOffset, regularOffset + limit)
+  }
+
+  const result = buildPaginatedListResult(items, page, limit, total)
+  return { ...result, items }
 })

@@ -6,7 +6,7 @@
     </template>
 
     <template #sidebar-list>
-      <div v-if="loading" class="split-sidebar-loading">
+      <div v-if="loading && !presets.length" class="split-sidebar-loading">
         <div class="spinner" />
       </div>
       <div v-else-if="!presets.length" class="split-sidebar-empty">
@@ -14,7 +14,7 @@
         <p class="text-xs text-muted">新增常用回覆或模組捷徑，於「對話」中一選即送</p>
         <el-button size="small" type="primary" plain @click="openCreate">立即新增</el-button>
       </div>
-      <div v-else class="split-list">
+      <div v-else ref="listEl" class="split-list" @scroll.passive="onSidebarListScroll">
         <AdminSplitListItem
           v-for="preset in presets"
           :key="preset.id"
@@ -28,6 +28,10 @@
           :meta-truncate="true"
           @select="selectPreset(preset)"
         />
+        <div v-if="loadingMore" class="admin-sidebar-load-more">
+          <div class="spinner" />
+          <span>載入更多…</span>
+        </div>
       </div>
     </template>
 
@@ -169,9 +173,15 @@ definePageMeta({ middleware: 'auth', layout: 'default' })
 
 const { workspaceId, apiFetch } = useWorkspace()
 
-const presets = ref<any[]>([])
 const modules = ref<any[]>([])
-const loading = ref(true)
+const {
+  items: presets,
+  loading,
+  loadingMore,
+  listEl,
+  load: loadPresets,
+  onScroll: onSidebarListScroll,
+} = useWorkspaceSidebarList<any>('/api/support-preset/list')
 const modulesLoading = ref(true)
 const saving = ref(false)
 const selectedId = ref<string | null>(null)
@@ -198,12 +208,6 @@ const presetActionTypeOptions = [
 
 const selectedPreset = computed(() => presets.value.find(p => p.id === selectedId.value) ?? null)
 
-async function loadPresets() {
-  loading.value = true
-  presets.value = await apiFetch<any[]>('/api/support-preset/list').catch(() => [])
-  loading.value = false
-}
-
 async function loadModules() {
   modulesLoading.value = true
   modules.value = await apiFetch<any[]>('/api/flow/list').catch(() => [])
@@ -211,7 +215,7 @@ async function loadModules() {
 }
 
 onMounted(() => {
-  loadPresets()
+  loadPresets(true)
   loadModules()
   loadTags({ status: 'active' })
 })
@@ -270,7 +274,7 @@ async function submitForm() {
         body: payload,
       })
       showToast('預存已建立 ✅', 'success')
-      await loadPresets()
+      await loadPresets(true)
       const created = presets.value.find(p => p.id === res.id) ?? presets.value[0]
       if (created) selectPreset(created, { skipDiscardConfirm: true })
       isCreating.value = false
@@ -280,7 +284,7 @@ async function submitForm() {
         body: payload,
       })
       showToast('預存已更新 ✅', 'success')
-      await loadPresets()
+      await loadPresets(true)
       markClean()
     }
   } catch {
@@ -299,7 +303,7 @@ async function deletePreset() {
     isCreating.value = false
     form.value = defaultForm()
     markClean()
-    await loadPresets()
+    await loadPresets(true)
   } catch {
     showToast('刪除失敗', 'error')
   }

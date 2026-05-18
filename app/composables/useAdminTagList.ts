@@ -5,16 +5,36 @@
  *   ✓ loadTags({ status: 'active' })
  *   ✗ loadTags(workspaceId.value, { status: 'active' })  // 第一個參數會被吃掉導致 status filter 失效
  */
+export const ADMIN_TAG_PAGE_SIZE = 50
+
+export type AdminTagListQuery = {
+  status?: string
+  category?: string
+  search?: string
+  includeMemberCount?: boolean
+  page?: number
+  limit?: number
+}
+
 export function useAdminTagList() {
   const tags = ref<any[]>([])
   const loading = ref(false)
+  const total = ref(0)
+  const page = ref(1)
+  const pageSize = ref(ADMIN_TAG_PAGE_SIZE)
   const { apiFetch } = useWorkspace()
 
-  // in-flight dedup：相同 query 並行呼叫只發 1 次
   let inFlight: { key: string; promise: Promise<boolean> } | null = null
 
-  async function loadTags(query?: { status?: string }): Promise<boolean> {
-    const key = query?.status ?? ''
+  async function loadTags(query?: AdminTagListQuery): Promise<boolean> {
+    const key = JSON.stringify({
+      status: query?.status ?? '',
+      category: query?.category ?? '',
+      search: query?.search ?? '',
+      includeMemberCount: query?.includeMemberCount ? '1' : '0',
+      page: query?.page ?? '',
+      limit: query?.limit ?? '',
+    })
     if (inFlight && inFlight.key === key) return inFlight.promise
 
     const task = (async () => {
@@ -22,12 +42,32 @@ export function useAdminTagList() {
       try {
         const search = new URLSearchParams()
         if (query?.status) search.set('status', query.status)
+        if (query?.category) search.set('category', query.category)
+        if (query?.search?.trim()) search.set('search', query.search.trim())
+        if (query?.includeMemberCount) search.set('includeMemberCount', '1')
+        if (query?.page) {
+          search.set('page', String(query.page))
+          search.set('limit', String(query.limit ?? pageSize.value))
+        }
+
         const qs = search.toString() ? `?${search.toString()}` : ''
-        tags.value = await apiFetch<any[]>(`/api/tag/list${qs}`)
+        const res = await apiFetch<any>(`/api/tag/list${qs}`)
+
+        if (query?.page) {
+          tags.value = res.items ?? []
+          total.value = res.total ?? 0
+          page.value = res.page ?? query.page
+          pageSize.value = res.limit ?? query.limit ?? ADMIN_TAG_PAGE_SIZE
+        }
+        else {
+          tags.value = Array.isArray(res) ? res : (res.items ?? [])
+          total.value = tags.value.length
+        }
         return true
       }
       catch {
         tags.value = []
+        total.value = 0
         return false
       }
       finally {
@@ -39,5 +79,5 @@ export function useAdminTagList() {
     return task
   }
 
-  return { tags, loading, loadTags }
+  return { tags, loading, total, page, pageSize, loadTags }
 }

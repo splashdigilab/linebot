@@ -8,7 +8,7 @@
 
     <!-- ── Sidebar List ── -->
     <template #sidebar-list>
-      <div v-if="loading" class="split-sidebar-loading">
+      <div v-if="loading && !rules.length" class="split-sidebar-loading">
         <div class="spinner" />
       </div>
       <div v-else-if="!rules.length" class="split-sidebar-empty">
@@ -16,7 +16,7 @@
         <p class="text-xs text-muted">新增一條關鍵字規則來開始</p>
         <el-button size="small" type="primary" plain @click="openCreate">立即新增</el-button>
       </div>
-      <div v-else class="split-list">
+      <div v-else ref="listEl" class="split-list" @scroll.passive="onSidebarListScroll">
         <AdminSplitListItem
           v-for="rule in rules"
           :key="rule.id"
@@ -30,6 +30,11 @@
           :meta-truncate="true"
           @select="selectRule(rule)"
         />
+
+        <div v-if="loadingMore" class="admin-sidebar-load-more">
+          <div class="spinner" />
+          <span>載入更多…</span>
+        </div>
       </div>
     </template>
 
@@ -213,9 +218,15 @@ definePageMeta({ middleware: 'auth', layout: 'default' })
 const { workspaceId, apiFetch } = useWorkspace()
 
 // ── State ────────────────────────────────────────────────
-const rules = ref<any[]>([])
 const modules = ref<any[]>([])
-const loading = ref(true)
+const {
+  items: rules,
+  loading,
+  loadingMore,
+  listEl,
+  load: loadRules,
+  onScroll: onSidebarListScroll,
+} = useWorkspaceSidebarList<any>('/api/auto-reply/list')
 const modulesLoading = ref(true)
 const saving = ref(false)
 const selectedId = ref<string | null>(null)
@@ -257,12 +268,6 @@ const keywordPlaceholder = computed(() => {
 })
 
 // ── Load ─────────────────────────────────────────────────
-async function loadRules() {
-  loading.value = true
-  rules.value = await apiFetch<any[]>('/api/auto-reply/list').catch(() => [])
-  loading.value = false
-}
-
 async function loadModules() {
   modulesLoading.value = true
   modules.value = await apiFetch<any[]>('/api/flow/list').catch(() => [])
@@ -270,7 +275,7 @@ async function loadModules() {
 }
 
 onMounted(() => {
-  loadRules()
+  loadRules(true)
   loadModules()
   loadTags({ status: 'active' })
 })
@@ -333,7 +338,7 @@ async function submitForm() {
         body: payload,
       })
       showToast('規則已建立 ✅', 'success')
-      await loadRules()
+      await loadRules(true)
       const newRule = rules.value.find(r => r.id === res.id) ?? rules.value[0]
       if (newRule) selectRule(newRule, { skipDiscardConfirm: true })
       isCreating.value = false
@@ -343,7 +348,7 @@ async function submitForm() {
         body: payload,
       })
       showToast('規則已更新 ✅', 'success')
-      await loadRules()
+      await loadRules(true)
       markClean()
     }
   } catch {
@@ -363,7 +368,7 @@ async function deleteRule() {
     isCreating.value = false
     form.value = defaultForm()
     markClean()
-    await loadRules()
+    await loadRules(true)
   } catch {
     showToast('刪除失敗', 'error')
   }

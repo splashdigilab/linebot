@@ -63,14 +63,33 @@
 
 .tags-table {
   width: 100%;
+
+  thead th,
+  tbody td {
+    text-align: left;
+    vertical-align: middle;
+  }
 }
 
 .tags-table__th--swatch {
   width: 36px;
 }
 
-.tags-table__th--actions {
-  width: 120px;
+.tags-table__th--count {
+  width: 80px;
+}
+
+.tags-table__row--clickable {
+  cursor: pointer;
+}
+
+.tags-status-switch {
+  --el-switch-on-color: var(--color-success);
+}
+
+.td-count {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
 }
 
 .td-name {
@@ -87,12 +106,6 @@
 .td-time {
   font-size: 0.82rem;
   color: var(--text-muted);
-}
-
-.td-actions {
-  display: flex;
-  gap: 0.4rem;
-  flex-wrap: wrap;
 }
 
 /* 動態色：僅設定 CSS 變數，視覺在 SCSS */
@@ -180,6 +193,13 @@
 
 .tags-dialog-select {
   width: 100%;
+}
+
+.admin-table-pager {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
 .tags-option-row {

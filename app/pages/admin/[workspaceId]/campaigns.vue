@@ -8,7 +8,7 @@
 
     <!-- ── Sidebar List ── -->
     <template #sidebar-list>
-      <div v-if="loading" class="split-sidebar-loading">
+      <div v-if="loading && !campaigns.length" class="split-sidebar-loading">
         <div class="spinner" />
       </div>
       <div v-else-if="!campaigns.length" class="split-sidebar-empty">
@@ -16,7 +16,7 @@
         <p class="text-xs text-muted">建立問券活動，讓加好友即自動貼標</p>
         <el-button size="small" type="primary" plain @click="openCreate">立即新增</el-button>
       </div>
-      <div v-else class="split-list">
+      <div v-else ref="listEl" class="split-list" @scroll.passive="onSidebarListScroll">
         <AdminSplitListItem
           v-for="c in campaigns"
           :key="c.id"
@@ -28,6 +28,11 @@
           :chip-tone="c.isActive ? 'success' : 'neutral'"
           @select="selectCampaign(c)"
         />
+
+        <div v-if="loadingMore" class="admin-sidebar-load-more">
+          <div class="spinner" />
+          <span>載入更多…</span>
+        </div>
       </div>
     </template>
 
@@ -265,9 +270,15 @@ const { workspaceId, apiFetch, getBearer } = useWorkspace()
 const { tags: allTags, loading: tagsLoading, loadTags } = useAdminTagList()
 const { toasts, showToast } = useAdminToast()
 
-const campaigns = ref<any[]>([])
 const modules = ref<any[]>([])
-const loading = ref(true)
+const {
+  items: campaigns,
+  loading,
+  loadingMore,
+  listEl,
+  load: loadCampaigns,
+  onScroll: onSidebarListScroll,
+} = useWorkspaceSidebarList<any>('/api/campaigns/list')
 const modulesLoading = ref(true)
 const saving = ref(false)
 const selectedId = ref<string | null>(null)
@@ -326,12 +337,6 @@ const campaignActionTypeOptions = [
 const selectedCampaign = computed(() => campaigns.value.find(c => c.id === selectedId.value) ?? null)
 
 // ── Load ─────────────────────────────────────────────────
-async function loadCampaigns() {
-  loading.value = true
-  campaigns.value = await apiFetch<any[]>('/api/campaigns/list').catch(() => [])
-  loading.value = false
-}
-
 async function loadModules() {
   modulesLoading.value = true
   modules.value = await apiFetch<any[]>('/api/flow/list').catch(() => [])
@@ -353,7 +358,7 @@ async function loadWorkspaceEffectiveLiff() {
 }
 
 onMounted(() => {
-  loadCampaigns()
+  loadCampaigns(true)
   loadModules()
   loadTags({ status: 'active' })
   loadWorkspaceEffectiveLiff()
@@ -454,7 +459,7 @@ async function submitForm() {
     if (isCreating.value) {
       const res = await apiFetch<any>('/api/campaigns/create', { method: 'POST', body: payload })
       showToast('活動已建立', 'success')
-      await loadCampaigns()
+      await loadCampaigns(true)
       const created = campaigns.value.find(c => c.id === res.id) ?? campaigns.value[0]
       if (created) selectCampaign(created, { skipDiscardConfirm: true })
       isCreating.value = false
@@ -462,7 +467,7 @@ async function submitForm() {
     else {
       await apiFetch(`/api/campaigns/${selectedId.value}`, { method: 'PUT', body: payload })
       showToast('活動已更新', 'success')
-      await loadCampaigns()
+      await loadCampaigns(true)
       const updated = campaigns.value.find(c => c.id === selectedId.value)
       if (updated) selectCampaign(updated, { skipDiscardConfirm: true })
       else await loadStats()
@@ -485,7 +490,7 @@ async function deleteCampaign() {
     isCreating.value = false
     form.value = defaultForm()
     markClean()
-    await loadCampaigns()
+    await loadCampaigns(true)
   }
   catch {
     showToast('刪除失敗', 'error')

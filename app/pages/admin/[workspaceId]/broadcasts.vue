@@ -8,14 +8,14 @@
 
     <!-- ── Sidebar List ── -->
     <template #sidebar-list>
-      <div v-if="loading" class="split-sidebar-loading">
+      <div v-if="loading && !broadcasts.length" class="split-sidebar-loading">
         <div class="spinner" />
       </div>
       <div v-else-if="!broadcasts.length" class="split-sidebar-empty">
         <span>尚無推播</span>
         <el-button size="small" type="primary" plain @click="openCreate">立即建立</el-button>
       </div>
-      <div v-else class="split-list">
+      <div v-else ref="listEl" class="split-list" @scroll.passive="onSidebarListScroll">
         <AdminSplitListItem
           v-for="bc in broadcasts"
           :key="bc.id"
@@ -29,6 +29,11 @@
           meta-truncate
           @select="selectItem(bc)"
         />
+
+        <div v-if="loadingMore" class="admin-sidebar-load-more">
+          <div class="spinner" />
+          <span>載入更多…</span>
+        </div>
       </div>
     </template>
 
@@ -318,10 +323,16 @@ function disabledPastDate(d: Date) {
 const { workspaceId, apiFetch } = useWorkspace()
 
 // ── 狀態 ────────────────────────────────────────────────────────────
-const broadcasts = ref<any[]>([])
 const flows = ref<{ id: string; name: string }[]>([])
 const { tags: allTags, loadTags: loadTagOptions } = useAdminTagList()
-const loading = ref(true)
+const {
+  items: broadcasts,
+  loading,
+  loadingMore,
+  listEl,
+  load: loadBroadcasts,
+  onScroll: onSidebarListScroll,
+} = useWorkspaceSidebarList<any>('/api/broadcast/list')
 const saving = ref(false)
 const validating = ref(false)
 const sending = ref(false)
@@ -456,22 +467,17 @@ function validateForm(): string | null {
 
 // ── API 操作 ─────────────────────────────────────────────────────────
 async function loadData() {
-  loading.value = true
   try {
-    const [bcs, tagOk, flowList] = await Promise.all([
-      apiFetch<any[]>('/api/broadcast/list'),
+    const [_, tagOk, flowList] = await Promise.all([
+      loadBroadcasts(true),
       loadTagOptions({ status: 'active' }),
       apiFetch<any[]>('/api/flow/list').catch(() => []),
     ])
-    broadcasts.value = bcs ?? []
     flows.value = (flowList ?? []).map((f: any) => ({ id: f.id, name: f.name || f.id }))
     if (!tagOk) showToast('載入標籤失敗', 'error')
   }
   catch {
     showToast('載入推播失敗', 'error')
-  }
-  finally {
-    loading.value = false
   }
 }
 

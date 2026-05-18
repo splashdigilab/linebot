@@ -6,14 +6,14 @@
     </template>
 
     <template #sidebar-list>
-      <div v-if="loading" class="split-sidebar-loading">
+      <div v-if="loading && !menus.length" class="split-sidebar-loading">
         <div class="spinner" />
       </div>
       <div v-else-if="!menus.length" class="split-sidebar-empty">
         <span>尚無圖文選單</span>
         <el-button size="small" type="primary" plain @click="openCreate">立即建立</el-button>
       </div>
-      <div v-else class="split-list">
+      <div v-else ref="listEl" class="split-list" @scroll.passive="onSidebarListScroll">
         <AdminSplitListItem
           v-for="menu in sortedMenus"
           :key="menu.id"
@@ -26,6 +26,11 @@
           :meta-text="`${menu.areas?.length ?? 0} 個區塊`"
           @select="selectMenu(menu)"
         />
+
+        <div v-if="loadingMore" class="admin-sidebar-load-more">
+          <div class="spinner" />
+          <span>載入更多…</span>
+        </div>
       </div>
     </template>
 
@@ -226,8 +231,14 @@ type LocalSelectedFile = {
 }
 
 // ── Data ──────────────────────────────────────────────────────
-const menus = ref<any[]>([])
-const loading = ref(true)
+const {
+  items: menus,
+  loading,
+  loadingMore,
+  listEl,
+  load: loadMenusList,
+  onScroll: onSidebarListScroll,
+} = useWorkspaceSidebarList<any>('/api/richmenu/list')
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
 const creating = ref(false)
@@ -376,21 +387,19 @@ function normalizeRichMenuImageContentType(mime: string): string {
 
 // ── Fetch ─────────────────────────────────────────────────────
 async function loadMenus() {
-  loading.value = true
   try {
-    const [menusData, modulesData, tagOk] = await Promise.all([
-      apiFetch<any[]>('/api/richmenu/list'),
+    const [_, modulesData, tagOk] = await Promise.all([
+      loadMenusList(true),
       apiFetch<any[]>('/api/flow/list'),
       loadTags({ status: 'active' }),
     ])
-    menus.value = menusData
-    modules.value = modulesData
+    modules.value = modulesData ?? []
     if (!tagOk) showToast('載入標籤失敗', 'error')
-  } catch (err) {
-    menus.value = []
-    modules.value = []
   }
-  loading.value = false
+  catch {
+    modules.value = []
+    showToast('載入圖文選單失敗', 'error')
+  }
 }
 onMounted(() => {
   loadMenus()
@@ -727,7 +736,7 @@ async function submitForm() {
       showToast('圖文選單已成功建立與部署 ✅', 'success')
     }
 
-    await loadMenus()
+    await loadMenusList(true)
     if (isCreating.value) {
       isCreating.value = false
       const latest = menus.value.find((menu) => menu.id === createdFirestoreId) ?? menus.value[0]
@@ -752,7 +761,7 @@ async function setAsDefault(menu: any) {
       body: { richMenuId: menu.richMenuId, firestoreId: menu.id },
     })
     showToast('已設為預設選單', 'success')
-    await loadMenus()
+    await loadMenusList(true)
   }
   catch {
     showToast('設定失敗', 'error')
@@ -770,7 +779,7 @@ async function deleteMenu() {
     isCreating.value = false
     form.value = defaultForm()
     markClean()
-    await loadMenus()
+    await loadMenusList(true)
   }
   catch {
     showToast('刪除失敗', 'error')

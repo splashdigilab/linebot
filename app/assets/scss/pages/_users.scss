@@ -135,3 +135,10 @@
 .users-table {
   width: 100%;
 }
+
+.admin-table-pager {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}

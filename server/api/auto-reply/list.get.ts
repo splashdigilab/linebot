@@ -1,11 +1,23 @@
+import { getDb } from '~~/server/utils/firebase'
+import { queryCollectionPage } from '~~/server/utils/paginated-collection-list'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 
+/**
+ * GET /api/auto-reply/list
+ * Query: page, limit（有帶則回傳 { items, total, page, limit, hasMore }）
+ */
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
+  const query = getQuery(event)
   const db = getDb()
-  const snap = await db.collection('autoReplies')
-    .where('workspaceId', '==', workspaceId)
-    .orderBy('createdAt', 'desc')
-    .get()
-  return snap.docs.map(doc => ({ id: doc.id, ...doc.data() }))
+
+  return queryCollectionPage(
+    db,
+    ref => ref
+      .where('workspaceId', '==', workspaceId)
+      .orderBy('createdAt', 'desc'),
+    'autoReplies',
+    query,
+    (id, data) => ({ id, ...data }),
+  )
 })

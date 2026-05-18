@@ -1,12 +1,12 @@
 import { listDocs } from '~~/server/utils/firebase'
+import { paginateInMemoryList } from '~~/server/utils/paginated-collection-list'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import type { BroadcastDoc } from '~~/shared/types/tag-broadcast'
 
 /**
  * GET /api/broadcast/list
  * Query: ?status=draft|scheduled|completed|...
- *
- * Response: Array<BroadcastDoc & { id: string }>（不含 messages、不含 audienceSnapshot.resolvedUserIds；編輯內容請 GET /api/broadcast/:id）
+ * Query: page, limit（有帶則回傳 { items, total, page, limit, hasMore }）
  */
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
@@ -14,16 +14,15 @@ export default defineEventHandler(async (event) => {
   const query = getQuery(event)
   const statusFilter = query.status as string | undefined
 
-  const broadcasts = await listDocs<BroadcastDoc>('broadcasts', (ref) =>
+  const broadcasts = await listDocs<BroadcastDoc>('broadcasts', ref =>
     ref.where('workspaceId', '==', workspaceId).orderBy('createdAt', 'desc'),
   )
 
   const filtered = statusFilter
-    ? broadcasts.filter((b) => b.status === statusFilter)
+    ? broadcasts.filter(b => b.status === statusFilter)
     : broadcasts
 
-  // 移除大型快照欄位，前端列表不需要
-  return filtered.map(({ audienceSnapshot, messages, ...rest }) => ({
+  const rows = filtered.map(({ audienceSnapshot, messages, ...rest }) => ({
     ...rest,
     audienceSnapshot: {
       estimatedCount: audienceSnapshot?.estimatedCount ?? 0,
@@ -31,4 +30,6 @@ export default defineEventHandler(async (event) => {
     },
     messageCount: Array.isArray(messages) ? messages.length : 0,
   }))
+
+  return paginateInMemoryList(rows, query)
 })

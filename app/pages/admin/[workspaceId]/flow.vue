@@ -10,7 +10,7 @@
 
     <!-- ── Sidebar List ── -->
     <template #sidebar-list>
-      <div v-if="loading" class="split-sidebar-loading">
+      <div v-if="loading && !flows.length" class="split-sidebar-loading">
         <div class="spinner" />
       </div>
       <div v-else-if="!flows.length" class="split-sidebar-empty">
@@ -19,7 +19,7 @@
           <el-button size="small" type="primary" plain @click="openCreate">立即建立</el-button>
         </AdminOperateGate>
       </div>
-      <div v-else class="split-list">
+      <div v-else ref="listEl" class="split-list" @scroll.passive="onSidebarListScroll">
         <AdminSplitListItem
           v-for="flow in systemFlows"
           :key="flow.id"
@@ -43,6 +43,7 @@
           @drop="onFlowListDrop($event, flowIndex)"
         >
           <span
+            v-if="!hasMore"
             class="drag-handle flow-sidebar-drag-handle"
             draggable="true"
             aria-label="拖曳調整順序"
@@ -57,6 +58,11 @@
             chip-tone="neutral"
             @select="selectFlow(flow)"
           />
+        </div>
+
+        <div v-if="loadingMore" class="admin-sidebar-load-more">
+          <div class="spinner" />
+          <span>載入更多…</span>
         </div>
       </div>
     </template>
@@ -793,9 +799,16 @@ const { apiFetch } = useWorkspace()
 const { canOperate, guardOperate } = useAdminOperateGuard()
 
 // ── State ─────────────────────────────────────────────
-const flows = ref<any[]>([])
 const richMessages = ref<any[]>([])
-const loading = ref(true)
+const {
+  items: flows,
+  loading,
+  loadingMore,
+  hasMore,
+  listEl,
+  load: loadFlows,
+  onScroll: onSidebarListScroll,
+} = useWorkspaceSidebarList<any>('/api/flow/list')
 const saving = ref(false)
 const duplicating = ref(false)
 const seeding = ref(false)
@@ -958,11 +971,6 @@ function isCarouselType(type: string) {
 }
 
 // ── Load ──────────────────────────────────────────────
-async function loadFlows() {
-  loading.value = true
-  flows.value = await apiFetch<any[]>('/api/flow/list').catch(() => [])
-  loading.value = false
-}
 async function loadRichMessages() {
   const list = await apiFetch<any[]>('/api/rich-message/list').catch(() => [])
   richMessages.value = (list ?? []).map((item) => normalizeRichMessageItem(item))
@@ -970,7 +978,7 @@ async function loadRichMessages() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadFlows(), loadRichMessages(), loadTags({ status: 'active' })])
+  await Promise.all([loadFlows(true), loadRichMessages(), loadTags({ status: 'active' })])
 })
 
 function setRegularFlowsOrder(nextRegular: any[]) {
@@ -1075,7 +1083,7 @@ async function seedSystemModules() {
     } else {
       showToast('系統模組已存在，無需重建', 'success')
     }
-    await loadFlows()
+    await loadFlows(true)
   } catch {
     showToast('初始化失敗', 'error')
   } finally {
@@ -1569,7 +1577,7 @@ async function submitForm() {
         },
       })
       showToast('模組已建立 ✅', 'success')
-      await loadFlows()
+      await loadFlows(true)
       const newFlow = flows.value.find(f => f.id === res.id) ?? flows.value[0]
       if (newFlow) selectFlow(newFlow, { skipDiscardConfirm: true })
       isCreating.value = false
@@ -1585,7 +1593,7 @@ async function submitForm() {
         },
       })
       showToast('模組已更新 ✅', 'success')
-      await loadFlows()
+      await loadFlows(true)
       markClean()
     }
   } catch (error: any) {
@@ -1604,7 +1612,7 @@ async function deleteFlow() {
     selectedId.value = null
     form.value = defaultForm()
     markClean()
-    await loadFlows()
+    await loadFlows(true)
   } catch {
     showToast('刪除失敗', 'error')
   }
@@ -1640,7 +1648,7 @@ async function duplicateFlow() {
       },
     })
     showToast('模組已複製 ✅', 'success')
-    await loadFlows()
+    await loadFlows(true)
     const newFlow = flows.value.find(f => f.id === res.id) ?? flows.value[0]
     if (newFlow) selectFlow(newFlow, { skipDiscardConfirm: true })
   } catch (error: any) {

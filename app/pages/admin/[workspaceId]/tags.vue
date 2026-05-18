@@ -43,15 +43,15 @@
                   <el-option label="停用" value="inactive" />
                 </el-select>
               </div>
-              <span class="tags-count text-muted">共 {{ filteredTags.length }} 筆</span>
+              <span class="tags-count text-muted">共 {{ total.toLocaleString('zh-TW') }} 筆</span>
             </div>
 
             <div v-if="loading" class="tags-loading">
               <div class="spinner" />
               <span>載入中…</span>
             </div>
-            <div v-else-if="!filteredTags.length" class="tags-empty">
-              <span>{{ tags.length ? '無符合的標籤' : '尚無任何標籤，請點擊右上角「新增標籤」開始' }}</span>
+            <div v-else-if="!tags.length" class="tags-empty">
+              <span>{{ total ? '無符合的標籤' : '尚無任何標籤，請點擊右上角「新增標籤」開始' }}</span>
             </div>
             <div v-else class="table-wrap">
               <table class="tags-table">
@@ -62,12 +62,19 @@
                     <th>Code</th>
                     <th>分類</th>
                     <th>狀態</th>
+                    <th class="tags-table__th--count">會員數</th>
                     <th>建立時間</th>
-                    <th class="tags-table__th--actions">操作</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="tag in filteredTags" :key="tag.id">
+                  <tr
+                    v-for="tag in tags"
+                    :key="tag.id"
+                    class="tags-table__row--clickable"
+                    tabindex="0"
+                    @click="openEdit(tag)"
+                    @keydown.enter="openEdit(tag)"
+                  >
                     <td>
                       <span class="tag-color-dot" :style="{ '--dot-bg': tag.color || '#6B7280' }" />
                     </td>
@@ -81,22 +88,22 @@
                         {{ tag.status === 'active' ? '啟用' : '停用' }}
                       </span>
                     </td>
+                    <td class="td-count">{{ formatMemberCount(tag.memberCount) }}</td>
                     <td class="td-time">{{ formatZhDateOnly(tag.createdAt) }}</td>
-                    <td>
-                      <div class="td-actions">
-                        <el-button size="small" @click="openEdit(tag)">編輯</el-button>
-                        <el-button
-                          size="small"
-                          :type="tag.status === 'active' ? 'danger' : 'default'"
-                          @click="toggleStatus(tag)"
-                        >
-                          {{ tag.status === 'active' ? '停用' : '啟用' }}
-                        </el-button>
-                      </div>
-                    </td>
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            <div v-if="!loading && total > pageSize" class="admin-table-pager">
+              <el-pagination
+                :current-page="page"
+                :page-size="pageSize"
+                :total="total"
+                layout="total, prev, pager, next"
+                background
+                @current-change="onPageChange"
+              />
             </div>
           </div>
         </div>
@@ -113,6 +120,19 @@
   >
     <el-form label-position="top" @submit.prevent>
       <div class="admin-field-stack">
+        <div class="admin-field-group">
+          <AdminFieldLabel text="啟用狀態" tight />
+          <el-switch
+            v-model="form.status"
+            active-value="active"
+            inactive-value="inactive"
+            active-text="啟用中"
+            inactive-text="已停用"
+            class="tags-status-switch"
+          />
+          <span class="tags-hint">停用的標籤不會出現在貼標選單，但仍可在此編輯</span>
+        </div>
+
         <div class="admin-field-group">
           <AdminFieldLabel text="Code（英文小寫+底線，建立後不可修改）" tight />
           <el-input
@@ -187,7 +207,7 @@ import { TAG_CATEGORY_OPTIONS, TAG_PRESET_COLORS, tagCategoryLabel } from '~~/sh
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 const { workspaceId, apiFetch } = useWorkspace()
-const { tags, loading, loadTags } = useAdminTagList()
+const { tags, loading, total, page, pageSize, loadTags } = useAdminTagList()
 const { toasts, showToast } = useAdminToast()
 
 const saving = ref(false)
@@ -204,24 +224,47 @@ const defaultForm = () => ({
   category: 'custom' as const,
   color: '#6B7280',
   description: '',
+  status: 'active' as const,
 })
 const form = ref(defaultForm())
 
-const filteredTags = computed(() => {
-  let list = [...tags.value]
-  if (filterStatus.value) list = list.filter((t) => t.status === filterStatus.value)
-  if (filterCategory.value) list = list.filter((t) => t.category === filterCategory.value)
-  if (searchText.value.trim()) {
-    const kw = searchText.value.toLowerCase()
-    list = list.filter((t) => t.name?.toLowerCase().includes(kw) || t.code?.toLowerCase().includes(kw))
-  }
-  return list
-})
+function formatMemberCount(count: number | undefined) {
+  return (count ?? 0).toLocaleString('zh-TW')
+}
 
-async function refreshTags() {
-  const ok = await loadTags()
+function tagListQuery(targetPage = page.value) {
+  return {
+    page: targetPage,
+    limit: pageSize.value,
+    includeMemberCount: true,
+    status: filterStatus.value || undefined,
+    category: filterCategory.value || undefined,
+    search: searchText.value,
+  }
+}
+
+async function reloadTags(resetPage = false) {
+  const targetPage = resetPage ? 1 : page.value
+  const ok = await loadTags(tagListQuery(targetPage))
   if (!ok) showToast('載入標籤失敗', 'error')
 }
+
+async function refreshTags() {
+  await reloadTags()
+}
+
+async function onPageChange(nextPage: number) {
+  await loadTags(tagListQuery(nextPage))
+}
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch([filterStatus, filterCategory], () => {
+  void reloadTags(true)
+})
+watch(searchText, () => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => void reloadTags(true), 300)
+})
 
 function openCreate() {
   isEditing.value = false
@@ -238,22 +281,9 @@ function openEdit(tag: any) {
     category: (tag.category ?? 'custom') as any,
     color: tag.color ?? '#6B7280',
     description: tag.description ?? '',
+    status: tag.status === 'inactive' ? 'inactive' : 'active',
   }
   dialogVisible.value = true
-}
-
-async function toggleStatus(tag: any) {
-  const next = tag.status === 'active' ? 'inactive' : 'active'
-  const label = next === 'inactive' ? '停用' : '啟用'
-  if (!confirm(`確定要${label}「${tag.name}」標籤嗎？`)) return
-  try {
-    await apiFetch(`/api/tag/${tag.id}`, { method: 'PUT', body: { status: next } })
-    showToast(`已${label}標籤`, 'success')
-    await refreshTags()
-  }
-  catch {
-    showToast(`${label}失敗`, 'error')
-  }
 }
 
 function validateForm(): string | null {
@@ -277,6 +307,7 @@ async function submitForm() {
           category: form.value.category,
           color: form.value.color,
           description: form.value.description.trim(),
+          status: form.value.status,
         },
       })
       showToast('標籤已更新 ✅', 'success')
@@ -290,6 +321,7 @@ async function submitForm() {
           category: form.value.category,
           color: form.value.color,
           description: form.value.description.trim(),
+          status: form.value.status,
         },
       })
       showToast('標籤已建立 ✅', 'success')
@@ -305,5 +337,5 @@ async function submitForm() {
   }
 }
 
-onMounted(refreshTags)
+onMounted(() => reloadTags(true))
 </script>

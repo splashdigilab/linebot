@@ -78,7 +78,7 @@ export default defineEventHandler(async (event) => {
     }
     safeRef = safeRef.limit(FALLBACK_MAX_FETCH)
     const safeSnap = await safeRef.get()
-    if (safeSnap.empty) return { sessions: [], total: 0, page, limit, truncated: false }
+    if (safeSnap.empty) return { sessions: [], total: 0, page, limit, hasMore: false, truncated: false }
 
     const filtered = safeSnap.docs
       .map(d => ({ id: d.id, data: d.data() as any }))
@@ -93,7 +93,16 @@ export default defineEventHandler(async (event) => {
       .sort((a, b) => toMillis(b.data.lastActivityAt) - toMillis(a.data.lastActivityAt))
 
     const sliced = filtered.slice(offset, offset + limit)
-    if (sliced.length === 0) return { sessions: [], total: filtered.length, page, limit, truncated: filtered.length >= FALLBACK_MAX_FETCH }
+    if (sliced.length === 0) {
+      return {
+        sessions: [],
+        total: filtered.length,
+        page,
+        limit,
+        hasMore: false,
+        truncated: filtered.length >= FALLBACK_MAX_FETCH,
+      }
+    }
 
     const rawUserIds = sliced.map(x => String(x.data.userId || '')).filter(Boolean)
     const fsUserIds = uniqueFirestoreUserIds(rawUserIds, workspaceId)
@@ -106,11 +115,13 @@ export default defineEventHandler(async (event) => {
 
     const sessions = sliced.map(({ id, data: s }) => mapSessionToRow(id, s, userMap, workspaceId))
 
+    const loaded = offset + sessions.length
     return {
       sessions,
       total: filtered.length,
       page,
       limit,
+      hasMore: loaded < filtered.length,
       truncated: filtered.length >= FALLBACK_MAX_FETCH,
     }
   }
@@ -147,7 +158,7 @@ export default defineEventHandler(async (event) => {
     ref = ref.limit(limit)
 
     const snap = await ref.get()
-    if (snap.empty) return { sessions: [], total, page, limit }
+    if (snap.empty) return { sessions: [], total, page, limit, hasMore: false }
 
     const rawUserIds = snap.docs.map(d => String(d.data().userId || '')).filter(Boolean)
     const fsUserIds = uniqueFirestoreUserIds(rawUserIds, workspaceId)
@@ -160,7 +171,8 @@ export default defineEventHandler(async (event) => {
 
     const sessions = snap.docs.map(d => mapSessionToRow(d.id, d.data(), userMap, workspaceId))
 
-    return { sessions, total, page, limit }
+    const loaded = offset + sessions.length
+    return { sessions, total, page, limit, hasMore: loaded < total }
   }
   catch (e: any) {
     const msg = String(e?.message || '')

@@ -54,7 +54,7 @@
                   </el-option>
                 </el-select>
               </div>
-              <span class="tags-count text-muted">共 {{ filteredUsers.length }} 位</span>
+              <span class="tags-count text-muted">共 {{ total.toLocaleString('zh-TW') }} 位</span>
             </div>
             <p class="users-sync-hint text-muted">
               清單來自資料庫：若只有「曾傳訊／按鈕／加好友後有觸發 Webhook」的帳號，請按上方「從 LINE 同步好友」以拉取官方好友名單（Messaging API
@@ -65,8 +65,8 @@
               <div class="spinner" />
               <span>載入中…</span>
             </div>
-            <div v-else-if="!filteredUsers.length" class="tags-empty">
-              <span>{{ allUsers.length ? '無符合條件的會員' : '尚無好友資料' }}</span>
+            <div v-else-if="!users.length" class="tags-empty">
+              <span>{{ total ? '無符合條件的會員' : '尚無好友資料' }}</span>
             </div>
             <div v-else class="table-wrap">
               <table class="users-table">
@@ -86,7 +86,7 @@
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="user in filteredUsers" :key="user.id">
+                  <tr v-for="user in users" :key="user.id">
                     <td>
                       <input
                         type="checkbox"
@@ -117,6 +117,17 @@
                   </tr>
                 </tbody>
               </table>
+            </div>
+
+            <div v-if="!loading && total > pageSize" class="admin-table-pager">
+              <el-pagination
+                :current-page="page"
+                :page-size="pageSize"
+                :total="total"
+                layout="total, prev, pager, next"
+                background
+                @current-change="onPageChange"
+              />
             </div>
           </div>
         </div>
@@ -226,7 +237,14 @@ definePageMeta({ middleware: 'auth', layout: 'default' })
 
 const { workspaceId, apiFetch } = useWorkspace()
 
-const { users: allUsers, loading: usersLoading, loadUsers } = useAdminUserList()
+const {
+  users,
+  loading: usersLoading,
+  total,
+  page,
+  pageSize,
+  loadUsers,
+} = useAdminUserList()
 const { tags: allTags, loading: tagsLoading, loadTags: loadTagOptions } = useAdminTagList()
 const loading = computed(() => usersLoading.value || tagsLoading.value)
 
@@ -246,25 +264,45 @@ const addTagIds = ref<string[]>([])
 const userTagSaving = ref(false)
 const syncingLine = ref(false)
 
-const filteredUsers = computed(() => {
-  let list = [...allUsers.value]
-  if (filterTagIds.value.length) {
-    list = list.filter((u) =>
-      filterTagIds.value.some((tid) => u.tagIds?.includes(tid)),
-    )
+function userListQuery(targetPage = page.value) {
+  return {
+    page: targetPage,
+    limit: pageSize.value,
+    tagIds: filterTagIds.value.length ? filterTagIds.value : undefined,
+    search: searchText.value,
   }
-  if (searchText.value.trim()) {
-    const kw = searchText.value.toLowerCase()
-    list = list.filter((u) => (u.displayName ?? '').toLowerCase().includes(kw))
-  }
-  return list
+}
+
+async function reloadUsers(resetPage = false): Promise<boolean> {
+  const targetPage = resetPage ? 1 : page.value
+  const ok = await loadUsers(userListQuery(targetPage))
+  if (!ok) showToast('載入會員失敗', 'error')
+  return ok
+}
+
+async function onPageChange(nextPage: number) {
+  selectedIds.value = []
+  await loadUsers(userListQuery(nextPage))
+}
+
+let searchTimer: ReturnType<typeof setTimeout> | null = null
+watch(filterTagIds, () => {
+  selectedIds.value = []
+  void reloadUsers(true)
+}, { deep: true })
+watch(searchText, () => {
+  if (searchTimer) clearTimeout(searchTimer)
+  searchTimer = setTimeout(() => {
+    selectedIds.value = []
+    void reloadUsers(true)
+  }, 300)
 })
 
 const isAllSelected = computed(
-  () => filteredUsers.value.length > 0 && filteredUsers.value.every((u) => selectedIds.value.includes(u.id)),
+  () => users.value.length > 0 && users.value.every((u) => selectedIds.value.includes(u.id)),
 )
 const isIndeterminate = computed(
-  () => !isAllSelected.value && filteredUsers.value.some((u) => selectedIds.value.includes(u.id)),
+  () => !isAllSelected.value && users.value.some((u) => selectedIds.value.includes(u.id)),
 )
 
 const availableTagsForDialog = computed(() => {
@@ -283,7 +321,7 @@ function toggleSelectAll() {
     selectedIds.value = []
   }
   else {
-    selectedIds.value = filteredUsers.value.map((u) => u.id)
+    selectedIds.value = users.value.map((u) => u.id)
   }
 }
 
@@ -343,17 +381,15 @@ async function syncFromLine() {
 
 async function loadData() {
   const [uOk, tOk] = await Promise.all([
-    loadUsers({ limit: 500 }),
+    reloadUsers(true),
     loadTagOptions({ status: 'active' }),
   ])
-  if (!uOk) showToast('載入會員失敗', 'error')
   if (!tOk) showToast('載入標籤失敗', 'error')
 }
 
 /** tag 增刪操作後只重抓 users，標籤不會變動，避免每次都重複拉 `/api/tag/list` */
 async function refreshUsersOnly() {
-  const ok = await loadUsers({ limit: 500 })
-  if (!ok) showToast('載入會員失敗', 'error')
+  await reloadUsers()
 }
 
 function openBatchTag(mode: 'add' | 'remove') {
@@ -406,7 +442,7 @@ async function addUserTags() {
     showToast('標籤已加入 ✅', 'success')
     addTagIds.value = []
     await refreshUsersOnly()
-    const updated = allUsers.value.find((u) => u.id === dialogUser.value!.id)
+    const updated = users.value.find((u) => u.id === dialogUser.value!.id)
     if (updated) dialogUser.value = JSON.parse(JSON.stringify(updated))
   }
   catch {
@@ -422,7 +458,7 @@ async function removeUserTag(userId: string, tagId: string) {
     await apiFetch(`/api/users/${userId}/tags/${tagId}`, { method: 'DELETE' })
     showToast('標籤已移除', 'success')
     await refreshUsersOnly()
-    const updated = allUsers.value.find((u) => u.id === userId)
+    const updated = users.value.find((u) => u.id === userId)
     if (updated) dialogUser.value = JSON.parse(JSON.stringify(updated))
   }
   catch {
