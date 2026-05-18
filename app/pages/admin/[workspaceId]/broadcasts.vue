@@ -283,8 +283,8 @@
         </ul>
       </div>
       <div v-else class="bc-validate-ok">
-        <p v-if="dialogIsSchedule && form.scheduleAt" class="tags-hint">
-          將排程於 {{ formatScheduleLabel(form.scheduleAt) }} 自動發送（不會立即送出）。
+        <p v-if="dialogIsSchedule && pendingScheduleAtLocal" class="tags-hint">
+          將排程於 {{ formatScheduleLabel(pendingScheduleAtLocal) }} 自動發送（不會立即送出）。
         </p>
         <div class="bc-stats-row">
           <div class="bc-stat-box">
@@ -301,15 +301,20 @@
       </div>
     </div>
     <template #footer>
-      <el-button @click="validateDialogVisible = false">取消</el-button>
-      <el-button
-        v-if="validateResult && !validateResult.errors?.length"
-        type="primary"
-        :loading="sending"
-        @click="confirmSend"
-      >
-        {{ confirmSubmitLabel }}
-      </el-button>
+      <div class="bc-dialog-footer">
+        <p v-if="confirmDialogError" class="bc-dialog-footer__error">{{ confirmDialogError }}</p>
+        <div class="bc-dialog-footer__actions">
+          <el-button @click="closeValidateDialog">取消</el-button>
+          <el-button
+            v-if="validateResult && !validateResult.errors?.length"
+            type="primary"
+            :loading="sending"
+            @click="onConfirmDialogSubmit"
+          >
+            {{ confirmSubmitLabel }}
+          </el-button>
+        </div>
+      </div>
     </template>
   </el-dialog>
 
@@ -346,10 +351,26 @@ function formatScheduleLabel(iso: string): string {
   return d.toLocaleString('zh-TW')
 }
 
-function scheduleAtForApi(): string {
-  const iso = localDateTimeInputToUtcIso(form.value.scheduleAt)
-  if (!iso) throw new Error('invalid scheduleAt')
-  return iso
+function scheduleAtForApi(localValue?: string): string | null {
+  const raw = String(localValue ?? form.value.scheduleAt ?? '').trim()
+  return localDateTimeInputToUtcIso(raw)
+}
+
+function apiErrorMessage(e: unknown, fallback: string): string {
+  if (e && typeof e === 'object') {
+    const o = e as Record<string, unknown>
+    const data = o.data as Record<string, unknown> | undefined
+    if (typeof data?.statusMessage === 'string') return data.statusMessage
+    if (typeof o.statusMessage === 'string') return o.statusMessage
+    if (typeof o.message === 'string') return o.message
+  }
+  return fallback
+}
+
+function isNotFoundApiError(e: unknown): boolean {
+  if (!e || typeof e !== 'object') return false
+  const o = e as Record<string, unknown>
+  return o.statusCode === 404 || o.status === 404
 }
 
 const { workspaceId, apiFetch } = useWorkspace()
@@ -375,6 +396,10 @@ const validateLoading = ref(false)
 const validateResult = ref<any>(null)
 /** 開啟驗證視窗當下鎖定的送出意圖（避免對話框開啟後切換 radio 誤觸立即發送） */
 const pendingSubmitMode = ref<'now' | 'schedule'>('now')
+/** 開啟驗證視窗時鎖定的排程時間（避免 saveDraft 重載表單後 scheduleAt 被清空） */
+const pendingScheduleAtLocal = ref('')
+const pendingBroadcastId = ref<string | null>(null)
+const confirmDialogError = ref('')
 const report = ref<any>(null)
 const { toasts, showToast } = useAdminToast()
 
@@ -526,7 +551,8 @@ function buildSaveBody(): Record<string, unknown> {
     && form.value.scheduleAt
 
   if (keepScheduled) {
-    body.scheduleAt = scheduleAtForApi()
+    const iso = scheduleAtForApi()
+    if (iso) body.scheduleAt = iso
   }
   else if (!isCreating.value) {
     body.scheduleAt = null
@@ -652,7 +678,19 @@ async function saveDraft(opts?: { preserveLocalSchedule?: boolean }): Promise<bo
   }
 }
 
+function closeValidateDialog() {
+  validateDialogVisible.value = false
+  confirmDialogError.value = ''
+}
+
+function resetPendingValidateContext() {
+  pendingScheduleAtLocal.value = ''
+  pendingBroadcastId.value = null
+  confirmDialogError.value = ''
+}
+
 async function openValidateDialog() {
+  resetPendingValidateContext()
   pendingSubmitMode.value = form.value.scheduleMode
 
   const err = validateForm({
@@ -664,6 +702,17 @@ async function openValidateDialog() {
   const saved = await saveDraft({ preserveLocalSchedule: pendingSubmitMode.value === 'schedule' })
   if (!saved || !selectedId.value) return
 
+  pendingBroadcastId.value = selectedId.value
+
+  if (pendingSubmitMode.value === 'schedule') {
+    await nextTick()
+    pendingScheduleAtLocal.value = String(form.value.scheduleAt || '').trim()
+    if (!pendingScheduleAtLocal.value) {
+      showToast('排程時間遺失，請重新選擇排程時間後再試', 'error')
+      return
+    }
+  }
+
   validateDialogVisible.value = true
   validateLoading.value = true
   validateResult.value = null
@@ -672,52 +721,93 @@ async function openValidateDialog() {
   }
   catch {
     showToast('驗證失敗', 'error')
-    validateDialogVisible.value = false
+    closeValidateDialog()
   }
   finally {
     validateLoading.value = false
   }
 }
 
-async function confirmSend() {
-  if (!selectedId.value) return
-  if (pendingSubmitMode.value === 'schedule') {
-    await confirmSchedule()
+async function onConfirmDialogSubmit() {
+  confirmDialogError.value = ''
+  try {
+    if (pendingSubmitMode.value === 'schedule') {
+      await confirmSchedule()
+    }
+    else {
+      await confirmSendNow()
+    }
   }
-  else {
-    await confirmSendNow()
+  catch (e: unknown) {
+    const msg = apiErrorMessage(e, '操作失敗')
+    confirmDialogError.value = msg
+    showToast(msg, 'error')
   }
 }
 
 async function confirmSchedule() {
-  if (!selectedId.value) return
-  if (!form.value.scheduleAt) {
-    showToast('排程時間遺失，請關閉視窗後重新選擇排程時間', 'error')
+  const id = pendingBroadcastId.value || selectedId.value
+  if (!id) {
+    confirmDialogError.value = '推播 ID 遺失，請關閉視窗後重試'
     return
   }
-  const scheduleErr = validateFutureScheduleLocalInput(form.value.scheduleAt)
-  if (scheduleErr) return showToast(scheduleErr, 'error')
+
+  const scheduleAtLocal = pendingScheduleAtLocal.value || String(form.value.scheduleAt || '').trim()
+  if (!scheduleAtLocal) {
+    confirmDialogError.value = '排程時間遺失，請關閉視窗後重新選擇排程時間'
+    return
+  }
+
+  const scheduleErr = validateFutureScheduleLocalInput(scheduleAtLocal)
+  if (scheduleErr) {
+    confirmDialogError.value = scheduleErr
+    showToast(scheduleErr, 'error')
+    return
+  }
+
+  const scheduleAtIso = scheduleAtForApi(scheduleAtLocal)
+  if (!scheduleAtIso) {
+    confirmDialogError.value = '排程時間格式無效'
+    return
+  }
+
+  const scheduleBody = {
+    name: form.value.name.trim(),
+    audienceSource: buildAudienceSource(),
+    messages: buildMessages(),
+    scheduleAt: scheduleAtIso,
+  }
 
   sending.value = true
   try {
-    const scheduleAtIso = scheduleAtForApi()
-    await apiFetch(`/api/broadcast/${selectedId.value}/schedule`, {
-      method: 'POST',
-      body: {
-        name: form.value.name.trim(),
-        audienceSource: buildAudienceSource(),
-        messages: buildMessages(),
-        scheduleAt: scheduleAtIso,
-      },
-    })
+    try {
+      await apiFetch(`/api/broadcast/${id}/schedule`, {
+        method: 'POST',
+        body: scheduleBody,
+      })
+    }
+    catch (e: unknown) {
+      // 舊版後端尚未部署 /schedule 時，改走 PUT 設定排程
+      if (!isNotFoundApiError(e)) throw e
+      await apiFetch(`/api/broadcast/${id}`, {
+        method: 'PUT',
+        body: scheduleBody,
+      })
+    }
+
     showToast(`已排程，將於 ${formatScheduleLabel(scheduleAtIso)} 自動發送 ✅`, 'success')
-    validateDialogVisible.value = false
+    closeValidateDialog()
+    resetPendingValidateContext()
     await loadData()
-    const found = broadcasts.value.find((b) => b.id === selectedId.value)
+    selectedId.value = id
+    const found = broadcasts.value.find((b) => b.id === id)
     if (found) await selectItem(found, { skipDiscardConfirm: true })
   }
-  catch (e: any) {
-    showToast(e?.data?.statusMessage || '排程失敗', 'error')
+  catch (e: unknown) {
+    const msg = apiErrorMessage(e, '排程失敗')
+    confirmDialogError.value = msg
+    showToast(msg, 'error')
+    throw e
   }
   finally {
     sending.value = false
@@ -725,18 +815,27 @@ async function confirmSchedule() {
 }
 
 async function confirmSendNow() {
-  if (!selectedId.value) return
+  const id = pendingBroadcastId.value || selectedId.value
+  if (!id) {
+    confirmDialogError.value = '推播 ID 遺失，請關閉視窗後重試'
+    return
+  }
   sending.value = true
   try {
-    const res = await apiFetch<any>(`/api/broadcast/${selectedId.value}/send`, { method: 'POST' })
+    const res = await apiFetch<any>(`/api/broadcast/${id}/send`, { method: 'POST' })
     showToast(`發送完成 ✅ 成功 ${res.sentCount} / 失敗 ${res.failedCount}`, 'success')
-    validateDialogVisible.value = false
+    closeValidateDialog()
+    resetPendingValidateContext()
     await loadData()
-    const found = broadcasts.value.find((b) => b.id === selectedId.value)
+    selectedId.value = id
+    const found = broadcasts.value.find((b) => b.id === id)
     if (found) await selectItem(found, { skipDiscardConfirm: true })
   }
-  catch (e: any) {
-    showToast(e?.data?.statusMessage || '發送失敗', 'error')
+  catch (e: unknown) {
+    const msg = apiErrorMessage(e, '發送失敗')
+    confirmDialogError.value = msg
+    showToast(msg, 'error')
+    throw e
   }
   finally {
     sending.value = false

@@ -82,6 +82,27 @@
   gap: 1rem;
 }
 
+.bc-dialog-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.bc-dialog-footer__error {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--el-color-danger);
+}
+
+.bc-dialog-footer__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .bc-preview-ids {
   display: flex;
   flex-direction: column;
