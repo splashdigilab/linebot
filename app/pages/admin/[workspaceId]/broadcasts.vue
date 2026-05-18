@@ -598,12 +598,23 @@ async function cancelEdit() {
   }
 }
 
-async function saveDraft(): Promise<boolean> {
+type LocalScheduleSnapshot = { mode: 'schedule'; at: string }
+
+async function saveDraft(opts?: { preserveLocalSchedule?: boolean }): Promise<boolean> {
   const err = validateForm({ requireScheduleTime: false })
   if (err) {
     showToast(err, 'error')
     return false
   }
+
+  /** 驗證並排程前會先存草稿；PUT 會送 scheduleAt:null，重載後若不還原則確認排程會讀到空字串而無反應 */
+  const scheduleSnap: LocalScheduleSnapshot | null =
+    opts?.preserveLocalSchedule
+    && form.value.scheduleMode === 'schedule'
+    && form.value.scheduleAt
+      ? { mode: 'schedule', at: form.value.scheduleAt }
+      : null
+
   saving.value = true
   try {
     const body = buildSaveBody()
@@ -624,6 +635,12 @@ async function saveDraft(): Promise<boolean> {
         showToast('已儲存但載入內容失敗，請重新點選該推播', 'error')
       }
     }
+
+    if (scheduleSnap) {
+      form.value.scheduleMode = scheduleSnap.mode
+      form.value.scheduleAt = scheduleSnap.at
+    }
+
     return true
   }
   catch (e: any) {
@@ -643,8 +660,8 @@ async function openValidateDialog() {
   })
   if (err) return showToast(err, 'error')
 
-  // 先儲存草稿確保最新內容已同步
-  const saved = await saveDraft()
+  // 先儲存草稿確保最新內容已同步（排程模式須保留本地選擇的時間，避免重載後確認排程無效）
+  const saved = await saveDraft({ preserveLocalSchedule: pendingSubmitMode.value === 'schedule' })
   if (!saved || !selectedId.value) return
 
   validateDialogVisible.value = true
@@ -673,7 +690,11 @@ async function confirmSend() {
 }
 
 async function confirmSchedule() {
-  if (!selectedId.value || !form.value.scheduleAt) return
+  if (!selectedId.value) return
+  if (!form.value.scheduleAt) {
+    showToast('排程時間遺失，請關閉視窗後重新選擇排程時間', 'error')
+    return
+  }
   const scheduleErr = validateFutureScheduleLocalInput(form.value.scheduleAt)
   if (scheduleErr) return showToast(scheduleErr, 'error')
 
