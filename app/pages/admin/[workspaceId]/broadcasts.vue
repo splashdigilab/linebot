@@ -196,7 +196,7 @@
                 :disabled-date="disabledPastDate"
               />
               <p v-if="selectedItem?.status === 'scheduled'" class="tags-hint">
-                已排程，到期後由系統自動發送。可修改內容與時間後按「儲存變更」，或按「取消排程」。
+                已排程，系統約每分鐘檢查一次並在到期時自動發送（伺服器需設定 CRON_SECRET）。可修改內容與時間後按「儲存變更」，或按「取消排程」。
               </p>
               <p v-else class="tags-hint">
                 確認排程後不會立即發送；受眾名單於排程時間到時計算。

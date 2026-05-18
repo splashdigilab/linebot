@@ -1,6 +1,4 @@
-import { Timestamp } from 'firebase-admin/firestore'
-import { getDb } from '~~/server/utils/firebase'
-import { executeBroadcastSend } from '~~/server/utils/broadcast-send'
+import { runDueScheduledBroadcasts } from '~~/server/utils/run-due-scheduled-broadcasts'
 
 /**
  * POST /api/broadcast/trigger-scheduled
@@ -42,42 +40,5 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // ── 查詢到期排程推播 ──────────────────────────────────────────────
-  const db = getDb()
-  const now = Timestamp.now()
-
-  const snap = await db.collection('broadcasts')
-    .where('status', '==', 'scheduled')
-    .where('scheduleAt', '<=', now)
-    .orderBy('scheduleAt', 'asc')
-    .limit(20)
-    .get()
-
-  if (snap.empty) {
-    return { triggered: 0, results: [] }
-  }
-
-  console.log(`[trigger-scheduled] 找到 ${snap.docs.length} 個到期排程推播`)
-
-  // ── 逐一發送（不使用 Promise.all，避免同時衝擊 LINE API 限流）────
-  const results: Array<{ id: string; success: boolean; error?: string }> = []
-
-  for (const doc of snap.docs) {
-    const id = doc.id
-    try {
-      const result = await executeBroadcastSend(id, { source: 'scheduler' })
-      results.push({ id, success: result.success })
-      console.log(`[trigger-scheduled] ✓ ${id} sentCount=${result.sentCount}`)
-    }
-    catch (e: any) {
-      const error = String(e?.message ?? e)
-      results.push({ id, success: false, error })
-      console.error(`[trigger-scheduled] ✗ ${id}`, error)
-    }
-  }
-
-  return {
-    triggered: snap.docs.length,
-    results,
-  }
+  return await runDueScheduledBroadcasts()
 })

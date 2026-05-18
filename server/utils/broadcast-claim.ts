@@ -45,7 +45,8 @@ export async function claimBroadcastForSend(
       }
       const at = broadcastScheduleAtToDate(data.scheduleAt as Timestamp | Date | null)
       if (!at) throw new Error('Scheduled broadcast missing scheduleAt')
-      if (at.getTime() > Date.now()) {
+      // 查詢已篩 scheduleAt <= now；保留 90 秒容差避免時鐘／寫入延遲
+      if (at.getTime() > Date.now() + 90_000) {
         throw new Error('Broadcast scheduleAt is in the future')
       }
     }

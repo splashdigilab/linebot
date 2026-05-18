@@ -14,6 +14,13 @@ export default defineNuxtConfig({
 
   nitro: {
     preset: 'aws-amplify',
+    experimental: {
+      tasks: true,
+    },
+    scheduledTasks: {
+      // 本機 dev 等環境；正式環境主要依 server/plugins/broadcast-scheduler.ts
+      '* * * * *': ['broadcast:trigger-scheduled'],
+    },
   },
 
   modules: [
