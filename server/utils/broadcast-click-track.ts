@@ -57,25 +57,49 @@ export function wrapBroadcastMessagesForClickTracking(
   const cloned = JSON.parse(JSON.stringify(messages)) as Record<string, unknown>[]
 
   for (const msg of cloned) {
-    if (msg?.type !== 'template' || !msg.template || typeof msg.template !== 'object') continue
-    const tpl = msg.template as Record<string, unknown>
-    const t = String(tpl.type || '')
+    // ── Template messages ──
+    if (msg?.type === 'template' && msg.template && typeof msg.template === 'object') {
+      const tpl = msg.template as Record<string, unknown>
+      const t = String(tpl.type || '')
 
-    if (t === 'buttons' || t === 'confirm') {
-      wrapActionsArray(tpl.actions as unknown[] | undefined, campaignId, origin, `tpl_${t}`)
+      if (t === 'buttons' || t === 'confirm') {
+        wrapActionsArray(tpl.actions as unknown[] | undefined, campaignId, origin, `tpl_${t}`)
+      }
+      else if (t === 'carousel' && Array.isArray(tpl.columns)) {
+        tpl.columns.forEach((col: Record<string, unknown>, ci: number) => {
+          wrapActionsArray(col.actions as unknown[] | undefined, campaignId, origin, `car_${ci}`)
+        })
+      }
+      else if (t === 'image_carousel' && Array.isArray(tpl.columns)) {
+        tpl.columns.forEach((col: Record<string, unknown>, ci: number) => {
+          const act = col.action as { type?: string; uri?: string } | undefined
+          if (act?.type === 'uri' && typeof act.uri === 'string') {
+            act.uri = wrapOneUri(act.uri, campaignId, `imgcar_${ci}`, origin)
+          }
+        })
+      }
     }
-    else if (t === 'carousel' && Array.isArray(tpl.columns)) {
-      tpl.columns.forEach((col: Record<string, unknown>, ci: number) => {
-        wrapActionsArray(col.actions as unknown[] | undefined, campaignId, origin, `car_${ci}`)
-      })
-    }
-    else if (t === 'image_carousel' && Array.isArray(tpl.columns)) {
-      tpl.columns.forEach((col: Record<string, unknown>, ci: number) => {
-        const act = col.action as { type?: string; uri?: string } | undefined
-        if (act?.type === 'uri' && typeof act.uri === 'string') {
-          act.uri = wrapOneUri(act.uri, campaignId, `imgcar_${ci}`, origin)
-        }
-      })
+
+    // ── Flex Image Carousel（hero image action）──
+    else if (msg?.type === 'flex') {
+      const contents = msg.contents as Record<string, unknown> | undefined
+      if (contents?.type === 'carousel' && Array.isArray(contents.contents)) {
+        (contents.contents as Record<string, unknown>[]).forEach((bubble, bi) => {
+          const hero = bubble.hero as { type?: string; action?: { type?: string; uri?: string } } | undefined
+          if (hero?.action?.type === 'uri' && typeof hero.action.uri === 'string') {
+            hero.action.uri = wrapOneUri(hero.action.uri, campaignId, `flexcar_${bi}`, origin)
+          }
+          const footerContents = (bubble.footer as { contents?: unknown[] } | undefined)?.contents
+          if (Array.isArray(footerContents)) {
+            footerContents.forEach((raw, fi) => {
+              const btn = raw as { action?: { type?: string; uri?: string } }
+              if (btn?.action?.type === 'uri' && typeof btn.action.uri === 'string') {
+                btn.action.uri = wrapOneUri(btn.action.uri, campaignId, `flexcar_${bi}_btn_${fi}`, origin)
+              }
+            })
+          }
+        })
+      }
     }
   }
 

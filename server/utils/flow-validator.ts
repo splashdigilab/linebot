@@ -138,6 +138,39 @@ function validateImageCarousel(msg: any): void {
   }
 }
 
+function validateFlexImageCarousel(msg: any): void {
+  if (!Array.isArray(msg?.columns) || msg.columns.length < 1) fail('Flex 圖片輪播：至少要有 1 個欄位')
+  if (msg.columns.length > 10) fail('Flex 圖片輪播：最多 10 個欄位')
+
+  for (const col of msg.columns) {
+    if (!String(col?.imageUrl || '').trim()) fail('Flex 圖片輪播：每個欄位都需要圖片')
+    const action = col?.action
+    if (action?.type === 'uri') {
+      if (!String(action?.uri || '').trim()) fail('Flex 圖片輪播網址為必填')
+    }
+    if (action?.type === 'message') {
+      if (!String(action?.text || '').trim()) fail('Flex 圖片輪播傳送文字為必填')
+    }
+    if (action?.type === 'module') {
+      if (!String(action?.moduleId || '').trim()) fail('Flex 圖片輪播：請選擇要觸發的機器人模組')
+    }
+    ensureTaggingSelection(action?.tagging, 'Flex 圖片輪播')
+
+    if (Array.isArray(col?.actions)) {
+      if (col.actions.length > 3) fail('Flex 圖片輪播：每個欄位按鈕最多 3 個')
+      for (const btn of col.actions) {
+        if (!String(btn?.label || '').trim()) fail('Flex 圖片輪播按鈕文字為必填')
+        if (btn?.type === 'uri' && !String(btn?.uri || '').trim()) fail('Flex 圖片輪播按鈕網址為必填')
+        if (btn?.type === 'message' && !String(btn?.text || '').trim()) fail('Flex 圖片輪播按鈕傳送文字為必填')
+        if (btn?.type === 'module' && !String(btn?.moduleId || '').trim()) {
+          fail('Flex 圖片輪播：請選擇要觸發的機器人模組')
+        }
+        ensureTaggingSelection(btn?.tagging, 'Flex 圖片輪播')
+      }
+    }
+  }
+}
+
 function validateMessageByType(msg: any): void {
   const type = String(msg?.type || '').trim()
   if (!type) fail('訊息格式錯誤：缺少 type')
@@ -166,6 +199,7 @@ function validateMessageByType(msg: any): void {
   }
   if (type === 'carousel') return validateCarousel(msg)
   if (type === 'imageCarousel') return validateImageCarousel(msg)
+  if (type === 'flexImageCarousel') return validateFlexImageCarousel(msg)
 
   fail(`不支援的訊息類型：${type}`)
 }

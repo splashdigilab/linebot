@@ -269,9 +269,10 @@
                             :src="card.imageUrl"
                             :alt="card.title || 'preview'"
                             class="conv-line-card-image"
+                            :style="getCardImageStyle(msg, card)"
                           />
                           <div
-                            v-if="getStructuredVariant(msg) === 'image_carousel' && getCardOverlayLabel(card)"
+                            v-if="shouldShowFlexImageHeroOverlay(msg, card) || (getStructuredVariant(msg) === 'image_carousel' && getCardOverlayLabel(card))"
                             class="conv-line-card-image-overlay"
                           >
                             {{ getCardOverlayLabel(card) }}
@@ -318,9 +319,10 @@
                       :src="card.imageUrl"
                       :alt="card.title || 'preview'"
                       class="conv-line-card-image"
+                      :style="getCardImageStyle(msg, card)"
                     />
                     <div
-                      v-if="getStructuredVariant(msg) === 'image_carousel' && getCardOverlayLabel(card)"
+                      v-if="shouldShowFlexImageHeroOverlay(msg, card) || (getStructuredVariant(msg) === 'image_carousel' && getCardOverlayLabel(card))"
                       class="conv-line-card-image-overlay"
                     >
                       {{ getCardOverlayLabel(card) }}
@@ -899,9 +901,13 @@ type StructuredCardPreview = {
   text: string
   imageUrl: string
   actions: string[]
+  /** Flex Image Carousel 用：LINE aspectRatio 字串，例如 "16:9" */
+  imageAspectRatio?: string
+  /** Flex Image Carousel：整圖點擊動作提示（無底部按鈕時顯示 overlay） */
+  heroActionLabel?: string
 }
 
-type StructuredVariant = 'buttons' | 'confirm' | 'carousel' | 'image_carousel' | 'flex' | 'imagemap' | 'generic'
+type StructuredVariant = 'buttons' | 'confirm' | 'carousel' | 'image_carousel' | 'flex_image_carousel' | 'flex' | 'imagemap' | 'generic'
 
 type StructuredMessagePreview = {
   variant: StructuredVariant
@@ -1803,7 +1809,19 @@ function normalizeCard(input?: Partial<StructuredCardPreview>): StructuredCardPr
     text: String(input?.text || '').trim(),
     imageUrl: String(input?.imageUrl || '').trim(),
     actions,
+    ...(input?.imageAspectRatio ? { imageAspectRatio: input.imageAspectRatio } : {}),
+    ...(input?.heroActionLabel ? { heroActionLabel: input.heroActionLabel } : {}),
   }
+}
+
+function isFlexImageCarouselBubble(bubble: any): boolean {
+  if (bubble?.hero?.type !== 'image') return false
+  if (bubble.body || bubble.header) return false
+  if (!bubble.footer) return true
+  const footerContents = bubble.footer?.contents
+  return Array.isArray(footerContents)
+    && footerContents.length > 0
+    && footerContents.every((item: any) => item?.type === 'button')
 }
 
 function extractFlexTexts(node: any, acc: string[] = []): string[] {
@@ -1887,6 +1905,25 @@ function getStructuredMessagePreview(msg: MsgItem): StructuredMessagePreview | n
   if (type === 'flex') {
     const contents = payload?.contents
     if (contents?.type === 'carousel' && Array.isArray(contents.contents)) {
+      // Flex Image Carousel：hero 圖片 + 可選 footer 按鈕
+      const isFlexImageCarousel = (contents.contents as any[]).every(isFlexImageCarouselBubble)
+      if (isFlexImageCarousel) {
+        return {
+          variant: 'flex_image_carousel',
+          cards: (contents.contents as any[]).map((bubble: any) => {
+            const footerActions = extractFlexActions(bubble.footer, [])
+            const heroActionLabel = bubble.hero?.action
+              ? toActionLabel(bubble.hero.action)
+              : ''
+            return normalizeCard({
+              imageUrl: String(bubble.hero?.url || '').trim(),
+              actions: footerActions,
+              heroActionLabel: footerActions.length > 0 ? '' : heroActionLabel,
+              imageAspectRatio: String(bubble.hero?.aspectRatio || '16:9').trim(),
+            })
+          }),
+        }
+      }
       return {
         variant: 'carousel',
         cards: contents.contents.map((bubble: any) => {
@@ -1953,7 +1990,17 @@ function getStructuredCardClass(msg: MsgItem, card: StructuredCardPreview): Reco
   }
 }
 
+function getCardImageStyle(msg: MsgItem, card: StructuredCardPreview): Record<string, string> {
+  if (getStructuredVariant(msg) !== 'flex_image_carousel') return {}
+  const ar = card.imageAspectRatio || '16:9'
+  const [w, h] = ar.split(':').map(Number)
+  if (!w || !h) return {}
+  return { aspectRatio: `${w} / ${h}` }
+}
+
 function getCardOverlayLabel(card: StructuredCardPreview): string {
+  const heroLabel = String(card.heroActionLabel || '').trim()
+  if (heroLabel && heroLabel.toLowerCase() !== 'ignore') return heroLabel
   const fromAction = Array.isArray(card.actions) && card.actions.length > 0
     ? String(card.actions[0] || '').trim()
     : ''
@@ -1963,12 +2010,21 @@ function getCardOverlayLabel(card: StructuredCardPreview): string {
 
 function shouldUseLineActionStyle(msg: MsgItem): boolean {
   const variant = getStructuredVariant(msg)
+  if (variant === 'flex_image_carousel') {
+    return getStructuredCards(msg).some(card => card.actions.length > 0)
+  }
   return variant === 'buttons' || variant === 'confirm' || variant === 'carousel' || variant === 'image_carousel'
+}
+
+function shouldShowFlexImageHeroOverlay(msg: MsgItem, card: StructuredCardPreview): boolean {
+  if (getStructuredVariant(msg) !== 'flex_image_carousel') return false
+  if (card.actions.length > 0) return false
+  return Boolean(String(card.heroActionLabel || '').trim())
 }
 
 function shouldUseStructuredCarousel(msg: MsgItem): boolean {
   const variant = getStructuredVariant(msg)
-  if (variant !== 'carousel' && variant !== 'image_carousel') return false
+  if (variant !== 'carousel' && variant !== 'image_carousel' && variant !== 'flex_image_carousel') return false
   return getStructuredCards(msg).length > 2
 }
 

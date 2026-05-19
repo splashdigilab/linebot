@@ -530,8 +530,83 @@
   }
 
   .conv-line-template.variant-carousel,
-  .conv-line-template.variant-image_carousel {
+  .conv-line-template.variant-image_carousel,
+  .conv-line-template.variant-flex_image_carousel {
     max-width: min(92vw, 1020px);
+  }
+
+  /* ── Flex Image Carousel（自訂比例，圖片填滿整個 card）── */
+  .conv-line-template.variant-flex_image_carousel .conv-line-card {
+    width: var(--line-card-width-image);
+    border: 0;
+    border-radius: 1rem;
+    box-shadow: none;
+    background: transparent;
+    overflow: visible;
+    position: relative;
+  }
+
+  .conv-line-template.variant-flex_image_carousel .conv-line-card-image {
+    height: auto;
+    aspect-ratio: 16 / 9; /* fallback；實際比例透過 JS 從資料取得後由 inline style 覆蓋 */
+    border-radius: 1rem;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.14);
+    object-fit: cover;
+  }
+
+  .conv-line-template.variant-flex_image_carousel .conv-line-template-carousel .conv-line-card {
+    width: min(var(--line-card-width-image), calc((100% - var(--conv-carousel-gap)) / 2));
+  }
+
+  .conv-line-template.variant-flex_image_carousel .conv-line-card-image-overlay {
+    position: absolute;
+    left: 50%;
+    bottom: 0.88rem;
+    transform: translateX(-50%);
+    z-index: 2;
+    margin: 0;
+    color: #fff;
+    font-size: 0.92rem;
+    font-weight: 600;
+    text-align: center;
+    letter-spacing: 0.01em;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.38);
+    pointer-events: none;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 999px;
+    padding: 0.26rem 0.76rem;
+    min-height: 1.7rem;
+    width: fit-content;
+    max-width: calc(100% - 1.2rem);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .conv-line-template.variant-flex_image_carousel .conv-line-card-title,
+  .conv-line-template.variant-flex_image_carousel .conv-line-card-text {
+    display: none;
+  }
+
+  .conv-line-template.variant-flex_image_carousel .conv-line-card-actions {
+    border-top: 1px solid #e4e7ee;
+    margin-top: 0;
+  }
+
+  .conv-line-template.variant-flex_image_carousel .conv-line-card-action {
+    color: #4e6f97;
+    text-shadow: none;
+    pointer-events: none;
+    height: auto;
+    padding: 0.84rem 0.66rem;
+    border-top: 1px solid #e8ebf2;
+  }
+
+  .conv-line-template.variant-flex_image_carousel .conv-line-card-action:first-child {
+    border-top: 0;
   }
 
   .conv-line-template.variant-carousel .conv-line-card {

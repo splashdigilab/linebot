@@ -132,6 +132,7 @@
             <el-button size="small" @click="addMessage('richMessage')">＋ 圖文訊息</el-button>
             <el-button size="small" @click="addMessage('carousel')">＋ 輪播</el-button>
             <el-button size="small" @click="addMessage('imageCarousel')">＋ 圖片輪播</el-button>
+            <el-button size="small" @click="addMessage('flexImageCarousel')">＋ Flex 圖片輪播</el-button>
             <el-button size="small" @click="addMessage('quickReply')">＋ 快速回覆</el-button>
             <el-button size="small" @click="addMessage('userInput')">＋ 用戶輸入</el-button>
           </div>
@@ -555,7 +556,7 @@
 
             <!-- ── Carousel block (flat stretch, but parent config is a standard card) ── -->
             <div
-              v-else-if="msg.type === 'carousel' || msg.type === 'imageCarousel'"
+              v-else-if="msg.type === 'carousel' || msg.type === 'imageCarousel' || msg.type === 'flexImageCarousel'"
               class="carousel-block"
               :class="{ dragging: dragIndex === i, 'drag-over': dragOverIndex === i && dragIndex !== i }"
               @dragover.prevent="onDragOver($event, i)"
@@ -580,7 +581,7 @@
                     <div class="flow-input-inset-wrap control-full">
                       <el-input
                         v-model="msg.altText"
-                        :placeholder="msg.type === 'imageCarousel' ? '訊息提醒文字（最多 400 字）' : '訊息提醒文字（不支援 Flex 時顯示，最多 400 字）'"
+                        :placeholder="msg.type === 'carousel' ? '訊息提醒文字（不支援 Flex 時顯示，最多 400 字）' : '訊息提醒文字（最多 400 字）'"
                         maxlength="400"
                       />
                       <FlowVariableInset
@@ -606,6 +607,20 @@
                   <p v-if="msg.type === 'imageCarousel'" class="text-xs text-muted">
                     固定 1:1 正方形顯示，超出部分會置中裁切
                   </p>
+                  <div v-if="msg.type === 'flexImageCarousel'" class="admin-field-group">
+                    <AdminFieldLabel text="圖片比例" tight />
+                    <el-select v-model="msg.imageAspectRatio" size="small" class="control-full">
+                      <el-option
+                        v-for="opt in FLEX_IMAGE_CAROUSEL_ASPECT_OPTIONS"
+                        :key="opt.id"
+                        :label="opt.label"
+                        :value="opt.id"
+                      />
+                    </el-select>
+                    <p class="text-xs text-muted">
+                      整張圖可點擊互動；可另加底部按鈕（非必需）；超出比例的部分會置中裁切
+                    </p>
+                  </div>
                 </div>
               </FlowMessageCardShell>
 
@@ -698,7 +713,7 @@
                 </template>
 
                 <!-- imageCarousel sub-cards -->
-                <template v-else>
+                <template v-else-if="msg.type === 'imageCarousel'">
                   <div
                     v-for="(col, ci) in msg.columns" :key="ci"
                     class="carousel-sub-card"
@@ -743,11 +758,94 @@
                   </div>
                 </template>
 
+                <!-- flexImageCarousel sub-cards -->
+                <template v-else-if="msg.type === 'flexImageCarousel'">
+                  <div
+                    v-for="(col, ci) in msg.columns" :key="ci"
+                    class="carousel-sub-card"
+                    :class="{ 'col-dragging': colDragMsgIndex === i && colDragIndex === ci, 'col-drag-over': colDragMsgIndex === i && colDragOverIndex === ci && colDragIndex !== ci }"
+                    @dragover.prevent="onColDragOver($event, i, Number(ci))"
+                    @dragenter.prevent
+                    @dragleave="onColDragLeave"
+                    @drop="onColDrop($event, i, Number(ci))"
+                  >
+                    <div class="carousel-card-top">
+                      <div class="flex gap-1 items-center">
+                        <span class="drag-handle" draggable="true" @dragstart.stop="onColDragStart($event, i, Number(ci))" @dragend.stop="onColDragEnd">⠿</span>
+                        <span class="carousel-card-idx">{{ Number(ci) + 1 }}</span>
+                      </div>
+                      <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(Number(ci), 1)">✕</el-button>
+                    </div>
+                    <div class="carousel-sub-body">
+                      <FlowUploadZone
+                        v-model="col.imageUrl"
+                        type="image"
+                        label="上傳圖片"
+                        class="carousel-sub-media-upload"
+                        :preview-frame="flexImageCarouselPreviewFrame(msg)"
+                      />
+                      <div class="carousel-actions carousel-actions-top-gap">
+                        <FlowActionEditor
+                          :action="col.action"
+                          :type-options="imageCarouselActionTypeOptions"
+                          :module-options="flows"
+                          :tag-options="allTags"
+                          :enable-tagging="true"
+                          :variable-options="variableTokenOptions"
+                          header-label="圖片動作"
+                          :field-size="'default'"
+                          :hide-fields-when-none="true"
+                          label-placeholder="按鈕文字 (選填)"
+                          text-title="傳送文字"
+                          text-placeholder="點擊後傳送的文字"
+                        />
+                      </div>
+                      <div v-if="col.actions?.length" class="carousel-actions">
+                        <div v-for="(act, ai) in col.actions" :key="ai">
+                          <FlowActionEditor
+                            :action="act"
+                            :type-options="standardActionTypeOptions"
+                            :module-options="flows"
+                            :tag-options="allTags"
+                            :enable-tagging="true"
+                            :variable-options="variableTokenOptions"
+                            :header-label="`按鈕 ${Number(ai) + 1}`"
+                            :field-size="'default'"
+                            label-placeholder="按鈕文字"
+                            text-title="傳送文字"
+                            text-placeholder="傳送文字"
+                          >
+                            <template #top-extra>
+                              <el-button
+                                link
+                                type="danger"
+                                size="small"
+                                @click="removeFlexImageCarouselButton(col, Number(ai))"
+                              >
+                                ✕
+                              </el-button>
+                            </template>
+                          </FlowActionEditor>
+                        </div>
+                      </div>
+                      <el-button
+                        v-if="!col.actions || col.actions.length < 3"
+                        plain
+                        size="small"
+                        class="control-dashed-add"
+                        @click="addFlexImageCarouselButton(col)"
+                      >
+                        ⊕ 新增按鈕（非必需）
+                      </el-button>
+                    </div>
+                  </div>
+                </template>
+
                 <!-- Add sub-card button -->
                 <button
                   v-if="msg.columns.length < 10"
                   class="carousel-add-card"
-                  @click="msg.type === 'carousel' ? addCarouselColumn(msg) : addImageCarouselColumn(msg)"
+                  @click="msg.type === 'carousel' ? addCarouselColumn(msg) : msg.type === 'flexImageCarousel' ? addFlexImageCarouselColumn(msg) : addImageCarouselColumn(msg)"
                 >
                   <span class="add-card-plus">＋</span>
                 </button>
@@ -779,6 +877,9 @@ import {
   CAROUSEL_IMAGE_ASPECT_OPTIONS,
   DEFAULT_CAROUSEL_IMAGE_ASPECT_RATIO,
   resolveCarouselImageAspectRatio,
+  FLEX_IMAGE_CAROUSEL_ASPECT_OPTIONS,
+  DEFAULT_FLEX_IMAGE_CAROUSEL_ASPECT_RATIO,
+  resolveFlexImageCarouselAspectRatio,
 } from '~~/shared/line-image-spec'
 import { loadImageNaturalSize, loadVideoNaturalSize, simplifyAspectRatio } from '~~/shared/media-preview'
 import {
@@ -934,7 +1035,8 @@ const MSG_META: Record<string, { label: string; badge: string }> = {
   richMessage:   { label: '📰 圖文訊息', badge: 'badge-green'  },
   richMessageRef:{ label: '📰 圖文訊息(舊)', badge: 'badge-green'  },
   carousel:      { label: '🎠 輪播訊息', badge: 'badge-green'  },
-  imageCarousel: { label: '🖼️ 圖片輪播', badge: 'badge-gray'  },
+  imageCarousel:     { label: '🖼️ 圖片輪播',      badge: 'badge-gray'   },
+  flexImageCarousel: { label: '🖼️ Flex 圖片輪播', badge: 'badge-purple' },
   quickReply:    { label: '⚡ 快速回覆', badge: 'badge-purple' },
   userInput:     { label: '✍️ 用戶輸入卡片', badge: 'badge-red' },
 }
@@ -967,7 +1069,7 @@ function msgBadgeClass(type: string) {
 }
 
 function isCarouselType(type: string) {
-  return type === 'carousel' || type === 'imageCarousel'
+  return type === 'carousel' || type === 'imageCarousel' || type === 'flexImageCarousel'
 }
 
 // ── Load ──────────────────────────────────────────────
@@ -1163,6 +1265,13 @@ function addMessage(type: string) {
       altText: '',
       columns: [newImageCarouselColumn()],
     })
+  } else if (type === 'flexImageCarousel') {
+    form.value.messages.push({
+      type: 'flexImageCarousel',
+      altText: '',
+      imageAspectRatio: DEFAULT_FLEX_IMAGE_CAROUSEL_ASPECT_RATIO,
+      columns: [newFlexImageCarouselColumn()],
+    })
   } else if (type === 'quickReply') {
     const existingIndex = form.value.messages.findIndex(m => m.type === 'quickReply' || m.type === 'userInput')
     if (existingIndex > -1) {
@@ -1208,6 +1317,14 @@ function newImageCarouselColumn() {
   return {
     imageUrl: '',
     action: { type: 'none', uri: '', text: '', label: '', moduleId: '', tagging: { enabled: false, addTagIds: [] } },
+  }
+}
+
+function newFlexImageCarouselColumn() {
+  return {
+    imageUrl: '',
+    action: { type: 'none', uri: '', text: '', label: '', moduleId: '', tagging: { enabled: false, addTagIds: [] } },
+    actions: [] as ReturnType<typeof newCarouselAction>[],
   }
 }
 
@@ -1376,6 +1493,15 @@ function addImageCarouselColumn(msg: any) {
   if (msg.columns.length < 10) msg.columns.push(newImageCarouselColumn())
 }
 
+function addFlexImageCarouselColumn(msg: any) {
+  if (msg.columns.length < 10) msg.columns.push(newFlexImageCarouselColumn())
+}
+
+function flexImageCarouselPreviewFrame(msg: any) {
+  const { widthRatio, heightRatio } = resolveFlexImageCarouselAspectRatio(msg?.imageAspectRatio)
+  return { widthRatio, heightRatio, fit: 'cover' as const }
+}
+
 function addCarouselAction(col: any) {
   if (!col.actions) col.actions = []
   if (col.actions.length < 3) col.actions.push(newCarouselAction())
@@ -1383,6 +1509,16 @@ function addCarouselAction(col: any) {
 
 function removeCarouselAction(col: any, actionIndex: number) {
   if (!col.actions || col.actions.length <= 1) return
+  col.actions.splice(actionIndex, 1)
+}
+
+function addFlexImageCarouselButton(col: any) {
+  if (!col.actions) col.actions = []
+  if (col.actions.length < 3) col.actions.push(newCarouselAction())
+}
+
+function removeFlexImageCarouselButton(col: any, actionIndex: number) {
+  if (!col.actions) return
   col.actions.splice(actionIndex, 1)
 }
 
@@ -1728,18 +1864,43 @@ function normalizeMessages(messages: any[]) {
       }
     }
 
-    if (msg.type !== 'carousel') return msg
-
-    const columns = Array.isArray(msg.columns) ? msg.columns : []
-    return {
-      ...msg,
-      columns: columns.map((col: any) => ({
-        ...col,
-        actions: Array.isArray(col?.actions) && col.actions.length > 0
-          ? col.actions
-          : [newCarouselAction()],
-      })),
+    if (msg.type === 'flexImageCarousel') {
+      const columns = Array.isArray(msg.columns) ? msg.columns : []
+      const aspectIds = FLEX_IMAGE_CAROUSEL_ASPECT_OPTIONS.map(o => o.id)
+      return {
+        ...msg,
+        imageAspectRatio: aspectIds.includes(msg.imageAspectRatio)
+          ? msg.imageAspectRatio
+          : DEFAULT_FLEX_IMAGE_CAROUSEL_ASPECT_RATIO,
+        columns: columns.map((col: any) => ({
+          ...col,
+          action: col?.action ?? {
+            type: 'none',
+            uri: '',
+            text: '',
+            label: '',
+            moduleId: '',
+            tagging: { enabled: false, addTagIds: [] },
+          },
+          actions: Array.isArray(col?.actions) ? col.actions : [],
+        })),
+      }
     }
+
+    if (msg.type === 'carousel') {
+      const columns = Array.isArray(msg.columns) ? msg.columns : []
+      return {
+        ...msg,
+        columns: columns.map((col: any) => ({
+          ...col,
+          actions: Array.isArray(col?.actions) && col.actions.length > 0
+            ? col.actions
+            : [newCarouselAction()],
+        })),
+      }
+    }
+
+    return msg
   })
 }
 
@@ -1903,6 +2064,33 @@ function validateMessages(messages: any[]): string | null {
         }
         if (action?.tagging?.enabled === true && (!Array.isArray(action?.tagging?.addTagIds) || action.tagging.addTagIds.length === 0)) {
           return '圖片輪播：已啟用貼標，請至少選擇一個標籤'
+        }
+      }
+    }
+
+    if (msg?.type === 'flexImageCarousel' && Array.isArray(msg.columns)) {
+      if (msg.columns.length < 1) return 'Flex 圖片輪播：至少要有 1 個欄位'
+      if (msg.columns.length > 10) return 'Flex 圖片輪播：最多 10 個欄位'
+      for (const col of msg.columns) {
+        if (!col?.imageUrl?.trim()) return 'Flex 圖片輪播：每個欄位都需要圖片'
+        const action = col?.action
+        if (action?.type === 'uri' && !action?.uri?.trim()) return 'Flex 圖片輪播網址為必填'
+        if (action?.type === 'message' && !action?.text?.trim()) return 'Flex 圖片輪播傳送文字為必填'
+        if (action?.type === 'module' && !action?.moduleId) return 'Flex 圖片輪播：請選擇要觸發的機器人模組'
+        if (action?.tagging?.enabled === true && (!Array.isArray(action?.tagging?.addTagIds) || action.tagging.addTagIds.length === 0)) {
+          return 'Flex 圖片輪播：已啟用貼標，請至少選擇一個標籤'
+        }
+        if (Array.isArray(col?.actions)) {
+          if (col.actions.length > 3) return 'Flex 圖片輪播：每個欄位按鈕最多 3 個'
+          for (const btn of col.actions) {
+            if (!btn?.label?.trim()) return 'Flex 圖片輪播按鈕文字為必填'
+            if (btn.type === 'uri' && !btn?.uri?.trim()) return 'Flex 圖片輪播按鈕網址為必填'
+            if (btn.type === 'message' && !btn?.text?.trim()) return 'Flex 圖片輪播按鈕傳送文字為必填'
+            if (btn.type === 'module' && !btn?.moduleId) return 'Flex 圖片輪播：請選擇要觸發的機器人模組'
+            if (btn?.tagging?.enabled === true && (!Array.isArray(btn?.tagging?.addTagIds) || btn.tagging.addTagIds.length === 0)) {
+              return 'Flex 圖片輪播：已啟用貼標，請至少選擇一個標籤'
+            }
+          }
         }
       }
     }

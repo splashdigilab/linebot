@@ -20,7 +20,7 @@ import {
 } from '~~/shared/auto-reply-rule'
 import { RICH_LAYOUT_PRESETS } from '~~/shared/rich-layout-presets'
 import { normalizeRichMessageActions } from '~~/shared/rich-message-editor-helpers'
-import { resolveRichMessageFromImageSize } from '~~/shared/line-image-spec'
+import { resolveRichMessageFromImageSize, resolveFlexImageCarouselAspectRatio } from '~~/shared/line-image-spec'
 import { createImagemapImageToken } from './line-imagemap-image-token'
 import { createUriTagToken } from './line-action-tag-token'
 import { addTagsToUser } from './tagging'
@@ -775,6 +775,84 @@ function buildRichMessageLineMessage(input: {
   })
 }
 
+/** Flex footer 按鈕 action（與輪播 template 按鈕邏輯一致，需顯示 label） */
+function buildFlexCarouselButtonAction(
+  action: any,
+  attributes: Record<string, string>,
+  userId: string,
+  publicBaseOverride: string,
+  lineChannelSecret: string,
+): Record<string, unknown> | null {
+  const type = String(action?.type || '').trim()
+  if (!type || type === 'none') return null
+  if (type === 'uri') {
+    return {
+      type: 'uri',
+      label: renderWithAttributes(action.label || '　', attributes).slice(0, 20),
+      uri: resolveUriWithTagging({
+        uri: renderWithAttributes(action.uri || 'https://google.com', attributes),
+        action,
+        userId,
+        publicBaseOverride,
+        channelSecret: lineChannelSecret,
+      }),
+    }
+  }
+  if (type === 'module') {
+    return {
+      type: 'postback',
+      label: renderWithAttributes(action.label || '觸發模組', attributes).slice(0, 20),
+      data: encodeTriggerModule(
+        action.moduleId,
+        action?.tagging?.enabled && Array.isArray(action?.tagging?.addTagIds)
+          ? action.tagging.addTagIds
+          : [],
+      ),
+    }
+  }
+  const renderedText = renderWithAttributes(action?.text || action?.label || '　', attributes).slice(0, 300)
+  const tagIds = extractTagIdsFromAction(action)
+  if (tagIds.length > 0) {
+    return {
+      type: 'postback',
+      label: renderWithAttributes(action?.label || '　', attributes).slice(0, 20),
+      data: encodeTriggerMessage(renderedText, tagIds),
+      displayText: renderedText,
+    }
+  }
+  return {
+    type: 'message',
+    label: renderWithAttributes(action?.label || '　', attributes).slice(0, 20),
+    text: renderedText,
+  }
+}
+
+function buildFlexImageCarouselFooter(
+  actions: any[],
+  attributes: Record<string, string>,
+  userId: string,
+  publicBaseOverride: string,
+  lineChannelSecret: string,
+): Record<string, unknown> | undefined {
+  const buttons = (actions ?? [])
+    .slice(0, 3)
+    .map((action) => buildFlexCarouselButtonAction(action, attributes, userId, publicBaseOverride, lineChannelSecret))
+    .filter(Boolean)
+    .map((flexAction) => ({
+      type: 'button',
+      style: 'link',
+      height: 'sm',
+      action: flexAction,
+    }))
+  if (!buttons.length) return undefined
+  return {
+    type: 'box',
+    layout: 'vertical',
+    spacing: 'sm',
+    contents: buttons,
+  }
+}
+
 /** Flex：底圖 + 依編輯器座標疊透明點擊區（類似圖文選單），可保留 postback 觸發模組 */
 function buildRichMessageFlexMessage(input: {
   altText: string
@@ -1112,6 +1190,80 @@ function buildLineMessages(
         altText: renderWithAttributes(msg.altText || '圖片輪播', attributes).slice(0, 400),
         template: { type: 'image_carousel', columns },
       } as messagingApi.TemplateMessage]
+    }
+
+    // ── Flex Image Carousel（自訂比例，整圖可點擊）──
+    if (msg.type === 'flexImageCarousel') {
+      const aspect = resolveFlexImageCarouselAspectRatio(msg.imageAspectRatio)
+      const bubbles = (msg.columns ?? [])
+        .filter((col: any) => col.imageUrl)
+        .map((col: any) => {
+          const actionType = col.action?.type
+          let heroAction: Record<string, unknown> | undefined
+          if (actionType === 'uri') {
+            heroAction = {
+              type: 'uri',
+              label: ' ',
+              uri: resolveUriWithTagging({
+                uri: renderWithAttributes(col.action.uri || 'https://google.com', attributes),
+                action: col.action,
+                userId,
+                publicBaseOverride,
+                channelSecret: lineChannelSecret,
+              }),
+            }
+          } else if (actionType === 'module') {
+            heroAction = {
+              type: 'postback',
+              label: ' ',
+              data: encodeTriggerModule(
+                col.action.moduleId || '',
+                col.action?.tagging?.enabled && Array.isArray(col.action?.tagging?.addTagIds)
+                  ? col.action.tagging.addTagIds
+                  : [],
+              ),
+            }
+          } else if (actionType === 'message') {
+            const renderedText = renderWithAttributes(col.action.text || '', attributes).slice(0, 300)
+            const tagIds = extractTagIdsFromAction(col.action)
+            heroAction = tagIds.length > 0
+              ? {
+                  type: 'postback',
+                  label: ' ',
+                  data: encodeTriggerMessage(renderedText, tagIds),
+                  displayText: renderedText,
+                }
+              : {
+                  type: 'message',
+                  label: ' ',
+                  text: renderedText,
+                }
+          }
+          const hero: Record<string, unknown> = {
+            type: 'image',
+            url: renderWithAttributes(col.imageUrl, attributes),
+            size: 'full',
+            aspectRatio: aspect.lineAspectRatio,
+            aspectMode: 'cover',
+          }
+          if (heroAction) hero.action = heroAction
+          const bubble: Record<string, unknown> = { type: 'bubble', size: 'mega', hero }
+          const footer = buildFlexImageCarouselFooter(
+            col.actions,
+            attributes,
+            userId,
+            publicBaseOverride,
+            lineChannelSecret,
+          )
+          if (footer) bubble.footer = footer
+          return bubble
+        })
+      if (!bubbles.length) return []
+      return [{
+        type: 'flex',
+        altText: renderWithAttributes(msg.altText || 'Flex 圖片輪播', attributes).slice(0, 400),
+        contents: { type: 'carousel', contents: bubbles },
+      } as messagingApi.FlexMessage]
     }
 
     // ── Rich Message Inline（底圖 + 疊在圖上的點擊區，類似圖文選單）──

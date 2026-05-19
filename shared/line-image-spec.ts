@@ -83,3 +83,34 @@ export function carouselAspectToPreviewSize(raw?: unknown): MediaNaturalSize {
   const { width, height } = resolveCarouselImageAspectRatio(raw)
   return { width, height }
 }
+
+// ── Flex Image Carousel ──────────────────────────────────────────────────────
+
+/** Flex 圖片輪播可自訂比例（LINE Flex image aspectRatio，高不超過寬的 3 倍） */
+export type FlexImageCarouselAspectRatio = '20:9' | '16:9' | '4:3' | '1:1'
+
+export const DEFAULT_FLEX_IMAGE_CAROUSEL_ASPECT_RATIO: FlexImageCarouselAspectRatio = '16:9'
+
+export const FLEX_IMAGE_CAROUSEL_ASPECT_OPTIONS: Array<{
+  id: FlexImageCarouselAspectRatio
+  label: string
+  widthRatio: number
+  heightRatio: number
+}> = [
+  { id: '20:9', label: '寬螢幕 20:9', widthRatio: 20, heightRatio: 9 },
+  { id: '16:9', label: '橫式 16:9', widthRatio: 16, heightRatio: 9 },
+  { id: '4:3',  label: '標準橫式 4:3', widthRatio: 4,  heightRatio: 3 },
+  { id: '1:1',  label: '正方形 1:1',  widthRatio: 1,  heightRatio: 1 },
+]
+
+export function resolveFlexImageCarouselAspectRatio(raw?: unknown): {
+  id: FlexImageCarouselAspectRatio
+  widthRatio: number
+  heightRatio: number
+  lineAspectRatio: string
+} {
+  const str = String(raw || '').trim()
+  const match = FLEX_IMAGE_CAROUSEL_ASPECT_OPTIONS.find(o => o.id === str)
+    ?? FLEX_IMAGE_CAROUSEL_ASPECT_OPTIONS.find(o => o.id === DEFAULT_FLEX_IMAGE_CAROUSEL_ASPECT_RATIO)!
+  return { id: match.id, widthRatio: match.widthRatio, heightRatio: match.heightRatio, lineAspectRatio: match.id }
+}
