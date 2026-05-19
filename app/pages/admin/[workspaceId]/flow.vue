@@ -131,8 +131,8 @@
             <el-button size="small" @click="addMessage('video')">＋ 影片</el-button>
             <el-button size="small" @click="addMessage('richMessage')">＋ 圖文訊息</el-button>
             <el-button size="small" @click="addMessage('carousel')">＋ 輪播</el-button>
-            <el-button size="small" @click="addMessage('imageCarousel')">＋ 圖片輪播</el-button>
-            <el-button size="small" @click="addMessage('flexImageCarousel')">＋ Flex 圖片輪播</el-button>
+            <el-button v-if="showLegacyImageCarousel" size="small" @click="addMessage('imageCarousel')">＋ 圖片輪播</el-button>
+            <el-button size="small" @click="addMessage('flexImageCarousel')">＋ 圖片輪播</el-button>
             <el-button size="small" @click="addMessage('quickReply')">＋ 快速回覆</el-button>
             <el-button size="small" @click="addMessage('userInput')">＋ 用戶輸入</el-button>
           </div>
@@ -1027,6 +1027,9 @@ function insertVariableToken(target: Record<string, any>, key: string, token: st
   target[key] = `${current}${token}`
 }
 
+/** 舊版 template 圖片輪播：保留類型與載入，僅隱藏新增按鈕 */
+const showLegacyImageCarousel = false
+
 // ── Badge helpers ─────────────────────────────────────
 const MSG_META: Record<string, { label: string; badge: string }> = {
   text:          { label: '📝 文字訊息',  badge: 'badge-blue'   },
@@ -1036,7 +1039,7 @@ const MSG_META: Record<string, { label: string; badge: string }> = {
   richMessageRef:{ label: '📰 圖文訊息(舊)', badge: 'badge-green'  },
   carousel:      { label: '🎠 輪播訊息', badge: 'badge-green'  },
   imageCarousel:     { label: '🖼️ 圖片輪播',      badge: 'badge-gray'   },
-  flexImageCarousel: { label: '🖼️ Flex 圖片輪播', badge: 'badge-purple' },
+  flexImageCarousel: { label: '🖼️ 圖片輪播', badge: 'badge-purple' },
   quickReply:    { label: '⚡ 快速回覆', badge: 'badge-purple' },
   userInput:     { label: '✍️ 用戶輸入卡片', badge: 'badge-red' },
 }
