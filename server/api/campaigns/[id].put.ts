@@ -65,6 +65,8 @@ export default defineEventHandler(async (event) => {
     moduleId: merged.moduleId,
     action: merged.action,
     redirectUrl: String(merged.redirectUrl ?? '') || null,
+    publishedClaimId: snap.data()?.publishedClaimId ?? null,
+    publishedCtaUrl: snap.data()?.publishedCtaUrl ?? null,
   })
 
   return {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseLeadClaimFromQuery } from './liff-lead-query'
+import { parseLeadClaimFromQuery, parsePublishedCtaUrl } from './liff-lead-query'
 
 describe('parseLeadClaimFromQuery', () => {
   it('reads claimToken and c from top-level query', () => {
@@ -45,5 +45,26 @@ describe('parseLeadClaimFromQuery', () => {
     const outer = `?liff.state=${inner}`
     const q = { 'liff.state': outer }
     expect(parseLeadClaimFromQuery(q)).toEqual({ ct: 'nested-token', campaignCode: 'c_nested', liffId: '2009-nested' })
+  })
+})
+
+describe('parsePublishedCtaUrl', () => {
+  it('reads claimToken from direct app base URL', () => {
+    const url = 'https://app.example.com/liff/lead?claimToken=stable-tok&c=launch_q1&liffId=2009-abc'
+    expect(parsePublishedCtaUrl(url)).toEqual({
+      ct: 'stable-tok',
+      campaignCode: 'launch_q1',
+      liffId: '2009-abc',
+    })
+  })
+
+  it('reads claimToken from liff.line.me URL via liff.state', () => {
+    const stateParams = encodeURIComponent('?claimToken=stable-tok-2&c=launch_q2&liffId=2009-def')
+    const url = `https://liff.line.me/2009-def?liff.state=${stateParams}`
+    expect(parsePublishedCtaUrl(url)).toEqual({
+      ct: 'stable-tok-2',
+      campaignCode: 'launch_q2',
+      liffId: '2009-def',
+    })
   })
 })

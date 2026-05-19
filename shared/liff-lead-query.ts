@@ -62,3 +62,18 @@ export function parseLeadClaimFromQuery(
 
   return { ct, campaignCode, liffId }
 }
+
+/** 從後台儲存的活動進入網址（direct 或 liff.line.me）解析 claimToken 等參數。 */
+export function parsePublishedCtaUrl(ctaUrl: string): { ct: string; campaignCode: string; liffId: string } {
+  try {
+    const u = new URL(ctaUrl)
+    const query: Record<string, string> = {}
+    u.searchParams.forEach((value, key) => {
+      query[key] = value
+    })
+    return parseLeadClaimFromQuery(query)
+  }
+  catch {
+    return { ct: '', campaignCode: '', liffId: '' }
+  }
+}
