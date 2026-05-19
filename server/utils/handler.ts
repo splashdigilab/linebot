@@ -400,14 +400,14 @@ async function dispatchPostReplyActions(
     const tagIds = tagging?.enabled && Array.isArray(tagging?.addTagIds)
       ? tagging.addTagIds.map((item: unknown) => String(item || '').trim()).filter(Boolean)
       : []
-    await db.collection('users').doc(uid).update({
+    await db.collection('users').doc(uid).set({
       activeInput: {
         moduleId: userInputMsg.moduleId,
         attribute: userInputMsg.attribute || null,
         tagIds,
         expiresAt: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
       }
-    })
+    }, { merge: true })
     invalidateUserDocCache(uid)
   }
 }
@@ -1668,6 +1668,9 @@ async function handleIncomingText(
 
     const flow = await getFlowByModuleId(moduleId)
 
+    // Always mark handled to prevent auto-reply from intercepting the user's answer
+    handledByInput = true
+
     if (flow && replyToken) {
       const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
       const lineMessages = buildLineMessages(
@@ -1677,18 +1680,21 @@ async function handleIncomingText(
         lineUserId,
         channelSecret,
       )
-      await replyMessage(replyToken, lineMessages, wid)
-      await dispatchPostReplyActions(lineUserId, flow.messages, wid)
-      saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, wid).catch(e => console.error('[conv] save error:', e))
-      if (sessionId) {
-        enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', moduleId, wid).catch(e =>
-          console.error('[session] enterModule error:', e),
-        )
+      if (lineMessages.length > 0) {
+        await replyMessage(replyToken, lineMessages, wid)
+        await dispatchPostReplyActions(lineUserId, flow.messages, wid)
+        saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, wid).catch(e => console.error('[conv] save error:', e))
+        if (sessionId) {
+          enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', moduleId, wid).catch(e =>
+            console.error('[session] enterModule error:', e),
+          )
+        }
+      } else {
+        console.warn('[userInput] next flow has no renderable messages, skipping reply:', moduleId)
       }
-      handledByInput = true
     } else {
       console.warn(
-        '[autoReply] activeInput flow missing/inactive, fallback to regular auto-reply:',
+        '[userInput] activeInput flow missing/inactive:',
         moduleId,
       )
     }
