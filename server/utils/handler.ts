@@ -827,6 +827,41 @@ function buildFlexCarouselButtonAction(
   }
 }
 
+function buildFlexImageCarouselBody(
+  col: any,
+  attributes: Record<string, string>,
+): Record<string, unknown> | undefined {
+  const title = renderWithAttributes(col?.title || '', attributes).trim().slice(0, 80)
+  const text = renderWithAttributes(col?.text || '', attributes).trim().slice(0, 300)
+  const contents: Record<string, unknown>[] = []
+  if (title) {
+    contents.push({
+      type: 'text',
+      text: title,
+      weight: 'bold',
+      size: 'md',
+      wrap: true,
+    })
+  }
+  if (text) {
+    contents.push({
+      type: 'text',
+      text,
+      size: 'sm',
+      color: '#666666',
+      wrap: true,
+    })
+  }
+  if (!contents.length) return undefined
+  return {
+    type: 'box',
+    layout: 'vertical',
+    spacing: 'sm',
+    paddingAll: '12px',
+    contents,
+  }
+}
+
 function buildFlexImageCarouselFooter(
   actions: any[],
   attributes: Record<string, string>,
@@ -1194,13 +1229,14 @@ function buildLineMessages(
 
     // ── Flex Image Carousel（自訂比例，整圖可點擊）──
     if (msg.type === 'flexImageCarousel') {
+      const enableImage = msg.enableImage !== false
       const aspect = resolveFlexImageCarouselAspectRatio(msg.imageAspectRatio)
       const bubbles = (msg.columns ?? [])
-        .filter((col: any) => col.imageUrl)
         .map((col: any) => {
+          const imageUrl = String(col?.imageUrl || '').trim()
           const actionType = col.action?.type
           let heroAction: Record<string, unknown> | undefined
-          if (actionType === 'uri') {
+          if (enableImage && actionType === 'uri') {
             heroAction = {
               type: 'uri',
               label: ' ',
@@ -1212,7 +1248,7 @@ function buildLineMessages(
                 channelSecret: lineChannelSecret,
               }),
             }
-          } else if (actionType === 'module') {
+          } else if (enableImage && actionType === 'module') {
             heroAction = {
               type: 'postback',
               label: ' ',
@@ -1223,7 +1259,7 @@ function buildLineMessages(
                   : [],
               ),
             }
-          } else if (actionType === 'message') {
+          } else if (enableImage && actionType === 'message') {
             const renderedText = renderWithAttributes(col.action.text || '', attributes).slice(0, 300)
             const tagIds = extractTagIdsFromAction(col.action)
             heroAction = tagIds.length > 0
@@ -1239,15 +1275,20 @@ function buildLineMessages(
                   text: renderedText,
                 }
           }
-          const hero: Record<string, unknown> = {
-            type: 'image',
-            url: renderWithAttributes(col.imageUrl, attributes),
-            size: 'full',
-            aspectRatio: aspect.lineAspectRatio,
-            aspectMode: 'cover',
+          const bubble: Record<string, unknown> = { type: 'bubble', size: 'mega' }
+          if (enableImage && imageUrl) {
+            const hero: Record<string, unknown> = {
+              type: 'image',
+              url: renderWithAttributes(col.imageUrl, attributes),
+              size: 'full',
+              aspectRatio: aspect.lineAspectRatio,
+              aspectMode: 'cover',
+            }
+            if (heroAction) hero.action = heroAction
+            bubble.hero = hero
           }
-          if (heroAction) hero.action = heroAction
-          const bubble: Record<string, unknown> = { type: 'bubble', size: 'mega', hero }
+          const body = buildFlexImageCarouselBody(col, attributes)
+          if (body) bubble.body = body
           const footer = buildFlexImageCarouselFooter(
             col.actions,
             attributes,
@@ -1256,12 +1297,14 @@ function buildLineMessages(
             lineChannelSecret,
           )
           if (footer) bubble.footer = footer
+          if (!bubble.hero && !bubble.body && !bubble.footer) return null
           return bubble
         })
+        .filter(Boolean)
       if (!bubbles.length) return []
       return [{
         type: 'flex',
-        altText: renderWithAttributes(msg.altText || 'Flex 圖片輪播', attributes).slice(0, 400),
+        altText: renderWithAttributes(msg.altText || '輪播訊息', attributes).slice(0, 400),
         contents: { type: 'carousel', contents: bubbles },
       } as messagingApi.FlexMessage]
     }

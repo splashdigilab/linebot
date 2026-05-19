@@ -1814,14 +1814,43 @@ function normalizeCard(input?: Partial<StructuredCardPreview>): StructuredCardPr
   }
 }
 
+function parseFlexImageCarouselBody(body: any): { title: string; text: string } {
+  const contents = body?.contents
+  if (!Array.isArray(contents)) return { title: '', text: '' }
+  const textNodes = contents.filter((item: any) => item?.type === 'text')
+  if (!textNodes.length) return { title: '', text: '' }
+  const first = textNodes[0]
+  const firstIsTitle = first?.weight === 'bold' || first?.size === 'md'
+  if (textNodes.length === 1) {
+    if (firstIsTitle) return { title: String(first.text || '').trim(), text: '' }
+    return { title: '', text: String(first.text || '').trim() }
+  }
+  return {
+    title: String(textNodes[0]?.text || '').trim(),
+    text: textNodes.slice(1).map((item: any) => String(item.text || '').trim()).filter(Boolean).join('\n'),
+  }
+}
+
 function isFlexImageCarouselBubble(bubble: any): boolean {
-  if (bubble?.hero?.type !== 'image') return false
-  if (bubble.body || bubble.header) return false
-  if (!bubble.footer) return true
-  const footerContents = bubble.footer?.contents
-  return Array.isArray(footerContents)
-    && footerContents.length > 0
-    && footerContents.every((item: any) => item?.type === 'button')
+  if (bubble?.size !== 'mega') return false
+  if (bubble?.header) return false
+  if (bubble?.hero && bubble.hero.type !== 'image') return false
+  if (bubble.body) {
+    const bodyContents = bubble.body?.contents
+    if (!Array.isArray(bodyContents) || !bodyContents.every((item: any) => item?.type === 'text')) {
+      return false
+    }
+  }
+  if (bubble.footer) {
+    const footerContents = bubble.footer?.contents
+    if (!Array.isArray(footerContents) || !footerContents.every((item: any) => item?.type === 'button')) {
+      return false
+    }
+  }
+  const hasHero = bubble?.hero?.type === 'image'
+  const hasBody = Boolean(bubble.body)
+  const hasFooter = Boolean(bubble.footer)
+  return hasHero || hasBody || hasFooter
 }
 
 function extractFlexTexts(node: any, acc: string[] = []): string[] {
@@ -1915,7 +1944,10 @@ function getStructuredMessagePreview(msg: MsgItem): StructuredMessagePreview | n
             const heroActionLabel = bubble.hero?.action
               ? toActionLabel(bubble.hero.action)
               : ''
+            const { title, text } = parseFlexImageCarouselBody(bubble.body)
             return normalizeCard({
+              title,
+              text,
               imageUrl: String(bubble.hero?.url || '').trim(),
               actions: footerActions,
               heroActionLabel: footerActions.length > 0 ? '' : heroActionLabel,
