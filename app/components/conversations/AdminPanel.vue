@@ -1832,25 +1832,31 @@ function parseFlexImageCarouselBody(body: any): { title: string; text: string } 
 }
 
 function isFlexImageCarouselBubble(bubble: any): boolean {
-  if (bubble?.size !== 'mega') return false
+  if (bubble?.type !== 'bubble') return false
+  // size 可能未儲存，只排除明確非 mega 的值
+  if (bubble?.size && bubble.size !== 'mega') return false
+  // 不允許有 header
   if (bubble?.header) return false
+  // hero 如果存在，必須是圖片
   if (bubble?.hero && bubble.hero.type !== 'image') return false
-  if (bubble.body) {
+  // body 如果存在，必須是 vertical box，且 contents 全為 text
+  if (bubble?.body) {
+    if (bubble.body.type !== 'box' || bubble.body.layout !== 'vertical') return false
     const bodyContents = bubble.body?.contents
     if (!Array.isArray(bodyContents) || !bodyContents.every((item: any) => item?.type === 'text')) {
       return false
     }
   }
-  if (bubble.footer) {
+  // footer 如果存在，必須是 vertical box，且 contents 全為 button
+  if (bubble?.footer) {
+    if (bubble.footer.type !== 'box') return false
     const footerContents = bubble.footer?.contents
     if (!Array.isArray(footerContents) || !footerContents.every((item: any) => item?.type === 'button')) {
       return false
     }
   }
-  const hasHero = bubble?.hero?.type === 'image'
-  const hasBody = Boolean(bubble.body)
-  const hasFooter = Boolean(bubble.footer)
-  return hasHero || hasBody || hasFooter
+  // 至少要有 hero、body、footer 其中一個
+  return Boolean(bubble?.hero?.type === 'image' || bubble?.body || bubble?.footer)
 }
 
 function extractFlexTexts(node: any, acc: string[] = []): string[] {
@@ -2016,9 +2022,16 @@ function getStructuredTemplateClass(msg: MsgItem): Array<string> {
 }
 
 function getStructuredCardClass(msg: MsgItem, card: StructuredCardPreview): Record<string, boolean> {
+  const variant = getStructuredVariant(msg)
+  const hasImage = Boolean(card.imageUrl)
+  const hasBody = Boolean(String(card.title || '').trim() || String(card.text || '').trim())
+  const hasActions = Array.isArray(card.actions) && card.actions.length > 0
   return {
-    'has-card-image': Boolean(card.imageUrl),
-    'is-card-text-only': getStructuredVariant(msg) === 'carousel' && !card.imageUrl,
+    'has-card-image': hasImage,
+    'has-card-body': hasBody,
+    'has-card-actions': hasActions,
+    'is-card-text-only': (variant === 'carousel' || variant === 'flex_image_carousel') && !hasImage,
+    'is-card-image-only': variant === 'flex_image_carousel' && hasImage && !hasBody && !hasActions,
   }
 }
 

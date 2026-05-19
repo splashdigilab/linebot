@@ -535,29 +535,106 @@
     max-width: min(92vw, 1020px);
   }
 
-  /* ── Flex Image Carousel（自訂比例，圖片填滿整個 card）── */
+  /* ── Flex 輪播訊息（flexImageCarousel）── */
+
+  /* 所有卡片：寬度、relative 定位供 overlay 絕對定位用 */
   .conv-line-template.variant-flex_image_carousel .conv-line-card {
     width: var(--line-card-width-image);
-    border: 0;
-    border-radius: 1rem;
-    box-shadow: none;
-    background: transparent;
-    overflow: visible;
     position: relative;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
+  /* 圖片高度統一用 aspect-ratio 控制，覆蓋 base 的固定 height: 188px */
   .conv-line-template.variant-flex_image_carousel .conv-line-card-image {
+    width: 100%;
     height: auto;
-    aspect-ratio: 16 / 9; /* fallback；實際比例透過 JS 從資料取得後由 inline style 覆蓋 */
+    aspect-ratio: 16 / 9; /* JS inline style 會以實際比例覆蓋此值 */
+    object-fit: cover;
+    display: block;
+    flex-shrink: 0;
+  }
+
+  /* 純圖卡片（無標題、內文、按鈕）：透明背景、整張圖圓角 */
+  .conv-line-template.variant-flex_image_carousel .conv-line-card.is-card-image-only {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  .conv-line-template.variant-flex_image_carousel .conv-line-card.is-card-image-only .conv-line-card-image {
     border-radius: 1rem;
     box-shadow: 0 1px 2px rgba(15, 23, 42, 0.14);
-    object-fit: cover;
+  }
+
+  /* 有圖片且含文字或按鈕：白底一體卡片，圖片頂部不圓角 */
+  .conv-line-template.variant-flex_image_carousel .conv-line-card.has-card-image.has-card-body,
+  .conv-line-template.variant-flex_image_carousel .conv-line-card.has-card-image.has-card-actions {
+    width: var(--line-card-width-text);
+    background: #fff;
+    border: 1px solid #d5d9df;
+    border-radius: var(--line-card-radius);
+    box-shadow: 0 1px 1px rgba(15, 23, 42, 0.08);
+    overflow: hidden;
+  }
+
+  .conv-line-template.variant-flex_image_carousel .conv-line-card.has-card-image.has-card-body .conv-line-card-image,
+  .conv-line-template.variant-flex_image_carousel .conv-line-card.has-card-image.has-card-actions .conv-line-card-image {
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .conv-line-template.variant-flex_image_carousel .conv-line-card.has-card-image.has-card-body .conv-line-card-title,
+  .conv-line-template.variant-flex_image_carousel .conv-line-card.has-card-image.has-card-actions .conv-line-card-title {
+    padding: 0.72rem 0.92rem 0.18rem;
+    font-size: var(--line-font-card-title);
+    line-height: var(--line-lh-card);
+    color: #1f2a3a;
+  }
+
+  .conv-line-template.variant-flex_image_carousel .conv-line-card.has-card-image.has-card-body .conv-line-card-text,
+  .conv-line-template.variant-flex_image_carousel .conv-line-card.has-card-image.has-card-actions .conv-line-card-text {
+    padding: 0 0.92rem 0.82rem;
+    font-size: var(--line-font-card-text);
+    line-height: var(--line-lh-card);
+    color: #3c4654;
+  }
+
+  /* 純文字卡片（enableImage 關閉）*/
+  .conv-line-template.variant-flex_image_carousel .conv-line-card.is-card-text-only {
+    width: var(--line-card-width-text);
+    background: #fff;
+    border: 1px solid #d5d9df;
+    border-radius: var(--line-card-radius);
+    box-shadow: 0 1px 1px rgba(15, 23, 42, 0.08);
+  }
+
+  .conv-line-template.variant-flex_image_carousel.is-text-only .conv-line-card-title {
+    font-size: 1.12rem;
+    padding-top: 0.92rem;
+  }
+
+  .conv-line-template.variant-flex_image_carousel.is-text-only .conv-line-card-text {
+    min-height: 2.8rem;
+  }
+
+  /* 輪播寬度 */
+  .conv-line-template.variant-flex_image_carousel.has-card-image .conv-line-template-carousel {
+    width: min(calc(var(--line-card-width-image) * 2 + var(--conv-carousel-gap)), 90vw);
+  }
+
+  .conv-line-template.variant-flex_image_carousel.is-text-only .conv-line-template-carousel {
+    width: min(calc(var(--line-card-width-text) * 2 + var(--conv-carousel-gap)), 90vw);
   }
 
   .conv-line-template.variant-flex_image_carousel .conv-line-template-carousel .conv-line-card {
-    width: min(var(--line-card-width-image), calc((100% - var(--conv-carousel-gap)) / 2));
+    width: 100%;
+    box-sizing: border-box;
   }
 
+  /* Overlay（整圖點擊提示）：絕對定位在卡片下緣 */
   .conv-line-template.variant-flex_image_carousel .conv-line-card-image-overlay {
     position: absolute;
     left: 50%;
@@ -586,9 +663,10 @@
     text-overflow: ellipsis;
   }
 
+  /* 底部按鈕列 */
   .conv-line-template.variant-flex_image_carousel .conv-line-card-actions {
     border-top: 1px solid #e4e7ee;
-    margin-top: 0;
+    margin-top: auto;
   }
 
   .conv-line-template.variant-flex_image_carousel .conv-line-card-action {
@@ -602,6 +680,17 @@
 
   .conv-line-template.variant-flex_image_carousel .conv-line-card-action:first-child {
     border-top: 0;
+  }
+
+  .conv-line-template.variant-flex_image_carousel .conv-line-card-actions.is-line-action {
+    border-top: 1px solid #d7dce5;
+  }
+
+  .conv-line-template.variant-flex_image_carousel .conv-line-card-action.is-line-action {
+    font-size: var(--line-font-action);
+    line-height: var(--line-lh-action);
+    color: #3b67a4;
+    padding: 0.78rem 0.66rem;
   }
 
   .conv-line-template.variant-carousel .conv-line-card {
