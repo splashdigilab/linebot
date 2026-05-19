@@ -58,139 +58,155 @@ export async function executeBroadcastSend(
   // ── 解析受眾 ──────────────────────────────────────────────────────
   let resolvedUserIds: string[] = []
 
-  if (data.audienceSource.type === 'all') {
-    const usersSnap = await db.collection('users').select('isBlocked').get()
-    resolvedUserIds = usersSnap.docs
-      .filter((d) => d.data().isBlocked !== true)
-      .map((d) => d.id)
-  }
-  else if (data.audienceSource.type === 'tags' && data.audienceSource.tagIds?.length) {
-    const filter: AudienceFilter = {
-      conditions: [{ type: 'includeAny', tagIds: data.audienceSource.tagIds }],
-      joinedAfter: null,
-      joinedBefore: null,
-      isBlocked: false,
+  try {
+    if (data.audienceSource.type === 'all') {
+      let query = db.collection('users').select('isBlocked') as FirebaseFirestore.Query
+      if (workspaceId) query = query.where('workspaceId', '==', workspaceId)
+      const usersSnap = await query.get()
+      resolvedUserIds = usersSnap.docs
+        .filter((d) => d.data().isBlocked !== true)
+        .map((d) => d.id)
     }
-    resolvedUserIds = await resolveAudienceUserIds(filter)
-  }
-  else if (data.audienceSource.type === 'audience' && data.audienceSource.audienceId) {
-    const audienceSnap = await db.collection('audiences').doc(data.audienceSource.audienceId).get()
-    if (!audienceSnap.exists) throw new Error('Audience not found')
-    resolvedUserIds = await resolveAudienceUserIds(audienceSnap.data()!.filter as AudienceFilter)
-  }
-  else if (data.audienceSource.type === 'import') {
-    resolvedUserIds = data.audienceSource.importedUserIds ?? []
-  }
+    else if (data.audienceSource.type === 'tags' && data.audienceSource.tagIds?.length) {
+      const filter: AudienceFilter = {
+        conditions: [{ type: 'includeAny', tagIds: data.audienceSource.tagIds }],
+        joinedAfter: null,
+        joinedBefore: null,
+        isBlocked: false,
+      }
+      resolvedUserIds = await resolveAudienceUserIds(filter, workspaceId)
+    }
+    else if (data.audienceSource.type === 'audience' && data.audienceSource.audienceId) {
+      const audienceSnap = await db.collection('audiences').doc(data.audienceSource.audienceId).get()
+      if (!audienceSnap.exists) throw new Error('Audience not found')
+      resolvedUserIds = await resolveAudienceUserIds(audienceSnap.data()!.filter as AudienceFilter, workspaceId)
+    }
+    else if (data.audienceSource.type === 'import') {
+      resolvedUserIds = data.audienceSource.importedUserIds ?? []
+    }
 
-  if (!resolvedUserIds.length) {
-    throw new Error('Resolved audience is empty')
-  }
+    if (!resolvedUserIds.length) {
+      throw new Error('Resolved audience is empty')
+    }
 
-  // ── 寫入受眾快照（status 已在 claim 時改為 processing）────────────
-  const snapshotAt = FieldValue.serverTimestamp()
-  await ref.update({
-    totalCount: resolvedUserIds.length,
-    'audienceSnapshot.resolvedUserIds': resolvedUserIds,
-    'audienceSnapshot.estimatedCount': resolvedUserIds.length,
-    updatedAt: snapshotAt,
-  })
-
-  // ── 呼叫 LINE multicast API ──────────────────────────────────────
-  const clickOrigin = String(runtimeConfig.clickTrackingBaseUrl || '').trim().replace(/\/$/, '')
-  const triggerModuleId = extractTriggerModuleId(data.messages)
-  let outboundMessages = data.messages
-  if (triggerModuleId) {
-    const rendered = await renderModuleToLineMessages(triggerModuleId, {
-      workspaceId,
-      requestOrigin: clickOrigin,
+    // ── 寫入受眾快照（status 已在 claim 時改為 processing）────────────
+    const snapshotAt = FieldValue.serverTimestamp()
+    await ref.update({
+      totalCount: resolvedUserIds.length,
+      'audienceSnapshot.resolvedUserIds': resolvedUserIds,
+      'audienceSnapshot.estimatedCount': resolvedUserIds.length,
+      updatedAt: snapshotAt,
     })
-    if (!rendered || rendered.lineMessages.length === 0) {
-      throw new Error(`Broadcast module not found or empty: ${triggerModuleId}`)
+
+    // ── 呼叫 LINE multicast API ──────────────────────────────────────
+    const clickOrigin = String(runtimeConfig.clickTrackingBaseUrl || '').trim().replace(/\/$/, '')
+    const triggerModuleId = extractTriggerModuleId(data.messages)
+    let outboundMessages = data.messages
+    if (triggerModuleId) {
+      const rendered = await renderModuleToLineMessages(triggerModuleId, {
+        workspaceId,
+        requestOrigin: clickOrigin,
+      })
+      if (!rendered || rendered.lineMessages.length === 0) {
+        throw new Error(`Broadcast module not found or empty: ${triggerModuleId}`)
+      }
+      outboundMessages = rendered.lineMessages as any[]
     }
-    outboundMessages = rendered.lineMessages as any[]
-  }
 
-  const messagesForLine = clickOrigin.startsWith('http')
-    ? wrapBroadcastMessagesForClickTracking(outboundMessages, id, clickOrigin)
-    : outboundMessages
+    const messagesForLine = clickOrigin.startsWith('http')
+      ? wrapBroadcastMessagesForClickTracking(outboundMessages, id, clickOrigin)
+      : outboundMessages
 
-  if (!clickOrigin.startsWith('http')) {
-    console.warn('[broadcast/send] PUBLIC_BASE_URL（或舊名 LINE_IMAGEMAP_BASE_URL／CLICK_TRACKING_BASE_URL）未設定，推播 URI 點擊不會寫入 broadcastClickLogs')
-  }
-
-  const recipients = resolvedUserIds
-    .map((docId) => ({
-      docId,
-      lineUserId: String(lineUserIdFromFirestoreDocId(docId, workspaceId) || '').trim(),
-    }))
-    .filter((r) => Boolean(r.lineUserId))
-  const lineUserIds = recipients.map((r) => r.lineUserId)
-
-  const lineUnit = broadcastAggregationUnit(id)
-  const { successCount, failedIds, lineAggregationApplied } = await multicastMessage(
-    lineUserIds,
-    messagesForLine as any,
-    workspaceId,
-    { customAggregationUnits: [lineUnit] },
-  )
-
-  if (!lineAggregationApplied) {
-    console.warn('[broadcast/send] LINE 未套用 customAggregationUnits，開封數將無法從 LINE Insight 取得')
-  }
-
-  // ── 寫入 deliveries 子集合 ────────────────────────────────────────
-  const BATCH_LIMIT = 400
-  let batch = db.batch()
-  let opsInBatch = 0
-
-  const flushBatch = async () => {
-    if (opsInBatch > 0) {
-      await batch.commit()
-      batch = db.batch()
-      opsInBatch = 0
+    if (!clickOrigin.startsWith('http')) {
+      console.warn('[broadcast/send] PUBLIC_BASE_URL（或舊名 LINE_IMAGEMAP_BASE_URL／CLICK_TRACKING_BASE_URL）未設定，推播 URI 點擊不會寫入 broadcastClickLogs')
     }
-  }
 
-  const failedSet = new Set(failedIds)
-  const sentAt = FieldValue.serverTimestamp()
+    const recipients = resolvedUserIds
+      .map((docId) => ({
+        docId,
+        lineUserId: String(lineUserIdFromFirestoreDocId(docId, workspaceId) || '').trim(),
+      }))
+      .filter((r) => Boolean(r.lineUserId))
+    const lineUserIds = recipients.map((r) => r.lineUserId)
 
-  for (const r of recipients) {
-    const isFailed = failedSet.has(r.lineUserId)
-    const deliveryDoc: BroadcastDeliveryDoc = {
+    if (!lineUserIds.length) {
+      throw new Error('No valid LINE user IDs in audience')
+    }
+
+    const lineUnit = broadcastAggregationUnit(id)
+    const { successCount, failedIds, lineAggregationApplied } = await multicastMessage(
+      lineUserIds,
+      messagesForLine as any,
+      workspaceId,
+      { customAggregationUnits: [lineUnit] },
+    )
+
+    if (!lineAggregationApplied) {
+      console.warn('[broadcast/send] LINE 未套用 customAggregationUnits，開封數將無法從 LINE Insight 取得')
+    }
+
+    // ── 寫入 deliveries 子集合 ────────────────────────────────────────
+    const BATCH_LIMIT = 400
+    let batch = db.batch()
+    let opsInBatch = 0
+
+    const flushBatch = async () => {
+      if (opsInBatch > 0) {
+        await batch.commit()
+        batch = db.batch()
+        opsInBatch = 0
+      }
+    }
+
+    const failedSet = new Set(failedIds)
+    const sentAt = FieldValue.serverTimestamp()
+
+    for (const r of recipients) {
+      const isFailed = failedSet.has(r.lineUserId)
+      const deliveryDoc: BroadcastDeliveryDoc = {
+        campaignId: id,
+        userId: r.docId,
+        deliveryStatus: isFailed ? 'failed' : 'sent',
+        failureReason: isFailed ? 'LINE multicast failed' : null,
+        sentAt: isFailed ? null : sentAt,
+        createdAt: sentAt,
+      }
+
+      const deliveryRef = db.collection('broadcasts').doc(id).collection('deliveries').doc(uuidv4())
+      batch.set(deliveryRef, deliveryDoc)
+      opsInBatch++
+
+      if (opsInBatch >= BATCH_LIMIT) await flushBatch()
+    }
+
+    await flushBatch()
+
+    // ── 更新 campaign 最終統計 ────────────────────────────────────────
+    const completedAt = FieldValue.serverTimestamp()
+    await ref.update({
+      status: failedIds.length === resolvedUserIds.length ? 'failed' : 'completed',
+      sentCount: successCount,
+      failedCount: failedIds.length,
+      completedAt,
+      updatedAt: completedAt,
+      lineAggregationUnit: lineAggregationApplied ? lineUnit : null,
+      lineInsightAggregationApplied: lineAggregationApplied,
+    })
+
+    return {
+      success: true,
       campaignId: id,
-      userId: r.docId,
-      deliveryStatus: isFailed ? 'failed' : 'sent',
-      failureReason: isFailed ? 'LINE multicast failed' : null,
-      sentAt: isFailed ? null : sentAt,
-      createdAt: sentAt,
+      totalCount: resolvedUserIds.length,
+      sentCount: successCount,
+      failedCount: failedIds.length,
     }
-
-    const deliveryRef = db.collection('broadcasts').doc(id).collection('deliveries').doc(uuidv4())
-    batch.set(deliveryRef, deliveryDoc)
-    opsInBatch++
-
-    if (opsInBatch >= BATCH_LIMIT) await flushBatch()
   }
-
-  await flushBatch()
-
-  // ── 更新 campaign 最終統計 ────────────────────────────────────────
-  const completedAt = FieldValue.serverTimestamp()
-  await ref.update({
-    status: failedIds.length === resolvedUserIds.length ? 'failed' : 'completed',
-    sentCount: successCount,
-    failedCount: failedIds.length,
-    completedAt,
-    updatedAt: completedAt,
-    lineAggregationUnit: lineAggregationApplied ? lineUnit : null,
-    lineInsightAggregationApplied: lineAggregationApplied,
-  })
-
-  return {
-    success: true,
-    campaignId: id,
-    totalCount: resolvedUserIds.length,
-    sentCount: successCount,
-    failedCount: failedIds.length,
+  catch (e) {
+    const failedAt = FieldValue.serverTimestamp()
+    await ref.update({
+      status: 'failed',
+      updatedAt: failedAt,
+    }).catch(() => {})
+    throw e
   }
 }

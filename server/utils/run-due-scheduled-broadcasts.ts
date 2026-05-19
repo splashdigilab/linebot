@@ -19,9 +19,12 @@ export type RunDueScheduledBroadcastsResponse = {
  * 查詢 status=scheduled 且 scheduleAt <= 現在 的推播並發送。
  * 由 POST /api/broadcast/trigger-scheduled 與應用內建 Cron 共用。
  */
-export async function runDueScheduledBroadcasts(): Promise<RunDueScheduledBroadcastsResponse> {
+export async function runDueScheduledBroadcasts(
+  opts?: { workspaceId?: string },
+): Promise<RunDueScheduledBroadcastsResponse> {
   const db = getDb()
   const now = Timestamp.now()
+  const workspaceId = String(opts?.workspaceId || '').trim()
 
   const snap = await db.collection('broadcasts')
     .where('status', '==', 'scheduled')
@@ -55,8 +58,12 @@ export async function runDueScheduledBroadcasts(): Promise<RunDueScheduledBroadc
   console.log(`[broadcast-scheduler] 找到 ${snap.docs.length} 個到期排程推播`)
 
   const results: DueScheduledBroadcastResult[] = []
+  let triggered = 0
 
   for (const doc of snap.docs) {
+    if (workspaceId && String(doc.data().workspaceId || '') !== workspaceId) continue
+
+    triggered++
     const id = doc.id
     try {
       const result = await executeBroadcastSend(id, { source: 'scheduler' })
@@ -71,7 +78,7 @@ export async function runDueScheduledBroadcasts(): Promise<RunDueScheduledBroadc
   }
 
   return {
-    triggered: snap.docs.length,
+    triggered,
     results,
   }
 }

@@ -196,7 +196,7 @@
                 :disabled-date="disabledPastDate"
               />
               <p v-if="selectedItem?.status === 'scheduled'" class="tags-hint">
-                已排程，系統約每分鐘檢查一次並在到期時自動發送（伺服器需設定 CRON_SECRET）。可修改內容與時間後按「儲存變更」，或按「取消排程」。
+                已排程，到期後約每分鐘自動發送（推播列表頁開著時會自動觸發；伺服器亦需設定 CRON_SECRET）。可「儲存變更」或「取消排程」。
               </p>
               <p v-else class="tags-hint">
                 確認排程後不會立即發送；受眾名單於排程時間到時計算。
@@ -570,6 +570,7 @@ async function loadData() {
     ])
     flows.value = (flowList ?? []).map((f: any) => ({ id: f.id, name: f.name || f.id }))
     if (!tagOk) showToast('載入標籤失敗', 'error')
+    syncDuePollTimer()
   }
   catch {
     showToast('載入推播失敗', 'error')
@@ -825,5 +826,55 @@ async function cancelBroadcast() {
   }
 }
 
-onMounted(loadData)
+/** 列表有「已排程」時每分鐘觸發到期發送（後台登入即可，無需另設 Cron） */
+let duePollTimer: ReturnType<typeof setInterval> | null = null
+
+function hasScheduledBroadcasts() {
+  return broadcasts.value.some((b) => b.status === 'scheduled')
+}
+
+async function processDueScheduledBroadcasts() {
+  if (!hasScheduledBroadcasts()) return
+  try {
+    const res = await apiFetch<{ triggered: number; results: Array<{ id: string; success: boolean; error?: string }> }>(
+      '/api/broadcast/process-due',
+      { method: 'POST' },
+    )
+    if (res.triggered > 0) {
+      await loadData()
+      if (selectedId.value) {
+        const found = broadcasts.value.find((b) => b.id === selectedId.value)
+        if (found) await selectItem(found, { skipDiscardConfirm: true })
+      }
+      const failed = res.results.filter((r) => !r.success)
+      if (failed.length) {
+        showToast(`有 ${failed.length} 則排程發送失敗，請查看狀態`, 'error')
+      }
+    }
+  }
+  catch {
+    /* 靜默；下次輪詢再試 */
+  }
+}
+
+function syncDuePollTimer() {
+  if (duePollTimer) {
+    clearInterval(duePollTimer)
+    duePollTimer = null
+  }
+  if (!hasScheduledBroadcasts()) return
+  void processDueScheduledBroadcasts()
+  duePollTimer = setInterval(() => {
+    void processDueScheduledBroadcasts()
+  }, 60_000)
+}
+
+onMounted(async () => {
+  await loadData()
+  syncDuePollTimer()
+})
+
+onUnmounted(() => {
+  if (duePollTimer) clearInterval(duePollTimer)
+})
 </script>

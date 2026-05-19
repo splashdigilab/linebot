@@ -48,7 +48,9 @@ export default defineEventHandler(async (event) => {
   let resolvedUserIds: string[] = []
   try {
     if (data.audienceSource.type === 'all') {
-      const usersSnap = await db.collection('users').select().get()
+      let query = db.collection('users').select() as FirebaseFirestore.Query
+      query = query.where('workspaceId', '==', workspaceId)
+      const usersSnap = await query.get()
       resolvedUserIds = usersSnap.docs.map((d) => d.id)
     }
     else if (data.audienceSource.type === 'tags' && data.audienceSource.tagIds?.length) {
@@ -58,7 +60,7 @@ export default defineEventHandler(async (event) => {
         joinedBefore: null,
         isBlocked: null,
       }
-      resolvedUserIds = await resolveAudienceUserIds(filter)
+      resolvedUserIds = await resolveAudienceUserIds(filter, workspaceId)
     }
     else if (data.audienceSource.type === 'audience' && data.audienceSource.audienceId) {
       const audienceSnap = await db.collection('audiences').doc(data.audienceSource.audienceId).get()
@@ -66,7 +68,7 @@ export default defineEventHandler(async (event) => {
         errors.push('指定的受眾群組不存在')
       }
       else {
-        resolvedUserIds = await resolveAudienceUserIds(audienceSnap.data()!.filter as AudienceFilter)
+        resolvedUserIds = await resolveAudienceUserIds(audienceSnap.data()!.filter as AudienceFilter, workspaceId)
       }
     }
     else if (data.audienceSource.type === 'import') {
