@@ -426,13 +426,14 @@ async function getFlowByModuleId(moduleId: string): Promise<FlowDoc | null> {
   return flow
 }
 
-async function loadActiveAutoReplyRules(): Promise<AutoReplyRuleShape[]> {
-  const cacheKey = 'active:autoReplies'
+async function loadActiveAutoReplyRules(workspaceId: string): Promise<AutoReplyRuleShape[]> {
+  const cacheKey = `active:autoReplies:${workspaceId}`
   const cached = getCached(autoReplyRuleCache, cacheKey)
   if (cached !== undefined) return cached
 
   const db = getDb()
   const snap = await db.collection('autoReplies')
+    .where('workspaceId', '==', workspaceId)
     .orderBy('createdAt', 'desc')
     .get()
 
@@ -445,9 +446,10 @@ async function loadActiveAutoReplyRules(): Promise<AutoReplyRuleShape[]> {
 
 async function matchAutoReplyRule(
   inputText: string,
+  workspaceId: string,
   options: { allowAnyText: boolean } = { allowAnyText: true },
 ): Promise<AutoReplyRuleShape | null> {
-  const rules = await loadActiveAutoReplyRules()
+  const rules = await loadActiveAutoReplyRules(workspaceId)
   return pickBestMatchingAutoReplyRule(rules, inputText, options)
 }
 
@@ -1511,7 +1513,7 @@ export async function handleMessageEvent(
         return null
       }),
       ensureUser(userId, undefined, workspaceId).catch(() => null),
-      loadActiveAutoReplyRules().catch(() => []),  // warm cache; result discarded
+      loadActiveAutoReplyRules(workspaceId).catch(() => []),  // warm cache; result discarded
     ])
 
     await handleIncomingText(userId, textContent, event.replyToken, options, preloadedUser, sessionId, workspaceId)
@@ -1642,7 +1644,7 @@ async function handleIncomingText(
     userDataOverride != null ? Promise.resolve(userDataOverride) : ensureUser(userId, undefined, wid),
     getLineWorkspaceCredentials(wid),
     sessionId ? shouldSuppressInboundBotAutomationForSession(sessionId) : Promise.resolve(false),
-    loadActiveAutoReplyRules().catch(() => []),
+    loadActiveAutoReplyRules(wid).catch(() => []),
   ])
   const userAttributes = buildAttributeContext(userData)
   let handledByInput = false
@@ -1703,7 +1705,7 @@ async function handleIncomingText(
   }
 
   if (!handledByInput && !suppressBotAutomation) {
-    const rule = await matchAutoReplyRule(textContent, {
+    const rule = await matchAutoReplyRule(textContent, wid, {
       allowAnyText: options.allowAnyText !== false,
     })
     if (rule) {
@@ -1786,7 +1788,7 @@ export async function handlePostbackEvent(
     trigger.moduleId
       ? getFlowByModuleId(trigger.moduleId)
       : messageTrigger.text
-        ? loadActiveAutoReplyRules().then(() => null)
+        ? loadActiveAutoReplyRules(workspaceId).then(() => null)
         : Promise.resolve(null),
   ])
 
@@ -1913,7 +1915,7 @@ export async function handlePostbackEvent(
 
   // Fallback: Match legacy postback data to an auto-reply keyword (if any)
   const rule = !suppressBotAutomationPostback
-    ? await matchAutoReplyRule(data, { allowAnyText: false })
+    ? await matchAutoReplyRule(data, workspaceId, { allowAnyText: false })
     : null
   if (rule && event.replyToken) {
     const userAttributes = buildAttributeContext(await userDataTask)
