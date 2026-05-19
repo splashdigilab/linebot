@@ -795,7 +795,7 @@
                           header-label="圖片動作"
                           :field-size="'default'"
                           :hide-fields-when-none="true"
-                          label-placeholder="按鈕文字 (選填)"
+                          :show-label-field="false"
                           text-title="傳送文字"
                           text-placeholder="點擊後傳送的文字"
                         />
