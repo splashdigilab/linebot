@@ -485,7 +485,7 @@
                 </div>
 
                 <div class="ui-settings">
-                  <div class="ui-field admin-field-group">
+                  <div v-if="showUserInputAttribute" class="ui-field admin-field-group">
                     <AdminFieldLabel tight>
                       儲存屬性名稱 <span class="text-muted">(選填)</span>
                     </AdminFieldLabel>
@@ -1072,7 +1072,9 @@ const showLegacyImageCarousel = true
 /** 舊版 template 輪播訊息：保留類型與載入，僅隱藏新增按鈕 */
 const showLegacyCarousel = false
 /** 用戶輸入卡片：保留類型與載入，可關閉新增按鈕 */
-const showUserInput = false
+const showUserInput = true
+/** 用戶輸入卡片：儲存屬性名稱欄位，可關閉顯示 */
+const showUserInputAttribute = false
 
 // ── Badge helpers ─────────────────────────────────────
 const MSG_META: Record<string, { label: string; badge: string }> = {
