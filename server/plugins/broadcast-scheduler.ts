@@ -19,7 +19,7 @@ export default defineNitroPlugin(() => {
 
   let running = false
 
-  Cron('* * * * *', async () => {
+  new Cron('* * * * *', async () => {
     if (running) return
     running = true
     try {
