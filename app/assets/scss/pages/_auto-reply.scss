@@ -132,9 +132,8 @@
   color: var(--text-primary);
 }
 
+/* 高度／捲動：layout/_split-layout.scss `.split-editor-body > .ar-editor-body` */
 .ar-editor-body {
-  flex: 1;
-  overflow-y: auto;
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
@@ -146,7 +145,7 @@
   width: 100%;
   max-width: 100%;
   min-width: 0;
-  flex-shrink: 1;
+  flex-shrink: 0;
 }
 
 .ar-section-hint {

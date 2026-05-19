@@ -5,6 +5,7 @@
 .cmp-section-card {
   width: min(780px, 100%);
   max-width: 100%;
+  flex-shrink: 0;
 }
 
 .cmp-url-row {

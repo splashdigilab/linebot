@@ -15,6 +15,7 @@
 .users-page-card .card-section-stack {
   flex: 1;
   min-height: 0;
+  overflow-y: auto;
 }
 
 .users-toolbar {

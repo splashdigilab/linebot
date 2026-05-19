@@ -14,11 +14,8 @@
   min-width: 0;
 }
 
-/* 與 auto-reply `.ar-editor-body` 相同節奏：可捲動內容區 */
+/* Solo / 表單堆疊外層（捲動與高度契約見下方 .split-editor-body） */
 .solo-editor-body {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
@@ -353,11 +350,49 @@
 
 .split-editor-body {
   flex: 1;
-  min-height: 0;         /* allow flex children to control their own scroll */
-  overflow-y: auto;      /* allow editor body scroll when content exceeds viewport */
+  min-height: 0;
+  overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
   padding: 0;
   display: flex;
   flex-direction: column;
+}
+
+/* 表單堆疊：依內容撐高，由 .split-editor-body 捲動（自動回覆、推播、設定等） */
+.split-editor-body > .ar-editor-body,
+.split-editor-body > .ls-page-body,
+.split-editor-body > .rm-editor-body,
+.split-editor-body > .solo-editor-body {
+  flex: none;
+  flex-shrink: 0;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
+/* 標籤／會員：填滿視窗，表格在卡片內捲動 */
+.split-editor-body > .solo-editor-body:has(.tags-page-card),
+.split-editor-body > .solo-editor-body:has(.users-page-card) {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Flow / 對話：填滿視窗，區域內自行捲動 */
+.split-editor-body > .flow-editor-messages {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.split-editor-body > .conv-messages {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* split 編輯區內的區塊卡不被 flex 壓扁（表格填滿頁除外，見 _tags / _users） */
+.split-editor-body .message-card {
+  flex-shrink: 0;
 }

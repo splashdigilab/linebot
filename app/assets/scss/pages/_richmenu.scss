@@ -63,9 +63,9 @@
   gap: var(--space-form-stack-gap);
 }
 
+/* 高度／捲動：layout/_split-layout.scss `.split-editor-body > .rm-editor-body` */
 .rm-editor-body {
   padding: 1.25rem;
-  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--space-form-stack-gap);
