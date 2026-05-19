@@ -43,7 +43,7 @@
           @drop="onFlowListDrop($event, flowIndex)"
         >
           <span
-            v-if="!hasMore"
+            v-if="canOperate"
             class="drag-handle flow-sidebar-drag-handle"
             draggable="true"
             aria-label="拖曳調整順序"
@@ -1173,18 +1173,34 @@ async function onFlowListDrop(e: DragEvent, dropIndex: number) {
   flowListDragOverIndex.value = null
   if (fromIndex === null || fromIndex === dropIndex) return
 
-  const nextRegular = [...regularFlows.value]
-  const [moved] = nextRegular.splice(fromIndex, 1)
-  nextRegular.splice(dropIndex, 0, moved)
+  const movedId = regularFlows.value[fromIndex]?.id
+  const targetId = regularFlows.value[dropIndex]?.id
+  if (!movedId || !targetId) return
 
   const previousFlows = [...flows.value]
-  setRegularFlowsOrder(nextRegular)
+  const visibleNext = [...regularFlows.value]
+  const [movedVisible] = visibleNext.splice(fromIndex, 1)
+  visibleNext.splice(dropIndex, 0, movedVisible)
+  setRegularFlowsOrder(visibleNext)
 
   try {
+    const allFlows = await apiFetch<any[]>('/api/flow/list')
+    const allRegular = allFlows.filter((f) => !f.isSystem)
+    const fullFromIndex = allRegular.findIndex((f) => f.id === movedId)
+    const fullDropIndex = allRegular.findIndex((f) => f.id === targetId)
+    if (fullFromIndex < 0 || fullDropIndex < 0) {
+      throw new Error('flow reorder index out of range')
+    }
+
+    const nextRegular = [...allRegular]
+    const [moved] = nextRegular.splice(fullFromIndex, 1)
+    nextRegular.splice(fullDropIndex, 0, moved)
+
     await apiFetch('/api/flow/reorder', {
       method: 'POST',
       body: { orderedIds: nextRegular.map((f) => f.id) },
     })
+    await loadFlows(true)
   } catch {
     flows.value = previousFlows
     showToast('排序儲存失敗', 'error')
