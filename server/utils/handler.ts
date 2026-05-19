@@ -432,13 +432,22 @@ async function loadActiveAutoReplyRules(workspaceId: string): Promise<AutoReplyR
   if (cached !== undefined) return cached
 
   const db = getDb()
+  // Use equality-only filter (no orderBy) to avoid requiring a composite Firestore index.
+  // Sorting is done in-memory before normalization (createdAt is stripped by normalizeAutoReplyRule).
   const snap = await db.collection('autoReplies')
     .where('workspaceId', '==', workspaceId)
-    .orderBy('createdAt', 'desc')
     .get()
 
-  const rules = snap.docs
-    .map((doc) => normalizeAutoReplyRule({ id: doc.id, ...doc.data() }))
+  const rawDocs = snap.docs
+    .map((doc) => ({ id: doc.id, ...doc.data() }))
+    .sort((a: any, b: any) => {
+      const aMs = a.createdAt?.toMillis?.() ?? a.createdAt ?? 0
+      const bMs = b.createdAt?.toMillis?.() ?? b.createdAt ?? 0
+      return bMs - aMs
+    })
+
+  const rules = rawDocs
+    .map((raw) => normalizeAutoReplyRule(raw))
     .filter((rule) => rule.isActive)
   setCache(autoReplyRuleCache, cacheKey, rules)
   return rules
