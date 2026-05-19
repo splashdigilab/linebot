@@ -1668,31 +1668,33 @@ async function handleIncomingText(
 
     const flow = await getFlowByModuleId(moduleId)
 
-    // Always mark handled to prevent auto-reply from intercepting the user's answer
-    handledByInput = true
-
-    if (flow && replyToken) {
-      const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
-      const lineMessages = buildLineMessages(
-        hydratedMessages,
-        userAttributes,
-        options.requestOrigin || '',
-        lineUserId,
-        channelSecret,
-      )
-      if (lineMessages.length > 0) {
-        await replyMessage(replyToken, lineMessages, wid)
-        await dispatchPostReplyActions(lineUserId, flow.messages, wid)
-        saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, wid).catch(e => console.error('[conv] save error:', e))
-        if (sessionId) {
-          enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', moduleId, wid).catch(e =>
-            console.error('[session] enterModule error:', e),
-          )
+    if (flow) {
+      // Flow found: mark handled so auto-reply doesn't intercept the user's answer
+      handledByInput = true
+      if (replyToken) {
+        const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
+        const lineMessages = buildLineMessages(
+          hydratedMessages,
+          userAttributes,
+          options.requestOrigin || '',
+          lineUserId,
+          channelSecret,
+        )
+        if (lineMessages.length > 0) {
+          await replyMessage(replyToken, lineMessages, wid)
+          await dispatchPostReplyActions(lineUserId, flow.messages, wid)
+          saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, wid).catch(e => console.error('[conv] save error:', e))
+          if (sessionId) {
+            enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', moduleId, wid).catch(e =>
+              console.error('[session] enterModule error:', e),
+            )
+          }
+        } else {
+          console.warn('[userInput] next flow has no renderable messages, skipping reply:', moduleId)
         }
-      } else {
-        console.warn('[userInput] next flow has no renderable messages, skipping reply:', moduleId)
       }
     } else {
+      // Flow not found: activeInput already deleted above, let auto-reply run normally
       console.warn(
         '[userInput] activeInput flow missing/inactive:',
         moduleId,
