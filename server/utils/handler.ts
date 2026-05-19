@@ -69,6 +69,16 @@ function setCache<T>(map: Map<string, CacheEntry<T>>, key: string, data: T) {
   map.set(key, { data, expires: Date.now() + CACHE_TTL_MS })
 }
 
+function invalidateUserDocCache(docId: string) {
+  userDocCache.delete(docId)
+}
+
+async function loadUserActiveInput(fsUserDocId: string): Promise<UserDoc['activeInput'] | null | undefined> {
+  const snap = await getDb().collection('users').doc(fsUserDocId).get()
+  if (!snap.exists) return null
+  return (snap.data() as UserDoc | undefined)?.activeInput ?? null
+}
+
 // ── Type Definitions ──────────────────────────────────────────────
 
 interface FlowDoc {
@@ -398,6 +408,7 @@ async function dispatchPostReplyActions(
         expiresAt: Date.now() + 24 * 60 * 60 * 1000 // 24 hours
       }
     })
+    invalidateUserDocCache(uid)
   }
 }
 
@@ -1636,8 +1647,12 @@ async function handleIncomingText(
   const userAttributes = buildAttributeContext(userData)
   let handledByInput = false
 
-  if (!suppressBotAutomation && userData && userData.activeInput && userData.activeInput.expiresAt > Date.now()) {
-    const { moduleId, attribute, tagIds } = userData.activeInput
+  const activeInput = !suppressBotAutomation
+    ? await loadUserActiveInput(fsUserDocId)
+    : null
+
+  if (activeInput && activeInput.expiresAt > Date.now()) {
+    const { moduleId, attribute, tagIds } = activeInput
     const db = getDb()
     const updates: any = { activeInput: FieldValue.delete() }
     if (attribute) {
@@ -1645,6 +1660,7 @@ async function handleIncomingText(
       userAttributes[attribute] = textContent
     }
     await db.collection('users').doc(fsUserDocId).update(updates)
+    invalidateUserDocCache(fsUserDocId)
 
     if (Array.isArray(tagIds) && tagIds.length > 0) {
       await addTagsToUser(fsUserDocId, tagIds, 'system', `userInput:${moduleId}`, wid)
@@ -1662,9 +1678,8 @@ async function handleIncomingText(
         channelSecret,
       )
       await replyMessage(replyToken, lineMessages, wid)
-      // Non-blocking: user has already received the reply; save/dispatch in background
+      await dispatchPostReplyActions(lineUserId, flow.messages, wid)
       saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, wid).catch(e => console.error('[conv] save error:', e))
-      dispatchPostReplyActions(lineUserId, flow.messages, wid).catch(e => console.error('[postReply] dispatch error:', e))
       if (sessionId) {
         enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', moduleId, wid).catch(e =>
           console.error('[session] enterModule error:', e),
@@ -1703,8 +1718,8 @@ async function handleIncomingText(
               channelSecret,
             )
             await replyMessage(replyToken, lineMessages, wid)
+            await dispatchPostReplyActions(lineUserId, flow.messages, wid)
             saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, wid).catch(e => console.error('[conv] save error:', e))
-            dispatchPostReplyActions(lineUserId, flow.messages, wid).catch(e => console.error('[postReply] dispatch error:', e))
             if (sessionId) {
               enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', rule.action.moduleId, wid).catch(e =>
                 console.error('[session] enterModule error:', e),
@@ -1868,8 +1883,8 @@ export async function handlePostbackEvent(
           channelSecret,
         )
         await replyMessage(event.replyToken, lineMessages, workspaceId)
+        await dispatchPostReplyActions(userId, flow.messages, workspaceId)
         saveOutgoingConversationMessagesByWorkspace(userId, lineMessages, workspaceId).catch(e => console.error('[conv] save error:', e))
-        dispatchPostReplyActions(userId, flow.messages, workspaceId).catch(e => console.error('[postReply] dispatch error:', e))
         if (sessionId) {
           enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', moduleId, workspaceId).catch(e =>
             console.error('[session] enterModule error:', e),
@@ -1906,8 +1921,8 @@ export async function handlePostbackEvent(
           channelSecret,
         )
         await replyMessage(event.replyToken, lineMessages, workspaceId)
+        await dispatchPostReplyActions(userId, flow.messages, workspaceId)
         saveOutgoingConversationMessagesByWorkspace(userId, lineMessages, workspaceId).catch(e => console.error('[conv] save error:', e))
-        dispatchPostReplyActions(userId, flow.messages, workspaceId).catch(e => console.error('[postReply] dispatch error:', e))
         if (sessionId) {
           enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', rule.action.moduleId, workspaceId).catch(e =>
             console.error('[session] enterModule (fallback) error:', e),
