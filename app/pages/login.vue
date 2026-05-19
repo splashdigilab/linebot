@@ -41,13 +41,23 @@
 <script setup lang="ts">
 definePageMeta({ layout: false })
 
-const { loginWithGoogle, isLoggedIn } = useAuth()
+const route = useRoute()
+const { loginWithGoogle, isLoggedIn, waitForAuthReady } = useAuth()
 const loading = ref(false)
 const errorMsg = ref('')
 
-// Redirect if already logged in
-watchEffect(() => {
-  if (isLoggedIn.value) navigateTo('/admin/workspaces')
+function loginRedirectTarget(): string {
+  const redirect = route.query.redirect
+  if (typeof redirect === 'string' && redirect.startsWith('/admin')) {
+    return redirect
+  }
+  return '/admin/workspaces'
+}
+
+// 已登入時離開登入頁（等 auth 就緒，避免重整流程誤觸）
+onMounted(async () => {
+  await waitForAuthReady()
+  if (isLoggedIn.value) await navigateTo(loginRedirectTarget())
 })
 
 async function handleLogin() {
@@ -55,7 +65,7 @@ async function handleLogin() {
   errorMsg.value = ''
   try {
     await loginWithGoogle()
-    await navigateTo('/admin/workspaces')
+    await navigateTo(loginRedirectTarget())
   }
   catch (e: unknown) {
     const msg = e instanceof Error ? e.message : '登入失敗，請重試'

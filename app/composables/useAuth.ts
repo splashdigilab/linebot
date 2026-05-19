@@ -35,5 +35,18 @@ export const useAuth = () => {
 
   const isLoggedIn = computed(() => !!user.value)
 
-  return { user, loading, isLoggedIn, loginWithGoogle, logout }
+  /** 等 Firebase 第一次回報登入狀態（避免重整時 middleware 誤判未登入） */
+  function waitForAuthReady(): Promise<void> {
+    if (!import.meta.client || !loading.value) return Promise.resolve()
+    return new Promise((resolve) => {
+      const stop = watch(loading, (isLoading) => {
+        if (!isLoading) {
+          stop()
+          resolve()
+        }
+      }, { immediate: true })
+    })
+  }
+
+  return { user, loading, isLoggedIn, waitForAuthReady, loginWithGoogle, logout }
 }
