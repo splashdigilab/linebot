@@ -37,6 +37,17 @@ export function useAdminSidebarInfiniteList<T>(fetchPage: FetchPageFn<T>) {
   const page = ref(1)
   const listEl = ref<HTMLElement | null>(null)
 
+  /** 列表尚無捲軸時自動載入下一批（避免卡在僅顯示第一頁） */
+  async function prefetchIfListDoesNotScroll() {
+    await nextTick()
+    const el = listEl.value
+    if (!el || !hasMore.value || loading.value || loadingMore.value) return
+    if (el.scrollHeight <= el.clientHeight + 1) {
+      await loadMore()
+      await prefetchIfListDoesNotScroll()
+    }
+  }
+
   async function load(reset = true) {
     if (reset) {
       if (loading.value) return
@@ -56,6 +67,9 @@ export function useAdminSidebarInfiniteList<T>(fetchPage: FetchPageFn<T>) {
       )
       items.value = reset ? res.items : [...items.value, ...res.items]
       hasMore.value = res.hasMore
+      if (hasMore.value) {
+        await prefetchIfListDoesNotScroll()
+      }
     }
     catch {
       if (reset) items.value = []
