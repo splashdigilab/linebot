@@ -3,6 +3,7 @@ import {
   validateAutoReplyRule,
 } from '~~/shared/auto-reply-rule'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { invalidateActiveAutoReplyRulesCache } from '~~/server/utils/handler'
 
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
@@ -31,6 +32,8 @@ export default defineEventHandler(async (event) => {
     tagging: body.tagging,
     cooldown: body.cooldown,
   }
+
+  invalidateActiveAutoReplyRulesCache(workspaceId)
 
   await db.collection('autoReplies').doc(id).update(updates)
   return { id, ...updates }

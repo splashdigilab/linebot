@@ -110,16 +110,77 @@ export function normalizeAutoReplyRule(rawRule: any): AutoReplyRuleShape {
   }
 }
 
+/** 將 Firestore 數值 / Timestamp 轉成 epoch ms */
+export function coerceAutoReplyCooldownTimestamp(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  if (value && typeof value === 'object') {
+    const maybeTs = value as { toMillis?: () => number; seconds?: number; _seconds?: number }
+    if (typeof maybeTs.toMillis === 'function') {
+      const ms = maybeTs.toMillis()
+      if (Number.isFinite(ms)) return ms
+    }
+    const sec = maybeTs.seconds ?? maybeTs._seconds
+    if (typeof sec === 'number' && Number.isFinite(sec)) return sec * 1000
+  }
+  return null
+}
+
+export function normalizeAutoReplyCooldownsMap(
+  raw: Record<string, unknown> | undefined | null,
+): Record<string, number> {
+  if (!raw || typeof raw !== 'object') return {}
+  const out: Record<string, number> = {}
+  for (const [ruleId, value] of Object.entries(raw)) {
+    const ts = coerceAutoReplyCooldownTimestamp(value)
+    if (ts != null) out[ruleId] = ts
+  }
+  return out
+}
+
+export interface AutoReplyModuleCooldownEntry {
+  triggeredAt: number
+  durationMs: number
+}
+
+export function normalizeAutoReplyModuleCooldownsMap(
+  raw: Record<string, unknown> | undefined | null,
+): Record<string, AutoReplyModuleCooldownEntry> {
+  if (!raw || typeof raw !== 'object') return {}
+  const out: Record<string, AutoReplyModuleCooldownEntry> = {}
+  for (const [moduleId, value] of Object.entries(raw)) {
+    if (!value || typeof value !== 'object') continue
+    const triggeredAt = coerceAutoReplyCooldownTimestamp((value as any).triggeredAt)
+    const durationMs = Number((value as any).durationMs)
+    if (triggeredAt == null || !Number.isFinite(durationMs) || durationMs <= 0) continue
+    out[moduleId] = { triggeredAt, durationMs }
+  }
+  return out
+}
+
+export function isAutoReplyModuleOnCooldown(
+  moduleId: string,
+  moduleCooldowns: Record<string, AutoReplyModuleCooldownEntry> | undefined,
+  now = Date.now(),
+): boolean {
+  const entry = moduleCooldowns?.[moduleId]
+  if (!entry) return false
+  return entry.triggeredAt + entry.durationMs > now
+}
+
 export function isAutoReplyRuleOnCooldown(
   rule: AutoReplyRuleShape,
   lastTriggeredAtByRuleId: Record<string, number> | undefined,
   now = Date.now(),
 ): boolean {
   if (!rule.cooldown.enabled || !rule.id) return false
-  const durationMs = rule.cooldown.durationMs
-  if (!durationMs || durationMs <= 0) return false
-  const last = lastTriggeredAtByRuleId?.[rule.id]
-  if (typeof last !== 'number' || !Number.isFinite(last)) return false
+  const durationMs = Number(rule.cooldown.durationMs)
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return false
+  const last = coerceAutoReplyCooldownTimestamp(lastTriggeredAtByRuleId?.[rule.id])
+  if (last == null) return false
   return last + durationMs > now
 }
 

@@ -1,4 +1,5 @@
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { invalidateActiveAutoReplyRulesCache } from '~~/server/utils/handler'
 
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
@@ -8,6 +9,8 @@ export default defineEventHandler(async (event) => {
   if (!existing.exists || existing.data()?.workspaceId !== workspaceId) {
     throw createError({ statusCode: 404, statusMessage: 'Not found' })
   }
+  invalidateActiveAutoReplyRulesCache(workspaceId)
+
   await db.collection('autoReplies').doc(id).delete()
   return { id }
 })

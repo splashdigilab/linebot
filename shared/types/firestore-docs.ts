@@ -16,6 +16,8 @@ export interface UserDoc {
   isBlocked: boolean
   /** 自動回覆規則 ID → 上次觸發時間（epoch ms） */
   autoReplyCooldowns?: Record<string, number>
+  /** 模組 ID → 冷卻資訊（由啟用防重複的自動回覆寫入） */
+  autoReplyModuleCooldowns?: Record<string, { triggeredAt: number; durationMs: number }>
   createdAt: Timestamp | FieldValue
 }
 

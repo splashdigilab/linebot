@@ -16,7 +16,10 @@ import {
   pickBestMatchingAutoReplyRule,
   normalizeAutoReplyAction,
   normalizeAutoReplyRule,
+  normalizeAutoReplyCooldownsMap,
+  normalizeAutoReplyModuleCooldownsMap,
   isAutoReplyRuleOnCooldown,
+  isAutoReplyModuleOnCooldown,
   type AutoReplyRuleShape,
 } from '~~/shared/auto-reply-rule'
 import { RICH_LAYOUT_PRESETS } from '~~/shared/rich-layout-presets'
@@ -74,6 +77,42 @@ function invalidateUserDocCache(docId: string) {
   userDocCache.delete(docId)
 }
 
+export function invalidateActiveAutoReplyRulesCache(workspaceId: string) {
+  autoReplyRuleCache.delete(`active:autoReplies:${workspaceId}`)
+}
+
+function patchUserDocCacheAutoReplyCooldown(
+  fsUserDocId: string,
+  ruleId: string,
+  triggeredAt: number,
+): void {
+  const entry = userDocCache.get(fsUserDocId)
+  if (!entry?.data) return
+  entry.data.autoReplyCooldowns = {
+    ...(entry.data.autoReplyCooldowns ?? {}),
+    [ruleId]: triggeredAt,
+  }
+}
+
+async function loadUserAutoReplyCooldownState(fsUserDocId: string): Promise<{
+  ruleCooldowns: Record<string, number>
+  moduleCooldowns: Record<string, { triggeredAt: number; durationMs: number }>
+}> {
+  const snap = await getDb().collection('users').doc(fsUserDocId).get()
+  if (!snap.exists) {
+    return { ruleCooldowns: {}, moduleCooldowns: {} }
+  }
+  const data = snap.data() as UserDoc | undefined
+  return {
+    ruleCooldowns: normalizeAutoReplyCooldownsMap(
+      data?.autoReplyCooldowns as Record<string, unknown> | undefined,
+    ),
+    moduleCooldowns: normalizeAutoReplyModuleCooldownsMap(
+      data?.autoReplyModuleCooldowns as Record<string, unknown> | undefined,
+    ),
+  }
+}
+
 async function loadUserActiveInput(fsUserDocId: string): Promise<UserDoc['activeInput'] | null | undefined> {
   const snap = await getDb().collection('users').doc(fsUserDocId).get()
   if (!snap.exists) return null
@@ -107,6 +146,7 @@ interface UserDoc {
   } | null
   attributes?: Record<string, string>
   autoReplyCooldowns?: Record<string, number>
+  autoReplyModuleCooldowns?: Record<string, { triggeredAt: number; durationMs: number }>
 }
 
 function toConversationText(msg: messagingApi.Message): string {
@@ -481,11 +521,36 @@ async function recordAutoReplyCooldown(
   rule: AutoReplyRuleShape,
 ): Promise<void> {
   if (!rule.cooldown?.enabled || !rule.id) return
-  const db = getDb()
-  await db.collection('users').doc(fsUserDocId).set({
-    [`autoReplyCooldowns.${rule.id}`]: Date.now(),
-  }, { merge: true })
-  invalidateUserDocCache(fsUserDocId)
+  const triggeredAt = Date.now()
+  const updates: Record<string, unknown> = {
+    [`autoReplyCooldowns.${rule.id}`]: triggeredAt,
+  }
+  if (rule.action.type === 'module' && rule.action.moduleId) {
+    updates[`autoReplyModuleCooldowns.${rule.action.moduleId}`] = {
+      triggeredAt,
+      durationMs: rule.cooldown.durationMs,
+    }
+  }
+  const ref = getDb().collection('users').doc(fsUserDocId)
+  try {
+    await ref.update(updates)
+  } catch (e: any) {
+    const code = e?.code ?? e?.status
+    if (code !== 5 && code !== 'not-found' && code !== 404) throw e
+    const mergeDoc: Record<string, unknown> = {
+      autoReplyCooldowns: { [rule.id]: triggeredAt },
+    }
+    if (rule.action.type === 'module' && rule.action.moduleId) {
+      mergeDoc.autoReplyModuleCooldowns = {
+        [rule.action.moduleId]: {
+          triggeredAt,
+          durationMs: rule.cooldown.durationMs,
+        },
+      }
+    }
+    await ref.set(mergeDoc, { merge: true })
+  }
+  patchUserDocCacheAutoReplyCooldown(fsUserDocId, rule.id, triggeredAt)
 }
 
 function buildAutoReplyActionMessages(
@@ -1684,12 +1749,22 @@ async function handleIncomingText(
   const userAttributes = buildAttributeContext(userData)
   let handledByInput = false
 
+  const cooldownState = !suppressBotAutomation
+    ? await loadUserAutoReplyCooldownState(fsUserDocId)
+    : { ruleCooldowns: {}, moduleCooldowns: {} }
+
   const activeInput = !suppressBotAutomation
     ? await loadUserActiveInput(fsUserDocId)
     : null
 
   if (activeInput && activeInput.expiresAt > Date.now()) {
     const { moduleId, attribute, tagIds } = activeInput
+
+    if (isAutoReplyModuleOnCooldown(moduleId, cooldownState.moduleCooldowns)) {
+      await getDb().collection('users').doc(fsUserDocId).update({ activeInput: FieldValue.delete() })
+      invalidateUserDocCache(fsUserDocId)
+      handledByInput = true
+    } else {
     const db = getDb()
     const updates: any = { activeInput: FieldValue.delete() }
     if (attribute) {
@@ -1737,12 +1812,13 @@ async function handleIncomingText(
         moduleId,
       )
     }
+    }
   }
 
   if (!handledByInput && !suppressBotAutomation) {
     const rule = await matchAutoReplyRule(textContent, wid, {
       allowAnyText: options.allowAnyText !== false,
-      autoReplyCooldowns: userData?.autoReplyCooldowns,
+      autoReplyCooldowns: cooldownState.ruleCooldowns,
     })
     if (rule) {
       let triggered = false
@@ -1793,10 +1869,12 @@ async function handleIncomingText(
         }
       }
 
-      if (triggered) {
-        recordAutoReplyCooldown(fsUserDocId, rule).catch(e =>
-          console.error('[autoReply] record cooldown error:', e),
-        )
+      if (triggered && rule.cooldown?.enabled && rule.id) {
+        try {
+          await recordAutoReplyCooldown(fsUserDocId, rule)
+        } catch (e) {
+          console.error('[autoReply] record cooldown error:', e)
+        }
       }
     }
   }

@@ -5,6 +5,7 @@ import {
   validateAutoReplyRule,
 } from '~~/shared/auto-reply-rule'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { invalidateActiveAutoReplyRulesCache } from '~~/server/utils/handler'
 
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
@@ -21,6 +22,8 @@ export default defineEventHandler(async (event) => {
     ? '輸入任何內容'
     : (body.keyword || '自動回覆')
   const db = getDb()
+  invalidateActiveAutoReplyRulesCache(workspaceId)
+
   await db.collection('autoReplies').doc(id).set({
     name: body.name || defaultName,
     keyword: body.keyword,
