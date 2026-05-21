@@ -85,6 +85,7 @@
       </div>
       <slot />
     </main>
+    <AdminToastHost />
   </div>
 </template>
 

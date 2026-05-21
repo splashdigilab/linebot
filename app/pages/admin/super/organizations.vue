@@ -306,7 +306,10 @@ async function toggleDisable(row: any) {
 
 async function addMember() {
   const email = newMemberEmail.value.trim()
-  if (!email) return
+  if (!email) {
+    showToast('請輸入 Email', 'error')
+    return
+  }
   memberSaving.value = true
   try {
     await apiFetch(`/api/admin/super/organizations/${membersTarget.value.id}/members`, {

@@ -317,8 +317,6 @@
       </div>
     </template>
   </el-dialog>
-
-  <AdminToastStack :toasts="toasts" />
 </template>
 
 <script setup lang="ts">
@@ -401,7 +399,7 @@ const pendingScheduleAtLocal = ref('')
 const pendingBroadcastId = ref<string | null>(null)
 const confirmDialogError = ref('')
 const report = ref<any>(null)
-const { toasts, showToast } = useAdminToast()
+const { showToast } = useAdminToast()
 
 const defaultForm = () => ({
   name: '',
@@ -626,7 +624,9 @@ async function cancelEdit() {
 }
 
 async function saveDraft(): Promise<boolean> {
-  const err = validateForm({ requireScheduleTime: false })
+  const err = validateForm({
+    requireScheduleTime: form.value.scheduleMode === 'schedule',
+  })
   if (err) {
     showToast(err, 'error')
     return false
@@ -712,6 +712,10 @@ async function openValidateDialog() {
   validateResult.value = null
   try {
     validateResult.value = await apiFetch(`/api/broadcast/${selectedId.value}/validate`, { method: 'POST' })
+    const serverErrors = validateResult.value?.errors
+    if (Array.isArray(serverErrors) && serverErrors.length > 0) {
+      showToast(serverErrors[0], 'error')
+    }
   }
   catch {
     showToast('驗證失敗', 'error')

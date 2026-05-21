@@ -900,7 +900,6 @@
     </template>
   </AdminSplitLayout>
 
-  <AdminToastStack :toasts="toasts" />
 </template>
 
 
@@ -956,7 +955,7 @@ const seeding = ref(false)
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
 const FLOW_MESSAGE_LIMIT = 5
-const { toasts, showToast } = useAdminToast()
+const { showToast } = useAdminToast()
 const { tags: allTags, loadTags } = useAdminTagList()
 
 // Drag and Drop State

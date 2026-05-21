@@ -227,7 +227,6 @@
     </template>
   </el-dialog>
 
-  <AdminToastStack :toasts="toasts" />
 </template>
 
 <script setup lang="ts">
@@ -251,7 +250,7 @@ const loading = computed(() => usersLoading.value || tagsLoading.value)
 const searchText = ref('')
 const filterTagIds = ref<string[]>([])
 const selectedIds = ref<string[]>([])
-const { toasts, showToast } = useAdminToast()
+const { showToast } = useAdminToast()
 
 const batchDialogVisible = ref(false)
 const batchMode = ref<'add' | 'remove'>('add')
@@ -399,7 +398,14 @@ function openBatchTag(mode: 'add' | 'remove') {
 }
 
 async function submitBatch() {
-  if (!batchTagIds.value.length || !selectedIds.value.length) return
+  if (!selectedIds.value.length) {
+    showToast('請先勾選至少一位會員', 'error')
+    return
+  }
+  if (!batchTagIds.value.length) {
+    showToast('請至少選擇一個標籤', 'error')
+    return
+  }
   batchSaving.value = true
   try {
     const endpoint = batchMode.value === 'add'
@@ -432,7 +438,11 @@ function openUserTagDialog(user: any) {
 }
 
 async function addUserTags() {
-  if (!dialogUser.value || !addTagIds.value.length) return
+  if (!dialogUser.value) return
+  if (!addTagIds.value.length) {
+    showToast('請至少選擇一個標籤', 'error')
+    return
+  }
   userTagSaving.value = true
   try {
     await apiFetch(`/api/users/${dialogUser.value.id}/tags`, {

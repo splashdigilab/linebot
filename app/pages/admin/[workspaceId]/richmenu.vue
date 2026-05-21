@@ -190,7 +190,6 @@
     </template>
   </AdminSplitLayout>
 
-  <AdminToastStack :toasts="toasts" />
 </template>
 
 <script setup lang="ts">
@@ -242,7 +241,7 @@ const {
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
 const creating = ref(false)
-const { toasts, showToast } = useAdminToast()
+const { showToast } = useAdminToast()
 const { tags: allTags, loadTags } = useAdminTagList()
 const selectedMenu = computed(() => menus.value.find((menu) => menu.id === selectedId.value) ?? null)
 

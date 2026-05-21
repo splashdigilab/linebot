@@ -1,7 +1,7 @@
 <template>
   <div class="toast-bar">
     <div v-for="t in toasts" :key="t.id" class="toast" :class="t.type">
-      <span>{{ t.type === 'success' ? '✅' : '❌' }}</span>
+      <span>{{ t.type === 'success' ? '✅' : t.type === 'warning' ? '⚠️' : '❌' }}</span>
       <span>{{ t.msg }}</span>
     </div>
   </div>
@@ -11,7 +11,7 @@
 interface AdminToastItem {
   id: number
   msg: string
-  type: 'success' | 'error'
+  type: 'success' | 'error' | 'warning'
 }
 
 defineProps<{

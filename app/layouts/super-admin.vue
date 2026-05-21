@@ -58,6 +58,7 @@
     <main class="main-content">
       <slot />
     </main>
+    <AdminToastHost />
   </div>
 </template>
 

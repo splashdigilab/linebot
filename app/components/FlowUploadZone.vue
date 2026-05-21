@@ -248,9 +248,11 @@ function onVideoMetadataWithEmit(event: Event) {
   emitVideoSized(dimensions.value ?? undefined)
 }
 
+const { showToast } = useAdminToast()
+
 function emitError(message: string) {
   emit('error', message)
-  alert(message)
+  showToast(message, 'error')
 }
 
 function clearLastObjectUrl() {

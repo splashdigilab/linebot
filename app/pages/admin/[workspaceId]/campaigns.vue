@@ -259,7 +259,6 @@
     </template>
   </AdminSplitLayout>
 
-  <AdminToastStack :toasts="toasts" />
 </template>
 
 <script setup lang="ts">
@@ -268,7 +267,7 @@ definePageMeta({ middleware: 'auth', layout: 'default' })
 const { workspaceId, apiFetch, getBearer } = useWorkspace()
 
 const { tags: allTags, loading: tagsLoading, loadTags } = useAdminTagList()
-const { toasts, showToast } = useAdminToast()
+const { showToast } = useAdminToast()
 
 const modules = ref<any[]>([])
 const {

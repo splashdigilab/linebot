@@ -158,7 +158,6 @@
     </template>
   </AdminSplitLayout>
 
-  <AdminToastStack :toasts="toasts" />
 </template>
 
 <script setup lang="ts">
@@ -186,7 +185,7 @@ const modulesLoading = ref(true)
 const saving = ref(false)
 const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
-const { toasts, showToast } = useAdminToast()
+const { showToast } = useAdminToast()
 const { tags: allTags, loading: tagsLoading, loadTags } = useAdminTagList()
 
 const defaultForm = () => ({

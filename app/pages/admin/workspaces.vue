@@ -114,9 +114,12 @@
       </el-button>
     </template>
   </el-dialog>
+
+  <AdminToastHost />
 </template>
 
 <script setup lang="ts">
+const { showToast } = useAdminToast()
 import type { WorkspaceItem } from '~~/app/composables/useWorkspace'
 import { DEFAULT_LINE_WORKSPACE_ID } from '~~/shared/line-workspace'
 
@@ -245,7 +248,11 @@ function resetCreate() {
 }
 
 async function submitCreate() {
-  if (!createForm.name.trim() || !createTargetOrgId.value) return
+  if (!createForm.name.trim()) {
+    showToast('請輸入官方帳號名稱', 'error')
+    return
+  }
+  if (!createTargetOrgId.value) return
   createSaving.value = true
   try {
     const token = await $auth.currentUser?.getIdToken()
@@ -256,10 +263,11 @@ async function submitCreate() {
     })
     showCreate.value = false
     workspaceList.value = await loadWorkspaceList()
+    showToast('官方帳號已建立', 'success')
   }
   catch (e: any) {
     const msg = e?.data?.statusMessage || e?.message || '建立失敗'
-    alert(msg)
+    showToast(msg, 'error')
   }
   finally {
     createSaving.value = false

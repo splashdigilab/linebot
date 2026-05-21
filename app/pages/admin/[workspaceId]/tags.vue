@@ -197,7 +197,6 @@
     </template>
   </el-dialog>
 
-  <AdminToastStack :toasts="toasts" />
 </template>
 
 <script setup lang="ts">
@@ -208,7 +207,7 @@ definePageMeta({ middleware: 'auth', layout: 'default' })
 
 const { workspaceId, apiFetch } = useWorkspace()
 const { tags, loading, total, page, pageSize, loadTags } = useAdminTagList()
-const { toasts, showToast } = useAdminToast()
+const { showToast } = useAdminToast()
 
 const saving = ref(false)
 const dialogVisible = ref(false)

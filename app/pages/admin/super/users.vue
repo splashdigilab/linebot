@@ -91,7 +91,10 @@ const foundUser = ref<any>(null)
 
 async function search() {
   const email = searchEmail.value.trim()
-  if (!email) return
+  if (!email) {
+    searchError.value = '請輸入 Email'
+    return
+  }
   searching.value = true
   searchError.value = ''
   foundUser.value = null

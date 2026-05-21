@@ -664,7 +664,6 @@
     </template>
   </el-dialog>
 
-  <AdminToastStack :toasts="toasts" />
 </template>
 
 <script setup lang="ts">
@@ -914,7 +913,7 @@ type StructuredMessagePreview = {
   cards: StructuredCardPreview[]
 }
 
-const { toasts, showToast } = useAdminToast()
+const { showToast } = useAdminToast()
 const { uploadToStorage, validateFile } = useMediaUpload()
 
 const CONV_LIST_PAGE_SIZE = 30
@@ -1379,7 +1378,10 @@ async function send() {
   sending.value = true
   try {
     const text = inputText.value.trim()
-    if (!text) return
+    if (!text) {
+      showToast('請輸入訊息', 'error')
+      return
+    }
     await apiFetch(`/api/conversations/${selectedUserId.value}/send`, {
       method: 'POST',
       body: { type: 'text', text },
