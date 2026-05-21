@@ -33,8 +33,7 @@ export default defineEventHandler(async (event) => {
     cooldown: body.cooldown,
   }
 
-  invalidateActiveAutoReplyRulesCache(workspaceId)
-
   await db.collection('autoReplies').doc(id).update(updates)
+  invalidateActiveAutoReplyRulesCache(workspaceId)
   return { id, ...updates }
 })

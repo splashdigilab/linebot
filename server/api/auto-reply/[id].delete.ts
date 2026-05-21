@@ -9,8 +9,7 @@ export default defineEventHandler(async (event) => {
   if (!existing.exists || existing.data()?.workspaceId !== workspaceId) {
     throw createError({ statusCode: 404, statusMessage: 'Not found' })
   }
-  invalidateActiveAutoReplyRulesCache(workspaceId)
-
   await db.collection('autoReplies').doc(id).delete()
+  invalidateActiveAutoReplyRulesCache(workspaceId)
   return { id }
 })

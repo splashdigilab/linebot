@@ -22,8 +22,6 @@ export default defineEventHandler(async (event) => {
     ? '輸入任何內容'
     : (body.keyword || '自動回覆')
   const db = getDb()
-  invalidateActiveAutoReplyRulesCache(workspaceId)
-
   await db.collection('autoReplies').doc(id).set({
     name: body.name || defaultName,
     keyword: body.keyword,
@@ -36,6 +34,7 @@ export default defineEventHandler(async (event) => {
     workspaceId,
     createdAt: FieldValue.serverTimestamp(),
   })
+  invalidateActiveAutoReplyRulesCache(workspaceId)
 
   return {
     id,

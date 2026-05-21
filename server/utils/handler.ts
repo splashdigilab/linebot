@@ -81,26 +81,15 @@ export function invalidateActiveAutoReplyRulesCache(workspaceId: string) {
   autoReplyRuleCache.delete(`active:autoReplies:${workspaceId}`)
 }
 
-function patchUserDocCacheAutoReplyCooldown(
-  fsUserDocId: string,
-  ruleId: string,
-  triggeredAt: number,
-): void {
-  const entry = userDocCache.get(fsUserDocId)
-  if (!entry?.data) return
-  entry.data.autoReplyCooldowns = {
-    ...(entry.data.autoReplyCooldowns ?? {}),
-    [ruleId]: triggeredAt,
-  }
-}
-
-async function loadUserAutoReplyCooldownState(fsUserDocId: string): Promise<{
+/** 一次讀取使用者文件，同時取出冷卻狀態與 activeInput，節省 Firestore round-trip */
+async function loadUserStateForIncomingText(fsUserDocId: string): Promise<{
   ruleCooldowns: Record<string, number>
   moduleCooldowns: Record<string, { triggeredAt: number; durationMs: number }>
+  activeInput: UserDoc['activeInput'] | null
 }> {
   const snap = await getDb().collection('users').doc(fsUserDocId).get()
   if (!snap.exists) {
-    return { ruleCooldowns: {}, moduleCooldowns: {} }
+    return { ruleCooldowns: {}, moduleCooldowns: {}, activeInput: null }
   }
   const data = snap.data() as UserDoc | undefined
   return {
@@ -110,13 +99,81 @@ async function loadUserAutoReplyCooldownState(fsUserDocId: string): Promise<{
     moduleCooldowns: normalizeAutoReplyModuleCooldownsMap(
       data?.autoReplyModuleCooldowns as Record<string, unknown> | undefined,
     ),
+    activeInput: data?.activeInput ?? null,
   }
 }
 
-async function loadUserActiveInput(fsUserDocId: string): Promise<UserDoc['activeInput'] | null | undefined> {
-  const snap = await getDb().collection('users').doc(fsUserDocId).get()
-  if (!snap.exists) return null
-  return (snap.data() as UserDoc | undefined)?.activeInput ?? null
+/**
+ * 原子性地確認冷卻狀態並寫入觸發時間。
+ * 使用 Firestore Transaction，確保並行請求（同一使用者快速連傳）只有第一則真正觸發。
+ * 回傳 true = 可以觸發；false = 已在冷卻中
+ */
+async function claimAutoReplyCooldown(
+  fsUserDocId: string,
+  rule: AutoReplyRuleShape,
+): Promise<boolean> {
+  if (!rule.cooldown?.enabled || !rule.id) return true
+
+  const db = getDb()
+  const userRef = db.collection('users').doc(fsUserDocId)
+  const ruleId = rule.id
+  const durationMs = Number(rule.cooldown.durationMs)
+  const triggeredAt = Date.now()
+  let shouldTrigger = false
+
+  try {
+    await db.runTransaction(async (tx) => {
+      const snap = await tx.get(userRef)
+      const data = snap.data() as UserDoc | undefined
+      const cooldowns = normalizeAutoReplyCooldownsMap(
+        data?.autoReplyCooldowns as Record<string, unknown> | undefined,
+      )
+
+      if (isAutoReplyRuleOnCooldown(rule, cooldowns, triggeredAt)) {
+        shouldTrigger = false
+        return
+      }
+
+      shouldTrigger = true
+      const updates: Record<string, unknown> = {
+        [`autoReplyCooldowns.${ruleId}`]: triggeredAt,
+      }
+      if (rule.action.type === 'module' && rule.action.moduleId) {
+        updates[`autoReplyModuleCooldowns.${rule.action.moduleId}`] = {
+          triggeredAt,
+          durationMs,
+        }
+      }
+
+      if (snap.exists) {
+        tx.update(userRef, updates)
+      } else {
+        const mergeData: Record<string, unknown> = {
+          autoReplyCooldowns: { [ruleId]: triggeredAt },
+        }
+        if (rule.action.type === 'module' && rule.action.moduleId) {
+          mergeData.autoReplyModuleCooldowns = {
+            [rule.action.moduleId]: { triggeredAt, durationMs },
+          }
+        }
+        tx.set(userRef, mergeData, { merge: true })
+      }
+    })
+  } catch (e) {
+    console.error('[autoReply] cooldown transaction error:', e)
+    return true
+  }
+
+  if (shouldTrigger) {
+    const entry = userDocCache.get(fsUserDocId)
+    if (entry?.data) {
+      entry.data.autoReplyCooldowns = {
+        ...(entry.data.autoReplyCooldowns ?? {}),
+        [ruleId]: triggeredAt,
+      }
+    }
+  }
+  return shouldTrigger
 }
 
 // ── Type Definitions ──────────────────────────────────────────────
@@ -500,7 +557,7 @@ async function matchAutoReplyRule(
   workspaceId: string,
   options: {
     allowAnyText: boolean
-    autoReplyCooldowns?: Record<string, number>
+    ruleCooldowns?: Record<string, number>
   } = { allowAnyText: true },
 ): Promise<AutoReplyRuleShape | null> {
   const rules = await loadActiveAutoReplyRules(workspaceId)
@@ -511,46 +568,9 @@ async function matchAutoReplyRule(
       excludeRuleIds,
     })
     if (!rule?.id) return rule
-    if (!isAutoReplyRuleOnCooldown(rule, options.autoReplyCooldowns)) return rule
+    if (!isAutoReplyRuleOnCooldown(rule, options.ruleCooldowns)) return rule
     excludeRuleIds.add(rule.id)
   }
-}
-
-async function recordAutoReplyCooldown(
-  fsUserDocId: string,
-  rule: AutoReplyRuleShape,
-): Promise<void> {
-  if (!rule.cooldown?.enabled || !rule.id) return
-  const triggeredAt = Date.now()
-  const updates: Record<string, unknown> = {
-    [`autoReplyCooldowns.${rule.id}`]: triggeredAt,
-  }
-  if (rule.action.type === 'module' && rule.action.moduleId) {
-    updates[`autoReplyModuleCooldowns.${rule.action.moduleId}`] = {
-      triggeredAt,
-      durationMs: rule.cooldown.durationMs,
-    }
-  }
-  const ref = getDb().collection('users').doc(fsUserDocId)
-  try {
-    await ref.update(updates)
-  } catch (e: any) {
-    const code = e?.code ?? e?.status
-    if (code !== 5 && code !== 'not-found' && code !== 404) throw e
-    const mergeDoc: Record<string, unknown> = {
-      autoReplyCooldowns: { [rule.id]: triggeredAt },
-    }
-    if (rule.action.type === 'module' && rule.action.moduleId) {
-      mergeDoc.autoReplyModuleCooldowns = {
-        [rule.action.moduleId]: {
-          triggeredAt,
-          durationMs: rule.cooldown.durationMs,
-        },
-      }
-    }
-    await ref.set(mergeDoc, { merge: true })
-  }
-  patchUserDocCacheAutoReplyCooldown(fsUserDocId, rule.id, triggeredAt)
 }
 
 function buildAutoReplyActionMessages(
@@ -1749,18 +1769,17 @@ async function handleIncomingText(
   const userAttributes = buildAttributeContext(userData)
   let handledByInput = false
 
-  const cooldownState = !suppressBotAutomation
-    ? await loadUserAutoReplyCooldownState(fsUserDocId)
-    : { ruleCooldowns: {}, moduleCooldowns: {} }
+  // 一次 Firestore read 同時取得冷卻狀態與 activeInput
+  const userState = !suppressBotAutomation
+    ? await loadUserStateForIncomingText(fsUserDocId)
+    : { ruleCooldowns: {}, moduleCooldowns: {}, activeInput: null }
 
-  const activeInput = !suppressBotAutomation
-    ? await loadUserActiveInput(fsUserDocId)
-    : null
+  const activeInput = userState.activeInput
 
   if (activeInput && activeInput.expiresAt > Date.now()) {
     const { moduleId, attribute, tagIds } = activeInput
 
-    if (isAutoReplyModuleOnCooldown(moduleId, cooldownState.moduleCooldowns)) {
+    if (isAutoReplyModuleOnCooldown(moduleId, userState.moduleCooldowns)) {
       await getDb().collection('users').doc(fsUserDocId).update({ activeInput: FieldValue.delete() })
       invalidateUserDocCache(fsUserDocId)
       handledByInput = true
@@ -1818,10 +1837,13 @@ async function handleIncomingText(
   if (!handledByInput && !suppressBotAutomation) {
     const rule = await matchAutoReplyRule(textContent, wid, {
       allowAnyText: options.allowAnyText !== false,
-      autoReplyCooldowns: cooldownState.ruleCooldowns,
+      ruleCooldowns: userState.ruleCooldowns,
     })
     if (rule) {
-      let triggered = false
+      // 冷卻規則：原子性地確認並寫入冷卻；並行請求中只有第一則能取得鎖
+      const canTrigger = await claimAutoReplyCooldown(fsUserDocId, rule)
+      if (!canTrigger) return
+
       // 貼標（非阻塞，不影響回覆速度）
       if (rule.tagging?.enabled && Array.isArray(rule.tagging?.addTagIds) && rule.tagging.addTagIds.length > 0) {
         addTagsToUser(fsUserDocId, rule.tagging.addTagIds, 'rule', rule.id ?? null, wid)
@@ -1849,7 +1871,6 @@ async function handleIncomingText(
                   console.error('[session] enterModule error:', e),
                 )
               }
-              triggered = true
             }
           } else {
             console.warn(
@@ -1864,16 +1885,7 @@ async function handleIncomingText(
           if (actionMessages.length > 0) {
             await replyMessage(replyToken, actionMessages, wid)
             saveOutgoingConversationMessagesByWorkspace(lineUserId, actionMessages, wid).catch(e => console.error('[conv] save error:', e))
-            triggered = true
           }
-        }
-      }
-
-      if (triggered && rule.cooldown?.enabled && rule.id) {
-        try {
-          await recordAutoReplyCooldown(fsUserDocId, rule)
-        } catch (e) {
-          console.error('[autoReply] record cooldown error:', e)
         }
       }
     }
