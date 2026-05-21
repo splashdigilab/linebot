@@ -21,7 +21,7 @@ interface SessionCacheEntry {
   lastActivityAt: number  // JS ms timestamp
   cachedAt: number
 }
-const SESSION_CACHE_TTL_MS = 10 * 1000
+const SESSION_CACHE_TTL_MS = 30 * 1000
 const sessionByUser = new Map<string, SessionCacheEntry>()   // lineUserId → entry
 const sessionStatusById = new Map<string, { status: ConversationStatus; cachedAt: number }>() // sessionId → status
 

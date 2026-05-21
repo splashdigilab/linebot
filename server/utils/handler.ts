@@ -644,8 +644,8 @@ export async function pushSupportPresetActionToUser(
       throw createError({ statusCode: 400, statusMessage: '此機器人模組沒有可發送的訊息' })
     }
     await pushMessage(lineUserId, lineMessages, workspaceId)
-    await saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, workspaceId)
-    await dispatchPostReplyActions(lineUserId, flow.messages, workspaceId)
+    saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, workspaceId).catch(e => console.error('[conv] save error:', e))
+    dispatchPostReplyActions(lineUserId, flow.messages, workspaceId).catch(e => console.error('[postReply] dispatchPostReplyActions failed:', e))
     return
   }
 
@@ -1769,9 +1769,17 @@ async function handleIncomingText(
   const userAttributes = buildAttributeContext(userData)
   let handledByInput = false
 
-  // 一次 Firestore read 同時取得冷卻狀態與 activeInput
-  const userState = !suppressBotAutomation
-    ? await loadUserStateForIncomingText(fsUserDocId)
+  // 直接從已取得的 userData 提取冷卻狀態與 activeInput，省去重複的 Firestore read
+  const userState = !suppressBotAutomation && userData
+    ? {
+        ruleCooldowns: normalizeAutoReplyCooldownsMap(
+          userData.autoReplyCooldowns as Record<string, unknown> | undefined,
+        ),
+        moduleCooldowns: normalizeAutoReplyModuleCooldownsMap(
+          userData.autoReplyModuleCooldowns as Record<string, unknown> | undefined,
+        ),
+        activeInput: userData.activeInput ?? null,
+      }
     : { ruleCooldowns: {}, moduleCooldowns: {}, activeInput: null }
 
   const activeInput = userState.activeInput
@@ -1813,7 +1821,7 @@ async function handleIncomingText(
         )
         if (lineMessages.length > 0) {
           await replyMessage(replyToken, lineMessages, wid)
-          await dispatchPostReplyActions(lineUserId, flow.messages, wid)
+          dispatchPostReplyActions(lineUserId, flow.messages, wid).catch(e => console.error('[postReply] dispatchPostReplyActions failed:', e))
           saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, wid).catch(e => console.error('[conv] save error:', e))
           if (sessionId) {
             enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', moduleId, wid).catch(e =>
@@ -1864,7 +1872,7 @@ async function handleIncomingText(
             )
             if (lineMessages.length > 0) {
               await replyMessage(replyToken, lineMessages, wid)
-              await dispatchPostReplyActions(lineUserId, flow.messages, wid)
+              dispatchPostReplyActions(lineUserId, flow.messages, wid).catch(e => console.error('[postReply] dispatchPostReplyActions failed:', e))
               saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, wid).catch(e => console.error('[conv] save error:', e))
               if (sessionId) {
                 enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', rule.action.moduleId, wid).catch(e =>
@@ -1940,12 +1948,8 @@ export async function handlePostbackEvent(
   })
   if (messageTrigger.text) {
     if (messageTrigger.tagIds.length > 0) {
-      try {
-        await addTagsToUser(lineUserFirestoreDocId(userId, workspaceId), messageTrigger.tagIds, 'system', 'postback:message', workspaceId)
-      }
-      catch (e) {
-        console.error('[tagging] message postback tagging failed:', e)
-      }
+      addTagsToUser(lineUserFirestoreDocId(userId, workspaceId), messageTrigger.tagIds, 'system', 'postback:message', workspaceId)
+        .catch(e => console.error('[tagging] message postback tagging failed:', e))
     }
     await handleIncomingText(
       userId,
@@ -1964,12 +1968,8 @@ export async function handlePostbackEvent(
   const switchTrigger = parseSwitchMenuData(data)
   if (switchTrigger.targetMenuId) {
     if (switchTrigger.tagIds.length > 0) {
-      try {
-        await addTagsToUser(lineUserFirestoreDocId(userId, workspaceId), switchTrigger.tagIds, 'system', `switchMenu:${switchTrigger.targetMenuId}`, workspaceId)
-      }
-      catch (e) {
-        console.error('[tagging] switch menu tagging failed:', e)
-      }
+      addTagsToUser(lineUserFirestoreDocId(userId, workspaceId), switchTrigger.tagIds, 'system', `switchMenu:${switchTrigger.targetMenuId}`, workspaceId)
+        .catch(e => console.error('[tagging] switch menu tagging failed:', e))
     }
     // 檢查是否為 LINE 原生瞬間切換（richmenuswitch）觸發的事件
     // @ts-ignore: LINE Node SDK's Event type might not perfectly reflect params yet
@@ -2009,12 +2009,8 @@ export async function handlePostbackEvent(
   if (trigger.moduleId && !suppressBotAutomationPostback) {
     const moduleId = trigger.moduleId
     if (trigger.tagIds.length > 0) {
-      try {
-        await addTagsToUser(lineUserFirestoreDocId(userId, workspaceId), trigger.tagIds, 'system', `postback:${moduleId}`, workspaceId)
-      }
-      catch (e) {
-        console.error('[tagging] module postback tagging failed:', e)
-      }
+      addTagsToUser(lineUserFirestoreDocId(userId, workspaceId), trigger.tagIds, 'system', `postback:${moduleId}`, workspaceId)
+        .catch(e => console.error('[tagging] module postback tagging failed:', e))
     }
     const flow = preloadedFlow ?? await getFlowByModuleId(moduleId)
 
@@ -2030,7 +2026,7 @@ export async function handlePostbackEvent(
           channelSecret,
         )
         await replyMessage(event.replyToken, lineMessages, workspaceId)
-        await dispatchPostReplyActions(userId, flow.messages, workspaceId)
+        dispatchPostReplyActions(userId, flow.messages, workspaceId).catch(e => console.error('[postReply] dispatchPostReplyActions failed:', e))
         saveOutgoingConversationMessagesByWorkspace(userId, lineMessages, workspaceId).catch(e => console.error('[conv] save error:', e))
         if (sessionId) {
           enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', moduleId, workspaceId).catch(e =>
@@ -2068,7 +2064,7 @@ export async function handlePostbackEvent(
           channelSecret,
         )
         await replyMessage(event.replyToken, lineMessages, workspaceId)
-        await dispatchPostReplyActions(userId, flow.messages, workspaceId)
+        dispatchPostReplyActions(userId, flow.messages, workspaceId).catch(e => console.error('[postReply] dispatchPostReplyActions failed:', e))
         saveOutgoingConversationMessagesByWorkspace(userId, lineMessages, workspaceId).catch(e => console.error('[conv] save error:', e))
         if (sessionId) {
           enterModule(sessionId, userId, flow.moduleType ?? 'bot_flow', rule.action.moduleId, workspaceId).catch(e =>
