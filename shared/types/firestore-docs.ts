@@ -1,6 +1,6 @@
 import type { Timestamp, FieldValue } from 'firebase-admin/firestore'
 import type { ModuleType } from './conversation-stats'
-import type { AutoReplyAction, AutoReplyMatchType, AutoReplyTagging } from '../auto-reply-rule'
+import type { AutoReplyAction, AutoReplyCooldown, AutoReplyMatchType, AutoReplyTagging } from '../auto-reply-rule'
 
 // ═══════════════════════════════════════════════════════════════════
 //  Collection: users
@@ -14,6 +14,8 @@ export interface UserDoc {
   displayName: string
   pictureUrl: string
   isBlocked: boolean
+  /** 自動回覆規則 ID → 上次觸發時間（epoch ms） */
+  autoReplyCooldowns?: Record<string, number>
   createdAt: Timestamp | FieldValue
 }
 
@@ -63,6 +65,7 @@ export interface AutoReplyDoc {
   moduleId: string
   isActive: boolean
   tagging: AutoReplyTagging
+  cooldown: AutoReplyCooldown
   createdAt: Timestamp | FieldValue
 }
 

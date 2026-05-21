@@ -14,6 +14,31 @@ export interface AutoReplyTagging {
   addTagIds: string[]
 }
 
+/** 同一使用者在冷卻時間內不會重複觸發此規則 */
+export interface AutoReplyCooldown {
+  enabled: boolean
+  /** 冷卻毫秒數，須為 AUTO_REPLY_COOLDOWN_DURATIONS_MS 之一 */
+  durationMs: number
+}
+
+export const AUTO_REPLY_COOLDOWN_OPTIONS: ReadonlyArray<{ value: number; label: string }> = [
+  { value: 60_000, label: '1 分鐘' },
+  { value: 3 * 60_000, label: '3 分鐘' },
+  { value: 5 * 60_000, label: '5 分鐘' },
+  { value: 10 * 60_000, label: '10 分鐘' },
+  { value: 15 * 60_000, label: '15 分鐘' },
+  { value: 30 * 60_000, label: '30 分鐘' },
+  { value: 60 * 60_000, label: '1 小時' },
+  { value: 3 * 60 * 60_000, label: '3 小時' },
+  { value: 6 * 60 * 60_000, label: '6 小時' },
+  { value: 12 * 60 * 60_000, label: '12 小時' },
+  { value: 24 * 60 * 60_000, label: '1 天' },
+]
+
+export const AUTO_REPLY_COOLDOWN_DURATIONS_MS = AUTO_REPLY_COOLDOWN_OPTIONS.map((o) => o.value)
+
+const DEFAULT_COOLDOWN_DURATION_MS = 60_000
+
 export interface AutoReplyRuleShape {
   id?: string
   name: string
@@ -22,6 +47,7 @@ export interface AutoReplyRuleShape {
   action: AutoReplyAction
   isActive: boolean
   tagging: AutoReplyTagging
+  cooldown: AutoReplyCooldown
 }
 
 const AUTO_REPLY_MATCH_TYPES: AutoReplyMatchType[] = ['containsAny', 'containsAll', 'exact', 'anyText']
@@ -61,6 +87,15 @@ export function normalizeAutoReplyTagging(raw: any): AutoReplyTagging {
   }
 }
 
+export function normalizeAutoReplyCooldown(raw: any): AutoReplyCooldown {
+  const enabled = raw?.enabled === true
+  const rawDuration = Number(raw?.durationMs)
+  const durationMs = AUTO_REPLY_COOLDOWN_DURATIONS_MS.includes(rawDuration)
+    ? rawDuration
+    : DEFAULT_COOLDOWN_DURATION_MS
+  return { enabled, durationMs }
+}
+
 export function normalizeAutoReplyRule(rawRule: any): AutoReplyRuleShape {
   const matchType = normalizeMatchType(rawRule?.matchType)
   return {
@@ -71,7 +106,21 @@ export function normalizeAutoReplyRule(rawRule: any): AutoReplyRuleShape {
     action: normalizeAutoReplyAction(rawRule?.action, String(rawRule?.moduleId ?? '')),
     isActive: rawRule?.isActive !== false,
     tagging: normalizeAutoReplyTagging(rawRule?.tagging),
+    cooldown: normalizeAutoReplyCooldown(rawRule?.cooldown),
   }
+}
+
+export function isAutoReplyRuleOnCooldown(
+  rule: AutoReplyRuleShape,
+  lastTriggeredAtByRuleId: Record<string, number> | undefined,
+  now = Date.now(),
+): boolean {
+  if (!rule.cooldown.enabled || !rule.id) return false
+  const durationMs = rule.cooldown.durationMs
+  if (!durationMs || durationMs <= 0) return false
+  const last = lastTriggeredAtByRuleId?.[rule.id]
+  if (typeof last !== 'number' || !Number.isFinite(last)) return false
+  return last + durationMs > now
 }
 
 export function splitAutoReplyKeywords(keyword: string): string[] {
@@ -115,11 +164,12 @@ const AUTO_REPLY_MATCH_PRIORITY: Record<AutoReplyMatchType, number> = {
 export function pickBestMatchingAutoReplyRule(
   rules: AutoReplyRuleShape[],
   inputText: string,
-  options: { allowAnyText: boolean },
+  options: { allowAnyText: boolean; excludeRuleIds?: Set<string> },
 ): AutoReplyRuleShape | null {
   let best: AutoReplyRuleShape | null = null
   let bestP = 999
   for (const rule of rules) {
+    if (rule.id && options.excludeRuleIds?.has(rule.id)) continue
     if (!options.allowAnyText && rule.matchType === 'anyText')
       continue
     if (!matchAutoReplyText(rule, inputText))
@@ -136,6 +186,9 @@ export function pickBestMatchingAutoReplyRule(
 export function validateAutoReplyRule(rule: AutoReplyRuleShape): string | null {
   if (!rule.name.trim()) return '請輸入規則名稱'
   if (rule.matchType !== 'anyText' && !rule.keyword.trim()) return '請輸入觸發內容'
+  if (rule.cooldown.enabled && !AUTO_REPLY_COOLDOWN_DURATIONS_MS.includes(rule.cooldown.durationMs)) {
+    return '請選擇有效的冷卻時間'
+  }
   if (rule.action.type === 'module' && !rule.action.moduleId) return '請選擇要觸發的機器人模組'
   if (rule.action.type === 'message' && !rule.action.text) return '請輸入回覆文字'
   if (rule.action.type === 'uri' && !rule.action.uri) return '請輸入網址'

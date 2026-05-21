@@ -123,6 +123,29 @@
             <div v-else class="ar-any-text-note">
               將於使用者輸入任意文字時觸發。
             </div>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="防重複觸發" tight />
+              <el-switch
+                v-model="form.cooldown.enabled"
+                active-text="啟用"
+                inactive-text="停用"
+                class="ar-status-switch"
+              />
+            </div>
+            <div v-if="form.cooldown.enabled" class="admin-field-group">
+              <AdminFieldLabel text="冷卻時間" tight />
+              <el-select v-model="form.cooldown.durationMs" class="control-full">
+                <el-option
+                  v-for="option in cooldownOptions"
+                  :key="option.value"
+                  :value="option.value"
+                  :label="option.label"
+                />
+              </el-select>
+              <p class="ar-section-hint">
+                同一使用者在冷卻時間內再次輸入時，不會重複觸發此規則。
+              </p>
+            </div>
           </div>
         </div>
 
@@ -206,7 +229,9 @@
 
 <script setup lang="ts">
 import {
+  AUTO_REPLY_COOLDOWN_OPTIONS,
   normalizeAutoReplyAction,
+  normalizeAutoReplyCooldown,
   normalizeAutoReplyRule,
   normalizeAutoReplyTagging,
   validateAutoReplyRule,
@@ -241,6 +266,7 @@ const defaultForm = () => ({
   action: normalizeAutoReplyAction({ type: 'module', moduleId: '' }),
   isActive: true,
   tagging: normalizeAutoReplyTagging(null),
+  cooldown: normalizeAutoReplyCooldown(null),
 })
 const form = ref(defaultForm())
 const { markClean, confirmLeaveIfDirty } = useUnsavedChanges({
@@ -253,6 +279,8 @@ const triggerModeOptions = [
   { value: 'exact', label: '內容完全一致' },
   { value: 'anyText', label: '輸入任何內容' },
 ]
+
+const cooldownOptions = AUTO_REPLY_COOLDOWN_OPTIONS
 
 const autoReplyActionTypeOptions = [
   { value: 'uri', label: '開啟網址' },
@@ -293,6 +321,7 @@ function selectRule(rule: any, opts?: { skipDiscardConfirm?: boolean }) {
     action: normalized.action,
     isActive: normalized.isActive,
     tagging: normalized.tagging,
+    cooldown: normalized.cooldown,
   }
   markClean()
 }

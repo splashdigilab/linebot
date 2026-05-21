@@ -29,6 +29,7 @@ export default defineEventHandler(async (event) => {
     moduleId,
     isActive: body.isActive,
     tagging: body.tagging,
+    cooldown: body.cooldown,
   }
 
   await db.collection('autoReplies').doc(id).update(updates)

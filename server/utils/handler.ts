@@ -16,6 +16,7 @@ import {
   pickBestMatchingAutoReplyRule,
   normalizeAutoReplyAction,
   normalizeAutoReplyRule,
+  isAutoReplyRuleOnCooldown,
   type AutoReplyRuleShape,
 } from '~~/shared/auto-reply-rule'
 import { RICH_LAYOUT_PRESETS } from '~~/shared/rich-layout-presets'
@@ -105,6 +106,7 @@ interface UserDoc {
     expiresAt: number
   } | null
   attributes?: Record<string, string>
+  autoReplyCooldowns?: Record<string, number>
 }
 
 function toConversationText(msg: messagingApi.Message): string {
@@ -456,10 +458,34 @@ async function loadActiveAutoReplyRules(workspaceId: string): Promise<AutoReplyR
 async function matchAutoReplyRule(
   inputText: string,
   workspaceId: string,
-  options: { allowAnyText: boolean } = { allowAnyText: true },
+  options: {
+    allowAnyText: boolean
+    autoReplyCooldowns?: Record<string, number>
+  } = { allowAnyText: true },
 ): Promise<AutoReplyRuleShape | null> {
   const rules = await loadActiveAutoReplyRules(workspaceId)
-  return pickBestMatchingAutoReplyRule(rules, inputText, options)
+  const excludeRuleIds = new Set<string>()
+  while (true) {
+    const rule = pickBestMatchingAutoReplyRule(rules, inputText, {
+      allowAnyText: options.allowAnyText,
+      excludeRuleIds,
+    })
+    if (!rule?.id) return rule
+    if (!isAutoReplyRuleOnCooldown(rule, options.autoReplyCooldowns)) return rule
+    excludeRuleIds.add(rule.id)
+  }
+}
+
+async function recordAutoReplyCooldown(
+  fsUserDocId: string,
+  rule: AutoReplyRuleShape,
+): Promise<void> {
+  if (!rule.cooldown?.enabled || !rule.id) return
+  const db = getDb()
+  await db.collection('users').doc(fsUserDocId).set({
+    [`autoReplyCooldowns.${rule.id}`]: Date.now(),
+  }, { merge: true })
+  invalidateUserDocCache(fsUserDocId)
 }
 
 function buildAutoReplyActionMessages(
@@ -1716,8 +1742,10 @@ async function handleIncomingText(
   if (!handledByInput && !suppressBotAutomation) {
     const rule = await matchAutoReplyRule(textContent, wid, {
       allowAnyText: options.allowAnyText !== false,
+      autoReplyCooldowns: userData?.autoReplyCooldowns,
     })
     if (rule) {
+      let triggered = false
       // 貼標（非阻塞，不影響回覆速度）
       if (rule.tagging?.enabled && Array.isArray(rule.tagging?.addTagIds) && rule.tagging.addTagIds.length > 0) {
         addTagsToUser(fsUserDocId, rule.tagging.addTagIds, 'rule', rule.id ?? null, wid)
@@ -1736,13 +1764,16 @@ async function handleIncomingText(
               lineUserId,
               channelSecret,
             )
-            await replyMessage(replyToken, lineMessages, wid)
-            await dispatchPostReplyActions(lineUserId, flow.messages, wid)
-            saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, wid).catch(e => console.error('[conv] save error:', e))
-            if (sessionId) {
-              enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', rule.action.moduleId, wid).catch(e =>
-                console.error('[session] enterModule error:', e),
-              )
+            if (lineMessages.length > 0) {
+              await replyMessage(replyToken, lineMessages, wid)
+              await dispatchPostReplyActions(lineUserId, flow.messages, wid)
+              saveOutgoingConversationMessagesByWorkspace(lineUserId, lineMessages, wid).catch(e => console.error('[conv] save error:', e))
+              if (sessionId) {
+                enterModule(sessionId, lineUserId, flow.moduleType ?? 'bot_flow', rule.action.moduleId, wid).catch(e =>
+                  console.error('[session] enterModule error:', e),
+                )
+              }
+              triggered = true
             }
           } else {
             console.warn(
@@ -1757,8 +1788,15 @@ async function handleIncomingText(
           if (actionMessages.length > 0) {
             await replyMessage(replyToken, actionMessages, wid)
             saveOutgoingConversationMessagesByWorkspace(lineUserId, actionMessages, wid).catch(e => console.error('[conv] save error:', e))
+            triggered = true
           }
         }
+      }
+
+      if (triggered) {
+        recordAutoReplyCooldown(fsUserDocId, rule).catch(e =>
+          console.error('[autoReply] record cooldown error:', e),
+        )
       }
     }
   }
