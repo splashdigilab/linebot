@@ -1798,14 +1798,18 @@ async function handleIncomingText(
       updates[`attributes.${attribute}`] = textContent
       userAttributes[attribute] = textContent
     }
-    await db.collection('users').doc(fsUserDocId).update(updates)
+    // Run user write and flow fetch in parallel; both are independent
+    const [, flow] = await Promise.all([
+      db.collection('users').doc(fsUserDocId).update(updates),
+      getFlowByModuleId(moduleId),
+    ])
     invalidateUserDocCache(fsUserDocId)
 
+    // Tags are non-blocking — flow/reply doesn't depend on tagging result
     if (Array.isArray(tagIds) && tagIds.length > 0) {
-      await addTagsToUser(fsUserDocId, tagIds, 'system', `userInput:${moduleId}`, wid)
+      addTagsToUser(fsUserDocId, tagIds, 'system', `userInput:${moduleId}`, wid)
+        .catch(e => console.error('[tagging] userInput tagging failed:', e))
     }
-
-    const flow = await getFlowByModuleId(moduleId)
 
     if (flow) {
       // Flow found: mark handled so auto-reply doesn't intercept the user's answer
@@ -1921,31 +1925,37 @@ export async function handlePostbackEvent(
   const trigger = parseTriggerModuleData(data)
   const messageTrigger = parseTriggerMessageData(data)
 
-  // Run session, credentials, and the most likely needed resource all in parallel.
-  // - module trigger: preload the flow document
+  // Run all independent work in parallel upfront:
+  // - credentials, session, user (always needed)
+  // - module trigger: fetch flow then immediately chain hydrateRichMessageRefs
   // - message trigger: warm the auto-reply rules cache
-  const [{ channelSecret }, sessionId, preloadedFlow] = await Promise.all([
+  const flowHydrateTask: Promise<{ flow: FlowDoc | null; hydrated: any[] }> = trigger.moduleId
+    ? getFlowByModuleId(trigger.moduleId).then(async (f) =>
+        f
+          ? { flow: f, hydrated: await hydrateRichMessageRefs(f.messages as any[]) }
+          : { flow: null, hydrated: [] },
+      )
+    : messageTrigger.text
+      ? loadActiveAutoReplyRules(workspaceId).then(() => ({ flow: null, hydrated: [] }))
+      : Promise.resolve({ flow: null, hydrated: [] })
+
+  const [{ channelSecret }, sessionId, preloadedUserData, { flow: preloadedFlow, hydrated: preloadedHydrated }] = await Promise.all([
     getLineWorkspaceCredentials(workspaceId),
     ensureConversationSession(userId, workspaceId).catch((e) => {
       console.error('[session] postback session error:', e)
       return null
     }),
-    trigger.moduleId
-      ? getFlowByModuleId(trigger.moduleId)
-      : messageTrigger.text
-        ? loadActiveAutoReplyRules(workspaceId).then(() => null)
-        : Promise.resolve(null),
+    ensureUser(userId, undefined, workspaceId).catch(e => {
+      console.error('[ensureUser] Error:', e)
+      return null
+    }),
+    flowHydrateTask,
   ])
 
+  // shouldSuppress is a near-instant cache hit after ensureConversationSession syncs sessionStatusById
   const suppressBotAutomationPostback = sessionId
     ? await shouldSuppressInboundBotAutomationForSession(sessionId)
     : false
-
-  // Fetch user in background; cache hit likely since ensureUser may have been called above
-  const userDataTask = ensureUser(userId, undefined, workspaceId).catch(e => {
-    console.error('[ensureUser] Error:', e)
-    return null
-  })
   if (messageTrigger.text) {
     if (messageTrigger.tagIds.length > 0) {
       addTagsToUser(lineUserFirestoreDocId(userId, workspaceId), messageTrigger.tagIds, 'system', 'postback:message', workspaceId)
@@ -1956,11 +1966,10 @@ export async function handlePostbackEvent(
       messageTrigger.text,
       event.replyToken,
       { ...options, allowAnyText: false },
-      await userDataTask,
+      preloadedUserData,
       sessionId,
       workspaceId,
     )
-    await userDataTask
     return
   }
 
@@ -1981,7 +1990,6 @@ export async function handlePostbackEvent(
       // 若伺服器再重複打一次 link API 反而會造成選單「閃屏重新載入」一次。
       // 所以此處直接 return 略過即可。
       console.log('[switchMenu] Handled by native richmenuswitch instantly, skipping redundant link API.')
-      await userDataTask
       return
     }
 
@@ -1990,7 +1998,7 @@ export async function handlePostbackEvent(
     console.log('[switchMenu] Fallback to server link API, targetId:', targetFirestoreId, 'userId:', userId)
     const db = getDb()
     const targetDoc = await db.collection('richmenus').doc(targetFirestoreId).get()
-    
+
     if (targetDoc.exists && targetDoc.data()?.richMenuId) {
       const lineRichMenuId = targetDoc.data()!.richMenuId
       try {
@@ -2002,10 +2010,9 @@ export async function handlePostbackEvent(
     } else {
       console.warn('[switchMenu] doc not found or missing richMenuId')
     }
-    await userDataTask
     return // Stop further processing
   }
-  // Handle direct module trigger (trigger was parsed upfront; preloadedFlow was fetched in parallel)
+  // Handle direct module trigger (flow + hydrated messages already fetched in parallel above)
   if (trigger.moduleId && !suppressBotAutomationPostback) {
     const moduleId = trigger.moduleId
     if (trigger.tagIds.length > 0) {
@@ -2016,8 +2023,11 @@ export async function handlePostbackEvent(
 
     if (flow) {
       if (event.replyToken) {
-        const userAttributes = buildAttributeContext(await userDataTask)
-        const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
+        const userAttributes = buildAttributeContext(preloadedUserData)
+        // Use preloaded hydrated messages (fetched in parallel with session/user above)
+        const hydratedMessages = preloadedFlow
+          ? preloadedHydrated
+          : await hydrateRichMessageRefs(flow.messages as any[])
         const lineMessages = buildLineMessages(
           hydratedMessages,
           userAttributes,
@@ -2037,12 +2047,10 @@ export async function handlePostbackEvent(
     } else {
       console.warn('[webhook] triggerModule target not found or inactive:', moduleId)
     }
-    await userDataTask
     return
   }
 
   if (trigger.moduleId && suppressBotAutomationPostback) {
-    await userDataTask
     return
   }
 
@@ -2051,7 +2059,7 @@ export async function handlePostbackEvent(
     ? await matchAutoReplyRule(data, workspaceId, { allowAnyText: false })
     : null
   if (rule && event.replyToken) {
-    const userAttributes = buildAttributeContext(await userDataTask)
+    const userAttributes = buildAttributeContext(preloadedUserData)
     if (rule.action.type === 'module') {
       const flow = await getFlowByModuleId(rule.action.moduleId)
       if (flow) {
@@ -2080,7 +2088,5 @@ export async function handlePostbackEvent(
       }
     }
   }
-
-  await userDataTask
 }
 

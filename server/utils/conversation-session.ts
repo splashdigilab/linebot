@@ -141,6 +141,8 @@ export async function ensureConversationSession(
       .update({ lastActivityAt: FieldValue.serverTimestamp() })
       .catch(e => console.warn('[session] bg lastActivityAt update failed:', e))
     sessionByUser.set(lineUserId, { ...cached, lastActivityAt: now, cachedAt: now })
+    // Sync sessionStatusById so shouldSuppressInboundBotAutomationForSession gets a cache hit
+    sessionStatusById.set(cached.sessionId, { status: cached.status, cachedAt: now })
     return cached.sessionId
   }
 
