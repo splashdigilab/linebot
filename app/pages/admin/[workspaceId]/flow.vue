@@ -184,7 +184,7 @@
                     <FlowActionEditor
                       :action="btn"
                       :type-options="standardActionTypeOptions"
-                      :module-options="flows"
+                      :module-options="modulePickerOptions"
                       :tag-options="allTags"
                       :enable-tagging="true"
                       :variable-options="variableTokenOptions"
@@ -333,7 +333,7 @@
                   <FlowRichMessageAreas
                     v-if="String(msg.heroImageUrl || '').trim()"
                     :msg="msg"
-                    :module-options="flows"
+                    :module-options="modulePickerOptions"
                     :tag-options="allTags"
                     :enable-tagging="true"
                     :show-canvas="true"
@@ -353,7 +353,7 @@
               <FlowRichMessageAreas
                 v-if="String(msg.heroImageUrl || '').trim()"
                 :msg="msg"
-                :module-options="flows"
+                :module-options="modulePickerOptions"
                 :tag-options="allTags"
                 :enable-tagging="true"
                 :show-canvas="false"
@@ -427,7 +427,7 @@
                       <FlowActionEditor
                         :action="qr.action"
                         :type-options="quickReplyActionTypeOptions"
-                        :module-options="flows"
+                        :module-options="modulePickerOptions"
                         :tag-options="allTags"
                         :enable-tagging="true"
                         :variable-options="variableTokenOptions"
@@ -513,7 +513,7 @@
                       收到回覆後，觸發下一個模組 <span class="text-muted">(必填)</span>
                     </AdminFieldLabel>
                     <el-select v-model="msg.moduleId" placeholder="選擇機器人模組" size="small" class="control-full">
-                      <el-option v-for="f in flows" :key="f.id" :value="f.id" :label="f.name" />
+                      <el-option v-for="f in modulePickerOptions" :key="f.id" :value="f.id" :label="f.name" />
                     </el-select>
                   </div>
                   <div class="ui-field admin-field-group">
@@ -692,7 +692,7 @@
                           <FlowActionEditor
                             :action="act"
                             :type-options="standardActionTypeOptions"
-                            :module-options="flows"
+                            :module-options="modulePickerOptions"
                             :tag-options="allTags"
                             :enable-tagging="true"
                             :variable-options="variableTokenOptions"
@@ -751,7 +751,7 @@
                         <FlowActionEditor
                           :action="col.action"
                           :type-options="imageCarouselActionTypeOptions"
-                          :module-options="flows"
+                          :module-options="modulePickerOptions"
                           :tag-options="allTags"
                           :enable-tagging="true"
                           :variable-options="variableTokenOptions"
@@ -828,7 +828,7 @@
                         <FlowActionEditor
                           :action="col.action"
                           :type-options="imageCarouselActionTypeOptions"
-                          :module-options="flows"
+                          :module-options="modulePickerOptions"
                           :tag-options="allTags"
                           :enable-tagging="true"
                           :variable-options="variableTokenOptions"
@@ -845,7 +845,7 @@
                           <FlowActionEditor
                             :action="act"
                             :type-options="standardActionTypeOptions"
-                            :module-options="flows"
+                            :module-options="modulePickerOptions"
                             :tag-options="allTags"
                             :enable-tagging="true"
                             :variable-options="variableTokenOptions"
@@ -941,14 +941,16 @@ const { canOperate, guardOperate } = useAdminOperateGuard()
 // ── State ─────────────────────────────────────────────
 const richMessages = ref<any[]>([])
 const {
-  items: flows,
+  allFlows,
+  flows,
+  modulePickerOptions,
   loading,
   loadingMore,
-  hasMore,
   listEl,
   load: loadFlows,
   onScroll: onSidebarListScroll,
-} = useWorkspaceSidebarList<any>('/api/flow/list')
+  setRegularFlowsOrder,
+} = useFlowWorkspaceList()
 const saving = ref(false)
 const duplicating = ref(false)
 const seeding = ref(false)
@@ -1128,12 +1130,12 @@ async function loadRichMessages() {
 }
 
 onMounted(async () => {
-  await Promise.all([loadFlows(true), loadRichMessages(), loadTags({ status: 'active' })])
+  await Promise.all([
+    loadFlows(true),
+    loadRichMessages(),
+    loadTags({ status: 'active' }),
+  ])
 })
-
-function setRegularFlowsOrder(nextRegular: any[]) {
-  flows.value = [...systemFlows.value, ...nextRegular]
-}
 
 // ── Sidebar flow list drag and drop ───────────────────
 function onFlowListDragStart(e: DragEvent, index: number) {
@@ -1176,15 +1178,14 @@ async function onFlowListDrop(e: DragEvent, dropIndex: number) {
   const targetId = regularFlows.value[dropIndex]?.id
   if (!movedId || !targetId) return
 
-  const previousFlows = [...flows.value]
+  const previousFlows = [...allFlows.value]
   const visibleNext = [...regularFlows.value]
   const [movedVisible] = visibleNext.splice(fromIndex, 1)
   visibleNext.splice(dropIndex, 0, movedVisible)
   setRegularFlowsOrder(visibleNext)
 
   try {
-    const allFlows = await apiFetch<any[]>('/api/flow/list')
-    const allRegular = allFlows.filter((f) => !f.isSystem)
+    const allRegular = allFlows.value.filter((f) => !f.isSystem)
     const fullFromIndex = allRegular.findIndex((f) => f.id === movedId)
     const fullDropIndex = allRegular.findIndex((f) => f.id === targetId)
     if (fullFromIndex < 0 || fullDropIndex < 0) {
@@ -1201,7 +1202,7 @@ async function onFlowListDrop(e: DragEvent, dropIndex: number) {
     })
     await loadFlows(true)
   } catch {
-    flows.value = previousFlows
+    allFlows.value = previousFlows
     showToast('排序儲存失敗', 'error')
   }
 }
