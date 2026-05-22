@@ -149,6 +149,14 @@
       ]
     },
     {
+      "collectionGroup": "leadCampaigns",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "campaignCode", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "leadClaims",
       "queryScope": "COLLECTION",
       "fields": [
@@ -189,6 +197,14 @@
       ]
     },
     {
+      "collectionGroup": "richmenus",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "isDefault", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "richMessages",
       "queryScope": "COLLECTION",
       "fields": [
@@ -210,6 +226,14 @@
       "fields": [
         { "fieldPath": "workspaceId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "tags",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "code", "order": "ASCENDING" }
       ]
     },
     {

@@ -18,7 +18,7 @@ export type TagCategory = 'member_status' | 'interest' | 'behavior' | 'activity'
 
 export interface TagDoc {
   workspaceId: string
-  /** 唯一識別碼，英文小寫加底線，程式內部使用。例如 interest_food */
+  /** 同一 workspace 內唯一；英文小寫加底線，程式內部使用。例如 interest_food */
   code: string
   /** 顯示名稱，給後台營運人員看 */
   name: string

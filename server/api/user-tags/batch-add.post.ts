@@ -57,7 +57,7 @@ export default defineEventHandler(async (event) => {
   }
 
   for (const userId of userIds) {
-    const fsUserDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId))
+    const fsUserDocId = lineUserFirestoreDocId(lineUserIdFromFirestoreDocId(userId, workspaceId), workspaceId)
     for (const tagId of tagIds) {
       const docId = `${fsUserDocId}_${tagId}`
       const ref = db.collection('userTags').doc(docId)

@@ -38,8 +38,22 @@ export default defineEventHandler(async (event) => {
 
   const id = uuidv4()
   const now = FieldValue.serverTimestamp()
-  const campaignCode = String(body.campaignCode ?? '').trim() || generateLeadCampaignCode()
+  const codeRaw = String(body?.campaignCode ?? '').trim()
+  const campaignCode = codeRaw || generateLeadCampaignCode()
   const { action, moduleId } = normalizeCampaignAction(body)
+
+  const db = getDb()
+  if (codeRaw) {
+    const existing = await db
+      .collection('leadCampaigns')
+      .where('workspaceId', '==', workspaceId)
+      .where('campaignCode', '==', campaignCode)
+      .limit(1)
+      .get()
+    if (!existing.empty) {
+      throw createError({ statusCode: 409, statusMessage: `活動代碼「${campaignCode}」在此官方帳號已存在` })
+    }
+  }
   const doc: Record<string, unknown> = {
     name: String(body.name).trim(),
     campaignCode,
@@ -57,7 +71,6 @@ export default defineEventHandler(async (event) => {
   if (sched.startsAt) doc.startsAt = sched.startsAt
   if (sched.endsAt) doc.endsAt = sched.endsAt
 
-  const db = getDb()
   await db.collection('leadCampaigns').doc(id).set(doc)
 
   const urlRes = await syncPublishedEntryUrlForCampaign(db, id, {

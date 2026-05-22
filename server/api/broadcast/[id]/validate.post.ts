@@ -64,7 +64,7 @@ export default defineEventHandler(async (event) => {
     }
     else if (data.audienceSource.type === 'audience' && data.audienceSource.audienceId) {
       const audienceSnap = await db.collection('audiences').doc(data.audienceSource.audienceId).get()
-      if (!audienceSnap.exists) {
+      if (!audienceSnap.exists || String(audienceSnap.data()?.workspaceId || '') !== workspaceId) {
         errors.push('指定的受眾群組不存在')
       }
       else {

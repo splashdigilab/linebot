@@ -39,11 +39,16 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: `category must be one of: ${VALID_CATEGORIES.join(', ')}` })
   }
 
-  // 檢查 code 唯一性
+  // 檢查同一 workspace 內 code 唯一性
   const db = getDb()
-  const existing = await db.collection('tags').where('code', '==', code).limit(1).get()
+  const existing = await db
+    .collection('tags')
+    .where('workspaceId', '==', workspaceId)
+    .where('code', '==', code)
+    .limit(1)
+    .get()
   if (!existing.empty) {
-    throw createError({ statusCode: 409, statusMessage: `Tag code "${code}" already exists` })
+    throw createError({ statusCode: 409, statusMessage: `Tag code "${code}" already exists in this workspace` })
   }
 
   const id = uuidv4()

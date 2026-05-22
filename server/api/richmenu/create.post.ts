@@ -31,7 +31,11 @@ export default defineEventHandler(async (event) => {
   if (setAsDefault) {
     await setDefaultRichMenu(richMenuId, workspaceId)
     const db = getDb()
-    const prev = await db.collection('richmenus').where('isDefault', '==', true).get()
+    const prev = await db
+      .collection('richmenus')
+      .where('workspaceId', '==', workspaceId)
+      .where('isDefault', '==', true)
+      .get()
     const batch = db.batch()
     prev.docs.forEach((d) => batch.update(d.ref, { isDefault: false }))
     await batch.commit()

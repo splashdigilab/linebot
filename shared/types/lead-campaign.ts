@@ -9,7 +9,7 @@ import type { AutoReplyAction } from '~~/shared/auto-reply-rule'
 export interface LeadCampaignDoc {
   workspaceId: string
   name: string
-  /** 小寫底線格式，例如 launch_2026_q2；用於 CTA URL 的 c= 參數 */
+  /** 小寫底線格式，例如 launch_2026_q2；同一 workspace 內唯一（手動填寫時檢查） */
   campaignCode: string
   /** 此活動對應的 LINE LIFF ID，例如 2007123456-AbCdEfGh */
   liffId: string

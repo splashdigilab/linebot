@@ -79,6 +79,9 @@ export async function executeBroadcastSend(
     else if (data.audienceSource.type === 'audience' && data.audienceSource.audienceId) {
       const audienceSnap = await db.collection('audiences').doc(data.audienceSource.audienceId).get()
       if (!audienceSnap.exists) throw new Error('Audience not found')
+      if (String(audienceSnap.data()?.workspaceId || '') !== workspaceId) {
+        throw new Error('Audience not found')
+      }
       resolvedUserIds = await resolveAudienceUserIds(audienceSnap.data()!.filter as AudienceFilter, workspaceId)
     }
     else if (data.audienceSource.type === 'import') {
