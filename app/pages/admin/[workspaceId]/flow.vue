@@ -4,7 +4,14 @@
     <template #sidebar-header>
       <span class="split-sidebar-title">🤖 機器人模組</span>
       <AdminOperateGate>
-        <el-button type="primary" size="small" @click="openCreate">➕ 新增</el-button>
+        <div class="flex gap-1">
+          <el-tooltip content="新增資料夾" placement="bottom" :show-after="300">
+            <el-button size="small" plain @click="createFlowFolderPrompt">📂</el-button>
+          </el-tooltip>
+          <el-tooltip content="新增模組" placement="bottom" :show-after="300">
+            <el-button type="primary" size="small" plain @click="openCreate">➕</el-button>
+          </el-tooltip>
+        </div>
       </AdminOperateGate>
     </template>
 
@@ -20,6 +27,7 @@
         </AdminOperateGate>
       </div>
       <div v-else ref="listEl" class="split-list" @scroll.passive="onSidebarListScroll">
+        <!-- 系統模組永遠在最上方（不可分組） -->
         <AdminSplitListItem
           v-for="flow in systemFlows"
           :key="flow.id"
@@ -29,26 +37,28 @@
           chip-tone="neutral"
           @select="selectFlow(flow)"
         />
+
+        <!-- 未分類的 regular flows（可拖曳重排序，沿用原本機制） -->
         <div
-          v-for="(flow, flowIndex) in regularFlows"
+          v-for="flow in uncategorizedFlows"
           :key="flow.id"
           class="flow-sidebar-row"
           :class="{
-            'flow-sidebar-row--dragging': flowListDragIndex === flowIndex,
-            'flow-sidebar-row--drag-over': flowListDragOverIndex === flowIndex && flowListDragIndex !== flowIndex,
+            'flow-sidebar-row--dragging': flowListDragIndex === regularFlowIndex(flow.id),
+            'flow-sidebar-row--drag-over': flowListDragOverIndex === regularFlowIndex(flow.id) && flowListDragIndex !== regularFlowIndex(flow.id),
           }"
-          @dragover.prevent="onFlowListDragOver($event, flowIndex)"
+          @dragover.prevent="onFlowListDragOver($event, regularFlowIndex(flow.id))"
           @dragenter.prevent
           @dragleave="onFlowListDragLeave"
-          @drop="onFlowListDrop($event, flowIndex)"
+          @drop="onFlowListDrop($event, regularFlowIndex(flow.id))"
         >
           <span
             v-if="canOperate"
             class="drag-handle flow-sidebar-drag-handle"
             draggable="true"
-            aria-label="拖曳調整順序"
-            @dragstart.stop="onFlowListDragStart($event, flowIndex)"
-            @dragend.stop="onFlowListDragEnd"
+            aria-label="拖曳搬移 / 排序"
+            @dragstart.stop="onFlowDragStart($event, flow.id, regularFlowIndex(flow.id))"
+            @dragend.stop="onFlowDragEnd"
           >⠿</span>
           <AdminSplitListItem
             class="flow-sidebar-row__item"
@@ -59,6 +69,74 @@
             @select="selectFlow(flow)"
           />
         </div>
+
+        <!-- 拖曳資料夾內模組時：出現「拖出資料夾」drop zone -->
+        <div
+          v-if="isDraggingFromFolder"
+          class="src-unfolder-zone"
+          :class="{ 'src-unfolder-zone--drop': dragOverFolderId === '__none__' }"
+          @dragover.prevent="onFlowFolderDragOver('__none__', $event)"
+          @dragleave="onFlowFolderDragLeave('__none__')"
+          @drop.prevent="onFlowFolderDrop(null)"
+        >
+          📥 拖到這裡 = 移出資料夾
+        </div>
+
+        <!-- 每個資料夾 -->
+        <template v-for="folder in flowFolders" :key="folder.id">
+          <div
+            class="src-folder-header"
+            :class="{ 'src-folder-header--drop': dragOverFolderId === folder.id }"
+            @click="toggleFlowFolder(folder.id)"
+            @dragover.prevent="onFlowFolderDragOver(folder.id, $event)"
+            @dragleave="onFlowFolderDragLeave(folder.id)"
+            @drop.prevent="onFlowFolderDrop(folder.id)"
+          >
+            <span class="src-folder-label">
+              <span class="src-folder-arrow">{{ isFlowFolderExpanded(folder.id) ? '▾' : '▸' }}</span>
+              📂 {{ folder.name }}
+              <span class="src-folder-count">（{{ flowCountByFolder[folder.id] ?? 0 }}）</span>
+            </span>
+            <AdminOperateGate>
+              <span class="src-folder-actions">
+                <el-tooltip content="編輯資料夾" placement="top" :show-after="300">
+                  <button class="src-folder-icon-btn" @click.stop="openFlowFolderEdit(folder)">✏️</button>
+                </el-tooltip>
+              </span>
+            </AdminOperateGate>
+          </div>
+          <template v-if="isFlowFolderExpanded(folder.id)">
+            <div
+              v-for="flow in flowsByFolder[folder.id] ?? []"
+              :key="flow.id"
+              class="flow-sidebar-row src-row--in-folder"
+              :class="{ 'flow-sidebar-row--dragging': draggedFlowId === flow.id }"
+            >
+              <span
+                v-if="canOperate"
+                class="drag-handle flow-sidebar-drag-handle"
+                draggable="true"
+                aria-label="拖曳搬移"
+                @dragstart.stop="onFlowDragStart($event, flow.id, null)"
+                @dragend.stop="onFlowDragEnd"
+              >⠿</span>
+              <AdminSplitListItem
+                class="flow-sidebar-row__item"
+                :title="flow.name"
+                :active="selectedId === flow.id"
+                :meta-text="MODULE_TYPE_LABELS[flow.moduleType] ?? '機器人流程'"
+                chip-tone="neutral"
+                @select="selectFlow(flow)"
+              />
+            </div>
+            <div
+              v-if="!(flowsByFolder[folder.id] ?? []).length"
+              class="src-folder-empty"
+            >
+              （資料夾為空；可從外面拖一筆過來）
+            </div>
+          </template>
+        </template>
 
         <div v-if="loadingMore" class="admin-sidebar-load-more">
           <div class="spinner" />
@@ -900,10 +978,60 @@
     </template>
   </AdminSplitLayout>
 
+  <!-- ── Flow Folder Edit Modal ──────────────────── -->
+  <el-dialog
+    v-model="flowFolderEditOpen"
+    title="✏️ 編輯資料夾"
+    width="480px"
+    :close-on-click-modal="false"
+    destroy-on-close
+  >
+    <div class="folder-form">
+      <div class="admin-field-group">
+        <AdminFieldLabel text="名稱" tight />
+        <el-input
+          v-model="flowFolderForm.name"
+          maxlength="50"
+          show-word-limit
+          placeholder="例：行銷活動 / 例假回覆"
+        />
+      </div>
+      <p v-if="flowFolderEditTarget" class="folder-form-hint">
+        目前底下 {{ flowCountByFolder[flowFolderEditTarget.id] ?? 0 }} 筆模組。
+        若刪除，底下的模組會自動移到「未分類」，**不會**被刪掉。
+      </p>
+    </div>
+    <template #footer>
+      <div class="folder-footer">
+        <el-button
+          type="danger"
+          plain
+          :loading="flowFolderDeleting"
+          :disabled="flowFolderSaving"
+          @click="deleteFlowFolderFromModal"
+        >
+          🗑️ 刪除資料夾
+        </el-button>
+        <div class="folder-footer-right">
+          <el-button @click="flowFolderEditOpen = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="flowFolderSaving"
+            :disabled="flowFolderDeleting || !flowFolderForm.name.trim() || flowFolderForm.name.trim() === flowFolderEditTarget?.name"
+            @click="saveFlowFolderName"
+          >
+            儲存
+          </el-button>
+        </div>
+      </div>
+    </template>
+  </el-dialog>
+
 </template>
 
 
 <script setup lang="ts">
+import { ElMessageBox } from 'element-plus'
 import {
   SLOT_LABELS as ACTION_SLOT_LABELS,
   validateUnifiedAction,
@@ -935,7 +1063,7 @@ import {
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
-const { apiFetch } = useWorkspace()
+const { apiFetch, workspaceId } = useWorkspace()
 const { canOperate, guardOperate } = useAdminOperateGuard()
 
 // ── State ─────────────────────────────────────────────
@@ -974,9 +1102,56 @@ const qrDragMsgIndex = ref<number | null>(null)
 const qrDragIndex = ref<number | null>(null)
 const qrDragOverIndex = ref<number | null>(null)
 
-// Sidebar flow list drag and drop
+// Sidebar flow list drag and drop（重排序 — 只對未分類有用）
 const flowListDragIndex = ref<number | null>(null)
 const flowListDragOverIndex = ref<number | null>(null)
+
+// ── Flow Folder state ─────────────────────────────
+interface FlowFolderRow {
+  id: string
+  name: string
+  order: number
+  createdAtMs: number
+}
+const flowFolders = ref<FlowFolderRow[]>([])
+const flowExpandedFolders = ref<Set<string>>(new Set())
+const FLOW_FOLDER_LS_KEY = computed(() => `flow-folders-expanded:${workspaceId.value}`)
+
+function loadFlowFolderExpandedState() {
+  try {
+    const raw = localStorage.getItem(FLOW_FOLDER_LS_KEY.value)
+    if (raw) flowExpandedFolders.value = new Set(JSON.parse(raw) as string[])
+  }
+  catch { /* 沒有就空集合，後續第一次載入時全展開 */ }
+}
+function saveFlowFolderExpandedState() {
+  try { localStorage.setItem(FLOW_FOLDER_LS_KEY.value, JSON.stringify([...flowExpandedFolders.value])) }
+  catch { /* */ }
+}
+function isFlowFolderExpanded(id: string) { return flowExpandedFolders.value.has(id) }
+function toggleFlowFolder(id: string) {
+  if (flowExpandedFolders.value.has(id)) flowExpandedFolders.value.delete(id)
+  else flowExpandedFolders.value.add(id)
+  flowExpandedFolders.value = new Set(flowExpandedFolders.value)
+  saveFlowFolderExpandedState()
+}
+
+// 拖曳：把 flow 拖到 folder
+const draggedFlowId = ref<string | null>(null)
+const dragOverFolderId = ref<string | null>(null)
+
+const isDraggingFromFolder = computed(() => {
+  if (!draggedFlowId.value) return false
+  const flow = flows.value.find(f => f.id === draggedFlowId.value)
+  return !!(flow as any)?.folderId
+})
+
+// Folder edit modal
+const flowFolderEditOpen = ref(false)
+const flowFolderEditTarget = ref<FlowFolderRow | null>(null)
+const flowFolderForm = ref({ name: '' })
+const flowFolderSaving = ref(false)
+const flowFolderDeleting = ref(false)
 
 const messageRenderKeys = new WeakMap<object, string>()
 let messageRenderKeySeq = 0
@@ -1015,6 +1190,27 @@ const { markClean, confirmLeaveIfDirty } = useUnsavedChanges({
 const selectedFlow = computed(() => flows.value.find(f => f.id === selectedId.value) ?? null)
 const systemFlows = computed(() => flows.value.filter((f) => f.isSystem))
 const regularFlows = computed(() => flows.value.filter((f) => !f.isSystem))
+
+// ── 資料夾分組 ─────────────────────────────────────
+const uncategorizedFlows = computed(() => regularFlows.value.filter(f => !(f as any).folderId))
+const flowsByFolder = computed(() => {
+  const map: Record<string, typeof regularFlows.value> = {}
+  for (const f of regularFlows.value) {
+    const fid = (f as any).folderId
+    if (!fid) continue
+    if (!map[fid]) map[fid] = [] as any
+    map[fid]!.push(f)
+  }
+  return map
+})
+const flowCountByFolder = computed<Record<string, number>>(() => {
+  const m: Record<string, number> = {}
+  for (const folder of flowFolders.value) m[folder.id] = (flowsByFolder.value[folder.id] ?? []).length
+  return m
+})
+function regularFlowIndex(id: string): number {
+  return regularFlows.value.findIndex(f => f.id === id)
+}
 const isSystemFlow = computed(() => selectedFlow.value?.isSystem === true)
 const BUILTIN_VARIABLE_LABELS: Record<string, string> = {
   displayName: '聯絡人名稱（使用者名字）',
@@ -1130,12 +1326,162 @@ async function loadRichMessages() {
 }
 
 onMounted(async () => {
+  loadFlowFolderExpandedState()
   await Promise.all([
     loadFlows(true),
     loadRichMessages(),
     loadTags({ status: 'active' }),
+    loadFlowFolders(),
   ])
 })
+
+// ── Flow Folder CRUD ─────────────────────────────────
+async function loadFlowFolders() {
+  try {
+    const res = await apiFetch<{ items: FlowFolderRow[] }>('/api/flow-folders')
+    flowFolders.value = res.items ?? []
+    // 第一次載入：所有資料夾預設展開（之後 toggle 會覆寫 localStorage）
+    if (!flowExpandedFolders.value.size) {
+      const init = new Set<string>()
+      for (const f of flowFolders.value) init.add(f.id)
+      flowExpandedFolders.value = init
+    }
+  }
+  catch { flowFolders.value = [] }
+}
+
+async function createFlowFolderPrompt() {
+  try {
+    const { value } = await ElMessageBox.prompt('輸入資料夾名稱：', '📂 新資料夾', {
+      confirmButtonText: '建立',
+      cancelButtonText: '取消',
+      inputPlaceholder: '例：行銷活動',
+      inputPattern: /^.{1,50}$/,
+      inputErrorMessage: '名稱長度需 1–50 字',
+    })
+    const name = String(value ?? '').trim()
+    if (!name) return
+    const folder = await apiFetch<FlowFolderRow>('/api/flow-folders', { method: 'POST', body: { name } })
+    flowFolders.value = [...flowFolders.value, folder]
+    flowExpandedFolders.value = new Set([...flowExpandedFolders.value, folder.id])
+    saveFlowFolderExpandedState()
+    showToast('已建立資料夾', 'success')
+  }
+  catch { /* 使用者取消 */ }
+}
+
+function openFlowFolderEdit(folder: FlowFolderRow) {
+  flowFolderEditTarget.value = folder
+  flowFolderForm.value = { name: folder.name }
+  flowFolderEditOpen.value = true
+}
+
+async function saveFlowFolderName() {
+  if (!flowFolderEditTarget.value) return
+  const target = flowFolderEditTarget.value
+  const newName = flowFolderForm.value.name.trim()
+  if (!newName || newName === target.name) return
+  flowFolderSaving.value = true
+  try {
+    const res = await apiFetch<FlowFolderRow>(`/api/flow-folders/${target.id}`, {
+      method: 'PUT',
+      body: { name: newName },
+    })
+    const idx = flowFolders.value.findIndex(f => f.id === target.id)
+    if (idx >= 0) flowFolders.value[idx] = res
+    showToast('已重新命名', 'success')
+    flowFolderEditOpen.value = false
+  }
+  catch (err: any) {
+    showToast(err?.statusMessage || '儲存失敗', 'error')
+  }
+  finally {
+    flowFolderSaving.value = false
+  }
+}
+
+async function deleteFlowFolderFromModal() {
+  if (!flowFolderEditTarget.value) return
+  const target = flowFolderEditTarget.value
+  const count = flowCountByFolder.value[target.id] ?? 0
+  const msg = count
+    ? `要刪除「${target.name}」這個資料夾嗎？\n底下的 ${count} 個模組會自動移到「未分類」，不會被刪除。`
+    : `要刪除「${target.name}」這個空資料夾嗎？`
+  try {
+    await ElMessageBox.confirm(msg, '🗑️ 刪除資料夾', {
+      confirmButtonText: '刪除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
+  flowFolderDeleting.value = true
+  try {
+    await apiFetch(`/api/flow-folders/${target.id}`, { method: 'DELETE' })
+    flowFolders.value = flowFolders.value.filter(f => f.id !== target.id)
+    for (const f of flows.value) {
+      if ((f as any).folderId === target.id) (f as any).folderId = null
+    }
+    showToast(count ? `已刪除資料夾，${count} 個模組已移至未分類` : '已刪除空資料夾', 'success')
+    flowFolderEditOpen.value = false
+  }
+  catch (err: any) {
+    showToast(err?.statusMessage || '刪除失敗', 'error')
+  }
+  finally {
+    flowFolderDeleting.value = false
+  }
+}
+
+// ── Unified flow drag entry：兩種拖法共用一個 dragstart ─────
+// `index` 有值 → 是「未分類」可重排序的 row（沿用 onFlowListDrag* 反應）
+// `index` null → 是「資料夾內」的 row，僅支援移到別的資料夾 / 拖出
+function onFlowDragStart(e: DragEvent, flowId: string, index: number | null) {
+  draggedFlowId.value = flowId
+  if (index !== null) onFlowListDragStart(e, index)
+  else if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.dropEffect = 'move'
+    e.dataTransfer.setData('text/plain', flowId)
+  }
+}
+function onFlowDragEnd() {
+  draggedFlowId.value = null
+  dragOverFolderId.value = null
+  onFlowListDragEnd()
+}
+
+// ── Folder drop target handlers ─────────────────────
+function onFlowFolderDragOver(folderId: string, ev: DragEvent) {
+  if (!draggedFlowId.value) return
+  dragOverFolderId.value = folderId
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'
+}
+function onFlowFolderDragLeave(folderId: string) {
+  if (dragOverFolderId.value === folderId) dragOverFolderId.value = null
+}
+async function onFlowFolderDrop(folderId: string | null) {
+  const flowId = draggedFlowId.value
+  dragOverFolderId.value = null
+  draggedFlowId.value = null
+  if (!flowId) return
+  const flow = flows.value.find(f => f.id === flowId) as any
+  if (!flow) return
+  if ((flow.folderId ?? null) === folderId) return
+  // 樂觀更新
+  flow.folderId = folderId
+  try {
+    await apiFetch(`/api/flow/${flowId}`, {
+      method: 'PUT',
+      body: { folderId },
+    })
+  }
+  catch (err: any) {
+    showToast(err?.statusMessage || '搬移失敗', 'error')
+    await loadFlows(true)
+  }
+}
 
 // ── Sidebar flow list drag and drop ───────────────────
 function onFlowListDragStart(e: DragEvent, index: number) {

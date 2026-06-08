@@ -4,8 +4,15 @@
     <template #sidebar-header>
       <span class="split-sidebar-title">📁 來源</span>
       <div class="flex gap-1">
-        <el-button size="small" plain @click="openCreateManual">➕ 新增</el-button>
-        <el-button size="small" type="primary" plain @click="goImport">📥 匯入</el-button>
+        <el-tooltip content="新增手寫條目" placement="bottom" :show-after="300">
+          <el-button size="small" plain @click="openCreateManual">➕</el-button>
+        </el-tooltip>
+        <el-tooltip content="新增資料夾" placement="bottom" :show-after="300">
+          <el-button size="small" plain @click="createFolderPrompt">📂</el-button>
+        </el-tooltip>
+        <el-tooltip content="匯入檔案 / 網址" placement="bottom" :show-after="300">
+          <el-button size="small" type="primary" plain @click="goImport">📥</el-button>
+        </el-tooltip>
       </div>
     </template>
 
@@ -42,14 +49,22 @@
         </div>
       </div>
       <div v-else class="split-list">
-        <!-- 文件 / 網址 來源（平鋪、永遠顯示） -->
-        <template v-if="importedSources.length">
-          <div class="src-group-header">
-            <span>📄 文件 / 網址（{{ importedSources.length }}）</span>
-          </div>
+        <!-- 未分類來源（直接平鋪在最上方，沒有 header） -->
+        <div
+          v-for="src in uncategorizedSources"
+          :key="src.id"
+          class="flow-sidebar-row"
+          :class="{ 'flow-sidebar-row--dragging': draggedSourceId === src.id }"
+        >
+          <span
+            class="drag-handle flow-sidebar-drag-handle"
+            draggable="true"
+            aria-label="拖曳搬移"
+            @dragstart.stop="onSourceDragStart(src.id, $event)"
+            @dragend.stop="onSourceDragEnd"
+          >⠿</span>
           <AdminSplitListItem
-            v-for="src in importedSources"
-            :key="src.id"
+            class="flow-sidebar-row__item"
             :title="src.name || '(未命名)'"
             :active="selectedId === src.id"
             time-in-title-row
@@ -60,35 +75,74 @@
             :meta-truncate="true"
             @select="selectSource(src)"
           />
-        </template>
+        </div>
 
-        <!-- 手寫條目（可摺疊；筆數 > 10 預設摺起來） -->
-        <template v-if="manualSources.length">
-          <button
-            type="button"
-            class="src-group-header src-group-header--toggle"
-            @click="manualGroupOpen = !manualGroupOpen"
+        <!-- 「移出資料夾」drop zone：只在拖曳「資料夾內」的卡片時才出現 -->
+        <div
+          v-if="isDraggingFromFolder"
+          class="src-unfolder-zone"
+          :class="{ 'src-unfolder-zone--drop': dragOverFolderId === '__none__' }"
+          @dragover.prevent="onFolderDragOver('__none__', $event)"
+          @dragleave="onFolderDragLeave('__none__')"
+          @drop.prevent="onFolderDrop(null)"
+        >
+          📥 拖到這裡 = 移出資料夾
+        </div>
+
+        <!-- 每個資料夾 -->
+        <template v-for="folder in folders" :key="folder.id">
+          <div
+            class="src-folder-header"
+            :class="{ 'src-folder-header--drop': dragOverFolderId === folder.id }"
+            @click="toggleFolder(folder.id)"
+            @dragover.prevent="onFolderDragOver(folder.id, $event)"
+            @dragleave="onFolderDragLeave(folder.id)"
+            @drop.prevent="onFolderDrop(folder.id)"
           >
-            <span>
-              <span class="src-group-arrow">{{ manualGroupOpen ? '▾' : '▸' }}</span>
-              ✍️ 手寫條目（{{ manualSources.length }}）
+            <span class="src-folder-label">
+              <span class="src-folder-arrow">{{ isExpanded(folder.id) ? '▾' : '▸' }}</span>
+              📂 {{ folder.name }}
+              <span class="src-folder-count">（{{ countByFolder[folder.id] ?? 0 }}）</span>
             </span>
-            <span v-if="!manualGroupOpen" class="src-group-hint">點此展開</span>
-          </button>
-          <template v-if="manualGroupOpen">
-            <AdminSplitListItem
-              v-for="src in manualSources"
+            <span class="src-folder-actions">
+              <el-tooltip content="編輯資料夾" placement="top" :show-after="300">
+                <button class="src-folder-icon-btn" @click.stop="openFolderEdit(folder)">✏️</button>
+              </el-tooltip>
+            </span>
+          </div>
+          <template v-if="isExpanded(folder.id)">
+            <div
+              v-for="src in sourcesByFolder[folder.id] ?? []"
               :key="src.id"
-              :title="src.name || '(未命名)'"
-              :active="selectedId === src.id"
-              time-in-title-row
-              title-row-chip
-              :chip-text="statusChipText(src)"
-              :chip-tone="statusChipTone(src)"
-              :meta-text="metaText(src)"
-              :meta-truncate="true"
-              @select="selectSource(src)"
-            />
+              class="flow-sidebar-row src-row--in-folder"
+              :class="{ 'flow-sidebar-row--dragging': draggedSourceId === src.id }"
+            >
+              <span
+                class="drag-handle flow-sidebar-drag-handle"
+                draggable="true"
+                aria-label="拖曳搬移"
+                @dragstart.stop="onSourceDragStart(src.id, $event)"
+                @dragend.stop="onSourceDragEnd"
+              >⠿</span>
+              <AdminSplitListItem
+                class="flow-sidebar-row__item"
+                :title="src.name || '(未命名)'"
+                :active="selectedId === src.id"
+                time-in-title-row
+                title-row-chip
+                :chip-text="statusChipText(src)"
+                :chip-tone="statusChipTone(src)"
+                :meta-text="metaText(src)"
+                :meta-truncate="true"
+                @select="selectSource(src)"
+              />
+            </div>
+            <div
+              v-if="!(sourcesByFolder[folder.id] ?? []).length"
+              class="src-folder-empty"
+            >
+              （資料夾為空；可從外面拖一筆過來）
+            </div>
           </template>
         </template>
       </div>
@@ -412,6 +466,55 @@
       </div>
     </template>
   </el-dialog>
+
+  <!-- ── Folder Edit Modal ──────────────────────────── -->
+  <el-dialog
+    v-model="folderEditOpen"
+    title="✏️ 編輯資料夾"
+    width="480px"
+    :close-on-click-modal="false"
+    destroy-on-close
+  >
+    <div class="folder-form">
+      <div class="admin-field-group">
+        <AdminFieldLabel text="名稱" tight />
+        <el-input
+          v-model="folderForm.name"
+          maxlength="50"
+          show-word-limit
+          placeholder="例：客服 FAQ"
+        />
+      </div>
+      <p v-if="folderEditTarget" class="folder-form-hint">
+        目前底下 {{ countByFolder[folderEditTarget.id] ?? 0 }} 筆來源。
+        若刪除，底下的來源會自動移到「未分類」，**不會**被刪掉。
+      </p>
+    </div>
+    <template #footer>
+      <div class="folder-footer">
+        <el-button
+          type="danger"
+          plain
+          :loading="folderDeleting"
+          :disabled="folderSaving"
+          @click="deleteFolderFromModal"
+        >
+          🗑️ 刪除資料夾
+        </el-button>
+        <div class="folder-footer-right">
+          <el-button @click="folderEditOpen = false">取消</el-button>
+          <el-button
+            type="primary"
+            :loading="folderSaving"
+            :disabled="folderDeleting || !folderForm.name.trim() || folderForm.name.trim() === folderEditTarget?.name"
+            @click="saveFolderName"
+          >
+            儲存
+          </el-button>
+        </div>
+      </div>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -427,6 +530,7 @@ interface SourceSummary {
   type: SourceType
   name: string
   url: string
+  folderId: string | null
   status: SourceStatus
   failureReason?: string
   chunkCount: number
@@ -484,14 +588,107 @@ const selectedSource = computed(() => sources.value.find(s => s.id === selectedI
 const orphanCount = ref(0)
 const migrating = ref(false)
 
-// 分組顯示：file / url 平鋪 + manual 摺疊
-const importedSources = computed(() => sources.value.filter(s => s.type === 'file' || s.type === 'url'))
-const manualSources = computed(() => sources.value.filter(s => s.type === 'manual'))
-// 手寫條目 > 10 筆預設摺起來（不然會把整個列表淹掉）
-const manualGroupOpen = ref(true)
-watch(manualSources, (list) => {
-  if (list.length > 10) manualGroupOpen.value = false
-}, { immediate: false })
+// ── 資料夾分組 ───────────────────────────────────────
+interface FolderRow {
+  id: string
+  name: string
+  order: number
+  createdAtMs: number
+}
+const folders = ref<FolderRow[]>([])
+
+// 哪些資料夾是展開狀態（含特殊值 '__none__' 代表「未分類」）；localStorage 持久化
+const expandedFolders = ref<Set<string>>(new Set(['__none__']))
+const LS_EXPANDED_KEY = computed(() => `kb-folders-expanded:${workspaceId.value}`)
+function loadExpandedState() {
+  try {
+    const raw = localStorage.getItem(LS_EXPANDED_KEY.value)
+    if (raw) expandedFolders.value = new Set(JSON.parse(raw) as string[])
+  }
+  catch { /* 預設只展開「未分類」 */ }
+}
+function saveExpandedState() {
+  try {
+    localStorage.setItem(LS_EXPANDED_KEY.value, JSON.stringify([...expandedFolders.value]))
+  }
+  catch { /* 寫不進去就算了 */ }
+}
+function isExpanded(folderId: string) { return expandedFolders.value.has(folderId) }
+function toggleFolder(folderId: string) {
+  if (expandedFolders.value.has(folderId)) expandedFolders.value.delete(folderId)
+  else expandedFolders.value.add(folderId)
+  expandedFolders.value = new Set(expandedFolders.value) // trigger reactivity
+  saveExpandedState()
+}
+
+const sourcesByFolder = computed(() => {
+  const map: Record<string, SourceSummary[]> = {}
+  for (const s of sources.value) {
+    const key = s.folderId || ''
+    if (!key) continue
+    if (!map[key]) map[key] = []
+    map[key].push(s)
+  }
+  return map
+})
+const uncategorizedSources = computed(() => sources.value.filter(s => !s.folderId))
+const countByFolder = computed<Record<string, number>>(() => {
+  const m: Record<string, number> = {}
+  for (const f of folders.value) m[f.id] = (sourcesByFolder.value[f.id] ?? []).length
+  return m
+})
+
+// ── 拖曳：把 source 拖到 folder ─────────────────────
+const draggedSourceId = ref<string | null>(null)
+const dragOverFolderId = ref<string | null>(null)
+
+// 拖曳中的這筆是不是「資料夾裡」的卡？是的話才顯示「拖出資料夾」drop zone
+const isDraggingFromFolder = computed(() => {
+  if (!draggedSourceId.value) return false
+  const src = sources.value.find(s => s.id === draggedSourceId.value)
+  return !!src?.folderId
+})
+
+function onSourceDragStart(srcId: string, ev: DragEvent) {
+  draggedSourceId.value = srcId
+  if (ev.dataTransfer) {
+    ev.dataTransfer.effectAllowed = 'move'
+    ev.dataTransfer.setData('text/plain', srcId)
+  }
+}
+function onSourceDragEnd() {
+  draggedSourceId.value = null
+  dragOverFolderId.value = null
+}
+function onFolderDragOver(folderId: string, ev: DragEvent) {
+  if (!draggedSourceId.value) return
+  dragOverFolderId.value = folderId
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'
+}
+function onFolderDragLeave(folderId: string) {
+  if (dragOverFolderId.value === folderId) dragOverFolderId.value = null
+}
+async function onFolderDrop(folderId: string | null) {
+  const srcId = draggedSourceId.value
+  dragOverFolderId.value = null
+  draggedSourceId.value = null
+  if (!srcId) return
+  const src = sources.value.find(s => s.id === srcId)
+  if (!src) return
+  if ((src.folderId ?? null) === folderId) return // 沒換位置
+  // 樂觀更新
+  src.folderId = folderId
+  try {
+    await apiFetch(`/api/ai/sources/${srcId}`, {
+      method: 'PUT',
+      body: { folderId },
+    })
+  }
+  catch (err: any) {
+    showToast(err?.statusMessage || '移動失敗', 'error')
+    await loadSources()
+  }
+}
 
 const chunks = ref<ChunkRow[]>([])
 
@@ -517,6 +714,13 @@ const chunkEditingId = ref<string | null>(null) // edit 模式才有值
 const chunkForm = ref({ title: '', content: '', tags: [] as string[] })
 const chunkSaving = ref(false)
 const chunkDeleting = ref(false)
+
+// ── Folder edit modal ───────────────────────────────
+const folderEditOpen = ref(false)
+const folderEditTarget = ref<FolderRow | null>(null)
+const folderForm = ref({ name: '' })
+const folderSaving = ref(false)
+const folderDeleting = ref(false)
 const chunkTagInput = ref('')
 const chunkTagInputVisible = ref(false)
 const chunkTagInputEl = ref<{ focus: () => void } | null>(null)
@@ -524,15 +728,112 @@ const chunkTagInputEl = ref<{ focus: () => void } | null>(null)
 async function loadSources() {
   loading.value = true
   try {
-    const res = await apiFetch<{ items: SourceSummary[]; orphanCount?: number }>('/api/ai/sources/list')
-    sources.value = res.items
-    orphanCount.value = Number(res.orphanCount ?? 0)
+    const [sourcesRes, foldersRes] = await Promise.all([
+      apiFetch<{ items: SourceSummary[]; orphanCount?: number }>('/api/ai/sources/list'),
+      apiFetch<{ items: FolderRow[] }>('/api/ai/folders').catch(() => ({ items: [] as FolderRow[] })),
+    ])
+    sources.value = sourcesRes.items
+    orphanCount.value = Number(sourcesRes.orphanCount ?? 0)
+    folders.value = foldersRes.items ?? []
+    // 第一次載入：把所有資料夾預設展開（之後 toggle 會覆寫 localStorage 狀態）
+    if (expandedFolders.value.size === 1 && expandedFolders.value.has('__none__')) {
+      const init = new Set<string>(['__none__'])
+      for (const f of folders.value) init.add(f.id)
+      expandedFolders.value = init
+    }
   }
   catch (err: any) {
     showToast(err?.statusMessage || '載入來源失敗', 'error')
   }
   finally {
     loading.value = false
+  }
+}
+
+// ── 資料夾 CRUD ─────────────────────────────────────
+async function createFolderPrompt() {
+  try {
+    const { value } = await ElMessageBox.prompt('輸入資料夾名稱：', '📂 新資料夾', {
+      confirmButtonText: '建立',
+      cancelButtonText: '取消',
+      inputPlaceholder: '例：客服 FAQ',
+      inputPattern: /^.{1,50}$/,
+      inputErrorMessage: '名稱長度需 1–50 字',
+    })
+    const name = String(value ?? '').trim()
+    if (!name) return
+    const folder = await apiFetch<FolderRow>('/api/ai/folders', { method: 'POST', body: { name } })
+    folders.value = [...folders.value, folder]
+    expandedFolders.value = new Set([...expandedFolders.value, folder.id])
+    saveExpandedState()
+    showToast('已建立資料夾', 'success')
+  }
+  catch { /* 使用者取消 */ }
+}
+
+// 編輯資料夾 modal — 改名 + 刪除都在這裡做
+function openFolderEdit(folder: FolderRow) {
+  folderEditTarget.value = folder
+  folderForm.value = { name: folder.name }
+  folderEditOpen.value = true
+}
+
+async function saveFolderName() {
+  if (!folderEditTarget.value) return
+  const target = folderEditTarget.value
+  const newName = folderForm.value.name.trim()
+  if (!newName || newName === target.name) return
+  folderSaving.value = true
+  try {
+    const res = await apiFetch<FolderRow>(`/api/ai/folders/${target.id}`, {
+      method: 'PUT',
+      body: { name: newName },
+    })
+    const idx = folders.value.findIndex(f => f.id === target.id)
+    if (idx >= 0) folders.value[idx] = res
+    showToast('已重新命名', 'success')
+    folderEditOpen.value = false
+  }
+  catch (err: any) {
+    showToast(err?.statusMessage || '儲存失敗', 'error')
+  }
+  finally {
+    folderSaving.value = false
+  }
+}
+
+async function deleteFolderFromModal() {
+  if (!folderEditTarget.value) return
+  const target = folderEditTarget.value
+  const count = countByFolder.value[target.id] ?? 0
+  const msg = count
+    ? `要刪除「${target.name}」這個資料夾嗎？\n底下的 ${count} 筆來源會自動移到「未分類」，不會被刪除。`
+    : `要刪除「${target.name}」這個空資料夾嗎？`
+  try {
+    await ElMessageBox.confirm(msg, '🗑️ 刪除資料夾', {
+      confirmButtonText: '刪除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
+  folderDeleting.value = true
+  try {
+    await apiFetch(`/api/ai/folders/${target.id}`, { method: 'DELETE' })
+    folders.value = folders.value.filter(f => f.id !== target.id)
+    // 把底下的 source 顯示在「未分類」
+    for (const s of sources.value) {
+      if (s.folderId === target.id) s.folderId = null
+    }
+    showToast(count ? `已刪除資料夾，${count} 筆來源已移至未分類` : '已刪除空資料夾', 'success')
+    folderEditOpen.value = false
+  }
+  catch (err: any) {
+    showToast(err?.statusMessage || '刪除失敗', 'error')
+  }
+  finally {
+    folderDeleting.value = false
   }
 }
 
@@ -876,7 +1177,10 @@ function relativeTime(ms: number) {
   return new Date(ms).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
 }
 
-onMounted(() => loadSources())
+onMounted(() => {
+  loadExpandedState()
+  loadSources()
+})
 </script>
 
 <style scoped lang="scss">
@@ -898,34 +1202,128 @@ onMounted(() => loadSources())
   line-height: 1.5;
 }
 
-// ─── Source group headers ───────────────────────
-.src-group-header {
+// ─── Folder headers — 群組標題感（比 row 重、有底色、跟上方有間距） ───
+.src-folder-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 8px 14px 4px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--el-text-color-secondary);
-  text-transform: none;
-  background: none;
-  border: none;
-  text-align: left;
-}
-.src-group-header--toggle {
+  padding: 0.5rem 0.625rem;
+  margin-top: 0.5rem; /* 跟上方未分類 / 上一個資料夾拉出間距 */
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  font-size: 0.875rem;
+  font-weight: 700; /* 比 row 的 500-600 更重 */
+  color: var(--text-primary);
+  background: var(--bg-surface); /* 抬升一階，跟列表底色區別 */
   cursor: pointer;
-  &:hover { color: var(--el-text-color-primary); }
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s, outline-color 0.15s;
+
+  &:hover {
+    background: var(--bg-hover);
+    border-color: var(--text-muted);
+  }
+  /* 拖曳目標 highlight：對齊 .flow-sidebar-row--drag-over */
+  &--drop {
+    outline-color: var(--color-line);
+    border-color: var(--color-line);
+  }
 }
-.src-group-arrow {
+
+/* ─── 資料夾內的卡片 — 縮排 + 左側 guide line ───
+   讓「在資料夾內」跟「未分類」一眼就分得出來 */
+.src-row--in-folder {
+  margin-left: 0.875rem;
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: -0.5rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--border);
+  }
+  /* hover 時 guide line 稍微亮一點 */
+  &:hover::before {
+    background: var(--text-muted);
+  }
+}
+.src-folder-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.src-folder-arrow {
   display: inline-block;
   width: 12px;
-  font-size: 10px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
 }
-.src-group-hint {
-  font-size: 10px;
+.src-folder-count {
+  font-size: 0.75rem;
   font-weight: 400;
-  color: var(--el-text-color-disabled);
+  color: var(--text-muted);
+}
+.src-folder-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+/* 永遠可見的小 icon 按鈕（沿用 .drag-handle 的 opacity 模式） */
+.src-folder-icon-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 0.875rem;
+  border-radius: 4px;
+  opacity: 0.5;
+  color: var(--text-muted);
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+
+  &:hover {
+    opacity: 1;
+    color: var(--text-secondary);
+    background: var(--bg-surface);
+  }
+}
+.src-folder-empty {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 4px 0.75rem 6px 1.75rem;
+}
+
+/* 「移出資料夾」drop zone — 只在拖曳中才顯示，平時為 0 高度 */
+.src-unfolder-zone {
+  margin: 6px 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--text-muted);
+  border-radius: var(--radius-md);
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  transition: outline-color 0.15s, background 0.15s;
+
+  &--drop {
+    outline-color: var(--color-line);
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+  }
 }
 
 .src-header {
@@ -1071,11 +1469,25 @@ onMounted(() => loadSources())
 }
 .chunk-tag { margin: 0; }
 
-.chunk-footer {
+.chunk-footer,
+.folder-footer {
   display: flex;
   align-items: center;
   justify-content: space-between;
   width: 100%;
 }
-.chunk-footer-right { display: flex; gap: 8px; }
+.chunk-footer-right,
+.folder-footer-right { display: flex; gap: 8px; }
+
+.folder-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.folder-form-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--el-text-color-secondary);
+}
 </style>

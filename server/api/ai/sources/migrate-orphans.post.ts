@@ -44,6 +44,7 @@ export default defineEventHandler(async (event) => {
       type: 'manual',
       name: String(data?.title ?? '').slice(0, 200) || '(未命名)',
       url: '',
+      folderId: null,
       filePath: '',
       contentHash: '',
       etag: '',

@@ -57,6 +57,7 @@ export default defineEventHandler(async (event) => {
       type: sourceType,
       name: String(body?.source?.name ?? '').trim(),
       url: String(body?.source?.url ?? '').trim(),
+      folderId: typeof body?.source?.folderId === 'string' ? body.source.folderId : null,
       filePath: '', // Phase 1b 不存原檔；要存到 Storage 可以擴
       contentHash: String(body?.source?.contentHash ?? '').trim(),
       etag: '',

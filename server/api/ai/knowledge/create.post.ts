@@ -39,6 +39,7 @@ export default defineEventHandler(async (event) => {
       type: 'manual',
       name: input.title.slice(0, 200),
       url: '',
+      folderId: typeof rawBody?.folderId === 'string' ? rawBody.folderId : null,
       filePath: '',
       contentHash: '',
       etag: '',

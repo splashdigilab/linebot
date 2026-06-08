@@ -18,6 +18,7 @@ export default defineEventHandler(async (event) => {
     refreshIntervalMinutes: body?.refreshIntervalMinutes,
     onChangeBehavior: body?.onChangeBehavior,
     name: body?.name,
+    folderId: body?.folderId === null ? null : (typeof body?.folderId === 'string' ? body.folderId : undefined),
   })
   if (!result) throw createError({ statusCode: 404, statusMessage: 'source not found' })
   return result

@@ -55,7 +55,23 @@ export interface FlowDoc {
   isSystem: boolean
   /** 一般模組列表排序（越小越靠前）；系統模組可忽略 */
   sortOrder?: number
+  /** 所屬資料夾；null = 未分類；系統模組永遠為 null */
+  folderId?: string | null
   createdAt: Timestamp | FieldValue
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Collection: flowFolders
+//  把 regular flows 分組顯示用；系統模組不受影響。
+// ═══════════════════════════════════════════════════════════════════
+
+export interface FlowFolderDoc {
+  workspaceId: string
+  name: string
+  /** 顯示順序（越小越靠前） */
+  order: number
+  createdAt: Timestamp | FieldValue
+  updatedAt: Timestamp | FieldValue
 }
 
 // ═══════════════════════════════════════════════════════════════════

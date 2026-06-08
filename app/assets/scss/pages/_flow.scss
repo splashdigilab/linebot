@@ -879,3 +879,142 @@
   }
 
 }
+
+/* ─── Sidebar folder grouping ───────────────────────
+   跟 /knowledge/sources 同一套視覺：資料夾標頭、縮排子項、左側 guide line。
+   抽到 flow.scss 是因為 flow + sources 都用同一個 sidebar 模式。 */
+.src-folder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  margin-top: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s, outline-color 0.15s;
+
+  &:hover {
+    background: var(--bg-hover);
+    border-color: var(--text-muted);
+  }
+  &--drop {
+    outline-color: var(--color-line);
+    border-color: var(--color-line);
+  }
+}
+.src-folder-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.src-folder-arrow {
+  display: inline-block;
+  width: 12px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.src-folder-count {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.src-folder-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.src-folder-icon-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 0.875rem;
+  border-radius: 4px;
+  opacity: 0.5;
+  color: var(--text-muted);
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+
+  &:hover {
+    opacity: 1;
+    color: var(--text-secondary);
+    background: var(--bg-surface);
+  }
+}
+.src-folder-empty {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  padding: 4px 0.75rem 6px 1.75rem;
+}
+
+.src-row--in-folder {
+  margin-left: 0.875rem;
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    left: -0.5rem;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    border-radius: 1px;
+    background: var(--border);
+  }
+  &:hover::before {
+    background: var(--text-muted);
+  }
+}
+
+.src-unfolder-zone {
+  margin: 6px 0;
+  padding: 8px 12px;
+  border: 1px dashed var(--text-muted);
+  border-radius: var(--radius-md);
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: var(--bg-surface);
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  transition: outline-color 0.15s, background 0.15s;
+
+  &--drop {
+    outline-color: var(--color-line);
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+  }
+}
+
+.folder-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.folder-form-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.folder-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+.folder-footer-right { display: flex; gap: 8px; }

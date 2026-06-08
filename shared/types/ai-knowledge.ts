@@ -42,8 +42,25 @@ export interface KnowledgeChunkDoc {
 export type KnowledgeSourceType = 'file' | 'url' | 'manual'
 export type KnowledgeSourceStatus = 'fetching' | 'splitting' | 'ready' | 'failed'
 
+// ═══════════════════════════════════════════════════════════════════
+//  Knowledge folder（資料夾）— 把 source 分組顯示
+//  Path: knowledgeFolders/{folderId}
+// ═══════════════════════════════════════════════════════════════════
+
+export interface KnowledgeFolderDoc {
+  workspaceId: string
+  /** 顯示名稱（1–50 字） */
+  name: string
+  /** 排序用；目前先用 createdAt 倒序，未來想做拖曳排序再用 */
+  order: number
+  createdAt: Timestamp | FieldValue
+  updatedAt: Timestamp | FieldValue
+}
+
 export interface KnowledgeSourceDoc {
   workspaceId: string
+  /** 所屬資料夾；null = 未分類 */
+  folderId: string | null
   type: KnowledgeSourceType
   /** 顯示名稱：檔名 / 網址 / 手打標題 */
   name: string

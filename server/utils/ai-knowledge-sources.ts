@@ -19,6 +19,8 @@ export interface SourceSummary {
   type: KnowledgeSourceType
   name: string
   url: string
+  /** 所屬資料夾；null = 未分類 */
+  folderId: string | null
   status: KnowledgeSourceStatus
   failureReason?: string
   chunkCount: number
@@ -44,6 +46,7 @@ export function docToSourceSummary(id: string, raw: Partial<KnowledgeSourceDoc>)
     type: (raw.type ?? 'file') as KnowledgeSourceType,
     name: String(raw.name ?? ''),
     url: String(raw.url ?? ''),
+    folderId: raw.folderId ?? null,
     status: (raw.status ?? 'ready') as KnowledgeSourceStatus,
     failureReason: raw.failureReason,
     chunkCount: Number(raw.chunkCount ?? 0),
@@ -157,10 +160,12 @@ export interface UpdateSourceSettingsInput {
   refreshIntervalMinutes?: number
   onChangeBehavior?: 'notify' | 'log_only'
   name?: string
+  /** 移動到指定資料夾；null = 移出資料夾（未分類） */
+  folderId?: string | null
 }
 
 /**
- * 更新 source 的設定（refresh 頻率、處理方式、顯示名稱）。
+ * 更新 source 的設定（refresh 頻率、處理方式、顯示名稱、所屬資料夾）。
  * 只動使用者可配置的欄位；不動 hash / etag / lastFetchedAt 等系統管理欄位。
  */
 export async function updateSourceSettings(
@@ -182,6 +187,9 @@ export async function updateSourceSettings(
   }
   if (typeof input.name === 'string' && input.name.trim()) {
     update.name = input.name.trim().slice(0, 200)
+  }
+  if (input.folderId !== undefined) {
+    update.folderId = input.folderId ? String(input.folderId) : null
   }
 
   await db.collection(KNOWLEDGE_SOURCES_COLLECTION).doc(sourceId).update(update)

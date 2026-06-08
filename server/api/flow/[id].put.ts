@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const body = await readBody(event)
-  const { name, messages, isActive, moduleType } = body
+  const { name, messages, isActive, moduleType, folderId } = body
 
   const updates: Record<string, unknown> = {}
   if (name !== undefined) updates.name = assertValidFlowName(name)
@@ -29,6 +29,10 @@ export default defineEventHandler(async (event) => {
     updates.messages = messages
   }
   if (isActive !== undefined) updates.isActive = isActive
+  // 系統模組不分組（永遠在頂端）；只有 regular flow 可以指定 folderId
+  if (folderId !== undefined && !existing.isSystem) {
+    updates.folderId = folderId === null ? null : (typeof folderId === 'string' ? folderId : null)
+  }
   if (moduleType !== undefined && VALID_MODULE_TYPES.includes(moduleType)) {
     if (existing.isSystem) {
       if (
