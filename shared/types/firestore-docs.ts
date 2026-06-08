@@ -1,6 +1,10 @@
 import type { Timestamp, FieldValue } from 'firebase-admin/firestore'
 import type { ModuleType } from './conversation-stats'
 import type { AutoReplyAction, AutoReplyCooldown, AutoReplyMatchType, AutoReplyTagging } from '../auto-reply-rule'
+import type { AiAutoReplyConfig, AiConversationMeta } from './ai-knowledge'
+
+// AI 相關 doc 型別（KnowledgeChunkDoc / KnowledgeSourceDoc / AiSettingsDoc / AiUsageDoc）
+// 定義於 ./ai-knowledge.ts，由 Nuxt 自動匯入
 
 // ═══════════════════════════════════════════════════════════════════
 //  Collection: users
@@ -32,6 +36,8 @@ export interface ConversationDoc {
   lastMessage: string
   lastDirection: 'incoming' | 'outgoing'
   lastMessageAt: Timestamp | null
+  /** 最近一次 AI 互動的脈絡快取；給「待真人」收件匣顯示用 */
+  aiMeta?: AiConversationMeta
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -57,9 +63,13 @@ export interface FlowDoc {
 //  Doc ID: uuid
 // ═══════════════════════════════════════════════════════════════════
 
+export type AutoReplyRuleType = 'keyword' | 'ai'
+
 export interface AutoReplyDoc {
   workspaceId: string
   name: string
+  /** 'keyword'（既有規則）｜ 'ai'（保底 AI 回覆，Phase 2 啟用）。缺省視為 'keyword' */
+  type?: AutoReplyRuleType
   keyword: string
   matchType: AutoReplyMatchType
   action: AutoReplyAction
@@ -68,6 +78,10 @@ export interface AutoReplyDoc {
   isActive: boolean
   tagging: AutoReplyTagging
   cooldown: AutoReplyCooldown
+  /** type === 'ai' 時使用 */
+  aiConfig?: AiAutoReplyConfig
+  /** 數字愈大優先；缺省（既有規則）視為 100，AI 規則建議 1 */
+  priority?: number
   createdAt: Timestamp | FieldValue
 }
 

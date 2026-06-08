@@ -124,6 +124,12 @@
 
     <!-- ── Editor Body ── -->
     <template #editor-body>
+      <ConversationsAiContextBanner
+        :user-id="selectedUserId"
+        :refresh-key="aiContextRefreshKey"
+        :api-fetch="apiFetch"
+        @apply-draft="applyAiDraft"
+      />
       <div ref="messagesEl" class="conv-messages">
         <div v-if="msgLoading" class="split-sidebar-loading">
           <div class="spinner" />
@@ -947,6 +953,11 @@ const selectedUser = ref<ConvItem | null>(null)
 const activeTab = ref<TabValue>('all')
 const inputText = ref('')
 const searchText = ref('')
+const aiContextRefreshKey = ref(0)
+
+function applyAiDraft(text: string) {
+  inputText.value = String(text || '')
+}
 const messagesEl = ref<HTMLElement | null>(null)
 const supportPresetsRaw = ref<any[]>([])
 const pendingSupportPresetId = ref('')

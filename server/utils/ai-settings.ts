@@ -1,0 +1,142 @@
+/**
+ * AI 工作區設定（aiSettings）讀寫 + 60 秒 in-memory 快取。
+ *
+ * Doc path: aiSettings/{workspaceId}
+ *   - 走 top-level + workspaceId 作 doc ID（單例）
+ *   - 與 conversations、autoReplies 等其他集合的隔離模式一致
+ */
+import { FieldValue, type Firestore } from 'firebase-admin/firestore'
+import { getDb } from './firebase'
+import {
+  AI_SETTINGS_DOC_ID as _AI_SETTINGS_DOC_ID_UNUSED, // 既有常數但這裡採 workspaceId 作為 ID；保留 import 避免 dead import 警告
+  buildDefaultAiSettings,
+  DEFAULT_CONFIDENCE_THRESHOLD,
+  DEFAULT_DISAMBIGUATION_COOLDOWN_MINUTES,
+  DEFAULT_DISAMBIGUATION_ENABLED,
+  DEFAULT_DISAMBIGUATION_MAX_OPTIONS,
+  DEFAULT_DISAMBIGUATION_MAX_SPREAD,
+  DEFAULT_DISAMBIGUATION_TOP1_MAX,
+  DEFAULT_DISAMBIGUATION_TOP1_MIN,
+  DEFAULT_GROUNDING_SIMILARITY_THRESHOLD,
+  DEFAULT_MONTHLY_TOKEN_CAP,
+  DEFAULT_REPLY_MAX_LEN,
+  DEFAULT_SENSITIVE_TOPICS,
+  DEFAULT_SYSTEM_PROMPT,
+} from '~~/shared/types/ai-knowledge'
+import type {
+  AiSettingsDoc,
+  AiAnswerModel,
+  AiEmbeddingModel,
+  QuotaExceedStrategy,
+} from '~~/shared/types/ai-knowledge'
+
+void _AI_SETTINGS_DOC_ID_UNUSED // 避免 unused import 警告（保留型別匯出符號的可發現性）
+
+export const AI_SETTINGS_COLLECTION = 'aiSettings'
+
+const CACHE_TTL_MS = 60_000
+const cache = new Map<string, { value: AiSettingsDoc; expiresAt: number }>()
+
+export function invalidateAiSettingsCache(workspaceId: string) {
+  cache.delete(workspaceId)
+}
+
+const ANSWER_MODELS: AiAnswerModel[] = ['gemini-2.5-flash', 'gemini-2.5-flash-lite']
+const EMBEDDING_MODELS: AiEmbeddingModel[] = ['gemini-embedding-001']
+const QUOTA_STRATEGIES: QuotaExceedStrategy[] = ['handoff_all', 'downgrade_model']
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number): number {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return fallback
+  return Math.min(max, Math.max(min, n))
+}
+
+/**
+ * 取得工作區設定。若 doc 不存在則回傳預設值（不寫入）。
+ */
+export async function getAiSettings(workspaceId: string, db: Firestore = getDb()): Promise<AiSettingsDoc> {
+  const cached = cache.get(workspaceId)
+  if (cached && cached.expiresAt > Date.now()) return cached.value
+
+  const ref = db.collection(AI_SETTINGS_COLLECTION).doc(workspaceId)
+  const snap = await ref.get()
+  const defaults = buildDefaultAiSettings()
+  const settings: AiSettingsDoc = snap.exists
+    ? normalizeAiSettings({ ...defaults, ...(snap.data() as Partial<AiSettingsDoc>) })
+    : { ...defaults, updatedAt: FieldValue.serverTimestamp() }
+
+  cache.set(workspaceId, { value: settings, expiresAt: Date.now() + CACHE_TTL_MS })
+  return settings
+}
+
+/**
+ * 把外部來的 input 收斂成乾淨的 AiSettingsDoc（不含 timestamp）。
+ * 任何不合法的欄位都會被預設值取代。
+ */
+export function normalizeAiSettings(raw: any): AiSettingsDoc {
+  const answerModel = ANSWER_MODELS.includes(raw?.answerModel) ? raw.answerModel : 'gemini-2.5-flash'
+  const embeddingModel = EMBEDDING_MODELS.includes(raw?.embeddingModel) ? raw.embeddingModel : 'gemini-embedding-001'
+  const quotaStrategy = QUOTA_STRATEGIES.includes(raw?.quota?.onExceed) ? raw.quota.onExceed : 'handoff_all'
+  const sensitiveTopics = Array.isArray(raw?.sensitiveTopics)
+    ? raw.sensitiveTopics.map((t: unknown) => String(t).trim()).filter(Boolean).slice(0, 200)
+    : [...DEFAULT_SENSITIVE_TOPICS]
+
+  return {
+    enabled: raw?.enabled === true,
+    answerModel,
+    embeddingModel,
+    confidenceThreshold: clampNumber(raw?.confidenceThreshold, 0, 1, DEFAULT_CONFIDENCE_THRESHOLD),
+    groundingThreshold: clampNumber(raw?.groundingThreshold, 0, 1, DEFAULT_GROUNDING_SIMILARITY_THRESHOLD),
+    systemPrompt: String(raw?.systemPrompt ?? DEFAULT_SYSTEM_PROMPT).slice(0, 4000),
+    replyMaxLen: clampNumber(raw?.replyMaxLen, 50, 1000, DEFAULT_REPLY_MAX_LEN),
+    sensitiveTopics,
+    quota: {
+      monthlyTokenCap: clampNumber(raw?.quota?.monthlyTokenCap, 0, 100_000_000, DEFAULT_MONTHLY_TOKEN_CAP),
+      onExceed: quotaStrategy,
+    },
+    disambiguation: (() => {
+      let top1Min = clampNumber(raw?.disambiguation?.top1Min, 0, 1, DEFAULT_DISAMBIGUATION_TOP1_MIN)
+      let top1Max = clampNumber(raw?.disambiguation?.top1Max, 0, 1, DEFAULT_DISAMBIGUATION_TOP1_MAX)
+      // 防呆：若使用者把 min/max 設反了，自動交換，避免條件 `min <= x < max` 永遠不成立
+      if (top1Min > top1Max) [top1Min, top1Max] = [top1Max, top1Min]
+      return {
+        enabled: typeof raw?.disambiguation?.enabled === 'boolean' ? raw.disambiguation.enabled : DEFAULT_DISAMBIGUATION_ENABLED,
+        top1Min,
+        top1Max,
+        maxSpread: clampNumber(raw?.disambiguation?.maxSpread, 0, 1, DEFAULT_DISAMBIGUATION_MAX_SPREAD),
+        maxOptions: Math.round(clampNumber(raw?.disambiguation?.maxOptions, 2, 5, DEFAULT_DISAMBIGUATION_MAX_OPTIONS)),
+        cooldownMinutes: Math.round(clampNumber(raw?.disambiguation?.cooldownMinutes, 0, 1440, DEFAULT_DISAMBIGUATION_COOLDOWN_MINUTES)),
+      }
+    })(),
+    updatedAt: raw?.updatedAt ?? FieldValue.serverTimestamp(),
+  }
+}
+
+/**
+ * 更新工作區設定。會 invalidate 快取。
+ */
+export async function setAiSettings(
+  workspaceId: string,
+  partial: Partial<AiSettingsDoc>,
+  db: Firestore = getDb(),
+): Promise<AiSettingsDoc> {
+  const current = await getAiSettings(workspaceId, db)
+  const merged = normalizeAiSettings({ ...current, ...partial, quota: { ...current.quota, ...(partial.quota ?? {}) } })
+  await db.collection(AI_SETTINGS_COLLECTION).doc(workspaceId).set({
+    ...merged,
+    updatedAt: FieldValue.serverTimestamp(),
+  })
+  invalidateAiSettingsCache(workspaceId)
+  return getAiSettings(workspaceId, db)
+}
+
+/**
+ * Grounding threshold：優先用 settings.groundingThreshold；沒傳 settings 時回退到全域常數。
+ * 留著 0-arg 形式以保留現有 caller 行為，但建議在有 settings 的地方直接讀 settings.groundingThreshold。
+ */
+export function getGroundingThreshold(settings?: Pick<AiSettingsDoc, 'groundingThreshold'>): number {
+  if (settings && Number.isFinite(settings.groundingThreshold)) {
+    return Math.min(1, Math.max(0, settings.groundingThreshold))
+  }
+  return DEFAULT_GROUNDING_SIMILARITY_THRESHOLD
+}

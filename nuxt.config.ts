@@ -20,6 +20,10 @@ export default defineNuxtConfig({
     scheduledTasks: {
       // 本機 dev 等環境；正式環境主要依 server/plugins/broadcast-scheduler.ts
       '* * * * *': ['broadcast:trigger-scheduled'],
+      // 每 5 分鐘撿 failed / 卡住的知識卡重新索引
+      '*/5 * * * *': ['ai:retry-stuck-chunks'],
+      // 每 30 分鐘掃 URL 來源是否內容變動（每個 source 的實際偵測頻率由 refreshIntervalMinutes 決定）
+      '*/30 * * * *': ['ai:detect-source-updates'],
     },
   },
 
@@ -67,6 +71,8 @@ export default defineNuxtConfig({
     firebaseClientEmail: process.env.FIREBASE_CLIENT_EMAIL ?? '',
     firebasePrivateKey: process.env.FIREBASE_PRIVATE_KEY ?? '',
     firebaseStorageBucket: process.env.FIREBASE_STORAGE_BUCKET ?? '',
+    /** Google AI Studio API key（Gemini answer + embedding 共用）。申請：https://aistudio.google.com/apikey */
+    geminiApiKey: process.env.GEMINI_API_KEY ?? '',
 
     // Public (exposed to client)
     public: {

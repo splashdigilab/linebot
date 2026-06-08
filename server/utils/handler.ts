@@ -34,6 +34,12 @@ import {
   shouldSuppressInboundBotAutomationForSession,
 } from './conversation-session'
 import type { ModuleType } from '~~/shared/types/conversation-stats'
+import { SYSTEM_MODULE_IDS } from '~~/shared/types/conversation-stats'
+import { answerWithAi } from './ai-answer'
+import { getAiSettings } from './ai-settings'
+import type { AiConversationMeta } from '~~/shared/types/ai-knowledge'
+import type { ActiveScriptState } from '~~/shared/types/ai-script'
+import { advanceScript, findMatchingScript, loadActiveScripts, startScript } from './ai-scripts'
 import {
   lineUserFirestoreDocId,
   lineUserIdFromFirestoreDocId,
@@ -201,6 +207,7 @@ interface UserDoc {
     tagIds?: string[]
     expiresAt: number
   } | null
+  activeScript?: ActiveScriptState | null
   attributes?: Record<string, string>
   autoReplyCooldowns?: Record<string, number>
   autoReplyModuleCooldowns?: Record<string, { triggeredAt: number; durationMs: number }>
@@ -1769,7 +1776,7 @@ async function handleIncomingText(
   const userAttributes = buildAttributeContext(userData)
   let handledByInput = false
 
-  // 直接從已取得的 userData 提取冷卻狀態與 activeInput，省去重複的 Firestore read
+  // 直接從已取得的 userData 提取冷卻狀態與 activeInput / activeScript，省去重複的 Firestore read
   const userState = !suppressBotAutomation && userData
     ? {
         ruleCooldowns: normalizeAutoReplyCooldownsMap(
@@ -1779,8 +1786,9 @@ async function handleIncomingText(
           userData.autoReplyModuleCooldowns as Record<string, unknown> | undefined,
         ),
         activeInput: userData.activeInput ?? null,
+        activeScript: userData.activeScript ?? null,
       }
-    : { ruleCooldowns: {}, moduleCooldowns: {}, activeInput: null }
+    : { ruleCooldowns: {}, moduleCooldowns: {}, activeInput: null, activeScript: null }
 
   const activeInput = userState.activeInput
 
@@ -1847,10 +1855,56 @@ async function handleIncomingText(
   }
 
   if (!handledByInput && !suppressBotAutomation) {
+    // 0. 使用者已在某條腳本中 → 推進、處理回覆 / handoff，結束
+    if (userState.activeScript) {
+      const advanced = await runScriptAdvance(
+        userState.activeScript,
+        textContent,
+        userAttributes,
+        fsUserDocId,
+        lineUserId,
+        replyToken,
+        wid,
+        sessionId ?? null,
+        options.requestOrigin || '',
+        channelSecret,
+      )
+      if (advanced) return
+      // advanced=false → 腳本已過期 / 狀態壞掉、已清掉 activeScript；落回一般流程
+    }
+
     const rule = await matchAutoReplyRule(textContent, wid, {
       allowAnyText: options.allowAnyText !== false,
       ruleCooldowns: userState.ruleCooldowns,
     })
+    if (!rule) {
+      // 1. 規則沒命中 → 嘗試啟動腳本
+      const scriptHandled = await runScriptStart(
+        textContent,
+        userAttributes,
+        fsUserDocId,
+        lineUserId,
+        replyToken,
+        wid,
+        sessionId ?? null,
+        options.requestOrigin || '',
+        channelSecret,
+      )
+      if (scriptHandled) return
+
+      // 2. 還是沒命中 → AI 保底
+      await tryAiFallback({
+        workspaceId: wid,
+        lineUserId,
+        textContent,
+        replyToken,
+        userAttributes,
+        channelSecret,
+        sessionId: sessionId ?? null,
+        requestOrigin: options.requestOrigin || '',
+      })
+      return
+    }
     if (rule) {
       // 冷卻規則：原子性地確認並寫入冷卻；並行請求中只有第一則能取得鎖
       const canTrigger = await claimAutoReplyCooldown(fsUserDocId, rule)
@@ -1901,6 +1955,274 @@ async function handleIncomingText(
         }
       }
     }
+  }
+}
+
+/**
+ * 嘗試從使用者輸入啟動腳本。
+ * 回傳 true 表示已處理（已回覆使用者）；false 表示沒有任何腳本命中。
+ */
+async function runScriptStart(
+  textContent: string,
+  userAttributes: Record<string, string>,
+  fsUserDocId: string,
+  lineUserId: string,
+  replyToken: string | undefined,
+  workspaceId: string,
+  sessionId: string | null,
+  requestOrigin: string,
+  channelSecret: string,
+): Promise<boolean> {
+  const scripts = await loadActiveScripts(workspaceId).catch(() => [])
+  if (!scripts.length) return false
+  const matched = findMatchingScript(scripts, textContent)
+  if (!matched) return false
+
+  const result = await startScript(matched, fsUserDocId, userAttributes)
+  invalidateUserDocCache(fsUserDocId)
+  await sendScriptReply(result.replyText, replyToken, lineUserId, workspaceId)
+  if (result.finished && result.thenHandoff) {
+    await triggerHandoff(userAttributes, lineUserId, workspaceId, sessionId, requestOrigin, channelSecret, /*alreadyReplied*/ true)
+  }
+  return true
+}
+
+async function runScriptAdvance(
+  active: ActiveScriptState,
+  textContent: string,
+  userAttributes: Record<string, string>,
+  fsUserDocId: string,
+  lineUserId: string,
+  replyToken: string | undefined,
+  workspaceId: string,
+  sessionId: string | null,
+  requestOrigin: string,
+  channelSecret: string,
+): Promise<boolean> {
+  const result = await advanceScript(active, textContent, userAttributes, fsUserDocId)
+  invalidateUserDocCache(fsUserDocId)
+  if (!result.replyText && result.finished) {
+    // 過期或狀態壞掉 → 不算處理過，讓主流程往下走（rule / AI）
+    return false
+  }
+  await sendScriptReply(result.replyText, replyToken, lineUserId, workspaceId)
+  if (result.finished && result.thenHandoff) {
+    await triggerHandoff(userAttributes, lineUserId, workspaceId, sessionId, requestOrigin, channelSecret, true)
+  }
+  return true
+}
+
+async function sendScriptReply(
+  text: string,
+  replyToken: string | undefined,
+  lineUserId: string,
+  workspaceId: string,
+): Promise<void> {
+  if (!text || !replyToken) return
+  const msg: messagingApi.TextMessage = { type: 'text', text: text.slice(0, 5000) }
+  await replyMessage(replyToken, [msg], workspaceId)
+  saveOutgoingConversationMessagesByWorkspace(lineUserId, [msg], workspaceId)
+    .catch(e => console.error('[script] save outgoing error:', e))
+}
+
+/**
+ * 腳本 reply.thenHandoff=true：標記 session 進入 live_agent。
+ * 訊息已經由腳本送出，這邊只負責 session state。
+ */
+async function triggerHandoff(
+  _userAttributes: Record<string, string>,
+  lineUserId: string,
+  workspaceId: string,
+  sessionId: string | null,
+  _requestOrigin: string,
+  _channelSecret: string,
+  _alreadyReplied: boolean,
+): Promise<void> {
+  if (!sessionId) return
+  enterModule(sessionId, lineUserId, 'live_agent', SYSTEM_MODULE_IDS.live_agent, workspaceId)
+    .catch(e => console.error('[script] enterModule(live_agent) error:', e))
+}
+
+/**
+ * 規則／腳本都沒命中時，呼叫 AI 接手。
+ *
+ * 由 caller 控制是否啟用 AI 自動回覆（settings.enabled）；playground 試答不受此限。
+ * AI 內部仍會判斷 quota / 敏感詞 / grounding / 信心，並回傳：
+ *   - answered → 直接以 AI 文字回覆
+ *   - handoff  → 觸發 sys_live_agent 流程（或預設文字），標記 session 進入 live_agent
+ *   - 其他    → 靜默（例如 query 過短）
+ *
+ * 一律寫入 conversation.aiMeta，給「真人收件匣」（Phase 4）參考。
+ */
+async function tryAiFallback(params: {
+  workspaceId: string
+  lineUserId: string
+  textContent: string
+  replyToken: string | undefined
+  userAttributes: Record<string, string>
+  channelSecret: string
+  sessionId: string | null
+  requestOrigin: string
+}): Promise<void> {
+  const { workspaceId, lineUserId, textContent, replyToken, userAttributes, channelSecret, sessionId, requestOrigin } = params
+
+  const settings = await getAiSettings(workspaceId).catch(() => null)
+  if (!settings?.enabled) return
+
+  const fsUserDocId = lineUserFirestoreDocId(lineUserId, workspaceId)
+
+  // 讀上一輪 aiMeta：用來判斷 followup 點選 & disambiguation cooldown
+  const convoSnap = await getDb().collection('conversations').doc(fsUserDocId).get().catch(() => null)
+  const prevAiMeta = (convoSnap?.data() as any)?.aiMeta as AiConversationMeta | undefined
+  const lastDis = prevAiMeta?.lastDisambiguation ?? null
+
+  // Followup：客人剛被反問過，這次訊息正好等於某個 option → 把該 option 當新 query 跑
+  let query = textContent
+  let isFollowup = false
+  if (lastDis?.options?.length) {
+    const trimmed = textContent.trim()
+    const match = lastDis.options.find(o => o.title === trimmed)
+    if (match) {
+      query = match.title
+      isFollowup = true
+    }
+  }
+
+  // Cooldown：最近反問過就先別再反問，這輪強制直接答（或走 handoff）
+  const cooldownMs = settings.disambiguation.cooldownMinutes * 60 * 1000
+  const askedAtMs = (lastDis?.askedAt as any)?.toMillis?.() ?? 0
+  const inCooldown = cooldownMs > 0 && askedAtMs > 0 && (Date.now() - askedAtMs) < cooldownMs
+  const skipDisambiguation = isFollowup || inCooldown
+
+  let result
+  try {
+    result = await answerWithAi({ workspaceId, query, isFollowup, skipDisambiguation })
+  }
+  catch (e) {
+    console.error('[ai-fallback] answerWithAi failed:', e)
+    return
+  }
+
+  // 跳過不回客人的情況（維持原本「無人接」行為）：
+  //   - skipped：AI 設定上跳過此題
+  //   - manual：真的是設定 / 空 query 等流程問題
+  //   - llm_error：Gemini 暴掉；丟「已為您安排專員」反而誤導客人，靜默等下一輪即可
+  if (
+    result.decision === 'skipped'
+    || (result.decision === 'handoff'
+      && (result.handoffReason === 'manual' || result.handoffReason === 'llm_error'))
+  ) {
+    return
+  }
+
+  // ── A. 答題：回覆文字 ─────────────────────────────────────
+  if (result.decision === 'answered' && result.answer.trim()) {
+    if (replyToken) {
+      const msg: messagingApi.TextMessage = { type: 'text', text: result.answer.slice(0, 5000) }
+      await replyMessage(replyToken, [msg], workspaceId)
+      saveOutgoingConversationMessagesByWorkspace(lineUserId, [msg], workspaceId)
+        .catch(e => console.error('[ai-fallback] save outgoing error:', e))
+    }
+    await writeAiMeta(fsUserDocId, {
+      lastDecision: 'answered',
+      lastConfidence: result.confidence,
+      lastHandoffReason: null,
+      lastQuery: textContent,
+      lastSourceChunkIds: result.sources.map(s => s.chunkId),
+      intent: '',
+      collectedFields: {},
+      suggestedReply: '',
+      lastDisambiguation: null,
+    })
+    return
+  }
+
+  // ── B. Disambiguation：反問澄清 + Quick Reply 按鈕 ─────────
+  if (result.decision === 'disambiguate' && result.disambiguation) {
+    const dis = result.disambiguation
+    const quickReplyItems: messagingApi.QuickReplyItem[] = dis.options.map(o => ({
+      type: 'action',
+      action: { type: 'message', label: o.title.slice(0, 20), text: o.title },
+    }))
+    quickReplyItems.push({
+      type: 'action',
+      action: { type: 'message', label: '🙋 找真人', text: '找真人' },
+    })
+    const msg: messagingApi.TextMessage = {
+      type: 'text',
+      text: dis.clarification.slice(0, 5000),
+      quickReply: { items: quickReplyItems },
+    }
+    if (replyToken) {
+      await replyMessage(replyToken, [msg], workspaceId)
+      saveOutgoingConversationMessagesByWorkspace(lineUserId, [msg], workspaceId)
+        .catch(e => console.error('[ai-fallback] save outgoing error:', e))
+    }
+    await writeAiMeta(fsUserDocId, {
+      lastDecision: 'disambiguate',
+      lastConfidence: result.confidence,
+      lastHandoffReason: null,
+      lastQuery: textContent,
+      lastSourceChunkIds: result.sources.map(s => s.chunkId),
+      intent: '',
+      collectedFields: {},
+      suggestedReply: '',
+      lastDisambiguation: {
+        options: dis.options,
+        askedAt: FieldValue.serverTimestamp(),
+      },
+    })
+    return
+  }
+
+  // ── C. Handoff：用 sys_live_agent 的訊息回覆 + 進入 live_agent 模組 ─
+  const liveAgentFlow = await getFlowByModuleId(SYSTEM_MODULE_IDS.live_agent).catch(() => null)
+  let handoffMessages: messagingApi.Message[] = []
+  if (liveAgentFlow) {
+    const hydrated = await hydrateRichMessageRefs(liveAgentFlow.messages as any[])
+    handoffMessages = buildLineMessages(hydrated, userAttributes, requestOrigin, lineUserId, channelSecret)
+  }
+  if (handoffMessages.length === 0) {
+    handoffMessages = [{ type: 'text', text: '已為您安排專員，將盡快回覆您 🙇' } as messagingApi.TextMessage]
+  }
+
+  if (replyToken) {
+    await replyMessage(replyToken, handoffMessages, workspaceId)
+    saveOutgoingConversationMessagesByWorkspace(lineUserId, handoffMessages, workspaceId)
+      .catch(e => console.error('[ai-fallback] save outgoing error:', e))
+  }
+
+  if (sessionId) {
+    enterModule(sessionId, lineUserId, 'live_agent', SYSTEM_MODULE_IDS.live_agent, workspaceId)
+      .catch(e => console.error('[ai-fallback] enterModule(live_agent) error:', e))
+  }
+
+  // 答題用的 suggestedReply：handoff 時若 AI 也有生內容（low_confidence 但有 answer），帶給真人客服參考
+  const suggestedReply = result.decision === 'handoff' && result.answer.trim() ? result.answer : ''
+  await writeAiMeta(fsUserDocId, {
+    lastDecision: 'handoff',
+    lastConfidence: result.confidence,
+    lastHandoffReason: result.handoffReason,
+    lastQuery: textContent,
+    lastSourceChunkIds: result.sources.map(s => s.chunkId),
+    intent: '',
+    collectedFields: {},
+    suggestedReply,
+    lastDisambiguation: null,
+  })
+}
+
+async function writeAiMeta(
+  fsUserDocId: string,
+  meta: Omit<AiConversationMeta, 'updatedAt'>,
+): Promise<void> {
+  try {
+    await getDb().collection('conversations').doc(fsUserDocId).set({
+      aiMeta: { ...meta, updatedAt: FieldValue.serverTimestamp() },
+    }, { merge: true })
+  }
+  catch (e) {
+    console.error('[ai-fallback] writeAiMeta failed:', e)
   }
 }
 

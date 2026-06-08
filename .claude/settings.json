@@ -20,7 +20,14 @@
       "WebFetch(domain:www.javacodegeeks.com)",
       "WebFetch(domain:siriwatknp.medium.com)",
       "Read(//Users/kevin/Downloads/**)",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "mcp__claude_ai_Google_Drive__search_files",
+      "mcp__claude_ai_Google_Drive__read_file_content",
+      "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('/Users/kevin/Documents/Github/linebot/firestore.indexes.json','utf8'\\)\\); console.log\\('JSON OK'\\)\")",
+      "Bash(npm run *)",
+      "Bash(npm install *)",
+      "Bash(mkdir -p /Users/kevin/Documents/Github/linebot/app/pages/admin/\\\\[workspaceId\\\\]/knowledge)",
+      "Bash(mv /Users/kevin/Documents/Github/linebot/app/pages/admin/\\\\[workspaceId\\\\]/knowledge.vue /Users/kevin/Documents/Github/linebot/app/pages/admin/\\\\[workspaceId\\\\]/knowledge/index.vue)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",
