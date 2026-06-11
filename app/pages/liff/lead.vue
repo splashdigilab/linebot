@@ -339,7 +339,11 @@ onMounted(async () => {
 
   // --- Step 7: Claim ---
   try {
-    const profile = await liff.getProfile()
+    // userId 由後端向 LINE 驗證 access token 取得，前端不再自報
+    const accessToken = liff.getAccessToken()
+    if (!accessToken) {
+      throw new Error('無法取得 LINE 授權（access token），請重新開啟連結')
+    }
     const res = await $fetch<{
       ok?: boolean
       immediatelyApplied?: boolean
@@ -349,7 +353,7 @@ onMounted(async () => {
       workspaceId?: string
     }>(
       '/api/liff/claim',
-      { method: 'POST', body: { rawToken: ct, lineUserId: profile.userId } },
+      { method: 'POST', body: { rawToken: ct, accessToken } },
     )
     clearLeadParams()
 
@@ -359,7 +363,7 @@ onMounted(async () => {
       fetch('/api/liff/apply', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lineUserId: profile.userId, workspaceId: res.workspaceId }),
+        body: JSON.stringify({ accessToken, workspaceId: res.workspaceId }),
         keepalive: true,
       }).catch(() => {})
     }

@@ -195,7 +195,8 @@ export interface BroadcastDeliveryDoc {
   userId: string
   deliveryStatus: DeliveryStatus
   failureReason: string | null
-  sentAt: Timestamp | null
+  /** 寫入時為 FieldValue（serverTimestamp），讀出為 Timestamp */
+  sentAt: Timestamp | FieldValue | null
   createdAt: Timestamp | FieldValue
 }
 

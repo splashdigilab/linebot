@@ -34,15 +34,44 @@ import type {
   HandoffReason,
 } from '~~/shared/types/ai-knowledge'
 
+export interface AiChatTurn {
+  role: 'user' | 'bot'
+  text: string
+}
+
 export interface AnswerInput {
   workspaceId: string
   query: string
+  /**
+   * 最近對話（最舊在前、不含本次 query）。用途：
+   *   1. 追問補救檢索——「那運費呢？」這類缺主題的短句，單句 embedding 撈不到卡時，
+   *      併上一輪客人訊息重新檢索一次
+   *   2. 生成回答時帶入對話脈絡，避免答非所問
+   */
+  history?: AiChatTurn[]
   /** Playground 用：回傳更多 debug 資訊 */
   debug?: boolean
   /** Caller 指示跳過 disambiguation（例：同對話 cooldown 期間） */
   skipDisambiguation?: boolean
   /** Followup 模式：客人點按鈕後重跑，不要再計 invocation */
   isFollowup?: boolean
+}
+
+/**
+ * 把「上一輪客人訊息」併進本次提問，給追問補救檢索用。
+ * 沒有可用的上一輪（無 history、上一輪與本次相同）回 null。
+ */
+export function buildContextualQuery(
+  history: AiChatTurn[] | undefined,
+  current: string,
+): string | null {
+  if (!history?.length) return null
+  const cur = current.trim()
+  const prevUser = [...history].reverse().find(
+    t => t.role === 'user' && t.text.trim() && t.text.trim() !== cur,
+  )
+  if (!prevUser) return null
+  return `${prevUser.text.trim()}\n${cur}`.slice(0, 1000)
 }
 
 export interface AnswerOutput extends AiAnswerResult {
@@ -68,7 +97,7 @@ function handoff(reason: HandoffReason, sources: SimilarChunk[] = []): AnswerOut
  *   - 真的找不到句末（整段沒有任何句點）→ 硬切並補「…」
  * 與舊版差異：絕對不會輸出超過 maxLen 字的內容（除了「…」算 1 字）。
  */
-function truncateAtSentence(text: string, maxLen: number): string {
+export function truncateAtSentence(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text
 
   // 只在 maxLen 之內找句末，不要往後越界
@@ -91,7 +120,7 @@ function truncateAtSentence(text: string, maxLen: number): string {
  * 同 sourceId 只留分數最高那張；無 sourceId 的卡視為各自獨立。
  * 結果保持原本由高到低的順序。
  */
-function dedupeBySource(chunks: SimilarChunk[]): SimilarChunk[] {
+export function dedupeBySource(chunks: SimilarChunk[]): SimilarChunk[] {
   const seen = new Set<string>()
   const out: SimilarChunk[] = []
   for (const c of chunks) {
@@ -111,7 +140,7 @@ function dedupeBySource(chunks: SimilarChunk[]): SimilarChunk[] {
  * 判斷是否進入 disambiguation 分支。
  * 條件：top-1 ∈ [top1Min, top1Max)，(top1 − top2) < maxSpread，dedupe 後至少 2 張。
  */
-function shouldDisambiguate(
+export function shouldDisambiguate(
   dedupedChunks: SimilarChunk[],
   settings: Pick<AiSettingsDoc, 'disambiguation'>,
 ): boolean {
@@ -135,7 +164,7 @@ function shouldDisambiguate(
  * 比對策略由嚴到鬆：完全相等 > 雙向 startsWith > 雙向 includes。
  * 找不到就回 null（被過濾）。
  */
-function matchCandidateTitle(llmTitle: string, candidates: SimilarChunk[]): SimilarChunk | null {
+export function matchCandidateTitle(llmTitle: string, candidates: SimilarChunk[]): SimilarChunk | null {
   const norm = (s: string) => s.replace(/\s+/g, '').toLowerCase()
   const target = norm(llmTitle)
   if (!target) return null
@@ -249,6 +278,9 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   }
 
   // ── 2. quota 護欄 ────────────────────────────────────────
+  // 注意：「先讀用量再答題、答完才記帳」並非嚴格原子——併發訊息可能讓當月用量
+  // 略為超過 cap（誤差約為同時在途的幾次呼叫）。cap 是軟性護欄，可接受此誤差；
+  // 若未來要做硬性計費上限，需改用 transaction 預扣。
   let answerModel = settings.answerModel
   if (settings.quota.monthlyTokenCap > 0) {
     const used = await getCurrentMonthTokens(workspaceId, db)
@@ -276,10 +308,28 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
     }
     return handoff('llm_error')
   }
-  const embedTokenEstimate = estimateTokens(text)
+  let embedTokenEstimate = estimateTokens(text)
 
-  const chunks = await searchSimilarChunks(db, workspaceId, queryVector, DEFAULT_TOP_K_CHUNKS)
-  const topSimilarity = chunks[0]?.similarity ?? 0
+  let chunks = await searchSimilarChunks(db, workspaceId, queryVector, DEFAULT_TOP_K_CHUNKS)
+  let topSimilarity = chunks[0]?.similarity ?? 0
+
+  // 追問補救：單句檢索不過 grounding 門檻時（典型如「那運費呢？」缺主題詞），
+  // 併上一輪客人訊息重新檢索一次，取分數較高的結果。只在低分時多花一次 embed。
+  const contextualQuery = buildContextualQuery(input.history, text)
+  if (contextualQuery && topSimilarity < getGroundingThreshold(settings)) {
+    try {
+      const ctxVector = await embedQuery(contextualQuery)
+      embedTokenEstimate += estimateTokens(contextualQuery)
+      const ctxChunks = await searchSimilarChunks(db, workspaceId, ctxVector, DEFAULT_TOP_K_CHUNKS)
+      if ((ctxChunks[0]?.similarity ?? 0) > topSimilarity) {
+        chunks = ctxChunks
+        topSimilarity = ctxChunks[0]?.similarity ?? 0
+      }
+    }
+    catch (err) {
+      console.warn('[ai-answer] contextual retrieval failed, keep single-turn result:', err)
+    }
+  }
 
   // ── 4. disambiguation 偵測（先於 grounding）──────────────
   // 「多張卡同樣相關」是比 grounding 更強的訊號 — 即使 top-1 略低於 grounding 門檻，
@@ -327,7 +377,16 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
     .map((c, i) => `[卡 ${i + 1}｜${c.title}]\n${c.content}`)
     .join('\n\n')
 
+  // 最近對話脈絡（最多 6 則）：讓 LLM 理解「那個」「還有呢」等指代，避免答非所問
+  const historyTurns = (input.history ?? []).slice(-6)
+  const historyBlock = historyTurns
+    .map(t => `${t.role === 'user' ? '客人' : '客服'}：${t.text.trim().slice(0, 200)}`)
+    .join('\n')
+
   const userPrompt = [
+    ...(historyBlock
+      ? ['【最近對話（最新在下，供理解指代與上下文）】', historyBlock, '']
+      : []),
     '【可參考的知識卡】',
     contextBlock,
     '',

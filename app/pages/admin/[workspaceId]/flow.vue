@@ -33,7 +33,7 @@
           :key="flow.id"
           :title="`🔒 ${flow.name}`"
           :active="selectedId === flow.id"
-          :meta-text="MODULE_TYPE_LABELS[flow.moduleType] ?? '機器人流程'"
+          :meta-text="moduleTypeLabel(flow.moduleType)"
           chip-tone="neutral"
           @select="selectFlow(flow)"
         />
@@ -64,7 +64,7 @@
             class="flow-sidebar-row__item"
             :title="flow.name"
             :active="selectedId === flow.id"
-            :meta-text="MODULE_TYPE_LABELS[flow.moduleType] ?? '機器人流程'"
+            :meta-text="moduleTypeLabel(flow.moduleType)"
             chip-tone="neutral"
             @select="selectFlow(flow)"
           />
@@ -124,7 +124,7 @@
                 class="flow-sidebar-row__item"
                 :title="flow.name"
                 :active="selectedId === flow.id"
-                :meta-text="MODULE_TYPE_LABELS[flow.moduleType] ?? '機器人流程'"
+                :meta-text="moduleTypeLabel(flow.moduleType)"
                 chip-tone="neutral"
                 @select="selectFlow(flow)"
               />
@@ -1062,6 +1062,11 @@ import {
 } from '~~/shared/types/conversation-stats'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
+
+/** flow 物件多為動態型別（any），統一在此收斂 moduleType → 顯示標籤 */
+function moduleTypeLabel(raw: unknown): string {
+  return MODULE_TYPE_LABELS[raw as ModuleType] ?? '機器人流程'
+}
 
 const { apiFetch, workspaceId } = useWorkspace()
 const { canOperate, guardOperate } = useAdminOperateGuard()

@@ -75,9 +75,9 @@ export default defineEventHandler(async (event) => {
 
   const urlRes = await syncPublishedEntryUrlForCampaign(db, id, {
     workspaceId,
-    liffId: doc.liffId,
-    campaignCode: doc.campaignCode,
-    isActive: doc.isActive,
+    liffId: doc.liffId as string,
+    campaignCode: doc.campaignCode as string,
+    isActive: doc.isActive as boolean,
     tagIds: doc.tagIds,
     moduleId: doc.moduleId,
     action: doc.action,

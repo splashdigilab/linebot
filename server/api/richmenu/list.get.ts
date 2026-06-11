@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
   const query = getQuery(event)
 
-  const menus = await listDocs<Record<string, unknown>>('richmenus', ref =>
+  const menus = await listDocs<Record<string, unknown> & { isDefault?: boolean }>('richmenus', ref =>
     ref.where('workspaceId', '==', workspaceId).orderBy('createdAt', 'desc'),
   )
 

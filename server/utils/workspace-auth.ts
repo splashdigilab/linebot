@@ -3,6 +3,10 @@ import type { DecodedIdToken } from 'firebase-admin/auth'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { WorkspaceMemberRole, OrgMemberRole } from '~~/shared/types/organization'
 import { getFirebaseAuth, getDb } from './firebase'
+import { capMapSize } from './bounded-cache'
+
+// 以 uid / email 為 key 的快取會隨用戶數成長，設上限防無上限增長
+const AUTH_CACHE_MAX_ENTRIES = 2000
 
 // ── 角色層級（數字越大權限越高）────────────────────────────────────
 
@@ -13,9 +17,13 @@ const ROLE_LEVEL: Record<WorkspaceMemberRole, number> = {
   owner: 4,
 }
 
-// ── In-memory caches（TTL 60s）──────────────────────────────────────
+// ── In-memory caches ────────────────────────────────────────────────
+// 注意：serverless 多實例下 invalidate 只作用於單一實例，其他實例要等 TTL 過期。
+// 角色／成員資格是安全邊界，TTL 收緊到 15s 縮短「移除成員後仍可存取」的空窗；
+// workspace→org 對應與 org 停用狀態變動頻率低，維持 60s。
 
 const CACHE_TTL_MS = 60_000
+const MEMBER_CACHE_TTL_MS = 15_000
 
 // workspace member cache（UID-based）
 interface CachedMember { role: WorkspaceMemberRole; expiresAt: number }
@@ -30,7 +38,8 @@ function getCachedMember(uid: string, workspaceId: string): WorkspaceMemberRole 
 }
 
 function setCachedMember(uid: string, workspaceId: string, role: WorkspaceMemberRole) {
-  memberCache.set(`${uid}:${workspaceId}`, { role, expiresAt: Date.now() + CACHE_TTL_MS })
+  memberCache.set(`${uid}:${workspaceId}`, { role, expiresAt: Date.now() + MEMBER_CACHE_TTL_MS })
+  capMapSize(memberCache, AUTH_CACHE_MAX_ENTRIES)
 }
 
 export function invalidateWorkspaceMemberCache(uid: string, workspaceId: string) {
@@ -50,7 +59,8 @@ function getCachedOrgMember(email: string, orgId: string): OrgMemberRole | null 
 }
 
 function setCachedOrgMember(email: string, orgId: string, role: OrgMemberRole | null) {
-  orgMemberCache.set(`org:${email}:${orgId}`, { role, expiresAt: Date.now() + CACHE_TTL_MS })
+  orgMemberCache.set(`org:${email}:${orgId}`, { role, expiresAt: Date.now() + MEMBER_CACHE_TTL_MS })
+  capMapSize(orgMemberCache, AUTH_CACHE_MAX_ENTRIES)
 }
 
 export function invalidateOrgMemberCache(email: string, orgId: string) {
@@ -145,9 +155,8 @@ export async function materializeWorkspaceInviteIfAny(
     .limit(1)
     .get()
 
-  if (invites.empty) return null
-
   const invDoc = invites.docs[0]
+  if (!invDoc) return null
   const inv = invDoc.data()
   const role = inv.role as WorkspaceMemberRole
   const memberRef = db.collection('workspaceMembers').doc(`${uid}_${workspaceId}`)
@@ -203,7 +212,7 @@ export async function getOrgMember(
     .limit(1)
     .get()
 
-  const role = snap.empty ? null : (snap.docs[0].data().role as OrgMemberRole)
+  const role = (snap.docs[0]?.data()?.role as OrgMemberRole | undefined) ?? null
   setCachedOrgMember(email, orgId, role)
   return role
 }

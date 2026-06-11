@@ -85,8 +85,7 @@ export default defineEventHandler(async (event) => {
 
   const userTagMap: Record<string, string[]> = {}
   for (const ut of allUserTags) {
-    if (!userTagMap[ut.userId]) userTagMap[ut.userId] = []
-    userTagMap[ut.userId].push(ut.tagId)
+    ;(userTagMap[ut.userId] ??= []).push(ut.tagId)
   }
 
   const allTagIds = [...new Set(allUserTags.map((ut) => ut.tagId))]

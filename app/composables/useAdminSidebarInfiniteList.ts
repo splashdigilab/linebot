@@ -10,7 +10,7 @@ export type SidebarListPageResult<T> = {
 
 type FetchPageFn<T> = (params: { page: number, limit: number }) => Promise<T[] | SidebarListPageResult<T>>
 
-function normalizePageResult<T>(res: T[] | SidebarListPageResult<T>): SidebarListPageResult<T> {
+function normalizePageResult<T>(res: T[] | Partial<SidebarListPageResult<T>>): SidebarListPageResult<T> {
   if (Array.isArray(res)) return { items: res, hasMore: false }
   return { items: res.items ?? [], hasMore: Boolean(res.hasMore) }
 }

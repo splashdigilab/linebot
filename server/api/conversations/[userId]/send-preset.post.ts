@@ -6,8 +6,8 @@ import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 function resolveRequestOrigin(event: Parameters<typeof getHeader>[0]): string {
   const protoRaw = String(getHeader(event, 'x-forwarded-proto') || 'https')
   const hostRaw = String(getHeader(event, 'x-forwarded-host') || getHeader(event, 'host') || '')
-  const proto = protoRaw.split(',')[0].trim().toLowerCase()
-  const host = hostRaw.split(',')[0].trim()
+  const proto = (protoRaw.split(',')[0] ?? '').trim().toLowerCase()
+  const host = (hostRaw.split(',')[0] ?? '').trim()
   if (!host) return ''
   const safeProto = proto === 'http' || proto === 'https' ? proto : 'https'
   return `${safeProto}://${host}`

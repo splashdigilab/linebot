@@ -52,7 +52,14 @@ export default defineEventHandler(async (event) => {
   // 寫入點擊 log（非同步，不阻塞 redirect）
   try {
     const db = getDb()
+    // token 不含 workspaceId（舊格式），從 campaign doc 補查；查不到留空字串
+    let workspaceId = ''
+    if (campaignId) {
+      const campaignSnap = await db.collection('broadcasts').doc(campaignId).get().catch(() => null)
+      workspaceId = String(campaignSnap?.data()?.workspaceId || '').trim()
+    }
     const logDoc: BroadcastClickLogDoc = {
+      workspaceId,
       campaignId,
       deliveryId: deliveryId || null,
       userId: userId || null,

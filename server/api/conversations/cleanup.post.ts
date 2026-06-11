@@ -77,7 +77,7 @@ export default defineEventHandler(async (event) => {
       continue
     }
 
-    const latest = latestSnap.docs[0].data()
+    const latest = latestSnap.docs[0]?.data() ?? {}
     await conversationRef.set(
       {
         lastMessage: latest.text ?? '',

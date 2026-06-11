@@ -4,6 +4,8 @@ import type { DocumentData, DocumentReference } from 'firebase-admin/firestore'
 import type { LeadClaimDoc } from '~~/shared/types/lead-campaign'
 import { getUserProfile } from '~~/server/utils/line'
 import { resolveLineOaBasicId } from '~~/server/utils/line-oa-basic-id'
+import { verifyLiffAccessToken, warnOnLiffChannelMismatch } from '~~/server/utils/liff-token'
+import { getLineWorkspaceCredentials } from '~~/server/utils/line-workspace-credentials'
 
 function sharedUserClaimDocId(campaignId: string, lineUserId: string): string {
   return createHash('sha256').update(`lead_shared|${campaignId}|${lineUserId}`).digest('hex')
@@ -67,8 +69,8 @@ function buildUserClaimTemplatePatch(
  *
  * Body:
  * {
- *   rawToken: string   // CTA URL 中的 ct= 參數（原始 token，未 hash）
- *   lineUserId: string // liff.getProfile().userId
+ *   rawToken: string    // CTA URL 中的 ct= 參數（原始 token，未 hash）
+ *   accessToken: string // liff.getAccessToken()；後端向 LINE 驗證後取得真實 userId
  * }
  *
  * Response:
@@ -83,11 +85,15 @@ function buildUserClaimTemplatePatch(
 export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const rawToken = String(body?.rawToken || '').trim()
-  const lineUserId = String(body?.lineUserId || '').trim()
+  const accessToken = String(body?.accessToken || '').trim()
 
-  if (!rawToken || !lineUserId) {
-    throw createError({ statusCode: 400, statusMessage: 'rawToken and lineUserId are required' })
+  if (!rawToken || !accessToken) {
+    throw createError({ statusCode: 400, statusMessage: 'rawToken and accessToken are required' })
   }
+
+  // userId 一律以 LINE 驗證結果為準，不信任 client 自報（防冒用他人身分兌換／觸發推播）
+  const verifiedUser = await verifyLiffAccessToken(accessToken)
+  const lineUserId = verifiedUser.userId
 
   const tokenHash = createHash('sha256').update(rawToken).digest('hex')
   const db = getDb()
@@ -183,6 +189,11 @@ export default defineEventHandler(async (event) => {
   if (!claimWorkspaceId) {
     throw createError({ statusCode: 409, statusMessage: 'Claim missing workspaceId' })
   }
+
+  // 觀測用：token 所屬 Login channel 與 workspace LIFF 設定不一致時記 log（不阻擋）
+  getLineWorkspaceCredentials(claimWorkspaceId)
+    .then(c => warnOnLiffChannelMismatch(verifiedUser, c.defaultLiffId, 'liff/claim'))
+    .catch(() => {})
 
   const [, followProfile] = await Promise.all([
     docRef.update({

@@ -41,8 +41,11 @@ export function useAreaEditor<TArea>(options: UseAreaEditorOptions<TArea>) {
     const areas = options.areas.value
     for (let i = 0; i < areas.length; i++) {
       for (let j = i + 1; j < areas.length; j++) {
-        const a = options.getBounds(areas[i])
-        const b = options.getBounds(areas[j])
+        const areaA = areas[i]
+        const areaB = areas[j]
+        if (!areaA || !areaB) continue
+        const a = options.getBounds(areaA)
+        const b = options.getBounds(areaB)
         const overlapping = !(
           a.x + a.width <= b.x ||
           a.x >= b.x + b.width ||

@@ -66,8 +66,8 @@ export function richMessageCanvasPaddingBottomPercent(
   heroImageWidth?: number,
   heroImageHeight?: number,
 ): string {
-  const { canvasWidth, canvasHeight } = getRichMessageCanvasSize(heroImageWidth, heroImageHeight)
-  return `${(canvasHeight / canvasWidth) * 100}%`
+  const { width, height } = getRichMessageCanvasSize(heroImageWidth, heroImageHeight)
+  return `${(height / width) * 100}%`
 }
 
 export function resolveCarouselImageAspectRatio(

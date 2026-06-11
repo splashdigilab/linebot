@@ -47,7 +47,8 @@ function sleep(ms: number) {
 
 async function callGemini<T>(path: string, body: unknown): Promise<T> {
   const apiKey = getApiKey()
-  const url = `${GEMINI_API_BASE}/${path}?key=${encodeURIComponent(apiKey)}`
+  // key 走 header 不走 query string，避免進到各層 access log
+  const url = `${GEMINI_API_BASE}/${path}`
 
   let lastReason = ''
   let lastStatus = 0
@@ -57,7 +58,7 @@ async function callGemini<T>(path: string, body: unknown): Promise<T> {
     try {
       res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
         body: JSON.stringify(body),
       })
     }

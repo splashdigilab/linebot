@@ -1,8 +1,9 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app'
 import { getAuth } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
-import { getStorage } from 'firebase/storage'
 
+// 前端只用 Firebase Auth（登入 + ID token）；資料一律走後端 API（firebase-admin）。
+// 不要在 client 端引入 firebase/firestore、firebase/storage——既沒有使用情境
+// （Security Rules 為 deny-all），也會白白增加 bundle 體積。
 export default defineNuxtPlugin(() => {
   const config = useRuntimeConfig()
 
@@ -18,19 +19,15 @@ export default defineNuxtPlugin(() => {
     })
   }
   else {
-    app = getApps()[0]
+    app = getApps()[0]!
   }
 
   const auth = getAuth(app)
-  const firestore = getFirestore(app)
-  const storage = getStorage(app)
 
   return {
     provide: {
       firebaseApp: app,
       auth,
-      firestore,
-      storage,
     },
   }
 })

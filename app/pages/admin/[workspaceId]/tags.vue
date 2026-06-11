@@ -223,7 +223,7 @@ const defaultForm = () => ({
   category: 'custom' as const,
   color: '#6B7280',
   description: '',
-  status: 'active' as const,
+  status: 'active' as 'active' | 'inactive',
 })
 const form = ref(defaultForm())
 

@@ -359,10 +359,10 @@ function statusLabel(status: KnowledgeChunkStatus) {
   return KNOWLEDGE_CHUNK_STATUS_LABELS[status] ?? status
 }
 
-function statusTone(status: KnowledgeChunkStatus): 'success' | 'warning' | 'danger' | 'neutral' {
+function statusTone(status: KnowledgeChunkStatus): 'success' | 'warning' | 'error' | 'neutral' {
   if (status === 'indexed') return 'success'
   if (status === 'pending') return 'warning'
-  if (status === 'failed') return 'danger'
+  if (status === 'failed') return 'error'
   return 'neutral'
 }
 

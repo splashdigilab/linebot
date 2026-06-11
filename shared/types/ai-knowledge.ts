@@ -127,6 +127,12 @@ export interface AiSettingsDoc {
     /** 超量時的處理策略 */
     onExceed: QuotaExceedStrategy
   }
+  /** Handoff 通知：AI 轉真人時，用官方帳號推播 LINE 訊息提醒指定客服人員（須為此 OA 好友） */
+  handoffNotify: {
+    enabled: boolean
+    /** 要通知的客服 LINE userIds（上限 10 位） */
+    lineUserIds: string[]
+  }
   /** 反問澄清（disambiguation）— 答案擦邊且 top-K 分數接近時主動反問 */
   disambiguation: {
     /** 總開關；關掉就照舊走 answered / handoff */
@@ -353,6 +359,10 @@ export function buildDefaultAiSettings(): Omit<AiSettingsDoc, 'updatedAt'> {
     quota: {
       monthlyTokenCap: DEFAULT_MONTHLY_TOKEN_CAP,
       onExceed: 'handoff_all',
+    },
+    handoffNotify: {
+      enabled: false,
+      lineUserIds: [],
     },
     disambiguation: {
       enabled: DEFAULT_DISAMBIGUATION_ENABLED,

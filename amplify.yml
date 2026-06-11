@@ -6,6 +6,8 @@ frontend:
         - npm ci
     build:
       commands:
+        - npm run test:unit
+        - npm run typecheck
         - npm run build
   artifacts:
     baseDirectory: .output

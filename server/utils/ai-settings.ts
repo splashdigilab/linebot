@@ -94,6 +94,12 @@ export function normalizeAiSettings(raw: any): AiSettingsDoc {
       monthlyTokenCap: clampNumber(raw?.quota?.monthlyTokenCap, 0, 100_000_000, DEFAULT_MONTHLY_TOKEN_CAP),
       onExceed: quotaStrategy,
     },
+    handoffNotify: {
+      enabled: raw?.handoffNotify?.enabled === true,
+      lineUserIds: Array.isArray(raw?.handoffNotify?.lineUserIds)
+        ? raw.handoffNotify.lineUserIds.map((v: unknown) => String(v).trim()).filter(Boolean).slice(0, 10)
+        : [],
+    },
     disambiguation: (() => {
       let top1Min = clampNumber(raw?.disambiguation?.top1Min, 0, 1, DEFAULT_DISAMBIGUATION_TOP1_MIN)
       let top1Max = clampNumber(raw?.disambiguation?.top1Max, 0, 1, DEFAULT_DISAMBIGUATION_TOP1_MAX)
@@ -121,7 +127,12 @@ export async function setAiSettings(
   db: Firestore = getDb(),
 ): Promise<AiSettingsDoc> {
   const current = await getAiSettings(workspaceId, db)
-  const merged = normalizeAiSettings({ ...current, ...partial, quota: { ...current.quota, ...(partial.quota ?? {}) } })
+  const merged = normalizeAiSettings({
+    ...current,
+    ...partial,
+    quota: { ...current.quota, ...(partial.quota ?? {}) },
+    handoffNotify: { ...current.handoffNotify, ...(partial.handoffNotify ?? {}) },
+  })
   await db.collection(AI_SETTINGS_COLLECTION).doc(workspaceId).set({
     ...merged,
     updatedAt: FieldValue.serverTimestamp(),

@@ -36,7 +36,7 @@ export function parseBase64Input(base64Input: unknown): Buffer {
   }
 
   const pureBase64 = source.includes('base64,')
-    ? source.split('base64,')[1]
+    ? (source.split('base64,')[1] ?? '')
     : source
 
   return Buffer.from(pureBase64, 'base64')

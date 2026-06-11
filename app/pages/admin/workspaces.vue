@@ -285,8 +285,9 @@ onMounted(async () => {
     workspaceList.value = list
     isSuperAdmin.value = tokenResult?.claims.superAdmin === true
 
-    if (!isSuperAdmin.value && visibleWorkspaceList.value.length === 1 && orgAdminOf.value.length === 0) {
-      await enter(visibleWorkspaceList.value[0].workspaceId)
+    const onlyWorkspace = visibleWorkspaceList.value.length === 1 ? visibleWorkspaceList.value[0] : undefined
+    if (!isSuperAdmin.value && onlyWorkspace && orgAdminOf.value.length === 0) {
+      await enter(onlyWorkspace.workspaceId)
     }
   }
   catch {

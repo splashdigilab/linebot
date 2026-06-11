@@ -121,6 +121,7 @@ export default defineEventHandler(async (event) => {
     )
     orgWsSnaps.forEach((snap, i) => {
       const orgId = activeAdminOrgIds[i]
+      if (!orgId) return
       snap.docs.forEach(d => {
         if (includedWorkspaceIds.has(d.id)) return
         result.push({
@@ -177,8 +178,9 @@ export default defineEventHandler(async (event) => {
   }
 
   const orgAdminOf = adminOrgIds
-    .filter(id => orgMap[id] && !orgMap[id].disabled)
-    .map(id => ({ id, name: orgMap[id].name }))
+    .map(id => ({ id, org: orgMap[id] }))
+    .filter((x): x is { id: string; org: NonNullable<typeof x.org> } => Boolean(x.org && !x.org.disabled))
+    .map(x => ({ id: x.id, name: x.org.name }))
 
   return { workspaces: result, orgAdminOf }
 })

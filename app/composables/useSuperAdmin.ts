@@ -19,13 +19,13 @@ export const useSuperAdmin = () => {
     options?: Parameters<typeof $fetch>[1],
   ): Promise<T> {
     const token = await getBearer()
-    return $fetch<T>(url, {
+    return await $fetch(url, {
       ...options,
       headers: {
         Authorization: `Bearer ${token}`,
         ...(options?.headers as object ?? {}),
       },
-    })
+    }) as T
   }
 
   const isSuperAdmin = useState<boolean>('superadmin:flag', () => false)

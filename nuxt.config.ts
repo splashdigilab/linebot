@@ -24,6 +24,8 @@ export default defineNuxtConfig({
       '*/5 * * * *': ['ai:retry-stuck-chunks'],
       // 每 30 分鐘掃 URL 來源是否內容變動（每個 source 的實際偵測頻率由 refreshIntervalMinutes 決定）
       '*/30 * * * *': ['ai:detect-source-updates'],
+      // 每小時清理過期的 webhook 冪等鎖（Firestore TTL 的程式內保底）
+      '0 * * * *': ['webhook:cleanup-event-locks'],
     },
   },
 
@@ -45,9 +47,10 @@ export default defineNuxtConfig({
     css: {
       preprocessorOptions: {
         scss: {
+          // Vite 7 型別未收錄 sass-embedded 的 api 選項，但執行期支援
           api: 'modern-compiler',
           additionalData: `@use "~/assets/scss/element-variables.scss" as *;`,
-        },
+        } as Record<string, unknown>,
       },
     },
   },

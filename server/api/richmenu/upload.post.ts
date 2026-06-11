@@ -15,7 +15,10 @@ export default defineEventHandler(async (event) => {
     allowedCategories: ['image'],
   })
 
-  await uploadRichMenuImage(richMenuId, imageBuffer, normalizedContentType || 'image/png', workspaceId)
+  const lineImageType = normalizedContentType === 'image/jpeg' || normalizedContentType === 'image/jpg'
+    ? 'image/jpeg' as const
+    : 'image/png' as const
+  await uploadRichMenuImage(richMenuId, imageBuffer, lineImageType, workspaceId)
 
   const storage = getStorage()
   const bucket = storage.bucket()

@@ -5,9 +5,16 @@ export type MediaNaturalSize = {
 
 export type PreviewFrameFit = 'contain' | 'cover'
 
+// 此檔在 shared/ 會被 server 端 tsconfig 一起檢查（無 DOM lib），
+// 瀏覽器全域改經 globalThis 取得並在執行期防呆。
 export function loadImageNaturalSize(src: string): Promise<MediaNaturalSize> {
   return new Promise((resolve, reject) => {
-    const img = new Image()
+    const ImageCtor = (globalThis as any).Image
+    if (!ImageCtor) {
+      reject(new Error('loadImageNaturalSize is browser-only'))
+      return
+    }
+    const img = new ImageCtor()
     img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight })
     img.onerror = reject
     img.src = src
@@ -16,7 +23,12 @@ export function loadImageNaturalSize(src: string): Promise<MediaNaturalSize> {
 
 export function loadVideoNaturalSize(src: string): Promise<MediaNaturalSize> {
   return new Promise((resolve, reject) => {
-    const video = document.createElement('video')
+    const doc = (globalThis as any).document
+    if (!doc) {
+      reject(new Error('loadVideoNaturalSize is browser-only'))
+      return
+    }
+    const video = doc.createElement('video')
     video.preload = 'metadata'
     video.onloadedmetadata = () => resolve({ width: video.videoWidth, height: video.videoHeight })
     video.onerror = reject

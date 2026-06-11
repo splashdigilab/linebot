@@ -1,13 +1,14 @@
 import { verifyLineWebhookSignature } from '../utils/line'
 import { listWorkspaceLineCredentials } from '../utils/line-workspace-credentials'
 import { handleMessageEvent, handlePostbackEvent, handleFollowEvent, handleUnfollowEvent } from '../utils/handler'
+import { claimWebhookEvent } from '../utils/webhook-dedup'
 import type { webhook } from '@line/bot-sdk'
 
 function resolveRequestOrigin(event: Parameters<typeof getHeader>[0]): string {
   const protoRaw = String(getHeader(event, 'x-forwarded-proto') || 'https')
   const hostRaw = String(getHeader(event, 'x-forwarded-host') || getHeader(event, 'host') || '')
-  const proto = protoRaw.split(',')[0].trim().toLowerCase()
-  const host = hostRaw.split(',')[0].trim()
+  const proto = (protoRaw.split(',')[0] ?? '').trim().toLowerCase()
+  const host = (hostRaw.split(',')[0] ?? '').trim()
   if (!host) return ''
   const safeProto = proto === 'http' || proto === 'https' ? proto : 'https'
   return `${safeProto}://${host}`
@@ -76,6 +77,12 @@ export default defineEventHandler(async (event) => {
   console.log('[webhook] received', payload.events.length, 'event(s):', payload.events.map(e => e.type))
   const tasks = payload.events.map(async (e) => {
     try {
+      // 冪等去重：LINE redelivery（逾時重送）同一 webhookEventId 只處理一次
+      const isFirstDelivery = await claimWebhookEvent(matchedWorkspaceId, (e as { webhookEventId?: string }).webhookEventId)
+      if (!isFirstDelivery) {
+        console.log('[webhook] duplicate event skipped:', e.type, (e as { webhookEventId?: string }).webhookEventId)
+        return
+      }
       if (e.type === 'message') {
         await handleMessageEvent(e as webhook.MessageEvent, { requestOrigin, workspaceId: matchedWorkspaceId })
       }

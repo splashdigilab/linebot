@@ -99,6 +99,20 @@ export async function replyMessage(
   return client.replyMessage({ replyToken, messages })
 }
 
+/**
+ * 在 1:1 聊天室顯示「輸入中…」loading 動畫（AI 思考期間的即時回饋）。
+ * 動畫會在送出訊息或 loadingSeconds 到期時自動消失；只支援 1:1，群組會被 LINE 忽略。
+ * loadingSeconds 須為 5 的倍數（5–60）。
+ */
+export async function showLoadingAnimation(
+  chatId: string,
+  workspaceId: string,
+  loadingSeconds = 20,
+) {
+  const { client } = await getMessagingBundle(workspaceId)
+  return client.showLoadingAnimation({ chatId, loadingSeconds })
+}
+
 /** Push a message to a LINE userId */
 export async function pushMessage(
   userId: string,
@@ -124,7 +138,7 @@ export async function uploadRichMenuImage(
   workspaceId: string,
 ) {
   const { blob } = await getMessagingBundle(workspaceId)
-  return blob.setRichMenuImage(richMenuId, new Blob([imageBuffer], { type: contentType }))
+  return blob.setRichMenuImage(richMenuId, new Blob([new Uint8Array(imageBuffer)], { type: contentType }))
 }
 
 /** 將指定圖文選單設為全體使用者的預設選單 */
@@ -158,9 +172,8 @@ export async function multicastMessage(
   const BATCH_SIZE = 500
   let successCount = 0
   const failedIds: string[] = []
-  const units = options?.customAggregationUnits?.length
-    ? [options.customAggregationUnits[0]]
-    : undefined
+  const firstUnit = options?.customAggregationUnits?.[0]
+  const units = firstUnit ? [firstUnit] : undefined
   /** 僅當所有批次皆以 customAggregationUnits 成功送出時為 true（任一批改走無彙總重試則 false） */
   let lineAggregationApplied = Boolean(units?.length)
 

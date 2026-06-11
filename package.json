@@ -9,6 +9,7 @@
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "test:unit": "vitest run",
+    "typecheck": "nuxt typecheck",
     "set-super-admin": "node --env-file=.env --experimental-strip-types scripts/set-super-admin.ts"
   },
   "dependencies": {
@@ -22,13 +23,14 @@
     "uuid": "^13.0.0",
     "vue": "^3.5.32",
     "vue-router": "^5.0.4",
-    "xlsx": "^0.18.5"
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {
     "@element-plus/nuxt": "^1.1.5",
     "@types/uuid": "^10.0.0",
     "element-plus": "^2.13.7",
     "sass": "^1.99.0",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.5",
+    "vue-tsc": "^3.3.4"
   }
 }

@@ -216,8 +216,9 @@ function onTypeChange(nextType: string | number | boolean | Record<string, unkno
   } as ActionShape)
 }
 
-function onTaggingEnabledChange(enabled: boolean) {
+function onTaggingEnabledChange(value: string | number | boolean) {
   if (props.disabled || !isTaggableAction.value) return
+  const enabled = Boolean(value)
   const prev = taggingSnapshot()
   patchAction({
     tagging: {

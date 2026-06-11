@@ -2,7 +2,7 @@ import type { webhook } from '@line/bot-sdk'
 import type { messagingApi } from '@line/bot-sdk'
 import { createError } from 'h3'
 import { getDb } from './firebase'
-import { replyMessage, pushMessage, getUserProfile, linkRichMenuIdToUser } from './line'
+import { replyMessage, pushMessage, getUserProfile, linkRichMenuIdToUser, showLoadingAnimation } from './line'
 import { getLineWorkspaceCredentials } from './line-workspace-credentials'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import {
@@ -35,8 +35,9 @@ import {
 } from './conversation-session'
 import type { ModuleType } from '~~/shared/types/conversation-stats'
 import { SYSTEM_MODULE_IDS } from '~~/shared/types/conversation-stats'
-import { answerWithAi } from './ai-answer'
+import { answerWithAi, type AiChatTurn } from './ai-answer'
 import { getAiSettings } from './ai-settings'
+import { notifyHandoffToStaff } from './ai-handoff-notify'
 import type { AiConversationMeta } from '~~/shared/types/ai-knowledge'
 import type { ActiveScriptState } from '~~/shared/types/ai-script'
 import { advanceScript, findMatchingScript, loadActiveScripts, startScript } from './ai-scripts'
@@ -44,6 +45,7 @@ import {
   lineUserFirestoreDocId,
   lineUserIdFromFirestoreDocId,
 } from '~~/shared/line-workspace'
+import { capMapSize } from './bounded-cache'
 
 // ── In-Memory Caching to Reduce DB Latency ──────────────────────────
 
@@ -60,6 +62,9 @@ const userDocCache = new Map<string, CacheEntry<UserDoc | null>>()
 const CACHE_TTL_MS = 60 * 1000
 // Shorter TTL for user docs since activeInput/attributes change more often
 const USER_CACHE_TTL_MS = 30 * 1000
+// 快取上限：userDocCache 以使用者為 key 會隨活躍用戶成長，必須設上限
+const CACHE_MAX_ENTRIES = 1000
+const USER_CACHE_MAX_ENTRIES = 5000
 
 function requireWorkspaceId(workspaceId: string | undefined, context: string): string {
   const wid = String(workspaceId || '').trim()
@@ -77,6 +82,12 @@ function getCached<T>(map: Map<string, CacheEntry<T>>, key: string): T | undefin
 
 function setCache<T>(map: Map<string, CacheEntry<T>>, key: string, data: T) {
   map.set(key, { data, expires: Date.now() + CACHE_TTL_MS })
+  capMapSize(map, CACHE_MAX_ENTRIES)
+}
+
+function setUserDocCache(docId: string, data: UserDoc) {
+  userDocCache.set(docId, { data, expires: Date.now() + USER_CACHE_TTL_MS })
+  capMapSize(userDocCache, USER_CACHE_MAX_ENTRIES)
 }
 
 function invalidateUserDocCache(docId: string) {
@@ -166,8 +177,9 @@ async function claimAutoReplyCooldown(
       }
     })
   } catch (e) {
-    console.error('[autoReply] cooldown transaction error:', e)
-    return true
+    // fail-closed：Firestore 故障時寧可這一輪不觸發，也不要讓冷卻全面失效造成大量重複觸發
+    console.error('[autoReply] cooldown transaction error (fail-closed):', e)
+    return false
   }
 
   if (shouldTrigger) {
@@ -225,11 +237,6 @@ function toConversationText(msg: messagingApi.Message): string {
   if (type === 'template') return String((msg as any).altText || '[模板訊息]').trim()
   if (type === 'flex') return String((msg as any).altText || '[Flex 訊息]').trim()
   return `[${String(type || 'message')}]`
-}
-
-async function saveOutgoingConversationMessages(userId: string, messages: messagingApi.Message[]): Promise<void> {
-  if (!Array.isArray(messages) || messages.length === 0) return
-  throw new Error(`[deprecated] saveOutgoingConversationMessages requires explicit workspaceId: ${userId} / ${messages.length}`)
 }
 
 function sanitizeForFirestore(value: any): any {
@@ -300,7 +307,7 @@ async function ensureUser(
       isBlocked: false,
     }
     await ref.set(newDoc)
-    userDocCache.set(docId, { data: newDoc, expires: Date.now() + USER_CACHE_TTL_MS })
+    setUserDocCache(docId, newDoc)
     return newDoc
   }
 
@@ -310,7 +317,7 @@ async function ensureUser(
     // Don't cache blocked users — they're edge cases and we want fresh state next time
     return data
   }
-  userDocCache.set(docId, { data, expires: Date.now() + USER_CACHE_TTL_MS })
+  setUserDocCache(docId, data)
   return data
 }
 
@@ -333,6 +340,40 @@ export async function handleFollowEvent(
   }
   catch (e) {
     console.error('[webhook] handleFollowEvent error:', e)
+  }
+}
+
+/**
+ * 原子性地把 leadClaim 從 claimed 轉成 applying（搶處理權）。
+ * 回傳 true = 搶到鎖可處理；false = 已被其他請求處理中／已處理，跳過。
+ * 處理中途當機會留下 applying 狀態：超過 2 分鐘視為 stale 可重搶；
+ * 使用者重新點活動連結時 /api/liff/claim 也會把狀態重設回 claimed。
+ */
+const CLAIM_APPLYING_STALE_MS = 2 * 60 * 1000
+
+async function claimLeadClaimForApply(
+  ref: FirebaseFirestore.DocumentReference,
+): Promise<boolean> {
+  const db = getDb()
+  try {
+    return await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref)
+      if (!snap.exists) return false
+      const data = snap.data() ?? {}
+      const status = String(data.status || '')
+      const applyingAtMs = (data.applyingAt as FirebaseFirestore.Timestamp | undefined)?.toMillis?.() ?? 0
+      const staleApplying = status === 'applying'
+        && applyingAtMs > 0
+        && (Date.now() - applyingAtMs) > CLAIM_APPLYING_STALE_MS
+      if (status !== 'claimed' && !staleApplying) return false
+      tx.update(ref, { status: 'applying', applyingAt: Timestamp.now() })
+      return true
+    })
+  }
+  catch (e) {
+    // 搶鎖失敗（Firestore 故障）不處理：claim 維持 claimed，下次 follow / apply 再試
+    console.error('[follow] claimLeadClaimForApply transaction error:', e)
+    return false
   }
 }
 
@@ -385,6 +426,15 @@ async function applyPendingClaims(
       console.warn('[follow] claim missing workspaceId, skipped:', doc.id)
       continue
     }
+
+    // 原子搶鎖：claimed → applying。follow webhook 與 /api/liff/apply 可能併發處理
+    // 同一張 claim，只有搶到鎖的一方執行貼標／推播，避免雙重套用。
+    const locked = await claimLeadClaimForApply(doc.ref)
+    if (!locked) {
+      console.log('[follow] claim already being applied elsewhere, skipped:', doc.id)
+      continue
+    }
+
     const { channelSecret } = await getLineWorkspaceCredentials(claimWorkspaceId)
 
     // 逾期檢查：僅舊 claim 含 expiresAt 時有效
@@ -2030,7 +2080,7 @@ async function sendScriptReply(
  * 訊息已經由腳本送出，這邊只負責 session state。
  */
 async function triggerHandoff(
-  _userAttributes: Record<string, string>,
+  userAttributes: Record<string, string>,
   lineUserId: string,
   workspaceId: string,
   sessionId: string | null,
@@ -2038,6 +2088,15 @@ async function triggerHandoff(
   _channelSecret: string,
   _alreadyReplied: boolean,
 ): Promise<void> {
+  // 通知值班客服（與 session 標記獨立，sessionId 缺失也照樣通知）
+  notifyHandoffToStaff({
+    workspaceId,
+    customerLineUserId: lineUserId,
+    customerName: userAttributes.displayName || lineUserId,
+    customerMessage: '',
+    reason: null,
+  }).catch(e => console.error('[script] notifyHandoffToStaff error:', e))
+
   if (!sessionId) return
   enterModule(sessionId, lineUserId, 'live_agent', SYSTEM_MODULE_IDS.live_agent, workspaceId)
     .catch(e => console.error('[script] enterModule(live_agent) error:', e))
@@ -2069,11 +2128,33 @@ async function tryAiFallback(params: {
   const settings = await getAiSettings(workspaceId).catch(() => null)
   if (!settings?.enabled) return
 
+  // AI 思考最壞 ~10 秒；先顯示「輸入中…」動畫給客人即時回饋（fire-and-forget，失敗不影響主流程）
+  showLoadingAnimation(lineUserId, workspaceId, 20).catch(() => {})
+
   const fsUserDocId = lineUserFirestoreDocId(lineUserId, workspaceId)
 
-  // 讀上一輪 aiMeta：用來判斷 followup 點選 & disambiguation cooldown
-  const convoSnap = await getDb().collection('conversations').doc(fsUserDocId).get().catch(() => null)
+  // 並行讀：上一輪 aiMeta（followup / disambiguation cooldown 判斷）+ 最近對話（多輪上下文）
+  const [convoSnap, historySnap] = await Promise.all([
+    getDb().collection('conversations').doc(fsUserDocId).get().catch(() => null),
+    getDb().collection('conversations').doc(fsUserDocId)
+      .collection('messages').orderBy('timestamp', 'desc').limit(8).get().catch(() => null),
+  ])
   const prevAiMeta = (convoSnap?.data() as any)?.aiMeta as AiConversationMeta | undefined
+
+  // 組裝最近對話（最舊在前）；排除剛存進去的本次訊息，最多帶 6 則
+  let history: AiChatTurn[] = (historySnap?.docs ?? [])
+    .map(d => d.data() as { direction?: string; text?: string })
+    .reverse()
+    .map(m => ({
+      role: m.direction === 'incoming' ? 'user' as const : 'bot' as const,
+      text: String(m.text || '').trim(),
+    }))
+    .filter(t => t.text)
+  const lastTurn = history[history.length - 1]
+  if (lastTurn && lastTurn.role === 'user' && lastTurn.text === textContent.trim()) {
+    history = history.slice(0, -1)
+  }
+  history = history.slice(-6)
   const lastDis = prevAiMeta?.lastDisambiguation ?? null
 
   // Followup：客人剛被反問過，這次訊息正好等於某個 option → 把該 option 當新 query 跑
@@ -2096,7 +2177,7 @@ async function tryAiFallback(params: {
 
   let result
   try {
-    result = await answerWithAi({ workspaceId, query, isFollowup, skipDisambiguation })
+    result = await answerWithAi({ workspaceId, query, isFollowup, skipDisambiguation, history })
   }
   catch (e) {
     console.error('[ai-fallback] answerWithAi failed:', e)
@@ -2196,6 +2277,15 @@ async function tryAiFallback(params: {
     enterModule(sessionId, lineUserId, 'live_agent', SYSTEM_MODULE_IDS.live_agent, workspaceId)
       .catch(e => console.error('[ai-fallback] enterModule(live_agent) error:', e))
   }
+
+  // 通知值班客服（fire-and-forget，內含節流與 enabled 判斷）
+  notifyHandoffToStaff({
+    workspaceId,
+    customerLineUserId: lineUserId,
+    customerName: userAttributes.displayName || lineUserId,
+    customerMessage: textContent,
+    reason: result.handoffReason,
+  }).catch(e => console.error('[ai-fallback] notifyHandoffToStaff error:', e))
 
   // 答題用的 suggestedReply：handoff 時若 AI 也有生內容（low_confidence 但有 answer），帶給真人客服參考
   const suggestedReply = result.decision === 'handoff' && result.answer.trim() ? result.answer : ''

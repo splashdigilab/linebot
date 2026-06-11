@@ -166,6 +166,63 @@
           </div>
         </div>
 
+        <!-- ── 轉真人通知 ─────────────────────── -->
+        <div class="message-card ai-section-card">
+          <div class="message-card-header">
+            <div class="card-header-main">
+              <span class="badge badge-green">🔔 轉真人通知</span>
+            </div>
+          </div>
+          <div class="card-section-stack">
+            <p class="ai-section-hint">
+              AI 或腳本把對話轉給真人時，用官方帳號推播 LINE 訊息提醒以下客服人員。
+              收通知的人必須已加這個官方帳號為好友；同一位客人 10 分鐘內只通知一次。
+            </p>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="啟用通知" tight />
+              <el-switch
+                v-model="form.handoffNotify.enabled"
+                active-text="啟用"
+                inactive-text="停用"
+              />
+            </div>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="通知對象（LINE userId，最多 10 位）" tight />
+              <div class="ai-tag-row">
+                <el-tag
+                  v-for="uid in form.handoffNotify.lineUserIds"
+                  :key="uid"
+                  closable
+                  class="ai-tag"
+                  @close="removeNotifyUser(uid)"
+                >
+                  {{ uid }}
+                </el-tag>
+                <el-input
+                  v-if="notifyInputVisible"
+                  ref="notifyInputEl"
+                  v-model="notifyInput"
+                  size="small"
+                  class="ai-tag-input"
+                  placeholder="Uxxxxxxxx…"
+                  @keydown.enter.prevent="commitNotifyUser"
+                  @blur="commitNotifyUser"
+                />
+                <el-button
+                  v-else
+                  size="small"
+                  plain
+                  :disabled="!form.handoffNotify.enabled || form.handoffNotify.lineUserIds.length >= 10"
+                  @click="showNotifyInput"
+                >
+                  ＋ 新增
+                </el-button>
+              </div>
+              <p class="ai-section-hint">可至「用戶」頁找到該客服人員（需先加官方帳號好友並傳過訊息），複製其 LINE userId（U 開頭）。</p>
+            </div>
+          </div>
+        </div>
+
         <!-- ── 反問澄清 ──────────────────────── -->
         <div class="message-card ai-section-card">
           <div class="message-card-header">
@@ -299,6 +356,7 @@ interface FormShape {
   replyMaxLen: number
   sensitiveTopics: string[]
   quota: { monthlyTokenCap: number; onExceed: AiSettingsDoc['quota']['onExceed'] }
+  handoffNotify: AiSettingsDoc['handoffNotify']
   disambiguation: AiSettingsDoc['disambiguation']
 }
 
@@ -313,6 +371,7 @@ function defaultForm(): FormShape {
     replyMaxLen: 300,
     sensitiveTopics: [],
     quota: { monthlyTokenCap: 1_000_000, onExceed: 'handoff_all' },
+    handoffNotify: { enabled: false, lineUserIds: [] },
     disambiguation: {
       enabled: true,
       top1Min: 0.65,
@@ -352,6 +411,28 @@ function removeSensitive(topic: string) {
   form.value.sensitiveTopics = form.value.sensitiveTopics.filter(t => t !== topic)
 }
 
+const notifyInput = ref('')
+const notifyInputVisible = ref(false)
+const notifyInputEl = ref<{ focus: () => void } | null>(null)
+
+function showNotifyInput() {
+  notifyInputVisible.value = true
+  nextTick(() => notifyInputEl.value?.focus())
+}
+
+function commitNotifyUser() {
+  const id = notifyInput.value.trim()
+  if (id && !form.value.handoffNotify.lineUserIds.includes(id) && form.value.handoffNotify.lineUserIds.length < 10) {
+    form.value.handoffNotify.lineUserIds = [...form.value.handoffNotify.lineUserIds, id]
+  }
+  notifyInput.value = ''
+  notifyInputVisible.value = false
+}
+
+function removeNotifyUser(uid: string) {
+  form.value.handoffNotify.lineUserIds = form.value.handoffNotify.lineUserIds.filter(u => u !== uid)
+}
+
 async function loadSettings(_resetOnly = false) {
   try {
     const data = await apiFetch<AiSettingsDoc>('/api/ai/settings')
@@ -365,6 +446,10 @@ async function loadSettings(_resetOnly = false) {
       replyMaxLen: data.replyMaxLen,
       sensitiveTopics: [...data.sensitiveTopics],
       quota: { ...data.quota },
+      handoffNotify: {
+        enabled: data.handoffNotify?.enabled === true,
+        lineUserIds: [...(data.handoffNotify?.lineUserIds ?? [])],
+      },
       disambiguation: { ...data.disambiguation },
     }
     markClean()

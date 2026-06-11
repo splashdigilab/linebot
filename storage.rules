@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// 上傳一律走後端 /api/upload（firebase-admin），client SDK 不直接存取 Storage。
+// 此 deny-all 與兩個專案（myfeel / splash）線上版本一致。
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
