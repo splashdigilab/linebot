@@ -123,7 +123,14 @@
               v-for="flow in flowsByFolder[folder.id] ?? []"
               :key="flow.id"
               class="flow-sidebar-row src-row--in-folder"
-              :class="{ 'flow-sidebar-row--dragging': draggedFlowId === flow.id }"
+              :class="{
+                'flow-sidebar-row--dragging': draggedFlowId === flow.id,
+                'flow-sidebar-row--drag-over': folderRowDragOverId === flow.id && draggedFlowId !== flow.id,
+              }"
+              @dragover.prevent="onFolderRowDragOver($event, folder.id, flow.id)"
+              @dragenter.prevent
+              @dragleave="onFolderRowDragLeave(flow.id)"
+              @drop.prevent="onFolderRowDrop(folder.id, flow.id)"
             >
               <span
                 v-if="canOperate"
@@ -1602,6 +1609,12 @@ async function onFlowListDrop(e: DragEvent, dropIndex: number) {
   const targetId = regularFlows.value[dropIndex]?.id
   if (!movedId || !targetId) return
 
+  await reorderRegularFlowById(movedId, targetId)
+}
+
+// 把 movedId 移到 targetId 的位置（全域 sortOrder；資料夾內排序也是走這套，
+// 因為 folder 分組只是依 folderId 過濾、順序仍由 sortOrder 決定）
+async function reorderRegularFlowById(movedId: string, targetId: string) {
   // 重排序要以完整清單為準：側邊欄是懶載入的，只動 visible 子集會讓
   // allFlows 被截斷、送出的 orderedIds 數量對不上後端而 400
   const previousFlows = [...allFlows.value]
@@ -1625,6 +1638,35 @@ async function onFlowListDrop(e: DragEvent, dropIndex: number) {
     allFlows.value = previousFlows
     showToast('排序儲存失敗', 'error')
   }
+}
+
+// ── 資料夾內卡片排序：拖到同資料夾的另一張卡上 ──────
+const folderRowDragOverId = ref<string | null>(null)
+
+function draggedFlowFolderId(): string | null {
+  if (!draggedFlowId.value) return null
+  const flow = flows.value.find(f => f.id === draggedFlowId.value) as any
+  return flow?.folderId ?? null
+}
+
+function onFolderRowDragOver(ev: DragEvent, folderId: string, flowId: string) {
+  // 只接「同資料夾內排序」；跨資料夾搬移仍走資料夾標頭 / 拖出 zone
+  if (!draggedFlowId.value || draggedFlowId.value === flowId) return
+  if (draggedFlowFolderId() !== folderId) return
+  folderRowDragOverId.value = flowId
+  if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'
+}
+function onFolderRowDragLeave(flowId: string) {
+  if (folderRowDragOverId.value === flowId) folderRowDragOverId.value = null
+}
+async function onFolderRowDrop(folderId: string, targetFlowId: string) {
+  const movedId = draggedFlowId.value
+  folderRowDragOverId.value = null
+  if (!canOperate.value) return
+  if (!movedId || movedId === targetFlowId) return
+  if (draggedFlowFolderId() !== folderId) return
+  draggedFlowId.value = null
+  await reorderRegularFlowById(movedId, targetFlowId)
 }
 
 // ── Select / Create ───────────────────────────────────
