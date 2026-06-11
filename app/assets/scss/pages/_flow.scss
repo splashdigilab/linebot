@@ -910,6 +910,22 @@
     outline-color: var(--color-line);
     border-color: var(--color-line);
   }
+  &--dragging {
+    opacity: 0.45;
+  }
+  &--reorder-over {
+    outline-color: var(--color-line);
+    border-color: var(--color-line);
+    outline-style: dashed;
+  }
+}
+.src-folder-drag-handle {
+  margin-right: 0.25rem;
+  cursor: grab;
+
+  &:active {
+    cursor: grabbing;
+  }
 }
 .src-folder-label {
   display: inline-flex;

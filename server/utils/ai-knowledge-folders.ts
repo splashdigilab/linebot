@@ -119,6 +119,30 @@ export async function renameFolder(
 }
 
 /**
+ * 重排資料夾：orderedIds 必須跟現有資料夾一一對應，order 直接寫成 index。
+ */
+export async function reorderFolders(
+  db: Firestore,
+  workspaceId: string,
+  orderedIds: string[],
+): Promise<void> {
+  const existing = await listFolders(db, workspaceId)
+  const existingIds = new Set(existing.map(f => f.id))
+  if (orderedIds.length !== existing.length || orderedIds.some(id => !existingIds.has(id))) {
+    throw createError({ statusCode: 400, statusMessage: '排序列表與資料夾數量不符' })
+  }
+
+  const batch = db.batch()
+  orderedIds.forEach((id, index) => {
+    batch.update(db.collection(KNOWLEDGE_FOLDERS_COLLECTION).doc(id), {
+      order: index,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+  })
+  await batch.commit()
+}
+
+/**
  * 刪除 folder：先把底下 source 的 folderId 設成 null（變未分類），再刪 folder。
  * 不刪 sources / chunks 本身。
  */

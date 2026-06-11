@@ -93,12 +93,24 @@
         <template v-for="folder in folders" :key="folder.id">
           <div
             class="src-folder-header"
-            :class="{ 'src-folder-header--drop': dragOverFolderId === folder.id }"
+            :class="{
+              'src-folder-header--drop': dragOverFolderId === folder.id,
+              'src-folder-header--dragging': draggedFolderId === folder.id,
+              'src-folder-header--reorder-over': folderReorderOverId === folder.id && draggedFolderId !== folder.id,
+            }"
             @click="toggleFolder(folder.id)"
             @dragover.prevent="onFolderDragOver(folder.id, $event)"
             @dragleave="onFolderDragLeave(folder.id)"
             @drop.prevent="onFolderDrop(folder.id)"
           >
+            <span
+              class="drag-handle flow-sidebar-drag-handle src-folder-drag-handle"
+              draggable="true"
+              aria-label="拖曳排序資料夾"
+              @click.stop
+              @dragstart.stop="onFolderHeaderDragStart($event, folder.id)"
+              @dragend.stop="onFolderHeaderDragEnd"
+            >⠿</span>
             <span class="src-folder-label">
               <span class="src-folder-arrow">{{ isExpanded(folder.id) ? '▾' : '▸' }}</span>
               📂 {{ folder.name }}
@@ -650,25 +662,85 @@ const isDraggingFromFolder = computed(() => {
 })
 
 function onSourceDragStart(srcId: string, ev: DragEvent) {
-  draggedSourceId.value = srcId
   if (ev.dataTransfer) {
     ev.dataTransfer.effectAllowed = 'move'
     ev.dataTransfer.setData('text/plain', srcId)
   }
+  // dragstart 的同一個 frame 不能動到 DOM（「拖出資料夾」zone 是 v-if，
+  // 立刻插入會讓 Chrome 直接取消這次拖曳），所以延後一個 frame 再設
+  requestAnimationFrame(() => {
+    draggedSourceId.value = srcId
+  })
 }
 function onSourceDragEnd() {
   draggedSourceId.value = null
   dragOverFolderId.value = null
 }
+// ── Folder header 拖曳排序（資料夾之間互換順序）──────
+const draggedFolderId = ref<string | null>(null)
+const folderReorderOverId = ref<string | null>(null)
+
+function onFolderHeaderDragStart(e: DragEvent, folderId: string) {
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', folderId)
+  }
+  // 同 onSourceDragStart：state 延後一個 frame，避免 dragstart 當下重繪取消拖曳
+  requestAnimationFrame(() => {
+    draggedFolderId.value = folderId
+  })
+}
+function onFolderHeaderDragEnd() {
+  draggedFolderId.value = null
+  folderReorderOverId.value = null
+}
+async function reorderFoldersTo(targetFolderId: string) {
+  const fromId = draggedFolderId.value
+  draggedFolderId.value = null
+  folderReorderOverId.value = null
+  if (!fromId || fromId === targetFolderId) return
+  const next = [...folders.value]
+  const fromIndex = next.findIndex(f => f.id === fromId)
+  const toIndex = next.findIndex(f => f.id === targetFolderId)
+  if (fromIndex < 0 || toIndex < 0) return
+  const previous = folders.value
+  const [moved] = next.splice(fromIndex, 1)
+  next.splice(toIndex, 0, moved!)
+  folders.value = next
+  try {
+    await apiFetch('/api/ai/folders/reorder', {
+      method: 'POST',
+      body: { orderedIds: next.map(f => f.id) },
+    })
+  }
+  catch (err: any) {
+    folders.value = previous
+    showToast(err?.statusMessage || '資料夾排序儲存失敗', 'error')
+  }
+}
+
 function onFolderDragOver(folderId: string, ev: DragEvent) {
+  if (draggedFolderId.value) {
+    // 拖的是資料夾 → 在別的資料夾標頭上顯示「插入位置」
+    if (folderId !== '__none__' && folderId !== draggedFolderId.value) {
+      folderReorderOverId.value = folderId
+      if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'
+    }
+    return
+  }
   if (!draggedSourceId.value) return
   dragOverFolderId.value = folderId
   if (ev.dataTransfer) ev.dataTransfer.dropEffect = 'move'
 }
 function onFolderDragLeave(folderId: string) {
   if (dragOverFolderId.value === folderId) dragOverFolderId.value = null
+  if (folderReorderOverId.value === folderId) folderReorderOverId.value = null
 }
 async function onFolderDrop(folderId: string | null) {
+  if (draggedFolderId.value) {
+    if (folderId) await reorderFoldersTo(folderId)
+    return
+  }
   const srcId = draggedSourceId.value
   dragOverFolderId.value = null
   draggedSourceId.value = null

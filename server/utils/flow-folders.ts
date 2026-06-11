@@ -115,6 +115,30 @@ export async function renameFlowFolder(
 }
 
 /**
+ * 重排資料夾：orderedIds 必須跟現有資料夾一一對應，order 直接寫成 index。
+ */
+export async function reorderFlowFolders(
+  db: Firestore,
+  workspaceId: string,
+  orderedIds: string[],
+): Promise<void> {
+  const existing = await listFlowFolders(db, workspaceId)
+  const existingIds = new Set(existing.map(f => f.id))
+  if (orderedIds.length !== existing.length || orderedIds.some(id => !existingIds.has(id))) {
+    throw createError({ statusCode: 400, statusMessage: '排序列表與資料夾數量不符' })
+  }
+
+  const batch = db.batch()
+  orderedIds.forEach((id, index) => {
+    batch.update(db.collection(FLOW_FOLDERS_COLLECTION).doc(id), {
+      order: index,
+      updatedAt: FieldValue.serverTimestamp(),
+    })
+  })
+  await batch.commit()
+}
+
+/**
  * 刪 folder：把底下 flows 的 folderId 改成 null，再刪 folder。
  * 不刪 flows 本身。
  */

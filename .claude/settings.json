@@ -69,7 +69,9 @@
       "Bash(sed -n '278,288p' \"app/pages/admin/[workspaceId]/tags.vue\")",
       "Bash(sed -n '1,12p' app/composables/useAdminSidebarInfiniteList.ts)",
       "Bash(sed -n '218,232p' \"app/pages/admin/[workspaceId]/tags.vue\")",
-      "Bash(echo \"typecheck errors: $?\")"
+      "Bash(echo \"typecheck errors: $?\")",
+      "Bash(echo \"exit=$?\")",
+      "Bash(git -C /Users/kevin/Documents/Github/linebot status --short)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",
