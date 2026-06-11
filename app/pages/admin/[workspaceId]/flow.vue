@@ -1529,24 +1529,20 @@ async function onFlowListDrop(e: DragEvent, dropIndex: number) {
   const targetId = regularFlows.value[dropIndex]?.id
   if (!movedId || !targetId) return
 
+  // 重排序要以完整清單為準：側邊欄是懶載入的，只動 visible 子集會讓
+  // allFlows 被截斷、送出的 orderedIds 數量對不上後端而 400
   const previousFlows = [...allFlows.value]
-  const visibleNext = [...regularFlows.value]
-  const [movedVisible] = visibleNext.splice(fromIndex, 1)
-  visibleNext.splice(dropIndex, 0, movedVisible)
-  setRegularFlowsOrder(visibleNext)
+  const allRegular = allFlows.value.filter((f) => !f.isSystem)
+  const fullFromIndex = allRegular.findIndex((f) => f.id === movedId)
+  const fullDropIndex = allRegular.findIndex((f) => f.id === targetId)
+  if (fullFromIndex < 0 || fullDropIndex < 0) return
+
+  const nextRegular = [...allRegular]
+  const [moved] = nextRegular.splice(fullFromIndex, 1)
+  nextRegular.splice(fullDropIndex, 0, moved)
+  setRegularFlowsOrder(nextRegular)
 
   try {
-    const allRegular = allFlows.value.filter((f) => !f.isSystem)
-    const fullFromIndex = allRegular.findIndex((f) => f.id === movedId)
-    const fullDropIndex = allRegular.findIndex((f) => f.id === targetId)
-    if (fullFromIndex < 0 || fullDropIndex < 0) {
-      throw new Error('flow reorder index out of range')
-    }
-
-    const nextRegular = [...allRegular]
-    const [moved] = nextRegular.splice(fullFromIndex, 1)
-    nextRegular.splice(fullDropIndex, 0, moved)
-
     await apiFetch('/api/flow/reorder', {
       method: 'POST',
       body: { orderedIds: nextRegular.map((f) => f.id) },

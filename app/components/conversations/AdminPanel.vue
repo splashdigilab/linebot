@@ -125,6 +125,7 @@
     <!-- ── Editor Body ── -->
     <template #editor-body>
       <ConversationsAiContextBanner
+        v-if="isSuperAdmin"
         :user-id="selectedUserId"
         :refresh-key="aiContextRefreshKey"
         :api-fetch="apiFetch"
@@ -954,6 +955,8 @@ const activeTab = ref<TabValue>('all')
 const inputText = ref('')
 const searchText = ref('')
 const aiContextRefreshKey = ref(0)
+// AI 相關功能暫時只開放 super admin（isSuperAdmin 由 default layout 載入時填好）
+const { isSuperAdmin } = useSuperAdmin()
 
 function applyAiDraft(text: string) {
   inputText.value = String(text || '')

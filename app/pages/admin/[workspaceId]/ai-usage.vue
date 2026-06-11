@@ -134,7 +134,7 @@
 <script setup lang="ts">
 import { HANDOFF_REASON_LABELS, type HandoffReason } from '~~/shared/types/ai-knowledge'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
 
 const { apiFetch, workspaceId } = useWorkspace()
 const router = useRouter()

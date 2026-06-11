@@ -121,17 +121,23 @@ const currentRoleLabel = computed(() => currentRole.value ? (ROLE_LABELS[current
 const navItems = computed(() => {
   const wid = workspaceId.value
   if (!wid) return []
+  // AI 相關功能暫時只開放 super admin（之後會開放，先隱藏入口）
+  const aiItems = isSuperAdmin.value
+    ? [
+        { to: `/admin/${wid}/knowledge/sources`, icon: '📚', label: '知識庫' },
+        { to: `/admin/${wid}/ai-scripts`, icon: '🧩', label: 'AI 腳本' },
+        { to: `/admin/${wid}/ai-playground`, icon: '🎮', label: 'AI Playground' },
+        { to: `/admin/${wid}/ai-usage`, icon: '📊', label: 'AI 用量' },
+        { to: `/admin/${wid}/ai-settings`, icon: '⚙️', label: 'AI 設定' },
+      ]
+    : []
   return [
     { to: `/admin/${wid}/conversation-stats`, icon: '📊', label: '對話統計' },
     { to: `/admin/${wid}/conversations`, icon: '💬', label: '對話' },
     { to: `/admin/${wid}/flow`, icon: '🤖', label: '機器人模組' },
     { to: `/admin/${wid}/richmenu`, icon: '🗂️', label: '圖文選單' },
     { to: `/admin/${wid}/auto-reply`, icon: '⚡', label: '自動回覆' },
-    { to: `/admin/${wid}/knowledge/sources`, icon: '📚', label: '知識庫' },
-    { to: `/admin/${wid}/ai-scripts`, icon: '🧩', label: 'AI 腳本' },
-    { to: `/admin/${wid}/ai-playground`, icon: '🎮', label: 'AI Playground' },
-    { to: `/admin/${wid}/ai-usage`, icon: '📊', label: 'AI 用量' },
-    { to: `/admin/${wid}/ai-settings`, icon: '⚙️', label: 'AI 設定' },
+    ...aiItems,
     { to: `/admin/${wid}/support-presets`, icon: '📦', label: '客服預存' },
     { to: `/admin/${wid}/tags`, icon: '🏷️', label: '標籤管理' },
     { to: `/admin/${wid}/campaigns`, icon: '📋', label: '活動標籤' },

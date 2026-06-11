@@ -189,7 +189,7 @@ import type {
 } from '~~/shared/types/ai-script'
 import { DEFAULT_COLLECT_EXPIRE_MS, DEFAULT_SCRIPT_PRIORITY } from '~~/shared/types/ai-script'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
 
 const { apiFetch } = useWorkspace()
 const { showToast } = useAdminToast()

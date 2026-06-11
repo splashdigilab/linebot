@@ -520,7 +520,7 @@
 <script setup lang="ts">
 import { ElMessageBox } from 'element-plus'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
 
 type SourceType = 'file' | 'url' | 'manual'
 type SourceStatus = 'fetching' | 'splitting' | 'ready' | 'failed'

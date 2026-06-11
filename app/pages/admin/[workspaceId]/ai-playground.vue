@@ -204,7 +204,7 @@ import {
   type AiSettingsDoc,
 } from '~~/shared/types/ai-knowledge'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
 
 const { apiFetch, workspaceId } = useWorkspace()
 const router = useRouter()

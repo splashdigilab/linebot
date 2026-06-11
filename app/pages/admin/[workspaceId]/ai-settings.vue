@@ -341,7 +341,7 @@
 <script setup lang="ts">
 import type { AiSettingsDoc } from '~~/shared/types/ai-knowledge'
 
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
 
 const { apiFetch } = useWorkspace()
 const { showToast } = useAdminToast()
