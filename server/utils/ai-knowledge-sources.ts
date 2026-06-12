@@ -5,7 +5,7 @@
  * chunk.sourceId 指回 source.id。手打單卡（type='manual'）也可有 source 把它們群組起來。
  */
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
-import { KNOWLEDGE_CHUNKS_COLLECTION } from './ai-knowledge-chunks'
+import { invalidateTagIndexCache, KNOWLEDGE_CHUNKS_COLLECTION } from './ai-knowledge-chunks'
 import type {
   KnowledgeSourceDoc,
   KnowledgeSourceStatus,
@@ -150,8 +150,11 @@ export async function deleteSourceWithChunks(
 
   const batch = db.batch()
   for (const doc of chunksSnap.docs) batch.delete(doc.ref)
+  // 變動偵測的全文暫存（subcollection）也一併清掉，避免孤兒 doc
+  batch.delete(db.collection(KNOWLEDGE_SOURCES_COLLECTION).doc(sourceId).collection('cache').doc('extracted'))
   batch.delete(db.collection(KNOWLEDGE_SOURCES_COLLECTION).doc(sourceId))
   await batch.commit()
+  invalidateTagIndexCache(workspaceId)
 
   return { chunksDeleted: chunksSnap.size }
 }

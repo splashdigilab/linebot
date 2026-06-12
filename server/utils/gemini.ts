@@ -157,6 +157,12 @@ export interface GenerateOptions {
   responseMimeType?: 'text/plain' | 'application/json'
   /** 預設用 gemini-2.5-flash（aiSettings 的 answerModel；切卡不另外傳） */
   model?: 'gemini-2.5-flash' | 'gemini-2.5-flash-lite'
+  /**
+   * Gemini 2.5 系列的 thinking token 會計入 maxOutputTokens。
+   * 短回覆 + 緊的 output cap 時務必設 0，否則 thinking 吃掉配額會把輸出（尤其 JSON）截斷。
+   * undefined = 交給模型預設（dynamic thinking）。
+   */
+  thinkingBudget?: number
 }
 
 interface GenerateResponse {
@@ -185,6 +191,7 @@ async function doGenerate(prompt: string, opts: GenerateOptions, model: NonNulla
       temperature: opts.temperature ?? 0.4,
       maxOutputTokens: opts.maxOutputTokens ?? 2048,
       ...(opts.responseMimeType ? { responseMimeType: opts.responseMimeType } : {}),
+      ...(opts.thinkingBudget !== undefined ? { thinkingConfig: { thinkingBudget: opts.thinkingBudget } } : {}),
     },
   }
   if (opts.systemInstruction) {

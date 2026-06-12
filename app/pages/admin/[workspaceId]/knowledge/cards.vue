@@ -290,7 +290,7 @@ const selectedId = ref<string | null>(null)
 const isCreating = ref(false)
 const { showToast } = useAdminToast()
 
-const defaultForm = () => ({ title: '', content: '', tags: [] as string[] })
+const defaultForm = () => ({ title: '', content: '', tags: [] as string[], questions: [] as string[] })
 const form = ref(defaultForm())
 const { markClean, confirmLeaveIfDirty } = useUnsavedChanges({
   getSnapshot: () => form.value,
@@ -416,6 +416,7 @@ function selectChunk(chunk: ChunkRow, opts?: { skipDiscardConfirm?: boolean }) {
     title: chunk.title ?? '',
     content: chunk.content ?? '',
     tags: Array.isArray(chunk.tags) ? [...chunk.tags] : [],
+    questions: Array.isArray((chunk as any).questions) ? [...(chunk as any).questions] : [],
   }
   markClean()
 }
@@ -452,7 +453,7 @@ async function submitForm() {
 
   saving.value = true
   try {
-    const body = { title, content, tags: form.value.tags }
+    const body = { title, content, tags: form.value.tags, questions: form.value.questions }
     if (isCreating.value) {
       const res = await apiFetch<{ id: string; status: KnowledgeChunkStatus; failureReason?: string }>(
         '/api/ai/knowledge/create',
@@ -530,7 +531,7 @@ async function normalizeContent() {
   if (!original) return
   normalizing.value = true
   try {
-    const res = await apiFetch<{ title: string; content: string; tags: string[] }>(
+    const res = await apiFetch<{ title: string; content: string; tags: string[]; questions?: string[] }>(
       '/api/ai/knowledge/normalize',
       {
         method: 'POST',
@@ -544,6 +545,7 @@ async function normalizeContent() {
     form.value.title = res.title || form.value.title
     form.value.content = res.content
     form.value.tags = res.tags
+    if (res.questions?.length) form.value.questions = res.questions
     showToast('已整理 — 記得儲存 ✨', 'success')
   }
   catch (err: any) {

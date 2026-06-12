@@ -29,8 +29,19 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // ── 1. 重新抓 URL ──────────────────────────────────────
-  const extracted = await extractUrlText(source.data.url)
+  // ── 1. 取最新內容：優先用變動偵測任務暫存的全文（hash 對得上才用），否則重抓 ──
+  let extracted: { text: string; rawLength: number }
+  const cacheSnap = await db.collection('knowledgeSources').doc(sourceId)
+    .collection('cache').doc('extracted')
+    .get()
+    .catch(() => null)
+  const cache = cacheSnap?.data() as { text?: string; hash?: string; rawLength?: number } | undefined
+  if (cache?.text && cache.hash && cache.hash === source.data.contentHash) {
+    extracted = { text: cache.text, rawLength: Number(cache.rawLength ?? cache.text.length) }
+  }
+  else {
+    extracted = await extractUrlText(source.data.url)
+  }
   if (!extracted.text) {
     throw createError({ statusCode: 502, statusMessage: '抓到網頁但內容為空' })
   }
@@ -39,7 +50,12 @@ export default defineEventHandler(async (event) => {
   const { chunks: newChunks, inputTokens, outputTokens } = await chunkTextWithLlm(extracted.text, {
     hint: source.data.name,
   })
-  await recordAiUsage(workspaceId, { inputTokens, outputTokens }).catch(() => {})
+  await recordAiUsage(workspaceId, {
+    inputTokens,
+    outputTokens,
+    importInputTokens: inputTokens,
+    importOutputTokens: outputTokens,
+  }).catch(() => {})
 
   // ── 3. 拉舊 chunks + 算 diff ──────────────────────────
   const oldChunks = await loadOldChunksForDiff(db, workspaceId, sourceId)

@@ -30,9 +30,13 @@ export default defineEventHandler(async (event) => {
     answered: 0,
     handoffs: 0,
     disambiguations: 0,
+    answeredThenHandoffs: 0,
+    answeredThenHandoffRate: 0,
     inputTokens: 0,
     outputTokens: 0,
     embeddingTokens: 0,
+    importInputTokens: 0,
+    importOutputTokens: 0,
     autoReplyRate: 0,
     handoffRate: 0,
     disambiguationRate: 0,
@@ -46,9 +50,12 @@ export default defineEventHandler(async (event) => {
   const answered = Number(data.answered ?? 0)
   const handoffs = Number(data.handoffs ?? 0)
   const disambiguations = Number(data.disambiguations ?? 0)
+  const answeredThenHandoffs = Number(data.answeredThenHandoffs ?? 0)
   const inputTokens = Number(data.inputTokens ?? 0)
   const outputTokens = Number(data.outputTokens ?? 0)
   const embeddingTokens = Number(data.embeddingTokens ?? 0)
+  const importInputTokens = Number(data.importInputTokens ?? 0)
+  const importOutputTokens = Number(data.importOutputTokens ?? 0)
 
   const cost
     = (inputTokens / 1_000_000) * GEMINI_FLASH_INPUT_USD_PER_M
@@ -61,9 +68,14 @@ export default defineEventHandler(async (event) => {
     answered,
     handoffs,
     disambiguations,
+    answeredThenHandoffs,
+    // 品質 proxy：成功回答之中有多少比例在 30 分鐘內又被轉真人（越低越好）
+    answeredThenHandoffRate: answered ? answeredThenHandoffs / answered : 0,
     inputTokens,
     outputTokens,
     embeddingTokens,
+    importInputTokens,
+    importOutputTokens,
     autoReplyRate: invocations ? answered / invocations : 0,
     handoffRate: invocations ? handoffs / invocations : 0,
     disambiguationRate: invocations ? disambiguations / invocations : 0,

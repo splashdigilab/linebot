@@ -14,7 +14,8 @@ const KNOWLEDGE_SOURCES_COLLECTION = 'knowledgeSources'
 /** 同時跑幾張卡的 embedding。Gemini 免費層 RPM 15、付費層 1000+，5 算保守 */
 const EMBED_CONCURRENCY = 5
 
-const MAX_BULK_CHUNKS = 50
+// 分段切卡（大型目錄）單次可產出超過 50 張；150 張 × ~300ms embed / 併發 5 ≈ 9 秒，仍在請求時限內
+const MAX_BULK_CHUNKS = 150
 
 /**
  * POST /api/ai/knowledge/bulk-create

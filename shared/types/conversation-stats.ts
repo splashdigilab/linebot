@@ -11,6 +11,8 @@ export type ConversationEventType =
   | 'entered_module'
   | 'handoff_request'
   | 'human_first_reply'
+  /** 真人把對話交還機器人（手動按鈕或閒置自動交還），bot/AI 恢復接手 */
+  | 'returned_to_bot'
   | 'conversation_closed'
 
 export type TrendGranularity = 'day' | 'week' | 'month'
@@ -29,6 +31,10 @@ export interface ConversationSessionDoc {
   hasHandoff: boolean
   handoffRequestedAt: FirebaseFirestore.Timestamp | null
   humanFirstRepliedAt: FirebaseFirestore.Timestamp | null
+  /** 真人最近一次回覆時間；閒置自動交還機器人的判斷基準（舊 session 可能沒有此欄位） */
+  humanLastRepliedAt?: FirebaseFirestore.Timestamp | null
+  /** SLA 提醒已發送的時間（每場會話只提醒一次） */
+  slaRemindedAt?: FirebaseFirestore.Timestamp | null
 }
 
 export interface ConversationEventDoc {

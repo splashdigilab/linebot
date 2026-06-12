@@ -18,6 +18,7 @@ import {
   DEFAULT_DISAMBIGUATION_TOP1_MAX,
   DEFAULT_DISAMBIGUATION_TOP1_MIN,
   DEFAULT_GROUNDING_SIMILARITY_THRESHOLD,
+  DEFAULT_HANDBACK_IDLE_MINUTES,
   DEFAULT_MONTHLY_TOKEN_CAP,
   DEFAULT_REPLY_MAX_LEN,
   DEFAULT_SENSITIVE_TOPICS,
@@ -83,6 +84,7 @@ export function normalizeAiSettings(raw: any): AiSettingsDoc {
 
   return {
     enabled: raw?.enabled === true,
+    replyMode: raw?.replyMode === 'draft' ? 'draft' : 'auto',
     answerModel,
     embeddingModel,
     confidenceThreshold: clampNumber(raw?.confidenceThreshold, 0, 1, DEFAULT_CONFIDENCE_THRESHOLD),
@@ -99,7 +101,9 @@ export function normalizeAiSettings(raw: any): AiSettingsDoc {
       lineUserIds: Array.isArray(raw?.handoffNotify?.lineUserIds)
         ? raw.handoffNotify.lineUserIds.map((v: unknown) => String(v).trim()).filter(Boolean).slice(0, 10)
         : [],
+      slaRemindMinutes: Math.round(clampNumber(raw?.handoffNotify?.slaRemindMinutes, 0, 1440, 15)),
     },
+    handbackIdleMinutes: Math.round(clampNumber(raw?.handbackIdleMinutes, 0, 1440, DEFAULT_HANDBACK_IDLE_MINUTES)),
     disambiguation: (() => {
       let top1Min = clampNumber(raw?.disambiguation?.top1Min, 0, 1, DEFAULT_DISAMBIGUATION_TOP1_MIN)
       let top1Max = clampNumber(raw?.disambiguation?.top1Max, 0, 1, DEFAULT_DISAMBIGUATION_TOP1_MAX)

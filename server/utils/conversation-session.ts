@@ -329,6 +329,7 @@ export async function recordHumanFirstReply(sessionId: string, userId: string): 
 
   await sessionRef.update({
     humanFirstRepliedAt: FieldValue.serverTimestamp(),
+    humanLastRepliedAt: FieldValue.serverTimestamp(),
     status: 'human_handling' as ConversationStatus,
     currentHandler: 'human' as InitialHandler,
     currentModuleType: 'live_agent' as ModuleType,
@@ -336,6 +337,34 @@ export async function recordHumanFirstReply(sessionId: string, userId: string): 
   })
   _updateSessionStatusCache(sessionId, 'human_handling')
   await recordConversationEvent(sessionId, userId, 'human_first_reply')
+}
+
+/**
+ * 把 pending_human / human_handling 的會話交還機器人，bot/AI 恢復接手後續訊息。
+ * 觸發來源：後台「交還機器人」按鈕，或 auto-handback 排程（真人閒置過久）。
+ * 回傳 false = session 不存在或目前狀態不可交還（已結束 / 本來就是 bot）。
+ */
+export async function handBackSessionToBot(
+  sessionId: string,
+  userId: string,
+): Promise<boolean> {
+  const db = getDb()
+  const sessionRef = db.collection('conversationSessions').doc(sessionId)
+  const sessionSnap = await sessionRef.get()
+  if (!sessionSnap.exists) return false
+
+  const session = sessionSnap.data() as any
+  if (session.status !== 'pending_human' && session.status !== 'human_handling') return false
+
+  await sessionRef.update({
+    status: 'bot_handling' as ConversationStatus,
+    currentHandler: 'bot' as InitialHandler,
+    currentModuleType: 'bot_flow' as ModuleType,
+    lastActivityAt: FieldValue.serverTimestamp(),
+  })
+  _updateSessionStatusCache(sessionId, 'bot_handling')
+  await recordConversationEvent(sessionId, lineUserIdFromFirestoreDocId(userId), 'returned_to_bot')
+  return true
 }
 
 /**
@@ -373,21 +402,32 @@ export async function closeConversationSession(sessionId: string, userId: string
 export async function shouldSuppressInboundBotAutomationForSession(
   sessionId: string | null | undefined,
 ): Promise<boolean> {
-  if (!sessionId) return false
+  const status = await getSessionStatusCached(sessionId)
+  return status === 'pending_human' || status === 'human_handling'
+}
+
+/**
+ * 取得 session status（走同一份 30 秒 cache）。
+ * 給「等待真人期間的輕量 ack」這類需要區分 pending_human / human_handling 的 caller 用。
+ */
+export async function getSessionStatusCached(
+  sessionId: string | null | undefined,
+): Promise<ConversationStatus | null> {
+  if (!sessionId) return null
 
   // Use cached status to avoid a redundant DB read (session was just read in ensureConversationSession)
   const now = Date.now()
   const cached = sessionStatusById.get(sessionId)
   if (cached && now - cached.cachedAt < SESSION_CACHE_TTL_MS) {
-    return cached.status === 'pending_human' || cached.status === 'human_handling'
+    return cached.status
   }
 
   const db = getDb()
   const snap = await db.collection('conversationSessions').doc(sessionId).get()
-  if (!snap.exists) return false
+  if (!snap.exists) return null
   const status = snap.data()?.status as ConversationStatus | undefined
   if (status) sessionStatusById.set(sessionId, { status, cachedAt: now })
-  return status === 'pending_human' || status === 'human_handling'
+  return status ?? null
 }
 
 export async function onHumanOutgoingMessage(userId: string, workspaceId: string): Promise<void> {
@@ -406,6 +446,9 @@ export async function onHumanOutgoingMessage(userId: string, workspaceId: string
   } else {
     await db.collection('conversationSessions').doc(sessionId).update({
       lastActivityAt: FieldValue.serverTimestamp(),
+      // 與 lastActivityAt 分開記：lastActivityAt 客人傳訊也會動，
+      // auto-handback 要的是「真人最後一次回覆」的時間
+      humanLastRepliedAt: FieldValue.serverTimestamp(),
     })
   }
 }

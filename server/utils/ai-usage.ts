@@ -29,6 +29,14 @@ export interface UsageDelta {
   answered?: number
   handoffs?: number
   disambiguations?: number
+  /**
+   * 匯入 / 整理（切卡、normalize）的 token 分項。**同時也要計入 inputTokens/outputTokens**
+   * （quota 以總量計），這兩個欄位只是讓報表能區分「答題」與「匯入」的成本。
+   */
+  importInputTokens?: number
+  importOutputTokens?: number
+  /** AI answered 後 30 分鐘內客人又被轉真人 — 品質 proxy（回答沒解決問題） */
+  answeredThenHandoffs?: number
 }
 
 /**
@@ -53,6 +61,9 @@ export async function recordAiUsage(
   if (delta.answered) updates.answered = FieldValue.increment(delta.answered)
   if (delta.handoffs) updates.handoffs = FieldValue.increment(delta.handoffs)
   if (delta.disambiguations) updates.disambiguations = FieldValue.increment(delta.disambiguations)
+  if (delta.importInputTokens) updates.importInputTokens = FieldValue.increment(delta.importInputTokens)
+  if (delta.importOutputTokens) updates.importOutputTokens = FieldValue.increment(delta.importOutputTokens)
+  if (delta.answeredThenHandoffs) updates.answeredThenHandoffs = FieldValue.increment(delta.answeredThenHandoffs)
 
   try {
     await ref.set(updates, { merge: true })

@@ -18,8 +18,8 @@
  *   7. confidence：使用 top-1 similarity 作為信心；< confidenceThreshold → handoff: low_confidence
  *   8. 否則 → answered，回傳 answer + sources
  */
-import { searchSimilarChunks, type SimilarChunk } from './ai-knowledge-chunks'
-import { embedQuery, estimateTokens, generateJson, generateText } from './gemini'
+import { searchChunksByIdentifierTag, searchSimilarChunks, type SimilarChunk } from './ai-knowledge-chunks'
+import { embedQuery, estimateTokens, generateJson } from './gemini'
 import { getAiSettings, getGroundingThreshold } from './ai-settings'
 import { getCurrentMonthTokens, recordAiUsage } from './ai-usage'
 import { getDb } from './firebase'
@@ -38,6 +38,12 @@ export interface AiChatTurn {
   role: 'user' | 'bot'
   text: string
 }
+
+/**
+ * 進 prompt 的單卡內容上限。top-K 全文最壞 ~25k 字只為生 300 字回答，
+ * 大多是浪費的 input token；卡片重點都在前段（「重點：」行 + 前幾句）。
+ */
+const CONTEXT_CARD_MAX_CHARS = 800
 
 export interface AnswerInput {
   workspaceId: string
@@ -137,6 +143,27 @@ export function dedupeBySource(chunks: SimilarChunk[]): SimilarChunk[] {
 }
 
 /**
+ * 跨來源重複卡去重：同一份內容被兩個來源各匯入一次時，兩張卡相似度幾乎相等，
+ * 會誤觸 disambiguation（top1−top2 < spread）反問客人「你要 A 還是 A？」。
+ * 標題或內容正規化後相同即視為重複，保留排前面（分數較高）那張。
+ */
+export function dedupeNearIdentical(chunks: SimilarChunk[]): SimilarChunk[] {
+  const norm = (s: string) => s.replace(/\s+/g, '').toLowerCase()
+  const seenTitles = new Set<string>()
+  const seenContents = new Set<string>()
+  const out: SimilarChunk[] = []
+  for (const c of chunks) {
+    const t = norm(c.title)
+    const body = norm(c.content)
+    if ((t && seenTitles.has(t)) || (body && seenContents.has(body))) continue
+    if (t) seenTitles.add(t)
+    if (body) seenContents.add(body)
+    out.push(c)
+  }
+  return out
+}
+
+/**
  * 判斷是否進入 disambiguation 分支。
  * 條件：top-1 ∈ [top1Min, top1Max)，(top1 − top2) < maxSpread，dedupe 後至少 2 張。
  */
@@ -192,7 +219,6 @@ async function generateDisambiguation(
   candidates: SimilarChunk[],
   query: string,
   settings: AiSettingsDoc,
-  answerModel: AiSettingsDoc['answerModel'],
 ): Promise<{ payload: DisambiguationPayload; inputTokens: number; outputTokens: number } | null> {
   const titlesList = candidates.map((c, i) => `${i + 1}. ${c.title}`).join('\n')
 
@@ -206,44 +232,59 @@ async function generateDisambiguation(
     '【客人提問】',
     query,
     '',
-    '回傳 JSON：{ "clarification": string, "optionTitles": string[] }',
+    '回傳 JSON：{ "clarification": string, "options": [{ "title": string, "label": string }] }',
     '',
     '【clarification 規則】',
     `- 控制在 50 字內、自然口語、不要疊敬語（不要「您好」「請問」開頭）。`,
     `- 只能描述「客人有哪些選項可選」，不要捏造客人沒提過的細節，不要報品號 / 編號。`,
     `- 不要直接列出全部選項名稱，按鈕自會顯示；只需引導客人做選擇即可。`,
     '',
-    '【optionTitles 規則】',
-    `- 最多 ${settings.disambiguation.maxOptions} 個。`,
-    `- 必須是上方候選清單裡的「完整原文標題」（不可改寫、不可截斷、不可翻譯）。`,
-    `- 順序依與客人問題的相關度由高到低排。`,
+    '【options 規則】',
+    `- 最多 ${settings.disambiguation.maxOptions} 個，順序依與客人問題的相關度由高到低排。`,
+    `- title：必須是上方候選清單裡的「完整原文標題」（不可改寫、不可截斷、不可翻譯）。`,
+    `- label：給按鈕顯示的短名稱，**12 字以內**，保留最能區分選項的字眼（去掉品號、括號附註）。`,
   ].join('\n')
 
   try {
-    const res = await generateJson<{ clarification?: unknown; optionTitles?: unknown }>(prompt, {
+    const res = await generateJson<{ clarification?: unknown; options?: unknown; optionTitles?: unknown }>(prompt, {
       systemInstruction: settings.systemPrompt,
       temperature: 0.3,
       maxOutputTokens: 512,
-      model: answerModel,
+      // 反問澄清是簡單任務（選標題 + 一句話），固定用 flash-lite 即可，不跟著 answerModel
+      model: 'gemini-2.5-flash-lite',
+      // 512 cap 很緊，thinking 一吃就截斷 JSON；簡單任務直接關
+      thinkingBudget: 0,
     })
     const clarification = String(res.data?.clarification ?? '').trim()
-    const rawTitles = Array.isArray(res.data?.optionTitles) ? res.data.optionTitles : []
+    // 新格式 options:[{title,label}]；舊格式 optionTitles:string[] 保留相容（LLM 偶爾不照新 schema）
+    const rawOptions: Array<{ title: string; label: string }> = Array.isArray(res.data?.options)
+      ? res.data.options.map((o: any) => ({
+          title: String(o?.title ?? '').trim(),
+          label: String(o?.label ?? '').trim(),
+        }))
+      : (Array.isArray(res.data?.optionTitles) ? res.data.optionTitles : [])
+          .map((t: unknown) => ({ title: String(t ?? '').trim(), label: '' }))
+
     // 用 fuzzy 比對映射回原 candidate，避免 LLM 簡化標題（去掉品號 / 多空白）就被全砍
-    const matchedChunks: SimilarChunk[] = []
+    const matched: Array<{ chunk: SimilarChunk; label: string }> = []
     const seenIds = new Set<string>()
-    for (const t of rawTitles) {
-      const llmTitle = String(t ?? '').trim()
-      if (!llmTitle) continue
-      const chunk = matchCandidateTitle(llmTitle, candidates)
+    for (const raw of rawOptions) {
+      if (!raw.title) continue
+      const chunk = matchCandidateTitle(raw.title, candidates)
       if (!chunk || seenIds.has(chunk.id)) continue
       seenIds.add(chunk.id)
-      matchedChunks.push(chunk)
-      if (matchedChunks.length >= settings.disambiguation.maxOptions) break
+      matched.push({ chunk, label: raw.label })
+      if (matched.length >= settings.disambiguation.maxOptions) break
     }
 
-    if (!clarification || matchedChunks.length < 2) return null
+    if (!clarification || matched.length < 2) return null
 
-    const options = matchedChunks.map(c => ({ chunkId: c.id, title: c.title }))
+    const options = matched.map(m => ({
+      chunkId: m.chunk.id,
+      title: m.chunk.title,
+      // label 給按鈕顯示；LLM 沒給就退回截標題
+      label: m.label || m.chunk.title.slice(0, 20),
+    }))
 
     return {
       payload: { clarification, options },
@@ -331,13 +372,33 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
     }
   }
 
+  // 識別碼精確比對（品號 / SKU / 型號）：embedding 對這類 token 幾乎沒訊號，
+  // tags 精確命中直接視為高信心來源。純中文提問零成本跳過（query 沒英數 run 直接回空）。
+  try {
+    const tagHits = await searchChunksByIdentifierTag(db, workspaceId, text)
+    if (tagHits.length) {
+      const byId = new Map(chunks.map(c => [c.id, c] as const))
+      for (const hit of tagHits) {
+        const existing = byId.get(hit.id)
+        if (existing) existing.similarity = Math.max(existing.similarity, hit.similarity)
+        else chunks.push(hit)
+      }
+      chunks.sort((a, b) => b.similarity - a.similarity)
+      chunks = chunks.slice(0, DEFAULT_TOP_K_CHUNKS)
+      topSimilarity = chunks[0]?.similarity ?? 0
+    }
+  }
+  catch (err) {
+    console.warn('[ai-answer] identifier-tag search failed, keep vector result:', err)
+  }
+
   // ── 4. disambiguation 偵測（先於 grounding）──────────────
   // 「多張卡同樣相關」是比 grounding 更強的訊號 — 即使 top-1 略低於 grounding 門檻，
   // 也應該主動反問澄清而不是默默 handoff。disambiguation 條件不過再走 grounding gate。
-  const dedupedChunks = dedupeBySource(chunks)
+  const dedupedChunks = dedupeNearIdentical(dedupeBySource(chunks))
   if (!input.skipDisambiguation && shouldDisambiguate(dedupedChunks, settings)) {
     const candidates = dedupedChunks.slice(0, settings.disambiguation.maxOptions)
-    const dis = await generateDisambiguation(candidates, text, settings, answerModel)
+    const dis = await generateDisambiguation(candidates, text, settings)
     if (dis) {
       if (!input.isFollowup) {
         await recordAiUsage(workspaceId, {
@@ -373,8 +434,12 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   }
 
   // ── 6. 生成回答 ──────────────────────────────────────────
-  const contextBlock = chunks
-    .map((c, i) => `[卡 ${i + 1}｜${c.title}]\n${c.content}`)
+  // Context 瘦身：同來源去重、低於地板分（grounding 門檻 − 0.05）的卡不進 prompt、
+  // 單卡內容截 CONTEXT_CARD_MAX_CHARS。top-1 已過 grounding 門檻，必在地板之上。
+  const contextFloor = Math.max(0, getGroundingThreshold(settings) - 0.05)
+  const contextChunks = dedupedChunks.filter(c => c.similarity >= contextFloor)
+  const contextBlock = contextChunks
+    .map((c, i) => `[卡 ${i + 1}｜${c.title}]\n${c.content.slice(0, CONTEXT_CARD_MAX_CHARS)}`)
     .join('\n\n')
 
   // 最近對話脈絡（最多 6 則）：讓 LLM 理解「那個」「還有呢」等指代，避免答非所問
@@ -393,24 +458,32 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
     '【客人提問】',
     text,
     '',
-    '請依「知識卡內容」回答。',
-    `字數**硬性限制 ${settings.replyMaxLen} 字以內**，超過會被截斷，務必在限制內把話收完整、句子要結束（最後一個字必須是。！？或結尾語助詞）。`,
-    '若知識卡沒有相關資訊，直接回覆「我沒有這個資訊，幫您轉接專員」。',
+    '回傳 JSON：{ "answer": string, "hasInfo": boolean }',
+    '請依「知識卡內容」回答，回覆文字放在 answer。',
+    `answer 字數**硬性限制 ${settings.replyMaxLen} 字以內**，超過會被截斷，務必在限制內把話收完整、句子要結束（最後一個字必須是。！？或結尾語助詞）。`,
+    '若知識卡沒有足夠資訊回答這個問題，hasInfo 設為 false、answer 留空字串；不要編造。',
   ].join('\n')
 
   let answerText = ''
+  let hasInfo = true
   let inputTokens = 0
   let outputTokens = 0
   try {
-    const res = await generateText(userPrompt, {
+    // 結構化輸出：hasInfo 由 LLM 明確回報，取代舊版對「沒有這個資訊」的字串比對
+    // （LLM 換個說法就漏網、把道歉文當正式回答發給客人）。
+    const res = await generateJson<{ answer?: unknown; hasInfo?: unknown }>(userPrompt, {
       systemInstruction: settings.systemPrompt,
       temperature: 0.4,
-      // 中文約 1.5–2 token/字；用 × 2.5 給 LLM 一點緩衝但避免它一路寫到超出限制太多。
-      // 加上 truncateAtSentence 會把超出的部分整句砍掉，所以 LLM 寫過頭就真的浪費了，不如卡緊一點。
-      maxOutputTokens: Math.min(2048, Math.ceil(settings.replyMaxLen * 2.5)),
+      // 中文約 1.5–2 token/字；用 × 2.5 給 LLM 一點緩衝但避免它一路寫到超出限制太多，
+      // 另加 128 token 給 JSON 結構與跳脫字元。truncateAtSentence 會把超出的部分整句砍掉。
+      maxOutputTokens: Math.min(2048, Math.ceil(settings.replyMaxLen * 2.5) + 128),
       model: answerModel,
+      // 關鍵：2.5 系列 thinking token 計入 maxOutputTokens；不關的話 thinking 吃掉配額
+      // 會把 JSON 截斷 → parse 失敗 → 整題變 llm_error 假警報（客服收到誤報推播）
+      thinkingBudget: 0,
     })
-    answerText = res.text.trim()
+    answerText = String(res.data?.answer ?? '').trim()
+    hasInfo = res.data?.hasInfo !== false
     inputTokens = res.inputTokens
     outputTokens = res.outputTokens
   }
@@ -431,7 +504,7 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   // 未來可加 LLM self-eval 做加權平均（簡報 p29 spike 點）。
   const confidence = topSimilarity
   const passesConfidence = confidence >= settings.confidenceThreshold
-  const passesContent = answerText.length > 0 && !/沒有這個資訊/.test(answerText)
+  const passesContent = hasInfo && answerText.length > 0
 
   const sourcesPayload = chunks.map(c => ({
     chunkId: c.id,

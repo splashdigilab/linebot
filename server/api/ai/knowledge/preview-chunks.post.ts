@@ -8,6 +8,7 @@ import {
 import { chunkTextWithLlm } from '~~/server/utils/ai-knowledge-chunker'
 import { getDb } from '~~/server/utils/firebase'
 import { KNOWLEDGE_SOURCES_COLLECTION } from '~~/server/utils/ai-knowledge-sources'
+import { recordAiUsage } from '~~/server/utils/ai-usage'
 
 /**
  * POST /api/ai/knowledge/preview-chunks
@@ -81,6 +82,15 @@ export default defineEventHandler(async (event) => {
   const { chunks, inputTokens, outputTokens } = await chunkTextWithLlm(extracted.text, {
     hint: sourceName,
   })
+
+  // 切卡 token 入帳（計入月度總量 quota + import 分項）。一份大文件可能比幾百次答題還貴，
+  // 不入帳的話 quota 與成本報表都是失真的。
+  await recordAiUsage(workspaceId, {
+    inputTokens,
+    outputTokens,
+    importInputTokens: inputTokens,
+    importOutputTokens: outputTokens,
+  }).catch(() => {})
 
   // 偵測同名來源（給前端顯示 dedup 警告用；不阻擋建立，只提醒）
   let existingMatches: Array<{ id: string; name: string; chunkCount: number; updatedAtMs: number }> = []

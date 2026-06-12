@@ -31,11 +31,14 @@ export default defineEventHandler(async (event) => {
   await recordAiUsage(workspaceId, {
     inputTokens: result.inputTokens,
     outputTokens: result.outputTokens,
+    importInputTokens: result.inputTokens,
+    importOutputTokens: result.outputTokens,
   }).catch(() => {})
 
   return {
     title: result.title,
     content: result.content,
     tags: result.tags,
+    questions: result.questions,
   }
 })

@@ -16,10 +16,18 @@ export const KNOWLEDGE_CHUNKS_COLLECTION = 'knowledgeChunks'
 /** pending 卡超過此時間就算「卡住」，會被排程任務撿回來重試 */
 export const PENDING_STUCK_MS = 5 * 60 * 1000
 
+/** 排程自動重試上限；超過代表非暫時性錯誤（內容問題等），停止無限重試燒 API。手動 reindex 不受限 */
+export const MAX_AUTO_RETRIES = 5
+
 export interface ChunkInput {
   title: string
   content: string
   tags: string[]
+  /**
+   * 「客人常見問法」（LLM 切卡 / normalize 時生成），會一併進 embedding 拉高
+   * query-card 相似度。undefined = 呼叫端沒提供（編輯表單沒有此欄位），保留既有值。
+   */
+  questions?: string[]
   sourceId?: string | null
 }
 
@@ -28,6 +36,9 @@ export function normalizeChunkInput(raw: any): ChunkInput {
     title: String(raw?.title ?? '').trim(),
     content: String(raw?.content ?? '').trim(),
     tags: Array.isArray(raw?.tags) ? raw.tags.map(String).map((t: string) => t.trim()).filter(Boolean) : [],
+    questions: Array.isArray(raw?.questions)
+      ? raw.questions.map(String).map((q: string) => q.trim()).filter(Boolean).slice(0, 3)
+      : undefined,
     sourceId: raw?.sourceId != null ? String(raw.sourceId).trim() || null : null,
   }
 }
@@ -37,6 +48,22 @@ export function validateChunkInput(input: ChunkInput): string | null {
   if (!input.content) return '請輸入內容'
   if (input.content.length > 5000) return '內容過長（上限 5000 字）'
   return null
+}
+
+/**
+ * 組出實際被 embed 的文字：title + 常見問法 + content。
+ * - title：切卡規則把核心識別資訊（品名等）放在 title，content 不一定會重複，
+ *   只 embed content 會讓「客人用品名提問」撈不到卡。
+ * - questions：客人是用問句提問、卡片是敘述句；把「常見問法」一起進向量
+ *   能直接拉高 query-card 相似度（比調 grounding 門檻有效）。
+ */
+export function buildEmbeddingText(title: string, content: string, questions?: string[]): string {
+  const parts = [
+    String(title || '').trim(),
+    ...(questions ?? []).map(q => String(q).trim()).filter(Boolean),
+    String(content || '').trim(),
+  ]
+  return parts.filter(Boolean).join('\n')
 }
 
 interface CreateChunkParams extends ChunkInput {
@@ -60,6 +87,7 @@ export async function createKnowledgeChunk(
     title: params.title,
     content: params.content,
     tags: params.tags,
+    questions: params.questions ?? [],
     embedding: null,
     tokens: estimateTokens(params.content),
     status: 'pending',
@@ -70,12 +98,13 @@ export async function createKnowledgeChunk(
     updatedAt: now,
   } satisfies Omit<KnowledgeChunkDoc, 'createdAt' | 'updatedAt'> & { createdAt: any; updatedAt: any })
 
-  return runIndexOnChunk(db, params.chunkId, params.content)
+  invalidateTagIndexCache(params.workspaceId)
+  return runIndexOnChunk(db, params.chunkId, buildEmbeddingText(params.title, params.content, params.questions))
 }
 
 interface UpdateChunkParams extends ChunkInput {
   chunkId: string
-  /** 內容沒變（只改標題/標籤）時可跳過重新索引 */
+  /** title 或 content 有變就要重新索引（兩者都會進 embedding）；只改標籤可跳過 */
   contentChanged: boolean
   /**
    * 是否為「使用者手動編輯」（非 re-sync 自動覆蓋）。
@@ -95,23 +124,40 @@ export async function updateKnowledgeChunk(
   const ref = db.collection(KNOWLEDGE_CHUNKS_COLLECTION).doc(params.chunkId)
   const now = FieldValue.serverTimestamp()
 
+  // 單次前置讀：status（早退分支回傳用）、既有 questions（沿用 / 比對是否變更）、workspaceId（tag cache 失效用）
+  const snap = await ref.get()
+  const existing = snap.data() ?? {}
+  const existingQuestions: string[] = Array.isArray(existing.questions) ? existing.questions.map(String) : []
+  const questions = params.questions ?? existingQuestions
+  // questions 也在 embedding 文字裡：有提供且與既有不同，就算 content 沒變也要重新索引，
+  // 否則 doc 上的 questions 與向量會永久分歧
+  const questionsChanged = params.questions !== undefined
+    && JSON.stringify(params.questions) !== JSON.stringify(existingQuestions)
+  const needsReindex = params.contentChanged || questionsChanged
+
   const baseUpdate: Record<string, unknown> = {
     title: params.title,
     content: params.content,
     tags: params.tags,
     updatedAt: now,
   }
+  if (params.questions !== undefined) {
+    baseUpdate.questions = params.questions
+  }
   if (params.manualEdit) {
     baseUpdate.manuallyEditedAt = now
   }
 
-  if (!params.contentChanged) {
-    await ref.update(baseUpdate)
-    const snap = await ref.get()
-    return { status: (snap.data()?.status as KnowledgeChunkStatus) ?? 'pending' }
+  if (typeof existing.workspaceId === 'string') {
+    invalidateTagIndexCache(existing.workspaceId)
   }
 
-  // 內容變動：先標 pending、清掉舊向量，再跑 embed
+  if (!needsReindex) {
+    await ref.update(baseUpdate)
+    return { status: (existing.status as KnowledgeChunkStatus) ?? 'pending' }
+  }
+
+  // 內容（或 questions）變動：先標 pending、清掉舊向量，再跑 embed
   await ref.update({
     ...baseUpdate,
     embedding: null,
@@ -121,27 +167,29 @@ export async function updateKnowledgeChunk(
     failureReason: FieldValue.delete(),
   })
 
-  return runIndexOnChunk(db, params.chunkId, params.content)
+  return runIndexOnChunk(db, params.chunkId, buildEmbeddingText(params.title, params.content, questions))
 }
 
 /**
  * 對單一卡跑 embedding。供 create / update / 排程 retry 共用。
+ * embeddingText 請用 buildEmbeddingText(title, content, questions) 組出。
  * 不會 throw：embed 失敗就把卡標成 failed 並寫入失敗原因。
  */
 export async function runIndexOnChunk(
   db: Firestore,
   chunkId: string,
-  content: string,
+  embeddingText: string,
 ): Promise<{ id: string; status: KnowledgeChunkStatus; failureReason?: string }> {
   const ref = db.collection(KNOWLEDGE_CHUNKS_COLLECTION).doc(chunkId)
   try {
-    const values = await embedDocument(content)
+    const values = await embedDocument(embeddingText)
     await ref.update({
       embedding: FieldValue.vector(values),
       status: 'indexed' satisfies KnowledgeChunkStatus,
       lastIndexedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       failureReason: FieldValue.delete(),
+      retryCount: FieldValue.delete(),
     })
     return { id: chunkId, status: 'indexed' }
   }
@@ -150,6 +198,7 @@ export async function runIndexOnChunk(
     await ref.update({
       status: 'failed' satisfies KnowledgeChunkStatus,
       failureReason: reason,
+      retryCount: FieldValue.increment(1),
       updatedAt: FieldValue.serverTimestamp(),
     }).catch(() => {})
     return { id: chunkId, status: 'failed', failureReason: reason }
@@ -212,6 +261,98 @@ export async function searchSimilarChunks(
   })
 }
 
+// ═══════════════════════════════════════════════════════════════════
+//  Identifier-tag exact match（向量檢索的精確補位）
+//
+//  切卡規則把品號 / SKU 放在 tags（例：「品號21070909」），而 embedding 對這類
+//  識別碼幾乎沒有訊號 — 客人拿品號提問會 no_grounding。這裡用「英數字串 ≥ 4 碼」
+//  的精確比對把這類查詢救回來：query 與 tag 共享同一段識別碼 run 即命中。
+//  只比對識別碼 run、不比對一般中文標籤，避免「運費」這類通用詞誤觸發高信心。
+// ═══════════════════════════════════════════════════════════════════
+
+/** tag 精確命中視為高信心來源（高於一般 confidence 門檻，會直接過 grounding） */
+export const TAG_MATCH_SIMILARITY = 0.95
+
+const TAG_INDEX_TTL_MS = 60_000
+const TAG_INDEX_MAX_DOCS = 2000
+const tagIndexCache = new Map<string, {
+  expiresAt: number
+  entries: Array<{ id: string; runs: string[] }>
+}>()
+
+export function invalidateTagIndexCache(workspaceId: string) {
+  tagIndexCache.delete(workspaceId)
+}
+
+/**
+ * 抽出識別碼候選：連續英數 ≥ 4 碼且**至少含一個數字**（品號、型號、訂單編號都有數字），統一小寫。
+ * 不含數字的 run（'line'、'mail'、'ipad' 這類一般單字）排除——否則 tag「LINE Pay」會讓
+ * 任何提到 LINE 的提問以 0.95 信心繞過 grounding / confidence 兩道護欄。
+ */
+export function extractIdentifierRuns(text: string): string[] {
+  return (String(text || '').toLowerCase().match(/[a-z0-9]{4,}/g) ?? [])
+    .filter(run => /\d/.test(run))
+}
+
+async function loadTagIndex(db: Firestore, workspaceId: string) {
+  const cached = tagIndexCache.get(workspaceId)
+  if (cached && cached.expiresAt > Date.now()) return cached.entries
+
+  const snap = await db.collection(KNOWLEDGE_CHUNKS_COLLECTION)
+    .where('workspaceId', '==', workspaceId)
+    .where('status', '==', 'indexed')
+    .select('tags')
+    .limit(TAG_INDEX_MAX_DOCS)
+    .get()
+
+  const entries = snap.docs
+    .map((d) => {
+      const tags: string[] = Array.isArray(d.data()?.tags) ? d.data().tags.map(String) : []
+      return { id: d.id, runs: tags.flatMap(extractIdentifierRuns) }
+    })
+    .filter(e => e.runs.length > 0)
+
+  tagIndexCache.set(workspaceId, { expiresAt: Date.now() + TAG_INDEX_TTL_MS, entries })
+  return entries
+}
+
+/**
+ * 用「識別碼精確比對」找卡。query 沒有任何英數 run 時零成本直接回空陣列
+ * （純中文提問完全不會多花 Firestore 讀取）。
+ */
+export async function searchChunksByIdentifierTag(
+  db: Firestore,
+  workspaceId: string,
+  query: string,
+  maxHits = 3,
+): Promise<SimilarChunk[]> {
+  const queryRuns = new Set(extractIdentifierRuns(query))
+  if (!queryRuns.size) return []
+
+  const index = await loadTagIndex(db, workspaceId)
+  const matchedIds = index
+    .filter(e => e.runs.some(r => queryRuns.has(r)))
+    .slice(0, maxHits)
+    .map(e => e.id)
+  if (!matchedIds.length) return []
+
+  const refs = matchedIds.map(id => db.collection(KNOWLEDGE_CHUNKS_COLLECTION).doc(id))
+  const snaps = await db.getAll(...refs)
+  return snaps
+    .filter(s => s.exists && s.data()?.status === 'indexed')
+    .map((s) => {
+      const data = s.data() as any
+      return {
+        id: s.id,
+        title: String(data?.title ?? ''),
+        content: String(data?.content ?? ''),
+        tags: Array.isArray(data?.tags) ? data.tags : [],
+        similarity: TAG_MATCH_SIMILARITY,
+        sourceId: data?.sourceId ?? null,
+      }
+    })
+}
+
 /**
  * 撿出 pending 卡住或 failed 的卡片，逐張重試。供排程任務呼叫。
  * 回傳掃到 / 重試 / 成功 / 失敗 的計數。
@@ -219,7 +360,7 @@ export async function searchSimilarChunks(
 export async function retryStuckChunks(
   db: Firestore,
   opts: { maxBatch?: number; pendingStuckMs?: number } = {},
-): Promise<{ scanned: number; retried: number; indexed: number; failed: number }> {
+): Promise<{ scanned: number; retried: number; indexed: number; failed: number; skippedPermanent: number }> {
   const maxBatch = opts.maxBatch ?? 20
   const stuckMs = opts.pendingStuckMs ?? PENDING_STUCK_MS
   const cutoff = new Date(Date.now() - stuckMs)
@@ -241,18 +382,32 @@ export async function retryStuckChunks(
   const seen = new Set<string>()
   let indexed = 0
   let failed = 0
+  let skippedPermanent = 0
   for (const doc of docs) {
     if (seen.has(doc.id)) continue
     seen.add(doc.id)
-    const content = String(doc.data()?.content ?? '')
+    const data = doc.data()
+
+    // 連續失敗超過上限 → 非暫時性錯誤（內容問題等），停止自動重試。
+    // 卡片維持 failed 狀態，使用者手動 reindex 仍可重試（成功會歸零 retryCount）。
+    if (Number(data?.retryCount ?? 0) >= MAX_AUTO_RETRIES) {
+      skippedPermanent++
+      continue
+    }
+
+    const content = String(data?.content ?? '')
     if (!content) {
       failed++
       continue
     }
-    const result = await runIndexOnChunk(db, doc.id, content)
+    const result = await runIndexOnChunk(db, doc.id, buildEmbeddingText(
+      String(data?.title ?? ''),
+      content,
+      Array.isArray(data?.questions) ? data.questions.map(String) : [],
+    ))
     if (result.status === 'indexed') indexed++
     else failed++
   }
 
-  return { scanned: docs.length, retried: seen.size, indexed, failed }
+  return { scanned: docs.length, retried: seen.size - skippedPermanent, indexed, failed, skippedPermanent }
 }

@@ -283,7 +283,7 @@ const textInput = ref('')
 // ── Preview ───────────────────────────────────────────────
 const previewing = ref(false)
 const truncated = ref(false)
-const chunks = ref<Array<{ included: boolean; title: string; content: string; tags: string[] }>>([])
+const chunks = ref<Array<{ included: boolean; title: string; content: string; tags: string[]; questions: string[] }>>([])
 const existingMatches = ref<Array<{ id: string; name: string; chunkCount: number; updatedAtMs: number }>>([])
 const sourceMeta = ref({
   type: '' as ImportMode | '',
@@ -317,7 +317,7 @@ async function runPreview() {
     }
 
     const res = await apiFetch<{
-      chunks: Array<{ title: string; content: string; tags: string[] }>
+      chunks: Array<{ title: string; content: string; tags: string[]; questions?: string[] }>
       sourceName: string
       sourceUrl: string
       truncated: boolean
@@ -335,6 +335,7 @@ async function runPreview() {
       title: c.title,
       content: c.content,
       tags: [...(c.tags ?? [])],
+      questions: [...(c.questions ?? [])],
     }))
     existingMatches.value = res.existingMatches ?? []
     sourceMeta.value = {
@@ -401,10 +402,10 @@ const failedItems = computed(() =>
 async function runImport() {
   const selected = chunks.value
     .filter(c => c.included && c.title.trim() && c.content.trim())
-    .map(c => ({ title: c.title.trim(), content: c.content.trim(), tags: c.tags }))
+    .map(c => ({ title: c.title.trim(), content: c.content.trim(), tags: c.tags, questions: c.questions ?? [] }))
 
   if (!selected.length) return showToast('請至少選擇一張卡', 'error')
-  if (selected.length > 50) return showToast('單次最多匯入 50 張，請先取消勾選一些', 'error')
+  if (selected.length > 150) return showToast('單次最多匯入 150 張，請先取消勾選一些', 'error')
 
   importing.value = true
   try {

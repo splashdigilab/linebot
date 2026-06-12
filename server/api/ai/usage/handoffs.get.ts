@@ -11,6 +11,8 @@ interface HandoffRow {
   handoffReason: AiConversationMeta['lastHandoffReason']
   sources: Array<{ chunkId: string; title: string }>
   updatedAtMs: number
+  /** 已被標記處理（resolvedAt >= updatedAt） */
+  resolved: boolean
 }
 
 function tsToMs(raw: unknown): number {
@@ -33,19 +35,24 @@ export default defineEventHandler(async (event): Promise<HandoffRow[]> => {
   const limit = Math.min(50, Math.max(1, Number(query.limit ?? 20)))
   const reason = String(query.reason ?? '').trim()
 
+  const includeResolved = String(query.includeResolved ?? '') === '1'
+
   const db = getDb()
   let q: FirebaseFirestore.Query = db.collection('conversations')
     .where('workspaceId', '==', workspaceId)
     .where('aiMeta.lastDecision', '==', 'handoff')
 
   // 若指定特定 handoff 原因，多加一條 where（要對應到 indexes.json 的 composite index）
-  if (reason === 'low_confidence' || reason === 'no_grounding') {
+  if (reason === 'low_confidence' || reason === 'no_grounding' || reason === 'user_request') {
     q = db.collection('conversations')
       .where('workspaceId', '==', workspaceId)
       .where('aiMeta.lastHandoffReason', '==', reason)
   }
 
-  const snap = await q.orderBy('aiMeta.updatedAt', 'desc').limit(limit).get()
+  // resolved 過濾在記憶體做：已處理的會佔掉名額，所以多抓幾倍再 filter + slice，
+  // 避免「前 N 筆全是已處理」讓更舊的未處理案例被完全遮住
+  const fetchLimit = includeResolved ? limit : Math.min(100, limit * 3)
+  const snap = await q.orderBy('aiMeta.updatedAt', 'desc').limit(fetchLimit).get()
 
   // Hydrate chunk titles（一次撈完，避免每列再打）
   const allChunkIds = new Set<string>()
@@ -68,9 +75,11 @@ export default defineEventHandler(async (event): Promise<HandoffRow[]> => {
     })
   }
 
-  return snap.docs.map((d) => {
+  const rows = snap.docs.map((d) => {
     const data = d.data() as { aiMeta?: AiConversationMeta; userId?: string; displayName?: string }
     const meta = data.aiMeta!
+    const updatedAtMs = tsToMs(meta.updatedAt)
+    const resolvedAtMs = tsToMs(meta.handoffResolvedAt)
     return {
       userId: String(data.userId ?? d.id),
       displayName: String(data.displayName ?? ''),
@@ -81,7 +90,11 @@ export default defineEventHandler(async (event): Promise<HandoffRow[]> => {
         chunkId: id,
         title: titleByChunkId[id] ?? '(卡片已刪除)',
       })),
-      updatedAtMs: tsToMs(meta.updatedAt),
+      updatedAtMs,
+      resolved: resolvedAtMs > 0 && resolvedAtMs >= updatedAtMs,
     }
   })
+
+  // 預設只回未處理的案例；includeResolved=1 連已處理的一起回
+  return (includeResolved ? rows : rows.filter(r => !r.resolved)).slice(0, limit)
 })

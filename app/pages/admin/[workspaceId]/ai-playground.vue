@@ -350,7 +350,12 @@ async function loadSettings() {
   catch { /* 忽略：拿不到就用預設 */ }
 }
 
-onMounted(() => loadSettings())
+onMounted(() => {
+  loadSettings()
+  // 監控頁「▶ 重演」帶 ?q= 過來：預填輸入框，讓使用者按送出重演該題
+  const q = String(useRoute().query.q ?? '').trim()
+  if (q) query.value = q
+})
 </script>
 
 <style scoped lang="scss">

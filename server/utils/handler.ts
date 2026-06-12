@@ -31,14 +31,16 @@ import { addTagsToUser } from './tagging'
 import {
   ensureConversationSession,
   enterModule,
+  getSessionStatusCached,
   shouldSuppressInboundBotAutomationForSession,
 } from './conversation-session'
 import type { ModuleType } from '~~/shared/types/conversation-stats'
 import { SYSTEM_MODULE_IDS } from '~~/shared/types/conversation-stats'
 import { answerWithAi, type AiChatTurn } from './ai-answer'
 import { getAiSettings } from './ai-settings'
+import { recordAiUsage } from './ai-usage'
 import { notifyHandoffToStaff } from './ai-handoff-notify'
-import type { AiConversationMeta } from '~~/shared/types/ai-knowledge'
+import type { AiConversationMeta, HandoffReason } from '~~/shared/types/ai-knowledge'
 import type { ActiveScriptState } from '~~/shared/types/ai-script'
 import { advanceScript, findMatchingScript, loadActiveScripts, startScript } from './ai-scripts'
 import {
@@ -1904,6 +1906,12 @@ async function handleIncomingText(
     }
   }
 
+  // 等待真人期間（pending_human）的輕量 ack：所有自動回覆都被抑制，客人傳訊息會
+  // 完全已讀不回。給一個節流過的「已收到」回饋。human_handling（真人對話中）不插話。
+  if (!handledByInput && suppressBotAutomation && replyToken) {
+    await maybeSendWaitingAck(sessionId ?? null, lineUserId, replyToken, wid)
+  }
+
   if (!handledByInput && !suppressBotAutomation) {
     // 0. 使用者已在某條腳本中 → 推進、處理回覆 / handoff，結束
     if (userState.activeScript) {
@@ -2102,6 +2110,114 @@ async function triggerHandoff(
     .catch(e => console.error('[script] enterModule(live_agent) error:', e))
 }
 
+/** 客人明確要求真人的句子（disambiguation quick reply 的「找真人」按鈕送出的文字） */
+const HUMAN_REQUEST_TEXTS = new Set(['找真人', '🙋 找真人', '轉真人', '真人客服'])
+
+// ── 回答品質 proxy：「AI 答完不久客人又被轉真人」────────────────────
+// AI answered 後 30 分鐘內發生 handoff，多半代表那次回答沒解決問題。
+// 聚合進 aiUsage.answeredThenHandoffs，給監控頁當品質指標（調門檻的依據）。
+const ANSWERED_THEN_HANDOFF_WINDOW_MS = 30 * 60 * 1000
+
+function wasRecentlyAnswered(meta: AiConversationMeta | undefined | null): boolean {
+  if (!meta || meta.lastDecision !== 'answered') return false
+  const ms = (meta.updatedAt as any)?.toMillis?.() ?? 0
+  return ms > 0 && (Date.now() - ms) < ANSWERED_THEN_HANDOFF_WINDOW_MS
+}
+
+// ── 等待真人期間的輕量 ack ────────────────────────────────────────
+// pending_human 時所有自動回覆都被抑制，客人後續訊息會完全沒回應（已讀不回）。
+// 每位客人 30 分鐘最多回一次「已收到」。per-instance in-memory 節流，
+// 多實例最壞各回一次，可接受（同 handoff 通知的取捨）。
+const WAITING_ACK_THROTTLE_MS = 30 * 60 * 1000
+const WAITING_ACK_MAP_MAX_ENTRIES = 5000
+const waitingAckSentAt = new Map<string, number>()
+
+async function maybeSendWaitingAck(
+  sessionId: string | null,
+  lineUserId: string,
+  replyToken: string,
+  workspaceId: string,
+): Promise<void> {
+  try {
+    // 只在「待真人」ack；真人對話中（human_handling）插話反而干擾
+    const status = await getSessionStatusCached(sessionId)
+    if (status !== 'pending_human') return
+
+    const key = `${workspaceId}:${lineUserId}`
+    const now = Date.now()
+    if (now - (waitingAckSentAt.get(key) ?? 0) < WAITING_ACK_THROTTLE_MS) return
+    // 先佔位（防並發 webhook 重複 ack），發送失敗再回滾，避免一次失敗讓客人 30 分鐘拿不到 ack
+    waitingAckSentAt.set(key, now)
+    capMapSize(waitingAckSentAt, WAITING_ACK_MAP_MAX_ENTRIES)
+
+    const msg: messagingApi.TextMessage = {
+      type: 'text',
+      text: '已收到您的訊息，專員會盡快回覆您 🙏',
+    }
+    try {
+      await replyMessage(replyToken, [msg], workspaceId)
+    }
+    catch (e) {
+      waitingAckSentAt.delete(key)
+      throw e
+    }
+    saveOutgoingConversationMessagesByWorkspace(lineUserId, [msg], workspaceId)
+      .catch(e => console.error('[waiting-ack] save outgoing error:', e))
+  }
+  catch (e) {
+    console.error('[waiting-ack] failed:', e)
+  }
+}
+
+/**
+ * 把客人轉真人：回覆 sys_live_agent 流程訊息（或預設文字）、標記 session 進入
+ * live_agent、通知值班客服。AI handoff 與「找真人」攔截共用。
+ */
+async function deliverHandoffReply(params: {
+  workspaceId: string
+  lineUserId: string
+  replyToken: string | undefined
+  userAttributes: Record<string, string>
+  channelSecret: string
+  sessionId: string | null
+  requestOrigin: string
+  /** 觸發 handoff 的客人訊息（給通知用） */
+  customerMessage: string
+  reason: HandoffReason | null
+}): Promise<void> {
+  const { workspaceId, lineUserId, replyToken, userAttributes, channelSecret, sessionId, requestOrigin } = params
+
+  const liveAgentFlow = await getFlowByModuleId(SYSTEM_MODULE_IDS.live_agent).catch(() => null)
+  let handoffMessages: messagingApi.Message[] = []
+  if (liveAgentFlow) {
+    const hydrated = await hydrateRichMessageRefs(liveAgentFlow.messages as any[])
+    handoffMessages = buildLineMessages(hydrated, userAttributes, requestOrigin, lineUserId, channelSecret)
+  }
+  if (handoffMessages.length === 0) {
+    handoffMessages = [{ type: 'text', text: '已為您安排專員，將盡快回覆您 🙇' } as messagingApi.TextMessage]
+  }
+
+  if (replyToken) {
+    await replyMessage(replyToken, handoffMessages, workspaceId)
+    saveOutgoingConversationMessagesByWorkspace(lineUserId, handoffMessages, workspaceId)
+      .catch(e => console.error('[ai-fallback] save outgoing error:', e))
+  }
+
+  if (sessionId) {
+    enterModule(sessionId, lineUserId, 'live_agent', SYSTEM_MODULE_IDS.live_agent, workspaceId)
+      .catch(e => console.error('[ai-fallback] enterModule(live_agent) error:', e))
+  }
+
+  // 通知值班客服（fire-and-forget，內含節流與 enabled 判斷）
+  notifyHandoffToStaff({
+    workspaceId,
+    customerLineUserId: lineUserId,
+    customerName: userAttributes.displayName || lineUserId,
+    customerMessage: params.customerMessage,
+    reason: params.reason,
+  }).catch(e => console.error('[ai-fallback] notifyHandoffToStaff error:', e))
+}
+
 /**
  * 規則／腳本都沒命中時，呼叫 AI 接手。
  *
@@ -2128,10 +2244,64 @@ async function tryAiFallback(params: {
   const settings = await getAiSettings(workspaceId).catch(() => null)
   if (!settings?.enabled) return
 
-  // AI 思考最壞 ~10 秒；先顯示「輸入中…」動畫給客人即時回饋（fire-and-forget，失敗不影響主流程）
-  showLoadingAnimation(lineUserId, workspaceId, 20).catch(() => {})
-
   const fsUserDocId = lineUserFirestoreDocId(lineUserId, workspaceId)
+
+  // 草稿模式：AI 照常答題並寫進收件匣（suggestedReply），但不對客人發任何訊息。
+  // 新導入工作區先觀察 AI 答題品質、再切全自動的漸進信任路徑。
+  const draftMode = settings.replyMode === 'draft'
+
+  // 客人明確要求真人（「找真人」按鈕或自行輸入）→ 不經 AI 直接轉接。
+  // 沒有這個攔截的話，「找真人」會被拿去向量檢索、靠 no_grounding 繞路才轉真人，
+  // 多花一次 embed，且若知識庫剛好有相關卡還可能被 AI 誤答。
+  if (HUMAN_REQUEST_TEXTS.has(textContent.trim())) {
+    // 計入用量統計：列表（aiMeta handoff）與 KPI（handoffs 計數）必須一致
+    recordAiUsage(workspaceId, { invocations: 1, handoffs: 1 })
+      .catch(e => console.error('[ai-fallback] recordAiUsage(user_request) error:', e))
+
+    // 品質指標：剛被 AI 回答完就按「找真人」= 回答沒解決問題（fire-and-forget）。
+    // 草稿模式不計——客人根本沒看到那次回答。
+    if (!draftMode) {
+      getDb().collection('conversations').doc(fsUserDocId).get()
+        .then((snap) => {
+          const meta = (snap.data() as any)?.aiMeta as AiConversationMeta | undefined
+          if (wasRecentlyAnswered(meta)) {
+            return recordAiUsage(workspaceId, { answeredThenHandoffs: 1 })
+          }
+        })
+        .catch(() => {})
+    }
+
+    // 草稿模式維持「不對客人發話、不鎖 session」的契約，只通知值班客服
+    if (draftMode) {
+      notifyHandoffToStaff({
+        workspaceId,
+        customerLineUserId: lineUserId,
+        customerName: userAttributes.displayName || lineUserId,
+        customerMessage: textContent,
+        reason: 'user_request',
+      }).catch(e => console.error('[ai-fallback] notifyHandoffToStaff error:', e))
+    }
+    else {
+      await deliverHandoffReply({
+        workspaceId, lineUserId, replyToken, userAttributes, channelSecret,
+        sessionId, requestOrigin,
+        customerMessage: textContent,
+        reason: 'user_request',
+      })
+    }
+    await writeAiMeta(fsUserDocId, {
+      lastDecision: 'handoff',
+      lastHandoffReason: 'user_request',
+      lastQuery: textContent,
+    })
+    return
+  }
+
+  // AI 思考最壞 ~10 秒；先顯示「輸入中…」動畫給客人即時回饋（fire-and-forget，失敗不影響主流程）
+  // 草稿模式不會回覆客人，顯示「輸入中…」反而誤導。
+  if (!draftMode) {
+    showLoadingAnimation(lineUserId, workspaceId, 20).catch(() => {})
+  }
 
   // 並行讀：上一輪 aiMeta（followup / disambiguation cooldown 判斷）+ 最近對話（多輪上下文）
   const [convoSnap, historySnap] = await Promise.all([
@@ -2175,30 +2345,54 @@ async function tryAiFallback(params: {
   const inCooldown = cooldownMs > 0 && askedAtMs > 0 && (Date.now() - askedAtMs) < cooldownMs
   const skipDisambiguation = isFollowup || inCooldown
 
+  // llm_error：Gemini 暴掉。不回客人（丟「已為您安排專員」反而誤導），但**不能靜默**——
+  // 客服必須知道有人在等：通知值班 + 寫 aiMeta 讓收件匣看得到這位客人。
+  const recordLlmError = async () => {
+    notifyHandoffToStaff({
+      workspaceId,
+      customerLineUserId: lineUserId,
+      customerName: userAttributes.displayName || lineUserId,
+      customerMessage: textContent,
+      reason: 'llm_error',
+    }).catch(e => console.error('[ai-fallback] notifyHandoffToStaff error:', e))
+    await writeAiMeta(fsUserDocId, {
+      lastDecision: 'handoff',
+      lastHandoffReason: 'llm_error',
+      lastQuery: textContent,
+      // 瞬時錯誤不能清掉反問狀態：客人重點同一顆按鈕要仍被視為 followup、cooldown 不重置
+      lastDisambiguation: prevAiMeta?.lastDisambiguation ?? null,
+      suggestedReply: prevAiMeta?.suggestedReply ?? '',
+    })
+  }
+
   let result
   try {
     result = await answerWithAi({ workspaceId, query, isFollowup, skipDisambiguation, history })
   }
   catch (e) {
     console.error('[ai-fallback] answerWithAi failed:', e)
+    await recordLlmError()
+    return
+  }
+
+  if (result.decision === 'handoff' && result.handoffReason === 'llm_error') {
+    await recordLlmError()
     return
   }
 
   // 跳過不回客人的情況（維持原本「無人接」行為）：
   //   - skipped：AI 設定上跳過此題
   //   - manual：真的是設定 / 空 query 等流程問題
-  //   - llm_error：Gemini 暴掉；丟「已為您安排專員」反而誤導客人，靜默等下一輪即可
   if (
     result.decision === 'skipped'
-    || (result.decision === 'handoff'
-      && (result.handoffReason === 'manual' || result.handoffReason === 'llm_error'))
+    || (result.decision === 'handoff' && result.handoffReason === 'manual')
   ) {
     return
   }
 
-  // ── A. 答題：回覆文字 ─────────────────────────────────────
+  // ── A. 答題：回覆文字（草稿模式只進收件匣，不發給客人）──────
   if (result.decision === 'answered' && result.answer.trim()) {
-    if (replyToken) {
+    if (replyToken && !draftMode) {
       const msg: messagingApi.TextMessage = { type: 'text', text: result.answer.slice(0, 5000) }
       await replyMessage(replyToken, [msg], workspaceId)
       saveOutgoingConversationMessagesByWorkspace(lineUserId, [msg], workspaceId)
@@ -2207,13 +2401,9 @@ async function tryAiFallback(params: {
     await writeAiMeta(fsUserDocId, {
       lastDecision: 'answered',
       lastConfidence: result.confidence,
-      lastHandoffReason: null,
       lastQuery: textContent,
       lastSourceChunkIds: result.sources.map(s => s.chunkId),
-      intent: '',
-      collectedFields: {},
-      suggestedReply: '',
-      lastDisambiguation: null,
+      suggestedReply: draftMode ? result.answer : '',
     })
     return
   }
@@ -2221,9 +2411,24 @@ async function tryAiFallback(params: {
   // ── B. Disambiguation：反問澄清 + Quick Reply 按鈕 ─────────
   if (result.decision === 'disambiguate' && result.disambiguation) {
     const dis = result.disambiguation
+
+    // 草稿模式：客人看不到選項按鈕，反問語句當建議回覆給客服參考即可；
+    // 不寫 lastDisambiguation（沒有「等客人選」的狀態）。
+    if (draftMode) {
+      await writeAiMeta(fsUserDocId, {
+        lastDecision: 'disambiguate',
+        lastConfidence: result.confidence,
+        lastQuery: textContent,
+        lastSourceChunkIds: result.sources.map(s => s.chunkId),
+        suggestedReply: dis.clarification,
+      })
+      return
+    }
+
+    // label 用 LLM 生成的短名稱（≤20 字硬限制是 LINE 規格）；送出的 text 用完整 title 供 followup 比對
     const quickReplyItems: messagingApi.QuickReplyItem[] = dis.options.map(o => ({
       type: 'action',
-      action: { type: 'message', label: o.title.slice(0, 20), text: o.title },
+      action: { type: 'message', label: (o.label || o.title).slice(0, 20), text: o.title },
     }))
     quickReplyItems.push({
       type: 'action',
@@ -2242,12 +2447,8 @@ async function tryAiFallback(params: {
     await writeAiMeta(fsUserDocId, {
       lastDecision: 'disambiguate',
       lastConfidence: result.confidence,
-      lastHandoffReason: null,
       lastQuery: textContent,
       lastSourceChunkIds: result.sources.map(s => s.chunkId),
-      intent: '',
-      collectedFields: {},
-      suggestedReply: '',
       lastDisambiguation: {
         options: dis.options,
         askedAt: FieldValue.serverTimestamp(),
@@ -2257,58 +2458,62 @@ async function tryAiFallback(params: {
   }
 
   // ── C. Handoff：用 sys_live_agent 的訊息回覆 + 進入 live_agent 模組 ─
-  const liveAgentFlow = await getFlowByModuleId(SYSTEM_MODULE_IDS.live_agent).catch(() => null)
-  let handoffMessages: messagingApi.Message[] = []
-  if (liveAgentFlow) {
-    const hydrated = await hydrateRichMessageRefs(liveAgentFlow.messages as any[])
-    handoffMessages = buildLineMessages(hydrated, userAttributes, requestOrigin, lineUserId, channelSecret)
-  }
-  if (handoffMessages.length === 0) {
-    handoffMessages = [{ type: 'text', text: '已為您安排專員，將盡快回覆您 🙇' } as messagingApi.TextMessage]
+  // 品質指標：AI 剛回答完又走到 handoff = 上次回答沒解決問題。
+  // 草稿模式不計——上次「answered」客人根本沒看到，計了會讓指標在試用期讀數爆表。
+  if (!draftMode && wasRecentlyAnswered(prevAiMeta)) {
+    recordAiUsage(workspaceId, { answeredThenHandoffs: 1 })
+      .catch(e => console.error('[ai-fallback] record answeredThenHandoffs error:', e))
   }
 
-  if (replyToken) {
-    await replyMessage(replyToken, handoffMessages, workspaceId)
-    saveOutgoingConversationMessagesByWorkspace(lineUserId, handoffMessages, workspaceId)
-      .catch(e => console.error('[ai-fallback] save outgoing error:', e))
+  // 草稿模式不對客人發話、也不鎖 session（沒承諾過客人「安排專員」），但仍通知值班客服。
+  if (draftMode) {
+    notifyHandoffToStaff({
+      workspaceId,
+      customerLineUserId: lineUserId,
+      customerName: userAttributes.displayName || lineUserId,
+      customerMessage: textContent,
+      reason: result.handoffReason,
+    }).catch(e => console.error('[ai-fallback] notifyHandoffToStaff error:', e))
   }
-
-  if (sessionId) {
-    enterModule(sessionId, lineUserId, 'live_agent', SYSTEM_MODULE_IDS.live_agent, workspaceId)
-      .catch(e => console.error('[ai-fallback] enterModule(live_agent) error:', e))
+  else {
+    await deliverHandoffReply({
+      workspaceId, lineUserId, replyToken, userAttributes, channelSecret,
+      sessionId, requestOrigin,
+      customerMessage: textContent,
+      reason: result.handoffReason,
+    })
   }
-
-  // 通知值班客服（fire-and-forget，內含節流與 enabled 判斷）
-  notifyHandoffToStaff({
-    workspaceId,
-    customerLineUserId: lineUserId,
-    customerName: userAttributes.displayName || lineUserId,
-    customerMessage: textContent,
-    reason: result.handoffReason,
-  }).catch(e => console.error('[ai-fallback] notifyHandoffToStaff error:', e))
 
   // 答題用的 suggestedReply：handoff 時若 AI 也有生內容（low_confidence 但有 answer），帶給真人客服參考
-  const suggestedReply = result.decision === 'handoff' && result.answer.trim() ? result.answer : ''
   await writeAiMeta(fsUserDocId, {
     lastDecision: 'handoff',
     lastConfidence: result.confidence,
     lastHandoffReason: result.handoffReason,
     lastQuery: textContent,
     lastSourceChunkIds: result.sources.map(s => s.chunkId),
-    intent: '',
-    collectedFields: {},
-    suggestedReply,
-    lastDisambiguation: null,
+    suggestedReply: result.decision === 'handoff' && result.answer.trim() ? result.answer : '',
   })
+}
+
+/** writeAiMeta 的預設值：呼叫端只需指定與預設不同的欄位，避免 6 個呼叫點各自展開全部欄位 */
+const AI_META_DEFAULTS: Omit<AiConversationMeta, 'updatedAt' | 'lastDecision'> = {
+  lastConfidence: 0,
+  lastHandoffReason: null,
+  lastQuery: '',
+  lastSourceChunkIds: [],
+  intent: '',
+  collectedFields: {},
+  suggestedReply: '',
+  lastDisambiguation: null,
 }
 
 async function writeAiMeta(
   fsUserDocId: string,
-  meta: Omit<AiConversationMeta, 'updatedAt'>,
+  meta: Partial<Omit<AiConversationMeta, 'updatedAt'>> & Pick<AiConversationMeta, 'lastDecision'>,
 ): Promise<void> {
   try {
     await getDb().collection('conversations').doc(fsUserDocId).set({
-      aiMeta: { ...meta, updatedAt: FieldValue.serverTimestamp() },
+      aiMeta: { ...AI_META_DEFAULTS, ...meta, updatedAt: FieldValue.serverTimestamp() },
     }, { merge: true })
   }
   catch (e) {

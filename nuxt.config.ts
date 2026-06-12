@@ -24,6 +24,9 @@ export default defineNuxtConfig({
       '*/5 * * * *': ['ai:retry-stuck-chunks'],
       // 每 30 分鐘掃 URL 來源是否內容變動（每個 source 的實際偵測頻率由 refreshIntervalMinutes 決定）
       '*/30 * * * *': ['ai:detect-source-updates'],
+      // 每 10 分鐘掃「真人處理中但閒置過久」的會話自動交還機器人（handbackIdleMinutes=0 不動作）
+      // + 「轉真人超時無人回應」的 SLA 提醒（每場會話一次）
+      '*/10 * * * *': ['conversation:auto-handback', 'conversation:handoff-sla'],
       // 每小時清理過期的 webhook 冪等鎖（Firestore TTL 的程式內保底）
       '0 * * * *': ['webhook:cleanup-event-locks'],
     },

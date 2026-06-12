@@ -59,6 +59,24 @@ export default defineEventHandler(async (event) => {
     }
     try {
       if (action === 'keep_old' || action === 'skip') {
+        // 內容完全相同（kind=unchanged）的卡：順手回填新切卡生成的「常見問法」。
+        // 內容沒變所以問句安全可採；不回填的話，舊卡（多在 questions 功能上線前建立）
+        // 永遠吃不到問句帶來的檢索提升。updateKnowledgeChunk 偵測到 questions 變更會自動重新索引。
+        if (
+          entry.kind === 'unchanged'
+          && entry.oldChunk
+          && entry.newChunk?.questions?.length
+        ) {
+          await updateKnowledgeChunk(db, {
+            chunkId: entry.oldChunk.id,
+            title: entry.oldChunk.title,
+            content: entry.oldChunk.content,
+            tags: entry.oldChunk.tags,
+            questions: entry.newChunk.questions,
+            contentChanged: false,
+            manualEdit: false,
+          }).catch(e => console.warn('[resync-apply] questions backfill failed:', entry.oldChunk?.id, e))
+        }
         kept++
         continue
       }
@@ -69,6 +87,7 @@ export default defineEventHandler(async (event) => {
           title: entry.newChunk.title,
           content: entry.newChunk.content,
           tags: entry.newChunk.tags,
+          questions: entry.newChunk.questions ?? [],
           sourceId,
         })
         added++
@@ -80,7 +99,10 @@ export default defineEventHandler(async (event) => {
           title: entry.newChunk.title,
           content: entry.newChunk.content,
           tags: entry.newChunk.tags,
-          contentChanged: entry.oldChunk.content !== entry.newChunk.content,
+          questions: entry.newChunk.questions ?? [],
+          // title 也在 embedding 文字裡，title 或 content 變了都要重新索引
+          contentChanged: entry.oldChunk.content !== entry.newChunk.content
+            || entry.oldChunk.title !== entry.newChunk.title,
           manualEdit: false, // re-sync 是自動的，不算手動編輯
         })
         // 清掉 manuallyEditedAt（使用者已選擇用新版了）

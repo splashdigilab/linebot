@@ -31,6 +31,17 @@
                 inactive-text="停用"
               />
             </div>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="回覆模式" tight />
+              <el-radio-group v-model="form.replyMode" :disabled="!form.enabled">
+                <el-radio value="auto">全自動（AI 直接回覆客人）</el-radio>
+                <el-radio value="draft">草稿（AI 只給客服建議回覆，不回覆客人）</el-radio>
+              </el-radio-group>
+              <p class="ai-section-hint">
+                建議新導入時先用「草稿」跑一到兩週：AI 的建議回覆會出現在「對話」頁的 AI 脈絡區塊，
+                由客服一鍵帶入回覆框。確認答題品質穩定後再切「全自動」。
+              </p>
+            </div>
           </div>
         </div>
 
@@ -70,6 +81,15 @@
             <p class="ai-section-hint">
               低於此門檻 AI 會放棄回答、轉真人客服。建議 <strong>0.75 起手</strong>，跑兩週後依數據再降。
             </p>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="快速套用組合" tight />
+              <div class="flex gap-1">
+                <el-button size="small" plain @click="applyPreset('strict')">🛡 嚴格（少答多轉真人）</el-button>
+                <el-button size="small" plain @click="applyPreset('balanced')">⚖️ 平衡（預設）</el-button>
+                <el-button size="small" plain @click="applyPreset('loose')">🚀 寬鬆（多答少轉）</el-button>
+              </div>
+              <p class="ai-section-hint">會同時調整信心 / Grounding 門檻與反問澄清區間，按「儲存設定」才生效。</p>
+            </div>
             <div class="admin-field-group">
               <AdminFieldLabel :text="`信心門檻：${form.confidenceThreshold.toFixed(2)}`" tight />
               <el-slider
@@ -220,6 +240,32 @@
               </div>
               <p class="ai-section-hint">可至「用戶」頁找到該客服人員（需先加官方帳號好友並傳過訊息），複製其 LINE userId（U 開頭）。</p>
             </div>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="超時再提醒（分鐘，0 = 關閉）" tight />
+              <el-input-number
+                v-model="form.handoffNotify.slaRemindMinutes"
+                :min="0"
+                :max="1440"
+                :step="5"
+                :disabled="!form.handoffNotify.enabled"
+              />
+              <p class="ai-section-hint">
+                轉真人後超過此時間仍無人回覆，再推播提醒一次（每場會話只提醒一次）。
+              </p>
+            </div>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="真人閒置自動交還機器人（分鐘，0 = 關閉）" tight />
+              <el-input-number
+                v-model="form.handbackIdleMinutes"
+                :min="0"
+                :max="1440"
+                :step="5"
+              />
+              <p class="ai-section-hint">
+                真人接手後若超過此時間沒有再回覆，系統自動把會話交還機器人，AI / 自動回覆恢復接手，
+                避免真人忘記收尾時客人後續訊息沒人理。也可在「對話」頁手動點「交還機器人」。
+              </p>
+            </div>
           </div>
         </div>
 
@@ -348,6 +394,7 @@ const { showToast } = useAdminToast()
 
 interface FormShape {
   enabled: boolean
+  replyMode: AiSettingsDoc['replyMode']
   answerModel: AiSettingsDoc['answerModel']
   embeddingModel: AiSettingsDoc['embeddingModel']
   confidenceThreshold: number
@@ -357,12 +404,14 @@ interface FormShape {
   sensitiveTopics: string[]
   quota: { monthlyTokenCap: number; onExceed: AiSettingsDoc['quota']['onExceed'] }
   handoffNotify: AiSettingsDoc['handoffNotify']
+  handbackIdleMinutes: number
   disambiguation: AiSettingsDoc['disambiguation']
 }
 
 function defaultForm(): FormShape {
   return {
     enabled: false,
+    replyMode: 'auto',
     answerModel: 'gemini-2.5-flash',
     embeddingModel: 'gemini-embedding-001',
     confidenceThreshold: 0.75,
@@ -371,7 +420,8 @@ function defaultForm(): FormShape {
     replyMaxLen: 300,
     sensitiveTopics: [],
     quota: { monthlyTokenCap: 1_000_000, onExceed: 'handoff_all' },
-    handoffNotify: { enabled: false, lineUserIds: [] },
+    handoffNotify: { enabled: false, lineUserIds: [], slaRemindMinutes: 15 },
+    handbackIdleMinutes: 0,
     disambiguation: {
       enabled: true,
       top1Min: 0.65,
@@ -388,6 +438,23 @@ const saving = ref(false)
 const { markClean, hasUnsavedChanges: dirty } = useUnsavedChanges({
   getSnapshot: () => form.value,
 })
+
+/**
+ * 門檻 preset：非工程背景的管理者沒有依據逐項調 RAG 參數，提供三檔起手組合。
+ * 嚴格 = 寧可轉真人也不要答錯；寬鬆 = 知識庫成熟後拉高自動回覆率。
+ */
+function applyPreset(name: 'strict' | 'balanced' | 'loose') {
+  const presets = {
+    strict: { conf: 0.8, grounding: 0.75, top1Min: 0.7, top1Max: 0.82 },
+    balanced: { conf: 0.75, grounding: 0.7, top1Min: 0.65, top1Max: 0.78 },
+    loose: { conf: 0.65, grounding: 0.6, top1Min: 0.55, top1Max: 0.7 },
+  } as const
+  const ps = presets[name]
+  form.value.confidenceThreshold = ps.conf
+  form.value.groundingThreshold = ps.grounding
+  form.value.disambiguation.top1Min = ps.top1Min
+  form.value.disambiguation.top1Max = ps.top1Max
+}
 
 const sensitiveInput = ref('')
 const sensitiveInputVisible = ref(false)
@@ -438,6 +505,7 @@ async function loadSettings(_resetOnly = false) {
     const data = await apiFetch<AiSettingsDoc>('/api/ai/settings')
     form.value = {
       enabled: data.enabled,
+      replyMode: data.replyMode === 'draft' ? 'draft' : 'auto',
       answerModel: data.answerModel,
       embeddingModel: data.embeddingModel,
       confidenceThreshold: data.confidenceThreshold,
@@ -449,7 +517,9 @@ async function loadSettings(_resetOnly = false) {
       handoffNotify: {
         enabled: data.handoffNotify?.enabled === true,
         lineUserIds: [...(data.handoffNotify?.lineUserIds ?? [])],
+        slaRemindMinutes: Number(data.handoffNotify?.slaRemindMinutes ?? 15),
       },
+      handbackIdleMinutes: Number(data.handbackIdleMinutes ?? 0),
       disambiguation: { ...data.disambiguation },
     }
     markClean()

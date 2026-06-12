@@ -27,6 +27,8 @@ export interface HandoffNotifyParams {
   customerMessage: string
   /** null = 非 AI 護欄觸發（例如腳本設定轉真人） */
   reason: HandoffReason | null
+  /** SLA 提醒模式：轉真人後超過 N 分鐘無人回應的再提醒（訊息格式不同） */
+  slaReminderMinutes?: number
 }
 
 export async function notifyHandoffToStaff(params: HandoffNotifyParams): Promise<void> {
@@ -44,13 +46,20 @@ export async function notifyHandoffToStaff(params: HandoffNotifyParams): Promise
   const reasonLabel = params.reason
     ? (HANDOFF_REASON_LABELS[params.reason] ?? params.reason)
     : '腳本轉真人'
-  const lines = [
-    '🙋 真人客服請求',
-    `客人：${params.customerName}`,
-    ...(params.customerMessage.trim() ? [`訊息：${params.customerMessage.trim().slice(0, 200)}`] : []),
-    `原因：${reasonLabel}`,
-    '請至後台「對話」頁回覆。',
-  ]
+  const lines = params.slaReminderMinutes
+    ? [
+        '⏰ 提醒：真人客服請求尚未回應',
+        `客人：${params.customerName}`,
+        `已等待超過 ${params.slaReminderMinutes} 分鐘`,
+        '請至後台「對話」頁回覆。',
+      ]
+    : [
+        '🙋 真人客服請求',
+        `客人：${params.customerName}`,
+        ...(params.customerMessage.trim() ? [`訊息：${params.customerMessage.trim().slice(0, 200)}`] : []),
+        `原因：${reasonLabel}`,
+        '請至後台「對話」頁回覆。',
+      ]
   const msg: messagingApi.TextMessage = { type: 'text', text: lines.join('\n') }
 
   const results = await Promise.allSettled(

@@ -41,7 +41,8 @@ export default defineEventHandler(async (event) => {
 
   const result = await updateKnowledgeChunk(db, {
     chunkId,
-    contentChanged,
+    // title 也在 embedding 文字裡，改標題同樣要重新索引
+    contentChanged: contentChanged || titleChanged,
     manualEdit: true,
     ...input,
   })

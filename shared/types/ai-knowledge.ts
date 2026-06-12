@@ -16,6 +16,8 @@ export interface KnowledgeChunkDoc {
   title: string
   content: string
   tags: string[]
+  /** 客人常見問法（LLM 生成），與 title/content 一併進 embedding；舊卡可能沒有此欄位 */
+  questions?: string[]
   /** Firestore VectorValue（768 dim）；尚未索引時為 null */
   embedding: EmbeddingVector | null
   /** 約略 token 數，用來估成本與檢索預算 */
@@ -23,6 +25,8 @@ export interface KnowledgeChunkDoc {
   status: KnowledgeChunkStatus
   /** 失敗原因（status === 'failed' 時填寫） */
   failureReason?: string
+  /** 連續索引失敗次數；超過上限後排程不再自動重試（手動 reindex 不受限，成功即歸零） */
+  retryCount?: number
   /** 來源 doc ID；手打輸入則為 null */
   sourceId: string | null
   /** 最後一次完成索引的時間（indexed 後才寫） */
@@ -105,10 +109,19 @@ export interface KnowledgeSourceDoc {
 export type AiAnswerModel = 'gemini-2.5-flash' | 'gemini-2.5-flash-lite'
 export type AiEmbeddingModel = 'gemini-embedding-001'
 export type QuotaExceedStrategy = 'handoff_all' | 'downgrade_model'
+/**
+ * 回覆模式：
+ *   - 'auto'：AI 直接回覆客人（原行為）
+ *   - 'draft'：AI 只把建議回覆寫進收件匣（aiMeta.suggestedReply），不對客人發話。
+ *     新導入工作區的漸進信任路徑：先觀察 AI 答題品質，再切全自動。
+ */
+export type AiReplyMode = 'auto' | 'draft'
 
 export interface AiSettingsDoc {
   /** 總開關：未啟用前 AI 不接任何訊息 */
   enabled: boolean
+  /** 回覆模式；enabled=true 才有意義 */
+  replyMode: AiReplyMode
   answerModel: AiAnswerModel
   embeddingModel: AiEmbeddingModel
   /** 信心門檻（0–1）；低於此值就轉真人。預設 0.75 */
@@ -132,7 +145,14 @@ export interface AiSettingsDoc {
     enabled: boolean
     /** 要通知的客服 LINE userIds（上限 10 位） */
     lineUserIds: string[]
+    /** SLA 提醒：轉真人後超過此分鐘數仍無人回應，再推播提醒一次（每場會話只提醒一次）。0 = 關閉 */
+    slaRemindMinutes: number
   }
+  /**
+   * 真人處理中、且真人最後回覆超過此分鐘數沒有後續回覆 → 自動把會話交還機器人。
+   * 0 = 關閉（只能手動按「交還機器人」或等 24h session 過期）。
+   */
+  handbackIdleMinutes: number
   /** 反問澄清（disambiguation）— 答案擦邊且 top-K 分數接近時主動反問 */
   disambiguation: {
     /** 總開關；關掉就照舊走 answered / handoff */
@@ -173,6 +193,11 @@ export interface AiUsageDoc {
   handoffs: number
   /** 觸發反問澄清的次數 */
   disambiguations: number
+  /** 匯入 / 整理（切卡、normalize）token 分項；已包含在 inputTokens/outputTokens 總量內 */
+  importInputTokens?: number
+  importOutputTokens?: number
+  /** AI answered 後 30 分鐘內客人又被轉真人 — 回答品質 proxy */
+  answeredThenHandoffs?: number
   updatedAt: Timestamp | FieldValue
 }
 
@@ -191,6 +216,8 @@ export type HandoffReason =
   | 'llm_error'
   /** 真正的設定 / 流程問題（空 query、AI 未啟用等），不是 LLM 服務問題 */
   | 'manual'
+  /** 客人明確要求真人（「找真人」按鈕或自行輸入），不經 AI 直接轉接 */
+  | 'user_request'
 
 export interface AiConversationMeta {
   /** 最近一次 AI 介入的決定 */
@@ -212,6 +239,11 @@ export interface AiConversationMeta {
     options: Array<{ chunkId: string; title: string }>
     askedAt: Timestamp | FieldValue
   } | null
+  /**
+   * 監控頁「轉真人案例」標記已處理的時間。resolvedAt >= updatedAt 視為已處理；
+   * 同客人之後又發生新互動（updatedAt 更新）會自動回到未處理。
+   */
+  handoffResolvedAt?: Timestamp | FieldValue | null
   updatedAt: Timestamp | FieldValue
 }
 
@@ -234,8 +266,11 @@ export interface AiAutoReplyConfig {
 export interface DisambiguationPayload {
   /** 反問客人的自然語句（LLM 生成） */
   clarification: string
-  /** 可選選項；每個 option 對應一張命中的知識卡 */
-  options: Array<{ chunkId: string; title: string }>
+  /**
+   * 可選選項；每個 option 對應一張命中的知識卡。
+   * label = 按鈕顯示用短名稱（≤20 字，LLM 生成）；按鈕送出的 text 仍用完整 title（followup 比對用）。
+   */
+  options: Array<{ chunkId: string; title: string; label?: string }>
 }
 
 export interface AiAnswerResult {
@@ -286,6 +321,9 @@ export const DEFAULT_DISAMBIGUATION_COOLDOWN_MINUTES = 5
 /** 預設月度 token 上限 */
 export const DEFAULT_MONTHLY_TOKEN_CAP = 1_000_000
 
+/** 真人閒置自動交還機器人（分鐘）；0 = 關閉。保守預設關閉，由各工作區自行啟用 */
+export const DEFAULT_HANDBACK_IDLE_MINUTES = 0
+
 /** aiSettings 單例 doc ID */
 export const AI_SETTINGS_DOC_ID = 'default'
 
@@ -324,6 +362,7 @@ export const HANDOFF_REASON_LABELS: Record<HandoffReason, string> = {
   quota_exceeded: '本月用量已滿',
   llm_error: 'AI 服務暫時失敗',
   manual: '人工指定',
+  user_request: '客人要求真人',
 }
 
 export const KNOWLEDGE_CHUNK_STATUS_LABELS: Record<KnowledgeChunkStatus, string> = {
@@ -349,6 +388,7 @@ export const QUOTA_EXCEED_STRATEGY_LABELS: Record<QuotaExceedStrategy, string> =
 export function buildDefaultAiSettings(): Omit<AiSettingsDoc, 'updatedAt'> {
   return {
     enabled: false,
+    replyMode: 'auto',
     answerModel: 'gemini-2.5-flash',
     embeddingModel: 'gemini-embedding-001',
     confidenceThreshold: DEFAULT_CONFIDENCE_THRESHOLD,
@@ -363,7 +403,9 @@ export function buildDefaultAiSettings(): Omit<AiSettingsDoc, 'updatedAt'> {
     handoffNotify: {
       enabled: false,
       lineUserIds: [],
+      slaRemindMinutes: 15,
     },
+    handbackIdleMinutes: DEFAULT_HANDBACK_IDLE_MINUTES,
     disambiguation: {
       enabled: DEFAULT_DISAMBIGUATION_ENABLED,
       top1Min: DEFAULT_DISAMBIGUATION_TOP1_MIN,

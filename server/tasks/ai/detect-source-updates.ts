@@ -76,6 +76,19 @@ async function checkOneSource(
       lastFetchedAt: FieldValue.serverTimestamp(),
     })
 
+    // 全文暫存到 subcollection：偵測時已抓過全文，丟掉的話使用者按「套用」還要重抓一次，
+    // 而且「偵測時的版本」和「套用時的版本」可能不一致。放 subcollection 避免 source
+    // 列表查詢拖著幾百 KB 的內文。
+    await db.collection(KNOWLEDGE_SOURCES_COLLECTION).doc(sourceId)
+      .collection('cache').doc('extracted')
+      .set({
+        text: extracted.text,
+        hash: newHash,
+        rawLength: extracted.rawLength,
+        fetchedAt: FieldValue.serverTimestamp(),
+      })
+      .catch(e => console.warn(`[detect-source-updates] ${sourceId} cache write failed:`, e))
+
     if (behavior === 'notify') {
       await markSourceOutdated(db, sourceId)
       return { sourceId, outcome: 'changed_notified' }

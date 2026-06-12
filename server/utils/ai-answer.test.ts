@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   truncateAtSentence,
   dedupeBySource,
+  dedupeNearIdentical,
   shouldDisambiguate,
   matchCandidateTitle,
   buildContextualQuery,
@@ -70,6 +71,32 @@ describe('dedupeBySource', () => {
       chunk({ id: 'b', sourceId: null }),
     ]
     expect(dedupeBySource(input)).toHaveLength(2)
+  })
+})
+
+describe('dedupeNearIdentical', () => {
+  it('跨來源同標題（忽略空白大小寫）只留排前面那張', () => {
+    const input = [
+      chunk({ id: 'a', title: '退換貨政策', content: '七天鑑賞期。', sourceId: 's1', similarity: 0.8 }),
+      chunk({ id: 'b', title: '退換貨 政策', content: '7 天鑑賞期內可退。', sourceId: 's2', similarity: 0.79 }),
+    ]
+    expect(dedupeNearIdentical(input).map(c => c.id)).toEqual(['a'])
+  })
+
+  it('同內容不同標題也視為重複', () => {
+    const input = [
+      chunk({ id: 'a', title: '運費', content: '滿千免運。', sourceId: 's1' }),
+      chunk({ id: 'b', title: '運費說明', content: '滿千免運。', sourceId: 's2' }),
+    ]
+    expect(dedupeNearIdentical(input).map(c => c.id)).toEqual(['a'])
+  })
+
+  it('標題與內容都不同的卡全部保留', () => {
+    const input = [
+      chunk({ id: 'a', title: '運費', content: '滿千免運。' }),
+      chunk({ id: 'b', title: '退換貨', content: '七天鑑賞期。' }),
+    ]
+    expect(dedupeNearIdentical(input)).toHaveLength(2)
   })
 })
 

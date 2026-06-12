@@ -32,6 +32,7 @@ function eventLabel(eventType: ConversationEventType, moduleType?: ModuleType): 
   if (eventType === 'conversation_closed') return '會話已結束'
   if (eventType === 'handoff_request') return '請求轉接真人'
   if (eventType === 'human_first_reply') return '真人客服首次回覆'
+  if (eventType === 'returned_to_bot') return '已交還機器人'
   if (eventType === 'entered_module') {
     const label = moduleType ? MODULE_TYPE_LABELS[moduleType] : '模組'
     return `進入：${label}`

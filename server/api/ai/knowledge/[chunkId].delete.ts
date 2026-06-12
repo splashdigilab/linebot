@@ -1,7 +1,7 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
-import { KNOWLEDGE_CHUNKS_COLLECTION } from '~~/server/utils/ai-knowledge-chunks'
+import { invalidateTagIndexCache, KNOWLEDGE_CHUNKS_COLLECTION } from '~~/server/utils/ai-knowledge-chunks'
 import { KNOWLEDGE_SOURCES_COLLECTION } from '~~/server/utils/ai-knowledge-sources'
 
 /**
@@ -26,6 +26,7 @@ export default defineEventHandler(async (event) => {
   }
 
   await ref.delete()
+  invalidateTagIndexCache(workspaceId)
 
   // 同步維護 source 的 chunkCount / 若是 manual 單張就一併刪掉 source
   if (existing.sourceId) {

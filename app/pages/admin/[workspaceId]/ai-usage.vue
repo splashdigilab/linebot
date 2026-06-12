@@ -46,6 +46,11 @@
                 <strong>{{ formatPercent(summary?.handoffRate) }}</strong>
                 <span class="usage-kpi__sub">{{ formatNumber(summary?.handoffs) }} 次轉接</span>
               </div>
+              <div class="usage-kpi usage-kpi--warning">
+                <span class="usage-kpi__label">答後仍轉真人</span>
+                <strong>{{ formatPercent(summary?.answeredThenHandoffRate) }}</strong>
+                <span class="usage-kpi__sub">{{ formatNumber(summary?.answeredThenHandoffs) }} 次（回答沒解決問題的 proxy，越低越好）</span>
+              </div>
               <div class="usage-kpi">
                 <span class="usage-kpi__label">每對話成本</span>
                 <strong>${{ summary?.perConversationUsd?.toFixed(4) ?? '0.0000' }}</strong>
@@ -79,6 +84,11 @@
                 <strong>{{ formatNumber(summary?.embeddingTokens) }}</strong>
                 <span class="text-xs text-muted">查詢向量化</span>
               </div>
+              <div class="usage-token-row">
+                <span class="text-muted">匯入 / 整理</span>
+                <strong>{{ formatNumber((summary?.importInputTokens ?? 0) + (summary?.importOutputTokens ?? 0)) }}</strong>
+                <span class="text-xs text-muted">切卡與 AI 整理（已含在上方 Input / Output 內）</span>
+              </div>
             </div>
             <p class="usage-hint">
               成本估算依 Gemini Flash 公開計價（input ${{ pricing.inputPerM }} / output ${{ pricing.outputPerM }} / embed ${{ pricing.embedPerM }} per 1M tokens）。
@@ -96,6 +106,7 @@
                 <el-option label="全部原因" value="" />
                 <el-option label="信心不足" value="low_confidence" />
                 <el-option label="知識庫無依據" value="no_grounding" />
+                <el-option label="客人要求真人" value="user_request" />
               </el-select>
             </div>
           </div>
@@ -121,6 +132,8 @@
                 <div class="usage-handoff-actions">
                   <el-button size="small" plain @click="goConversation(row.userId)">💬 開對話</el-button>
                   <el-button size="small" type="primary" plain @click="goAddKnowledge(row.lastQuery)">📥 補知識</el-button>
+                  <el-button size="small" plain @click="goPlayground(row.lastQuery)">▶ 重演</el-button>
+                  <el-button size="small" type="success" plain :loading="resolvingUserId === row.userId" @click="resolveHandoff(row.userId)">✓ 已處理</el-button>
                 </div>
               </div>
             </div>
@@ -144,9 +157,13 @@ interface Summary {
   invocations: number
   answered: number
   handoffs: number
+  answeredThenHandoffs: number
+  answeredThenHandoffRate: number
   inputTokens: number
   outputTokens: number
   embeddingTokens: number
+  importInputTokens: number
+  importOutputTokens: number
   autoReplyRate: number
   handoffRate: number
   estimatedCostUsd: number
@@ -159,6 +176,7 @@ interface HandoffRow {
   lastQuery: string
   lastConfidence: number
   handoffReason: HandoffReason | null
+  resolved: boolean
   sources: Array<{ chunkId: string; title: string }>
   updatedAtMs: number
 }
@@ -250,6 +268,24 @@ function goConversation(userId: string) {
 }
 function goAddKnowledge(_query: string) {
   router.push(`/admin/${workspaceId.value}/knowledge`)
+}
+function goPlayground(query: string) {
+  router.push(`/admin/${workspaceId.value}/ai-playground?q=${encodeURIComponent(query)}`)
+}
+
+const resolvingUserId = ref<string | null>(null)
+async function resolveHandoff(userId: string) {
+  resolvingUserId.value = userId
+  try {
+    await apiFetch('/api/ai/usage/handoffs/resolve', { method: 'POST', body: { userId } })
+    handoffs.value = handoffs.value.filter(r => r.userId !== userId)
+  }
+  catch {
+    // 失敗就保留在列表上，下次再按
+  }
+  finally {
+    resolvingUserId.value = null
+  }
 }
 
 onMounted(() => loadAll())

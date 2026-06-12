@@ -110,6 +110,16 @@
           <span class="conv-session-toolbar__hint">{{ selectedSessionId ? '此場會話' : '進行中會話' }}</span>
           <el-tag size="small" type="info">{{ sessionToolbarMeta.statusLabel }}</el-tag>
           <el-button
+            v-if="sessionToolbarMeta.status === 'pending_human' || sessionToolbarMeta.status === 'human_handling'"
+            size="small"
+            type="primary"
+            plain
+            :loading="handingBackSession"
+            @click="handBackSelectedSession"
+          >
+            交還機器人
+          </el-button>
+          <el-button
             v-if="sessionToolbarMeta.status !== 'closed'"
             size="small"
             plain
@@ -948,6 +958,7 @@ const sessionStatusCounts = ref<Record<ConvSessionStatus, number>>({
   closed: 0,
 })
 const closingSession = ref(false)
+const handingBackSession = ref(false)
 const selectedUserId = ref<string | null>(null)
 const selectedSessionId = ref<string | null>(null)
 const selectedUser = ref<ConvItem | null>(null)
@@ -1448,6 +1459,31 @@ async function reloadAfterOutgoing() {
   else if (selectedUser.value) {
     await selectUser(selectedUser.value)
     await loadSessionCounts()
+  }
+}
+
+async function handBackSelectedSession() {
+  const sid = selectedSessionId.value || allTabActiveSession.value?.sessionId
+  const st = sessionToolbarMeta.value?.status
+  if (!sid || (st !== 'pending_human' && st !== 'human_handling'))
+    return
+  handingBackSession.value = true
+  try {
+    await apiFetch(`/api/conversations/sessions/${sid}/handback`, {
+      method: 'POST',
+    })
+    showToast('已交還機器人，AI / 自動回覆恢復接手', 'success')
+    if (selectedSessionId.value)
+      await reloadSessionTimeline()
+    else if (selectedUser.value)
+      await selectUser(selectedUser.value)
+    await refreshListQuiet()
+  }
+  catch (e: any) {
+    showToast(e?.data?.statusMessage || '交還機器人失敗', 'error')
+  }
+  finally {
+    handingBackSession.value = false
   }
 }
 

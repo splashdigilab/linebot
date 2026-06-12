@@ -63,6 +63,7 @@ export default defineEventHandler(async (event) => {
     title: input.title,
     content: input.content,
     tags: input.tags,
+    questions: input.questions,
     sourceId,
   })
 
@@ -73,6 +74,7 @@ export default defineEventHandler(async (event) => {
     title: input.title,
     content: input.content,
     tags: input.tags,
+    questions: input.questions ?? [],
     sourceId,
   }
 })
