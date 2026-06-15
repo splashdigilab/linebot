@@ -150,6 +150,95 @@ export async function chunkTextWithLlm(rawText: string, opts?: { hint?: string }
 }
 
 // ═══════════════════════════════════════════════════════════════════
+//  Overview（總覽卡）
+//  列表頁（商品首頁、型錄頁）切碎成個別卡片後，再額外合成「一張」分類索引卡。
+//  用途：接「你們有賣什麼 / 有哪些產品」這類列舉型問題 —— 個別產品卡對這種廣泛
+//  提問相似度都低且接近，會誤觸反問澄清；一張帶分類結構的總覽卡能被廣泛提問
+//  精準命中（靠它的 questions），top-1 衝高就直接回答。
+//
+//  設計：從「已切好的子卡片標題 + 重點行」合成，不重讀原文 ——
+//  比再跑一次原文便宜、且保證總覽內容與實際卡片一致；長文也只餵標題不會撞 token 上限。
+// ═══════════════════════════════════════════════════════════════════
+
+const OVERVIEW_SYSTEM_INSTRUCTION = `你是專業的客服知識整理助手。任務：把一份「卡片清單」濃縮成「一張」總覽卡，讓客人問「你們有賣什麼 / 有哪些 / 全部品項」這類列舉型問題時，能用這張卡一次回答。
+
+規則：
+1. 只輸出「一張」卡，不要拆成多張。
+2. 把清單裡的品項依性質歸成幾個分類（例：家電、咖啡、寵物、生活…），同類放一起。
+3. content 格式：
+   - 第一行以「重點：」開頭，用 ｜ 分隔各分類，每個分類後面用括號列出該類的主要品項（例：「重點：家電（循環扇、洗衣機、除濕機）｜咖啡（智慧咖啡機、手沖機）｜寵物（飲水機、清淨機）」）。
+   - 留一個空行。
+   - 接著用 1–3 句口語總結（例：「我們主要販售各式家電、咖啡與生活用品，想了解哪一類可以再告訴我。」），不要 markdown / 項目符號 / 表情符號。
+4. 不要遺漏清單裡的主要品項；但同質、重複的可合併描述。不要捏造清單裡沒有的品項。
+5. 不要出現品號、SKU、價格、編號。
+6. tags：放 2–4 個分類關鍵字（例：商品總覽、產品列表）。
+7. questions：寫 3–4 個客人會用來問「全部品項」的口語問句（例：「你們有賣什麼？」「有哪些產品？」「全部商品有哪些？」「有什麼推薦？」）。
+
+輸出格式（嚴格 JSON）：
+{ "title": "string", "content": "string", "tags": ["string"], "questions": ["string"] }`
+
+/** 合成總覽卡時，每張子卡只取「標題 + 內容第一行」餵進 LLM，控制 input 量 */
+function overviewSourceLine(c: ChunkInput): string {
+  const firstLine = c.content.split('\n').map(s => s.trim()).find(Boolean) ?? ''
+  return firstLine ? `- ${c.title}：${firstLine}` : `- ${c.title}`
+}
+
+export interface OverviewResult {
+  card: ChunkInput
+  inputTokens: number
+  outputTokens: number
+}
+
+/**
+ * 從已切好的卡片清單合成「一張」總覽卡（isOverview=true）。
+ * 子卡片不足 2 張時回 null（沒必要做總覽）。失敗時 throw，由 caller 決定要不要降級。
+ */
+export async function summarizeAsOverviewCard(
+  chunks: ChunkInput[],
+  opts?: { hint?: string },
+): Promise<OverviewResult | null> {
+  const items = chunks.filter(c => c.title && c.content)
+  if (items.length < 2) return null
+
+  const prompt = [
+    opts?.hint ? `來源：${opts.hint}` : '',
+    '請把下面這份卡片清單濃縮成「一張」總覽卡：',
+    '------',
+    items.map(overviewSourceLine).join('\n'),
+    '------',
+  ].filter(Boolean).join('\n\n')
+
+  const { data, inputTokens, outputTokens } = await generateJson<{
+    title?: unknown
+    content?: unknown
+    tags?: unknown
+    questions?: unknown
+  }>(prompt, {
+    systemInstruction: OVERVIEW_SYSTEM_INSTRUCTION,
+    temperature: 0.2,
+    maxOutputTokens: 2048,
+    // 同其它結構化 JSON 任務：關掉 thinking，避免吃掉配額把 JSON 截斷
+    thinkingBudget: 0,
+  })
+
+  const title = String(data?.title ?? '').trim()
+  const content = String(data?.content ?? '').trim()
+  if (!title || !content) return null
+  const tags = Array.isArray(data?.tags)
+    ? data.tags.map(t => String(t).trim()).filter(Boolean).slice(0, 6)
+    : []
+  const questions = Array.isArray(data?.questions)
+    ? data.questions.map(q => String(q).trim()).filter(Boolean).slice(0, 4)
+    : []
+
+  return {
+    card: { title, content, tags, questions, sourceId: null, isOverview: true },
+    inputTokens,
+    outputTokens,
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
 //  Normalize（單卡整理）
 //  既有卡 / 手打卡用同樣的 system instruction 跑一次，把它變成標準格式：
 //    - 第一行「重點：」keyword 摘要

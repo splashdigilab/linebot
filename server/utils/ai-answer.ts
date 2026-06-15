@@ -175,6 +175,9 @@ export function shouldDisambiguate(
   if (!cfg.enabled) return false
   const [a, b] = dedupedChunks
   if (!a || !b) return false
+  // top-1 命中「總覽卡」：客人問的是列舉型問題（你們有賣什麼），總覽卡贏了本身就是答案，
+  // 不該再反問「你要哪一個」。直接放行去 answer。
+  if (a.isOverview) return false
   const top1 = a.similarity
   const top2 = b.similarity
   if (top1 < cfg.top1Min || top1 >= cfg.top1Max) return false

@@ -17,6 +17,7 @@ function chunk(partial: Partial<SimilarChunk> & { id: string }): SimilarChunk {
     tags: [],
     similarity: 0,
     sourceId: null,
+    isOverview: false,
     ...partial,
   }
 }
@@ -140,6 +141,14 @@ describe('shouldDisambiguate', () => {
   it('top-1 / top-2 差距達 maxSpread → false', () => {
     expect(shouldDisambiguate(pair(0.7, 0.6), settings)).toBe(false)
     expect(shouldDisambiguate(pair(0.7, 0.63), settings)).toBe(false)
+  })
+
+  it('top-1 是總覽卡 → false（列舉型問題直接用總覽卡答，不反問）', () => {
+    const withOverview = [
+      chunk({ id: 'a', similarity: 0.6, isOverview: true }),
+      chunk({ id: 'b', similarity: 0.58 }),
+    ]
+    expect(shouldDisambiguate(withOverview, settings)).toBe(false)
   })
 })
 

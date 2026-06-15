@@ -1,0 +1,200 @@
+/* ── Knowledge import dialog（KnowledgeImportDialog.vue）─────────── */
+.kb-import-dialog .el-dialog__body {
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.kb-step-label {
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0 0 12px;
+}
+
+.kb-section-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin: 0 0 12px;
+}
+
+.kb-warning {
+  color: var(--el-color-warning);
+  font-weight: 500;
+}
+
+.kb-dedup-warning,
+.kb-ocr-alert {
+  margin-bottom: 12px;
+}
+
+.kb-dedup-body p {
+  margin: 0 0 6px;
+}
+
+.kb-dedup-list {
+  margin: 6px 0 8px;
+  padding-left: 18px;
+  font-size: 13px;
+}
+
+.kb-dedup-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.kb-import-tabs {
+  margin-top: -8px;
+}
+
+.kb-overview-toggle {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  background: var(--el-fill-color-light);
+
+  .kb-section-hint {
+    margin: 6px 0 0;
+  }
+}
+
+.kb-overview-card {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+  border: 1px solid var(--el-color-primary-light-5);
+  border-radius: 6px;
+  background: var(--el-color-primary-light-9);
+}
+
+.kb-overview-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--el-color-primary);
+}
+
+.kb-file-zone {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  border: 1px dashed var(--el-border-color);
+  border-radius: 6px;
+  background: var(--el-fill-color-light);
+}
+
+.kb-file-input {
+  display: none;
+}
+
+.kb-file-name {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+
+.kb-import-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+  flex-wrap: wrap;
+}
+
+.kb-bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.kb-chunk-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px;
+}
+
+.kb-chunk-row {
+  display: flex;
+  gap: 12px;
+  padding: 12px;
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+  border: 1px solid var(--el-border-color-lighter);
+
+  &--excluded {
+    opacity: 0.5;
+  }
+}
+
+.kb-chunk-checkbox {
+  padding-top: 8px;
+}
+
+.kb-chunk-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.kb-chunk-textarea {
+  width: 100%;
+}
+
+.kb-chunk-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.kb-tag-input {
+  width: 100px;
+}
+
+.kb-result-summary {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.kb-result-stat {
+  flex: 1;
+  padding: 16px;
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+  text-align: center;
+
+  &--success {
+    background: var(--el-color-success-light-9);
+    color: var(--el-color-success);
+  }
+
+  &--danger {
+    background: var(--el-color-danger-light-9);
+    color: var(--el-color-danger);
+  }
+
+  strong {
+    display: block;
+    font-size: 24px;
+    margin-top: 4px;
+  }
+}
+
+.kb-result-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+}
+
+.kb-failed-list {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  li {
+    margin: 4px 0;
+  }
+}

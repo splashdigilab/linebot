@@ -29,6 +29,8 @@ export interface ChunkInput {
    */
   questions?: string[]
   sourceId?: string | null
+  /** 是否為列表頁合成的「總覽卡」（見 KnowledgeChunkDoc.isOverview） */
+  isOverview?: boolean
 }
 
 export function normalizeChunkInput(raw: any): ChunkInput {
@@ -40,6 +42,7 @@ export function normalizeChunkInput(raw: any): ChunkInput {
       ? raw.questions.map(String).map((q: string) => q.trim()).filter(Boolean).slice(0, 3)
       : undefined,
     sourceId: raw?.sourceId != null ? String(raw.sourceId).trim() || null : null,
+    isOverview: raw?.isOverview === true,
   }
 }
 
@@ -88,6 +91,7 @@ export async function createKnowledgeChunk(
     content: params.content,
     tags: params.tags,
     questions: params.questions ?? [],
+    isOverview: params.isOverview === true,
     embedding: null,
     tokens: estimateTokens(params.content),
     status: 'pending',
@@ -218,6 +222,8 @@ export interface SimilarChunk {
   similarity: number
   /** 來源 ID（同來源切出來的多 chunk 用此 dedupe） */
   sourceId: string | null
+  /** 是否為列表頁合成的「總覽卡」；答題端據此跳過反問澄清 */
+  isOverview: boolean
 }
 
 /**
@@ -257,6 +263,7 @@ export async function searchSimilarChunks(
       tags: Array.isArray(data?.tags) ? data.tags : [],
       similarity,
       sourceId: data?.sourceId ?? null,
+      isOverview: data?.isOverview === true,
     }
   })
 }
@@ -349,6 +356,7 @@ export async function searchChunksByIdentifierTag(
         tags: Array.isArray(data?.tags) ? data.tags : [],
         similarity: TAG_MATCH_SIMILARITY,
         sourceId: data?.sourceId ?? null,
+        isOverview: data?.isOverview === true,
       }
     })
 }

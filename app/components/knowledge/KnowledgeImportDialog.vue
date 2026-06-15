@@ -50,6 +50,16 @@
         </el-tab-pane>
       </el-tabs>
 
+      <div class="kb-overview-toggle">
+        <el-checkbox v-model="generateOverview">
+          這是商品 / 列表頁（額外產生一張「總覽卡」）
+        </el-checkbox>
+        <p class="kb-section-hint">
+          適用首頁、商品型錄這類「列出很多項目」的頁面。除了把每個項目切成卡片，再額外合成一張帶分類的總覽卡，
+          讓客人問「你們有賣什麼 / 有哪些產品」時能一次回答，不會被反問。
+        </p>
+      </div>
+
       <div class="kb-import-actions">
         <el-button
           type="primary"
@@ -109,6 +119,35 @@
           </div>
         </div>
       </el-alert>
+
+      <!-- 總覽卡（列表頁專屬）：列在最上面、可編輯、可取消 -->
+      <div v-if="overviewCard" class="kb-overview-card">
+        <div class="kb-chunk-checkbox">
+          <el-checkbox v-model="overviewCard.included" />
+        </div>
+        <div class="kb-chunk-content">
+          <div class="kb-overview-badge">🗂️ 總覽卡（接「你們有賣什麼」這類問題）</div>
+          <el-input v-model="overviewCard.title" placeholder="標題" size="small" class="kb-chunk-title" />
+          <el-input
+            v-model="overviewCard.content"
+            type="textarea"
+            :rows="4"
+            placeholder="內容"
+            class="kb-chunk-textarea"
+          />
+          <div class="kb-chunk-tags">
+            <el-tag
+              v-for="tag in overviewCard.tags"
+              :key="tag"
+              size="small"
+              closable
+              @close="removeTag(overviewCard, tag)"
+            >
+              {{ tag }}
+            </el-tag>
+          </div>
+        </div>
+      </div>
 
       <div class="kb-bulk-actions">
         <el-button size="small" plain @click="selectAll">全選</el-button>
@@ -273,6 +312,11 @@ function fileToBase64(file: File): Promise<string> {
 const urlInput = ref('')
 const textInput = ref('')
 
+// ── Overview（列表頁總覽卡）──────────────────────────────
+const generateOverview = ref(false)
+type OverviewCard = { included: boolean; title: string; content: string; tags: string[]; questions: string[] }
+const overviewCard = ref<OverviewCard | null>(null)
+
 // ── Preview ───────────────────────────────────────────────
 const previewing = ref(false)
 const truncated = ref(false)
@@ -296,7 +340,7 @@ const includedCount = computed(() => chunks.value.filter(c => c.included).length
 async function runPreview() {
   previewing.value = true
   try {
-    const body: Record<string, unknown> = { type: mode.value }
+    const body: Record<string, unknown> = { type: mode.value, generateOverview: generateOverview.value }
     if (mode.value === 'file') {
       body.fileName = fileName.value
       body.contentType = fileContentType.value
@@ -312,6 +356,7 @@ async function runPreview() {
 
     const res = await apiFetch<{
       chunks: Array<{ title: string; content: string; tags: string[]; questions?: string[] }>
+      overviewCard?: { title: string; content: string; tags: string[]; questions: string[] } | null
       sourceName: string
       sourceUrl: string
       truncated: boolean
@@ -333,6 +378,15 @@ async function runPreview() {
       tags: [...(c.tags ?? [])],
       questions: [...(c.questions ?? [])],
     }))
+    overviewCard.value = res.overviewCard
+      ? {
+          included: true,
+          title: res.overviewCard.title,
+          content: res.overviewCard.content,
+          tags: [...(res.overviewCard.tags ?? [])],
+          questions: [...(res.overviewCard.questions ?? [])],
+        }
+      : null
     existingMatches.value = res.existingMatches ?? []
     sourceMeta.value = {
       type: mode.value,
@@ -406,6 +460,11 @@ async function runImport() {
 
   importing.value = true
   try {
+    const ov = overviewCard.value
+    const overviewPayload = ov && ov.included && ov.title.trim() && ov.content.trim()
+      ? { title: ov.title.trim(), content: ov.content.trim(), tags: ov.tags, questions: ov.questions ?? [] }
+      : null
+
     const res = await apiFetch<typeof result.value>('/api/ai/knowledge/bulk-create', {
       method: 'POST',
       body: {
@@ -415,6 +474,7 @@ async function runImport() {
           url: sourceMeta.value.url,
         },
         chunks: selected,
+        overviewCard: overviewPayload,
       },
     })
     result.value = res
@@ -447,6 +507,8 @@ function resetAll() {
   urlInput.value = ''
   textInput.value = ''
   chunks.value = []
+  overviewCard.value = null
+  generateOverview.value = false
   existingMatches.value = []
   truncated.value = false
   ocrUsed.value = false
@@ -479,177 +541,3 @@ function relativeTime(ms: number): string {
   return new Date(ms).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
 }
 </script>
-
-<style scoped lang="scss">
-.kb-import-dialog :deep(.el-dialog__body) {
-  max-height: 72vh;
-  overflow-y: auto;
-}
-
-.kb-step-label {
-  font-size: 13px;
-  font-weight: 600;
-  margin: 0 0 12px;
-}
-
-.kb-section-hint {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  margin: 0 0 12px;
-}
-
-.kb-warning {
-  color: var(--el-color-warning);
-  font-weight: 500;
-}
-
-.kb-dedup-warning,
-.kb-ocr-alert {
-  margin-bottom: 12px;
-}
-
-.kb-dedup-body p {
-  margin: 0 0 6px;
-}
-
-.kb-dedup-list {
-  margin: 6px 0 8px;
-  padding-left: 18px;
-  font-size: 13px;
-}
-
-.kb-dedup-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-top: 8px;
-}
-
-.kb-import-tabs {
-  margin-top: -8px;
-}
-
-.kb-file-zone {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  border: 1px dashed var(--el-border-color);
-  border-radius: 6px;
-  background: var(--el-fill-color-light);
-}
-
-.kb-file-input {
-  display: none;
-}
-
-.kb-file-name {
-  font-size: 13px;
-  color: var(--el-text-color-regular);
-}
-
-.kb-import-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 16px;
-  flex-wrap: wrap;
-}
-
-.kb-bulk-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-.kb-chunk-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 4px;
-}
-
-.kb-chunk-row {
-  display: flex;
-  gap: 12px;
-  padding: 12px;
-  background: var(--el-fill-color-light);
-  border-radius: 6px;
-  border: 1px solid var(--el-border-color-lighter);
-
-  &--excluded {
-    opacity: 0.5;
-  }
-}
-
-.kb-chunk-checkbox {
-  padding-top: 8px;
-}
-
-.kb-chunk-content {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-width: 0;
-}
-
-.kb-chunk-textarea {
-  width: 100%;
-}
-
-.kb-chunk-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-
-.kb-tag-input {
-  width: 100px;
-}
-
-.kb-result-summary {
-  display: flex;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.kb-result-stat {
-  flex: 1;
-  padding: 16px;
-  background: var(--el-fill-color-light);
-  border-radius: 6px;
-  text-align: center;
-
-  &--success {
-    background: var(--el-color-success-light-9);
-    color: var(--el-color-success);
-  }
-
-  &--danger {
-    background: var(--el-color-danger-light-9);
-    color: var(--el-color-danger);
-  }
-
-  strong {
-    display: block;
-    font-size: 24px;
-    margin-top: 4px;
-  }
-}
-
-.kb-result-label {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-}
-
-.kb-failed-list {
-  margin: 8px 0 0;
-  padding-left: 20px;
-  li {
-    margin: 4px 0;
-  }
-}
-</style>

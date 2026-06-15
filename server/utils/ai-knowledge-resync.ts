@@ -193,7 +193,9 @@ export async function loadOldChunksForDiff(
   sourceId: string,
 ): Promise<OldChunk[]> {
   const chunks = await listChunksBySource(db, workspaceId, sourceId)
-  return chunks.map(c => ({
+  // 總覽卡（isOverview）不參與 diff：它是機器合成、由 resync-apply 依最終子卡片單獨重生，
+  // 不該被當成「新切卡裡找不到 → 移除」而誤報。
+  return chunks.filter(c => !c.isOverview).map(c => ({
     id: c.id,
     title: c.title,
     content: c.content,

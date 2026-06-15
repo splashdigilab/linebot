@@ -8,7 +8,7 @@ import {
   MAX_RAW_TEXT_LEN,
   ocrPdfWithGemini,
 } from '~~/server/utils/ai-source-extractors'
-import { chunkTextWithLlm } from '~~/server/utils/ai-knowledge-chunker'
+import { chunkTextWithLlm, summarizeAsOverviewCard } from '~~/server/utils/ai-knowledge-chunker'
 import { getDb } from '~~/server/utils/firebase'
 import { KNOWLEDGE_SOURCES_COLLECTION } from '~~/server/utils/ai-knowledge-sources'
 import { recordAiUsage } from '~~/server/utils/ai-usage'
@@ -27,6 +27,8 @@ export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const body = await readBody(event)
   const type = String(body?.type ?? '').trim()
+  // 列表頁（商品首頁等）：除了切碎成個別卡，再額外合成一張「總覽卡」接列舉型問題
+  const wantOverview = body?.generateOverview === true
 
   let extracted: { text: string; rawLength: number; meta: Record<string, string | number> }
   let sourceName = ''
@@ -119,10 +121,33 @@ export default defineEventHandler(async (event) => {
     hint: sourceName,
   })
 
-  // 切卡(+ 掃描檔 OCR)token 入帳（計入月度總量 quota + import 分項）。
+  // 列表頁：再合成一張總覽卡（失敗不擋切卡結果，只記 warning）
+  let overviewCard: { title: string; content: string; tags: string[]; questions: string[] } | null = null
+  let overviewInputTokens = 0
+  let overviewOutputTokens = 0
+  if (wantOverview && chunks.length >= 2) {
+    try {
+      const ov = await summarizeAsOverviewCard(chunks, { hint: sourceName })
+      if (ov) {
+        overviewCard = {
+          title: ov.card.title,
+          content: ov.card.content,
+          tags: ov.card.tags,
+          questions: ov.card.questions ?? [],
+        }
+        overviewInputTokens = ov.inputTokens
+        overviewOutputTokens = ov.outputTokens
+      }
+    }
+    catch (e) {
+      console.warn('[preview-chunks] overview synthesis failed:', e)
+    }
+  }
+
+  // 切卡(+ 掃描檔 OCR + 總覽卡)token 入帳（計入月度總量 quota + import 分項）。
   // 一份大文件可能比幾百次答題還貴，不入帳的話 quota 與成本報表都是失真的。
-  const totalInput = inputTokens + ocrInputTokens
-  const totalOutput = outputTokens + ocrOutputTokens
+  const totalInput = inputTokens + ocrInputTokens + overviewInputTokens
+  const totalOutput = outputTokens + ocrOutputTokens + overviewOutputTokens
   await recordAiUsage(workspaceId, {
     inputTokens: totalInput,
     outputTokens: totalOutput,
@@ -166,6 +191,7 @@ export default defineEventHandler(async (event) => {
     meta: extracted.meta,
     ocrUsed,
     chunks,
+    overviewCard,
     existingMatches,
     usage: { inputTokens: totalInput, outputTokens: totalOutput },
   }

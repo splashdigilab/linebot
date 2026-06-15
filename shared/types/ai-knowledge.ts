@@ -18,6 +18,13 @@ export interface KnowledgeChunkDoc {
   tags: string[]
   /** 客人常見問法（LLM 生成），與 title/content 一併進 embedding；舊卡可能沒有此欄位 */
   questions?: string[]
+  /**
+   * 是否為「總覽卡」：列表頁（如商品首頁）匯入時額外合成的一張分類索引卡，
+   * 用來接「你們有賣什麼」這類列舉型問題。一個 source 至多一張。
+   * 它是機器合成的，re-sync 預設直接覆蓋更新（除非被手動編輯過）；
+   * 答題時 top-1 命中總覽卡則不進反問澄清（總覽贏了本身就是答案）。
+   */
+  isOverview?: boolean
   /** Firestore VectorValue（768 dim）；尚未索引時為 null */
   embedding: EmbeddingVector | null
   /** 約略 token 數，用來估成本與檢索預算 */
@@ -89,6 +96,12 @@ export interface KnowledgeSourceDoc {
    * 不提供 'overwrite' 自動覆蓋選項 — 太危險（網站可能短暫掛 / 改版會切壞）。
    */
   onChangeBehavior: 'notify' | 'log_only'
+  /**
+   * 列表頁（商品首頁、型錄頁）匯入時，除了切碎成個別卡片，再額外合成一張「總覽卡」
+   * （isOverview=true 的 chunk），用來接「你們有賣什麼」這類列舉型問題。
+   * re-sync 套用後會依當下的子卡片重新合成這張總覽卡。預設 false。
+   */
+  generateOverview?: boolean
   lastFetchedAt: Timestamp | null
   /** 偵測到 URL 內容變了但還沒套用的時間；null = 沒過期 / 已套用 */
   outdatedAt: Timestamp | null

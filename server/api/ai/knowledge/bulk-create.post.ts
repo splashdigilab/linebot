@@ -45,6 +45,16 @@ export default defineEventHandler(async (event) => {
     if (err) throw createError({ statusCode: 400, statusMessage: `卡片「${input.title || '未命名'}」：${err}` })
   }
 
+  // 列表頁的「總覽卡」與一般卡分開傳：它帶 isOverview，re-sync 時要能單獨辨識 / 重生
+  const rawOverview = body?.overviewCard
+  const overviewInput = rawOverview?.title && rawOverview?.content
+    ? { ...normalizeChunkInput(rawOverview), isOverview: true }
+    : null
+  if (overviewInput) {
+    const err = validateChunkInput(overviewInput)
+    if (err) throw createError({ statusCode: 400, statusMessage: `總覽卡：${err}` })
+  }
+
   const db = getDb()
 
   // ── 建 knowledgeSource（type=text 不建） ────────────────────────
@@ -66,10 +76,11 @@ export default defineEventHandler(async (event) => {
       refreshIntervalSec: 0,
       refreshIntervalMinutes: sourceType === 'url' ? 1440 : 0, // URL 預設每天偵測；檔案不自動
       onChangeBehavior: 'notify',
+      generateOverview: Boolean(overviewInput),
       lastFetchedAt: now,
       outdatedAt: null,
       status: 'ready',
-      chunkCount: inputs.length,
+      chunkCount: inputs.length + (overviewInput ? 1 : 0),
       createdAt: now,
       updatedAt: now,
     })
@@ -95,6 +106,17 @@ export default defineEventHandler(async (event) => {
     }
   }
   await Promise.all(Array.from({ length: Math.min(EMBED_CONCURRENCY, inputs.length) }, worker))
+
+  // ── 總覽卡（若有）：最後單獨建一張，帶 isOverview ──────────────────
+  if (overviewInput) {
+    const r = await createKnowledgeChunk(db, {
+      workspaceId,
+      chunkId: uuidv4(),
+      ...overviewInput,
+      sourceId,
+    })
+    results.push({ id: r.id, status: r.status, title: overviewInput.title, failureReason: r.failureReason })
+  }
 
   const indexed = results.filter(r => r.status === 'indexed').length
   const failed = results.filter(r => r.status === 'failed').length
