@@ -96,13 +96,26 @@ export function normalizeAiSettings(raw: any): AiSettingsDoc {
       monthlyTokenCap: clampNumber(raw?.quota?.monthlyTokenCap, 0, 100_000_000, DEFAULT_MONTHLY_TOKEN_CAP),
       onExceed: quotaStrategy,
     },
-    handoffNotify: {
-      enabled: raw?.handoffNotify?.enabled === true,
-      lineUserIds: Array.isArray(raw?.handoffNotify?.lineUserIds)
+    handoffNotify: (() => {
+      const lineUserIds: string[] = Array.isArray(raw?.handoffNotify?.lineUserIds)
         ? raw.handoffNotify.lineUserIds.map((v: unknown) => String(v).trim()).filter(Boolean).slice(0, 10)
-        : [],
-      slaRemindMinutes: Math.round(clampNumber(raw?.handoffNotify?.slaRemindMinutes, 0, 1440, 15)),
-    },
+        : []
+      // 顯示名稱快取只保留還在名單上的 user,避免 doc 越長越肥
+      const displayNames: Record<string, string> = {}
+      const rawNames = raw?.handoffNotify?.displayNames
+      if (rawNames && typeof rawNames === 'object') {
+        for (const uid of lineUserIds) {
+          const name = String(rawNames[uid] ?? '').trim()
+          if (name) displayNames[uid] = name.slice(0, 100)
+        }
+      }
+      return {
+        enabled: raw?.handoffNotify?.enabled === true,
+        lineUserIds,
+        displayNames,
+        slaRemindMinutes: Math.round(clampNumber(raw?.handoffNotify?.slaRemindMinutes, 0, 1440, 15)),
+      }
+    })(),
     handbackIdleMinutes: Math.round(clampNumber(raw?.handbackIdleMinutes, 0, 1440, DEFAULT_HANDBACK_IDLE_MINUTES)),
     disambiguation: (() => {
       let top1Min = clampNumber(raw?.disambiguation?.top1Min, 0, 1, DEFAULT_DISAMBIGUATION_TOP1_MIN)

@@ -184,9 +184,14 @@ export interface GenerateResult {
   outputTokens: number
 }
 
-async function doGenerate(prompt: string, opts: GenerateOptions, model: NonNullable<GenerateOptions['model']>): Promise<GenerateResult> {
+/** 一則 user message 的 part:純文字、或 inline 檔案(PDF / 圖片,base64) */
+export type GeminiPart =
+  | { text: string }
+  | { inlineData: { mimeType: string; data: string } }
+
+async function doGenerate(parts: GeminiPart[], opts: GenerateOptions, model: NonNullable<GenerateOptions['model']>): Promise<GenerateResult> {
   const body: Record<string, unknown> = {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    contents: [{ role: 'user', parts }],
     generationConfig: {
       temperature: opts.temperature ?? 0.4,
       maxOutputTokens: opts.maxOutputTokens ?? 2048,
@@ -215,14 +220,22 @@ async function doGenerate(prompt: string, opts: GenerateOptions, model: NonNulla
  * 寧可拿到「輸出品質稍差但有」也好過完全失敗。flash-lite 本身失敗就照樣 throw。
  */
 export async function generateText(prompt: string, opts: GenerateOptions = {}): Promise<GenerateResult> {
+  return generateParts([{ text: prompt }], opts)
+}
+
+/**
+ * 同 generateText,但 user message 可帶多個 part(例:inline PDF + 指令文字)。
+ * 給掃描檔 OCR 這類多模態輸入用;fallback 行為與 generateText 一致。
+ */
+export async function generateParts(parts: GeminiPart[], opts: GenerateOptions = {}): Promise<GenerateResult> {
   const primary = opts.model ?? 'gemini-2.5-flash'
   try {
-    return await doGenerate(prompt, opts, primary)
+    return await doGenerate(parts, opts, primary)
   }
   catch (err: any) {
     if (primary === 'gemini-2.5-flash' && err?.statusCode === 502) {
       console.warn(`[gemini] ${primary} unavailable (${err?.statusMessage ?? 'unknown'}), falling back to gemini-2.5-flash-lite`)
-      return await doGenerate(prompt, opts, 'gemini-2.5-flash-lite')
+      return await doGenerate(parts, opts, 'gemini-2.5-flash-lite')
     }
     throw err
   }

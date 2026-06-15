@@ -145,6 +145,8 @@ export interface AiSettingsDoc {
     enabled: boolean
     /** 要通知的客服 LINE userIds（上限 10 位） */
     lineUserIds: string[]
+    /** userId → 顯示名稱快取；僅供後台 UI 顯示用,推播本身只看 lineUserIds */
+    displayNames?: Record<string, string>
     /** SLA 提醒：轉真人後超過此分鐘數仍無人回應，再推播提醒一次（每場會話只提醒一次）。0 = 關閉 */
     slaRemindMinutes: number
   }
@@ -403,6 +405,7 @@ export function buildDefaultAiSettings(): Omit<AiSettingsDoc, 'updatedAt'> {
     handoffNotify: {
       enabled: false,
       lineUserIds: [],
+      displayNames: {},
       slaRemindMinutes: 15,
     },
     handbackIdleMinutes: DEFAULT_HANDBACK_IDLE_MINUTES,

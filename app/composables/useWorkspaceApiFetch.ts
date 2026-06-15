@@ -18,6 +18,10 @@ export function useWorkspaceApiFetch(workspaceId: MaybeRefOrGetter<string> = DEF
     return u.getIdToken()
   }
 
+  // 泛用 string URL 的轉送層:不要走 nitro typed routes 的 $fetch 推導
+  // (路由聯集太大,TS 比對 string 會爆 "Excessive stack depth");型別安全由呼叫端 <T> 提供
+  const rawFetch = $fetch as (url: string, opts?: Record<string, unknown>) => Promise<unknown>
+
   async function apiFetch<T>(
     url: string,
     options?: Parameters<typeof $fetch>[1],
@@ -29,13 +33,13 @@ export function useWorkspaceApiFetch(workspaceId: MaybeRefOrGetter<string> = DEF
 
     if (method === 'GET' || method === 'HEAD' || method === 'DELETE') {
       const sep = url.includes('?') ? '&' : '?'
-      return await $fetch(`${url}${sep}workspaceId=${encodeURIComponent(wid)}`, {
+      return await rawFetch(`${url}${sep}workspaceId=${encodeURIComponent(wid)}`, {
         ...options,
         headers: { ...authHeader, ...(options?.headers as object ?? {}) },
       }) as T
     }
 
-    return await $fetch(url, {
+    return await rawFetch(url, {
       ...options,
       headers: { ...authHeader, ...(options?.headers as object ?? {}) },
       body: options?.body

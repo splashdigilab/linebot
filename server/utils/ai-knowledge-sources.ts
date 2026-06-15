@@ -112,7 +112,7 @@ export async function listChunksBySource(
   db: Firestore,
   workspaceId: string,
   sourceId: string,
-): Promise<Array<{ id: string; title: string; content: string; tags: string[]; status: string; manuallyEditedAtMs: number; updatedAtMs: number }>> {
+): Promise<Array<{ id: string; title: string; content: string; tags: string[]; status: string; failureReason?: string; manuallyEditedAtMs: number; updatedAtMs: number }>> {
   const snap = await db.collection(KNOWLEDGE_CHUNKS_COLLECTION)
     .where('workspaceId', '==', workspaceId)
     .where('sourceId', '==', sourceId)
@@ -125,6 +125,7 @@ export async function listChunksBySource(
       content: String(data?.content ?? ''),
       tags: Array.isArray(data?.tags) ? data.tags.map(String) : [],
       status: String(data?.status ?? 'pending'),
+      ...(data?.failureReason ? { failureReason: String(data.failureReason) } : {}),
       manuallyEditedAtMs: tsToMs(data?.manuallyEditedAt),
       updatedAtMs: tsToMs(data?.updatedAt),
     }

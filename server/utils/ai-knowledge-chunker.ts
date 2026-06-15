@@ -90,6 +90,9 @@ async function chunkSegment(text: string, hint: string | undefined): Promise<Chu
     systemInstruction: SYSTEM_INSTRUCTION,
     temperature: 0.2,
     maxOutputTokens: 8192,
+    // thinking 會吃掉 maxOutputTokens 配額，讓 JSON 寫到一半被截斷（Unterminated string）。
+    // 切卡不需要深度思考，關掉把整個配額留給輸出。
+    thinkingBudget: 0,
   })
 
   const rawChunks = Array.isArray(data?.chunks) ? data.chunks : []
@@ -210,6 +213,8 @@ export async function normalizeChunkWithLlm(input: {
     systemInstruction: NORMALIZE_SYSTEM_INSTRUCTION,
     temperature: 0.2,
     maxOutputTokens: 4096,
+    // 同 chunkSegment：關掉 thinking，避免吃掉配額把 JSON 截斷。
+    thinkingBudget: 0,
   })
 
   const title = String(data?.title ?? '').trim() || input.title

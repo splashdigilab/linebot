@@ -3,7 +3,10 @@ import {
   extractPdfText,
   extractUrlText,
   extractXlsxText,
+  isProbablyScannedPdf,
+  MAX_OCR_PAGES,
   MAX_RAW_TEXT_LEN,
+  ocrPdfWithGemini,
 } from '~~/server/utils/ai-source-extractors'
 import { chunkTextWithLlm } from '~~/server/utils/ai-knowledge-chunker'
 import { getDb } from '~~/server/utils/firebase'
@@ -28,6 +31,9 @@ export default defineEventHandler(async (event) => {
   let extracted: { text: string; rawLength: number; meta: Record<string, string | number> }
   let sourceName = ''
   let sourceUrl = ''
+  let ocrUsed = false
+  let ocrInputTokens = 0
+  let ocrOutputTokens = 0
 
   if (type === 'file') {
     const fileName = String(body?.fileName ?? '').trim()
@@ -50,7 +56,37 @@ export default defineEventHandler(async (event) => {
     const isXlsx = contentType.includes('spreadsheet') || contentType.includes('excel')
       || ext === 'xlsx' || ext === 'xls'
 
-    if (isPdf) extracted = await extractPdfText(buffer)
+    if (isPdf) {
+      extracted = await extractPdfText(buffer)
+      // 掃描檔 / 圖片檔 PDF 沒有文字層 → 改用 Gemini 多模態辨識,而不是丟「切不出卡」的誤導錯誤
+      if (isProbablyScannedPdf(extracted)) {
+        const pages = Number(extracted.meta.pages ?? 0)
+        if (pages > MAX_OCR_PAGES) {
+          throw createError({
+            statusCode: 400,
+            statusMessage: `這份 PDF 是掃描檔（無文字層、共 ${pages} 頁），AI 辨識目前支援 ${MAX_OCR_PAGES} 頁以內；請拆分檔案或改貼文字`,
+          })
+        }
+        const ocr = await ocrPdfWithGemini(buffer)
+        ocrInputTokens = ocr.inputTokens
+        ocrOutputTokens = ocr.outputTokens
+        if (!ocr.text) {
+          // OCR token 照記:有呼叫就有成本
+          await recordAiUsage(workspaceId, {
+            inputTokens: ocrInputTokens,
+            outputTokens: ocrOutputTokens,
+            importInputTokens: ocrInputTokens,
+            importOutputTokens: ocrOutputTokens,
+          }).catch(() => {})
+          throw createError({
+            statusCode: 400,
+            statusMessage: '這份 PDF 是掃描檔，AI 也辨識不出文字（可能解析度過低或非文字內容）；請改貼文字或提供文字版檔案',
+          })
+        }
+        extracted = { text: ocr.text, rawLength: ocr.rawLength, meta: { ...extracted.meta, ocr: 1 } }
+        ocrUsed = true
+      }
+    }
     else if (isXlsx) extracted = extractXlsxText(buffer)
     else throw createError({ statusCode: 400, statusMessage: `不支援的檔案類型：${ext || contentType}` })
   }
@@ -83,13 +119,15 @@ export default defineEventHandler(async (event) => {
     hint: sourceName,
   })
 
-  // 切卡 token 入帳（計入月度總量 quota + import 分項）。一份大文件可能比幾百次答題還貴，
-  // 不入帳的話 quota 與成本報表都是失真的。
+  // 切卡(+ 掃描檔 OCR)token 入帳（計入月度總量 quota + import 分項）。
+  // 一份大文件可能比幾百次答題還貴，不入帳的話 quota 與成本報表都是失真的。
+  const totalInput = inputTokens + ocrInputTokens
+  const totalOutput = outputTokens + ocrOutputTokens
   await recordAiUsage(workspaceId, {
-    inputTokens,
-    outputTokens,
-    importInputTokens: inputTokens,
-    importOutputTokens: outputTokens,
+    inputTokens: totalInput,
+    outputTokens: totalOutput,
+    importInputTokens: totalInput,
+    importOutputTokens: totalOutput,
   }).catch(() => {})
 
   // 偵測同名來源（給前端顯示 dedup 警告用；不阻擋建立，只提醒）
@@ -126,8 +164,9 @@ export default defineEventHandler(async (event) => {
     rawLength: extracted.rawLength,
     truncated: extracted.rawLength > extracted.text.length,
     meta: extracted.meta,
+    ocrUsed,
     chunks,
     existingMatches,
-    usage: { inputTokens, outputTokens },
+    usage: { inputTokens: totalInput, outputTokens: totalOutput },
   }
 })

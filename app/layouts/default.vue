@@ -39,6 +39,21 @@
             <span>{{ item.label }}</span>
           </NuxtLink>
 
+          <!-- AI 客服 section -->
+          <template v-if="aiNavItems.length">
+            <div class="nav-section-label">AI 客服</div>
+            <NuxtLink
+              v-for="item in aiNavItems"
+              :key="item.to"
+              :to="item.to"
+              class="nav-item"
+              :class="{ active: route.path.startsWith(item.to) }"
+            >
+              <span class="nav-icon">{{ item.icon }}</span>
+              <span>{{ item.label }}</span>
+            </NuxtLink>
+          </template>
+
           <!-- Settings section (owner/admin only) -->
           <template v-if="canManageSettings">
             <div class="nav-section-label">設定</div>
@@ -121,28 +136,30 @@ const currentRoleLabel = computed(() => currentRole.value ? (ROLE_LABELS[current
 const navItems = computed(() => {
   const wid = workspaceId.value
   if (!wid) return []
-  // AI 相關功能暫時只開放 super admin（之後會開放，先隱藏入口）
-  const aiItems = isSuperAdmin.value
-    ? [
-        { to: `/admin/${wid}/knowledge/sources`, icon: '📚', label: '知識庫' },
-        { to: `/admin/${wid}/ai-scripts`, icon: '🧩', label: 'AI 腳本' },
-        { to: `/admin/${wid}/ai-playground`, icon: '🎮', label: 'AI Playground' },
-        { to: `/admin/${wid}/ai-usage`, icon: '📊', label: 'AI 用量' },
-        { to: `/admin/${wid}/ai-settings`, icon: '⚙️', label: 'AI 設定' },
-      ]
-    : []
   return [
     { to: `/admin/${wid}/conversation-stats`, icon: '📊', label: '對話統計' },
     { to: `/admin/${wid}/conversations`, icon: '💬', label: '對話' },
     { to: `/admin/${wid}/flow`, icon: '🤖', label: '機器人模組' },
     { to: `/admin/${wid}/richmenu`, icon: '🗂️', label: '圖文選單' },
     { to: `/admin/${wid}/auto-reply`, icon: '⚡', label: '自動回覆' },
-    ...aiItems,
     { to: `/admin/${wid}/support-presets`, icon: '📦', label: '客服預存' },
     { to: `/admin/${wid}/tags`, icon: '🏷️', label: '標籤管理' },
     { to: `/admin/${wid}/campaigns`, icon: '📋', label: '活動標籤' },
     { to: `/admin/${wid}/broadcasts`, icon: '📣', label: '推播' },
     { to: `/admin/${wid}/users`, icon: '👥', label: '會員' },
+  ]
+})
+
+// AI 相關功能暫時只開放 super admin(之後會開放,先隱藏入口)。
+// ai-scripts 與自動回覆/flow 功能重疊、無人使用,頁面保留但不給導覽入口。
+const aiNavItems = computed(() => {
+  const wid = workspaceId.value
+  if (!wid || !isSuperAdmin.value) return []
+  return [
+    { to: `/admin/${wid}/knowledge/sources`, icon: '📚', label: '知識庫' },
+    { to: `/admin/${wid}/ai-playground`, icon: '🎮', label: '測試對話' },
+    { to: `/admin/${wid}/ai-usage`, icon: '📈', label: '用量監控' },
+    { to: `/admin/${wid}/ai-settings`, icon: '⚙️', label: 'AI 設定' },
   ]
 })
 </script>

@@ -93,7 +93,12 @@
       "Bash(sed -n '1,120p' /Users/kevin/Documents/Github/linebot/server/utils/ai-knowledge-chunks.test.ts)",
       "Bash(sed -n '1,120p' /Users/kevin/Documents/Github/linebot/server/utils/ai-knowledge-resync.test.ts)",
       "Bash(sed -n '60,100p' /Users/kevin/Documents/Github/linebot/server/api/ai/knowledge/preview-chunks.post.ts)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "Bash(awk -F/ '{print $1\"/\"$2}')",
+      "Bash(echo \"typecheck-exit:$?\")",
+      "Bash(grep -n '$fetch' /Users/kevin/Documents/Github/linebot/app/composables/useWorkspaceApiFetch.ts)",
+      "Bash(node --input-type=module -e ' *)",
+      "WebFetch(domain:fin.ai)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",

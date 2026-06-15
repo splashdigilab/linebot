@@ -4,14 +4,11 @@
     <template #sidebar-header>
       <span class="split-sidebar-title">📁 來源</span>
       <div class="flex gap-1">
-        <el-tooltip content="新增手寫條目" placement="bottom" :show-after="300">
-          <el-button size="small" plain @click="openCreateManual">➕</el-button>
-        </el-tooltip>
         <el-tooltip content="新增資料夾" placement="bottom" :show-after="300">
           <el-button size="small" plain @click="createFolderPrompt">📂</el-button>
         </el-tooltip>
-        <el-tooltip content="匯入檔案 / 網址" placement="bottom" :show-after="300">
-          <el-button size="small" type="primary" plain @click="goImport">📥</el-button>
+        <el-tooltip content="匯入檔案 / 網址 / 大段文字" placement="bottom" :show-after="300">
+          <el-button size="small" type="primary" plain @click="goImport">📥 匯入</el-button>
         </el-tooltip>
       </div>
     </template>
@@ -42,9 +39,8 @@
       </div>
       <div v-else-if="!sources.length && !orphanCount" class="split-sidebar-empty">
         <span>沒有任何來源</span>
-        <p class="text-xs text-muted">每個來源代表一份知識（PDF / 網址 / 手寫條目），AI 從這些來源裡找答案。</p>
+        <p class="text-xs text-muted">每個來源代表一份知識（PDF / 網址 / 文字），AI 從這些來源裡找答案。</p>
         <div class="flex gap-1" style="margin-top:8px;">
-          <el-button size="small" plain @click="openCreateManual">➕ 手寫</el-button>
           <el-button size="small" type="primary" plain @click="goImport">📥 匯入</el-button>
         </div>
       </div>
@@ -164,9 +160,8 @@
     <template #editor-empty>
       <span class="empty-icon">📁</span>
       <h3>選擇一個來源開始管理</h3>
-      <p>或新增一筆手寫條目 / 匯入新的 PDF、網址</p>
+      <p>或匯入新的 PDF、網址、文字</p>
       <div class="flex gap-2" style="margin-top:8px;">
-        <el-button @click="openCreateManual">➕ 新增手寫</el-button>
         <el-button type="primary" @click="goImport">📥 匯入</el-button>
       </div>
     </template>
@@ -403,12 +398,27 @@
   <!-- ── Chunk Edit Modal ───────────────────────────── -->
   <el-dialog
     v-model="chunkEditOpen"
-    :title="chunkEditMode === 'create' ? '➕ 新增手寫條目' : '✏️ 編輯卡片'"
+    :title="chunkEditMode === 'create' ? '➕ 新增卡片(手寫一條知識)' : '✏️ 編輯卡片'"
     width="700px"
     :close-on-click-modal="false"
     destroy-on-close
   >
     <div class="chunk-form">
+      <!-- 索引狀態(編輯既有卡才有) -->
+      <div v-if="chunkEditMode === 'edit'" class="chunk-status-row">
+        <span :class="['badge', chunkStatusBadge(chunkEditStatus)]">{{ chunkStatusLabel(chunkEditStatus) }}</span>
+        <span v-if="chunkEditStatus === 'pending'" class="text-xs text-muted">背景索引中,約 5–30 秒</span>
+        <span v-if="chunkEditFailureReason" class="chunk-status-failure">{{ chunkEditFailureReason }}</span>
+        <el-button
+          v-if="chunkEditStatus === 'failed'"
+          size="small"
+          plain
+          :loading="chunkReindexing"
+          @click="reindexChunkFromModal"
+        >
+          🔄 重新索引
+        </el-button>
+      </div>
       <div class="admin-field-group">
         <AdminFieldLabel text="標題" tight />
         <el-input
@@ -428,6 +438,18 @@
           show-word-limit
           placeholder="把這條的完整資訊寫進來，AI 會用整段當回答依據。"
         />
+        <div class="chunk-normalize-row">
+          <el-button
+            size="small"
+            plain
+            :loading="chunkNormalizing"
+            :disabled="!chunkForm.content.trim()"
+            @click="normalizeChunkFromModal"
+          >
+            ✨ AI 整理一下
+          </el-button>
+          <span class="text-xs text-muted">自動加重點摘要、移除系統碼,提高檢索準確度;整理後記得儲存</span>
+        </div>
       </div>
       <div class="admin-field-group">
         <AdminFieldLabel text="標籤（非必填，後台分類用）" tight />
@@ -478,6 +500,9 @@
       </div>
     </template>
   </el-dialog>
+
+  <!-- ── 匯入彈窗 ───────────────────────────────────── -->
+  <KnowledgeImportDialog v-model="importOpen" @imported="onImported" />
 
   <!-- ── Folder Edit Modal ──────────────────────────── -->
   <el-dialog
@@ -559,6 +584,7 @@ interface ChunkRow {
   content: string
   tags: string[]
   status: string
+  failureReason?: string
   manuallyEditedAtMs: number
   updatedAtMs: number
 }
@@ -588,7 +614,6 @@ interface DiffData {
 }
 
 const { apiFetch, workspaceId } = useWorkspace()
-const router = useRouter()
 const { showToast } = useAdminToast()
 
 const sources = ref<SourceSummary[]>([])
@@ -783,9 +808,14 @@ const decisions = ref<Record<string, string>>({})
 const chunkEditOpen = ref(false)
 const chunkEditMode = ref<'create' | 'edit'>('create')
 const chunkEditingId = ref<string | null>(null) // edit 模式才有值
-const chunkForm = ref({ title: '', content: '', tags: [] as string[] })
+// questions 是 AI 整理產生的常見問法,使用者不直接編;沒值就不送、後端保留既有
+const chunkForm = ref({ title: '', content: '', tags: [] as string[], questions: undefined as string[] | undefined })
 const chunkSaving = ref(false)
 const chunkDeleting = ref(false)
+const chunkEditStatus = ref('')
+const chunkEditFailureReason = ref('')
+const chunkNormalizing = ref(false)
+const chunkReindexing = ref(false)
 
 // ── Folder edit modal ───────────────────────────────
 const folderEditOpen = ref(false)
@@ -1046,7 +1076,17 @@ async function applyDiff() {
   }
 }
 
-function goImport() { router.push(`/admin/${workspaceId.value}/knowledge/import`) }
+// ── 匯入彈窗(原獨立頁面已整併) ──────────────────────
+const importOpen = ref(false)
+function goImport() { importOpen.value = true }
+
+async function onImported(sourceId: string | null) {
+  await loadSources()
+  if (sourceId) {
+    const src = sources.value.find(s => s.id === sourceId)
+    if (src) await selectSource(src)
+  }
+}
 
 // ── 一鍵整理舊版未分組卡片 ───────────────────────────
 async function migrateOrphans() {
@@ -1093,11 +1133,13 @@ async function renameSource() {
   catch { /* 使用者取消 */ }
 }
 
-// ── 新增手寫條目 ─────────────────────────────────────
+// ── 新增手寫卡片 ─────────────────────────────────────
 function openCreateManual() {
   chunkEditMode.value = 'create'
   chunkEditingId.value = null
-  chunkForm.value = { title: '', content: '', tags: [] }
+  chunkForm.value = { title: '', content: '', tags: [], questions: undefined }
+  chunkEditStatus.value = ''
+  chunkEditFailureReason.value = ''
   chunkEditOpen.value = true
 }
 
@@ -1109,8 +1151,64 @@ function openEditChunk(chunk: ChunkRow) {
     title: chunk.title,
     content: chunk.content,
     tags: [...(chunk.tags ?? [])],
+    questions: undefined,
   }
+  chunkEditStatus.value = chunk.status
+  chunkEditFailureReason.value = chunk.failureReason ?? ''
   chunkEditOpen.value = true
+}
+
+// ── AI 整理(normalize):加重點摘要、去系統碼 ─────────
+async function normalizeChunkFromModal() {
+  const original = chunkForm.value.content.trim()
+  if (!original) return
+  chunkNormalizing.value = true
+  try {
+    const res = await apiFetch<{ title: string; content: string; tags: string[]; questions?: string[] }>(
+      '/api/ai/knowledge/normalize',
+      {
+        method: 'POST',
+        body: {
+          title: chunkForm.value.title,
+          content: chunkForm.value.content,
+          tags: chunkForm.value.tags,
+        },
+      },
+    )
+    chunkForm.value.title = res.title || chunkForm.value.title
+    chunkForm.value.content = res.content
+    chunkForm.value.tags = res.tags
+    if (res.questions?.length) chunkForm.value.questions = res.questions
+    showToast('已整理 — 記得儲存 ✨', 'success')
+  }
+  catch (err: any) {
+    showToast(err?.statusMessage || 'AI 整理失敗', 'error')
+  }
+  finally {
+    chunkNormalizing.value = false
+  }
+}
+
+// ── 重新索引(索引失敗的卡) ──────────────────────────
+async function reindexChunkFromModal() {
+  if (!chunkEditingId.value) return
+  chunkReindexing.value = true
+  try {
+    await apiFetch(`/api/ai/knowledge/${chunkEditingId.value}/reindex`, { method: 'POST' })
+    showToast('已重新索引', 'success')
+    if (selectedId.value) await loadSourceDetail(selectedId.value)
+    const updated = chunks.value.find(c => c.id === chunkEditingId.value)
+    if (updated) {
+      chunkEditStatus.value = updated.status
+      chunkEditFailureReason.value = updated.failureReason ?? ''
+    }
+  }
+  catch (err: any) {
+    showToast(err?.statusMessage || '重新索引失敗', 'error')
+  }
+  finally {
+    chunkReindexing.value = false
+  }
 }
 
 async function saveChunk() {
@@ -1119,11 +1217,13 @@ async function saveChunk() {
   if (!t || !c) return
   chunkSaving.value = true
   try {
+    const body: Record<string, unknown> = { title: t, content: c, tags: chunkForm.value.tags }
+    if (chunkForm.value.questions?.length) body.questions = chunkForm.value.questions
     if (chunkEditMode.value === 'create') {
-      // 建立新手寫條目（後端會自動建一個 type='manual' 的 source 包它）
+      // 建立新手寫卡片（後端會自動建一個 type='manual' 的 source 包它）
       const res = await apiFetch<{ id: string; sourceId: string }>('/api/ai/knowledge/create', {
         method: 'POST',
-        body: { title: t, content: c, tags: chunkForm.value.tags },
+        body,
       })
       showToast('已建立', 'success')
       chunkEditOpen.value = false
@@ -1136,7 +1236,7 @@ async function saveChunk() {
     else if (chunkEditingId.value) {
       await apiFetch(`/api/ai/knowledge/${chunkEditingId.value}`, {
         method: 'PUT',
-        body: { title: t, content: c, tags: chunkForm.value.tags },
+        body,
       })
       showToast('已儲存', 'success')
       chunkEditOpen.value = false
@@ -1220,6 +1320,9 @@ function statusLabel(s: string) {
 function chunkStatusLabel(s: string) {
   return s === 'indexed' ? '可用' : s === 'pending' ? '處理中' : '失敗'
 }
+function chunkStatusBadge(s: string) {
+  return s === 'indexed' ? 'badge-green' : s === 'pending' ? 'badge-yellow' : 'badge-red'
+}
 function statusChipText(src: SourceSummary) {
   if (src.outdatedAtMs > 0) return '⚠️ 有變動'
   if (src.status === 'ready') return '可用'
@@ -1249,10 +1352,55 @@ function relativeTime(ms: number) {
   return new Date(ms).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
 }
 
-onMounted(() => {
+onMounted(async () => {
   loadExpandedState()
-  loadSources()
+  const route = useRoute()
+  await loadSources()
+
+  // 監控頁「📥 補知識」帶 ?q=(客人沒被答到的問題):直接開新增手寫視窗、預填標題
+  const q = String(route.query.q ?? '').trim()
+  if (q) {
+    openCreateManual()
+    chunkForm.value.title = q.slice(0, 200)
+    return
+  }
+
+  // 測試對話頁「編輯」帶 ?chunkId=:反查所屬來源,自動選取並開啟該卡的編輯視窗
+  const chunkId = String(route.query.chunkId ?? '').trim()
+  if (chunkId) {
+    await openChunkById(chunkId)
+    return
+  }
+
+  // 匯入完成帶 ?sourceId=:自動選中剛匯入的來源,讓使用者直接看到成果
+  const sourceId = String(route.query.sourceId ?? '').trim()
+  if (sourceId) {
+    const src = sources.value.find(s => s.id === sourceId)
+    if (src) await selectSource(src)
+    return
+  }
+
+  // 舊的 /knowledge/import 網址轉進來時帶 ?import=1:直接打開匯入彈窗
+  if (String(route.query.import ?? '') === '1') importOpen.value = true
 })
+
+async function openChunkById(chunkId: string) {
+  try {
+    const info = await apiFetch<{ id: string; sourceId: string | null }>(`/api/ai/knowledge/${chunkId}`)
+    if (!info.sourceId) {
+      showToast('這張卡尚未歸入任何來源,請先用「一鍵整理」歸檔', 'error')
+      return
+    }
+    const src = sources.value.find(s => s.id === info.sourceId)
+    if (!src) return
+    await selectSource(src)
+    const chunk = chunks.value.find(c => c.id === chunkId)
+    if (chunk) openEditChunk(chunk)
+  }
+  catch {
+    showToast('找不到這張卡(可能已被刪除)', 'error')
+  }
+}
 </script>
 
 <style scoped lang="scss">
@@ -1531,6 +1679,25 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 14px;
+}
+
+.chunk-status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chunk-status-failure {
+  font-size: 12px;
+  color: var(--el-color-danger);
+}
+
+.chunk-normalize-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
 }
 
 .chunk-tag-row {

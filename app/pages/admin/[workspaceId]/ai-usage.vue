@@ -194,7 +194,8 @@ function makePeriodOptions() {
   const opts: Array<{ value: string; label: string }> = []
   const now = new Date()
   for (let i = 0; i < 3; i++) {
-    const d = new Date(now.getUTCFullYear(), now.getUTCMonth() - i, 1)
+    // 一律走 UTC:server 以 UTC 年月記帳;用本地時間建構再讀 UTC 會在 UTC+8 差一個月
+    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))
     const y = d.getUTCFullYear()
     const m = String(d.getUTCMonth() + 1).padStart(2, '0')
     opts.push({ value: `${y}${m}`, label: `${y}-${m}` })
@@ -266,8 +267,11 @@ function reasonBadgeClass(r: HandoffReason | null) {
 function goConversation(userId: string) {
   router.push(`/admin/${workspaceId.value}/conversations?userId=${encodeURIComponent(userId)}`)
 }
-function goAddKnowledge(_query: string) {
-  router.push(`/admin/${workspaceId.value}/knowledge`)
+function goAddKnowledge(query: string) {
+  // 帶客人原句過去:來源頁會自動開「新增手寫」視窗並預填標題,不用重打一遍
+  const q = (query || '').trim()
+  const suffix = q ? `?q=${encodeURIComponent(q)}` : ''
+  router.push(`/admin/${workspaceId.value}/knowledge/sources${suffix}`)
 }
 function goPlayground(query: string) {
   router.push(`/admin/${workspaceId.value}/ai-playground?q=${encodeURIComponent(query)}`)

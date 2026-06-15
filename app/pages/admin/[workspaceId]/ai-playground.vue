@@ -3,7 +3,7 @@
     <template #editor-header>
       <AdminSoloPageHeading
         field-label="AI 客服"
-        title="🎮 Playground"
+        title="🎮 測試對話"
         caption="試答模式：以「真實 LINE 對話」方式測試 AI，不會影響正式對話"
       />
     </template>
@@ -171,7 +171,7 @@
             :rows="2"
             :maxlength="500"
             placeholder="例：請問退費要多久才會收到？（⌘+Enter 送出）"
-            @keydown.enter.meta.prevent="run"
+            @keydown="onComposerKeydown"
           />
           <div class="pg-composer-actions">
             <el-button
@@ -302,6 +302,15 @@ async function send(text: string, opts: { skipDisambiguation?: boolean; isFollow
   }
 }
 
+function onComposerKeydown(evt: Event | KeyboardEvent) {
+  // ⌘+Enter(mac)/ Ctrl+Enter(win)送出
+  const e = evt as KeyboardEvent
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault()
+    run()
+  }
+}
+
 async function run() {
   const text = query.value
   query.value = ''
@@ -336,8 +345,8 @@ function resetConversation() {
 }
 
 function goEditChunk(chunkId: string) {
-  // 帶 chunkId 過去；卡片頁會 onMounted 時自動選取該卡開啟編輯
-  router.push(`/admin/${workspaceId.value}/knowledge/cards?chunkId=${encodeURIComponent(chunkId)}`)
+  // 帶 chunkId 過去；來源頁會反查所屬來源、自動選取並開啟該卡的編輯視窗
+  router.push(`/admin/${workspaceId.value}/knowledge/sources?chunkId=${encodeURIComponent(chunkId)}`)
 }
 
 async function loadSettings() {
