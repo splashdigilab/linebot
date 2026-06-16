@@ -110,13 +110,21 @@
       "Bash(echo \"total errors: $\\(npm run typecheck 2>&1)",
       "Bash(echo \"typecheck errors: $\\(npm run typecheck 2>&1)",
       "Bash(echo \"typecheck: $\\(npm run typecheck 2>&1)",
-      "WebFetch(domain:www.myfeel-tw.com)"
+      "WebFetch(domain:www.myfeel-tw.com)",
+      "Bash(grep -n 'preview-chunks\\\\|fileBase64\\\\|readAsDataURL\\\\|FileReader\\\\|contentType\\\\|base64\\\\|fetch\\\\|$fetch\\\\|catch\\\\|error' app/components/knowledge/KnowledgeImportDialog.vue)",
+      "Bash(git show *)",
+      "Bash(node -e \"import\\('unpdf'\\).then\\(m=>console.log\\('unpdf ok', Object.keys\\(m\\)\\)\\).catch\\(e=>console.log\\('UNPDF LOAD FAIL:', e.message\\)\\)\")",
+      "Bash(cp /tmp/repro.mjs ./repro.mjs)",
+      "Bash(sed -i '' \"s#/Users/kevin/Documents/Github/linebot/node_modules/xlsx/xlsx.mjs#xlsx#\" repro.mjs)",
+      "Bash(node repro.mjs)",
+      "Bash(node -e \"const x=require\\('xlsx'\\); console.log\\('read'in x, 'utils' in x\\)\")"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",
       "/Users/kevin/Documents/Github/linebot/server/api/admin/super/organizations",
       "/Users/kevin/Documents/Github/linebot/server/api/admin/super/users",
-      "/Users/kevin/Documents/Github/linebot/server/api/admin/super/organizations/[id]/members"
+      "/Users/kevin/Documents/Github/linebot/server/api/admin/super/organizations/[id]/members",
+      "/private/tmp"
     ]
   }
 }
