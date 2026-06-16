@@ -1,9 +1,30 @@
 import { describe, expect, it } from 'vitest'
-import { isProbablyScannedPdf } from './ai-source-extractors'
+import { isProbablyScannedPdf, resolveInternalUrl } from './ai-source-extractors'
 
 function extracted(rawLength: number, pages: number) {
   return { text: 'x'.repeat(Math.min(rawLength, 100)), rawLength, meta: { pages } }
 }
+
+describe('resolveInternalUrl', () => {
+  const base = 'https://shop.example.com/'
+  it('相對路徑解析成絕對網址', () => {
+    expect(resolveInternalUrl('/projects/abc', base)).toBe('https://shop.example.com/projects/abc')
+  })
+  it('同網域絕對網址保留', () => {
+    expect(resolveInternalUrl('https://shop.example.com/p/1', base)).toBe('https://shop.example.com/p/1')
+  })
+  it('跨網域 → null（避免帶外部社群連結雜訊）', () => {
+    expect(resolveInternalUrl('https://facebook.com/x', base)).toBeNull()
+  })
+  it('非 http(s)（js / mailto / tel）→ null', () => {
+    expect(resolveInternalUrl('javascript:void(0)', base)).toBeNull()
+    expect(resolveInternalUrl('mailto:a@b.com', base)).toBeNull()
+    expect(resolveInternalUrl('tel:0800', base)).toBeNull()
+  })
+  it('純錨點解析回本頁網址（同網域 http，保留）', () => {
+    expect(resolveInternalUrl('#section', base)).toBe('https://shop.example.com/#section')
+  })
+})
 
 describe('isProbablyScannedPdf', () => {
   it('完全沒文字層 → 掃描檔', () => {

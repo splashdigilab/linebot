@@ -101,7 +101,14 @@
       "WebFetch(domain:fin.ai)",
       "Bash(grep '\\\\.vue$')",
       "Bash(npx sass *)",
-      "Bash(echo \"=== exit: $? ===\")"
+      "Bash(echo \"=== exit: $? ===\")",
+      "Bash(lsof -nP -iTCP -sTCP:LISTEN)",
+      "Bash(echo \"total: $\\(npm run typecheck 2>&1)",
+      "Bash(curl -s -A \"LineBotKnowledgeFetcher/1.0\" --max-time 15 \"https://www.myfeel-tw.com/\")",
+      "Bash(node /tmp/ai_probe.mjs)",
+      "Bash(node _ai_probe.mjs)",
+      "Bash(echo \"total errors: $\\(npm run typecheck 2>&1)",
+      "Bash(echo \"typecheck errors: $\\(npm run typecheck 2>&1)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",

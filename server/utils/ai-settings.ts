@@ -90,6 +90,7 @@ export function normalizeAiSettings(raw: any): AiSettingsDoc {
     confidenceThreshold: clampNumber(raw?.confidenceThreshold, 0, 1, DEFAULT_CONFIDENCE_THRESHOLD),
     groundingThreshold: clampNumber(raw?.groundingThreshold, 0, 1, DEFAULT_GROUNDING_SIMILARITY_THRESHOLD),
     systemPrompt: String(raw?.systemPrompt ?? DEFAULT_SYSTEM_PROMPT).slice(0, 4000),
+    shopUrl: String(raw?.shopUrl ?? '').trim().slice(0, 500),
     replyMaxLen: clampNumber(raw?.replyMaxLen, 50, 1000, DEFAULT_REPLY_MAX_LEN),
     sensitiveTopics,
     quota: {

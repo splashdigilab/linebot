@@ -264,9 +264,26 @@ async function scrollToBottom() {
   if (el) el.scrollTop = el.scrollHeight
 }
 
+/** 把目前畫面上的對話轉成 answerWithAi 吃的 history（最近 6 則、要有文字）。 */
+function buildHistoryPayload(): Array<{ role: 'user' | 'bot'; text: string }> {
+  return history.value
+    .map((t: Turn) => t.role === 'user'
+      ? { role: 'user' as const, text: t.text }
+      : {
+          role: 'bot' as const,
+          text: t.result.decision === 'answered'
+            ? t.result.answer
+            : (t.result.decision === 'disambiguate' ? t.result.disambiguation?.clarification ?? '' : ''),
+        })
+    .filter((t: { role: 'user' | 'bot'; text: string }) => t.text.trim())
+    .slice(-6)
+}
+
 async function send(text: string, opts: { skipDisambiguation?: boolean; isFollowup?: boolean } = {}) {
   const trimmed = text.trim()
   if (!trimmed) return
+  // 帶入「本次提問之前」的對話脈絡，讓 playground 跟正式 LINE 一樣支援多輪追問
+  const historyPayload = buildHistoryPayload()
   history.value.push({ role: 'user', text: trimmed })
   await scrollToBottom()
   running.value = true
@@ -275,6 +292,7 @@ async function send(text: string, opts: { skipDisambiguation?: boolean; isFollow
       method: 'POST',
       body: {
         query: trimmed,
+        history: historyPayload,
         skipDisambiguation: opts.skipDisambiguation === true,
         isFollowup: opts.isFollowup === true,
       },

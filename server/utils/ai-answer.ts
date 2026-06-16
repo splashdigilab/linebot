@@ -19,6 +19,7 @@
  *   8. 否則 → answered，回傳 answer + sources
  */
 import { searchChunksByIdentifierTag, searchSimilarChunks, type SimilarChunk } from './ai-knowledge-chunks'
+import { getCatalogSourceIds } from './ai-knowledge-sources'
 import { embedQuery, estimateTokens, generateJson } from './gemini'
 import { getAiSettings, getGroundingThreshold } from './ai-settings'
 import { getCurrentMonthTokens, recordAiUsage } from './ai-usage'
@@ -64,8 +65,138 @@ export interface AnswerInput {
 }
 
 /**
- * 把「上一輪客人訊息」併進本次提問，給追問補救檢索用。
- * 沒有可用的上一輪（無 history、上一輪與本次相同）回 null。
+ * 純社交語句（招呼 / 道謝 / 道別）偵測 + 罐頭回覆。命中就不走 RAG ——
+ * 這類話語意上跟產品卡勉強沾邊（~0.6），硬走 RAG 會讓 bot「附身」成某產品
+ * （回「我是小獴友」）或對「謝謝」直接 handoff 轉真人。
+ * 刻意收得很緊（去標點後需整句等於該語句、且 ≤ 8 字），避免誤攔
+ * 「你好我想問除濕機」「謝謝但這個多少錢」這種帶實際問題的句子。
+ * 全部租戶中立；之後要客製可改成 per-workspace 設定。
+ */
+const GREETING_RE = /^(hi+|hello+|hey+|嗨+|哈囉+|哈摟+|你好|妳好|您好|安安|早安|午安|晚安|在嗎|有人嗎|請問有人嗎)$/i
+const THANKS_RE = /^(謝謝你?|謝謝啦|謝謝喔|感謝你?|感恩|多謝|thanks?|thankyou|thx|3q)$/i
+const FAREWELL_RE = /^(掰掰|拜拜|再見|bye+|byebye|seeyou)$/i
+
+export const DEFAULT_GREETING_REPLY = '您好，請問有什麼可以為您服務的嗎？😊'
+export const DEFAULT_THANKS_REPLY = '不客氣！還有需要都可以再跟我說 😊'
+export const DEFAULT_FAREWELL_REPLY = '再見，有需要再來找我喔！😊'
+
+/** 社交意圖 → 罐頭回覆；非社交回 null。intent router 與 regex fallback 共用。 */
+export function socialReplyForIntent(intent: MessageIntent): string | null {
+  if (intent === 'greeting') return DEFAULT_GREETING_REPLY
+  if (intent === 'thanks') return DEFAULT_THANKS_REPLY
+  if (intent === 'farewell') return DEFAULT_FAREWELL_REPLY
+  return null
+}
+
+/**
+ * Regex fallback：intent router 失敗（LLM 逾時 / 429）時用，沿用收緊的關鍵字判斷。
+ * 命中社交語句回對應罐頭回覆；否則回 null（續走 RAG）。
+ */
+export function socialCannedReply(text: string): string | null {
+  const t = String(text || '').trim().replace(/[!！。.~～、,，?？\s]/g, '')
+  if (!t || t.length > 8) return null
+  if (GREETING_RE.test(t)) return DEFAULT_GREETING_REPLY
+  if (THANKS_RE.test(t)) return DEFAULT_THANKS_REPLY
+  if (FAREWELL_RE.test(t)) return DEFAULT_FAREWELL_REPLY
+  return null
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Intent router（意圖路由）
+//  開頭跑一次 flash-lite 分類，跟 embedQuery 並行 → 幾乎不增加延遲。
+//  用「整句語意」判斷意圖,解決關鍵字「列不完」與「謝謝但後面還有問題」的問題。
+//  失敗回 null,呼叫端 fallback 回 regex / heuristic,不會整題掛掉。
+//  通用、不綁租戶；敏感詞另由 detectSensitiveTopic 關鍵字硬擋,這裡只是語意補抓。
+// ═══════════════════════════════════════════════════════════════════
+
+export type MessageIntent = 'greeting' | 'thanks' | 'farewell' | 'find_human' | 'sensitive' | 'question'
+
+export interface IntentResult {
+  intent: MessageIntent
+  /** 這句是否「沒有上一輪就看不懂」（多少錢 / 可以無線充電嗎 = true；除濕機多少錢 = false） */
+  isFollowup: boolean
+  inputTokens: number
+  outputTokens: number
+}
+
+const VALID_INTENTS: MessageIntent[] = ['greeting', 'thanks', 'farewell', 'find_human', 'sensitive', 'question']
+
+const INTENT_SYSTEM_INSTRUCTION = `你是客服訊息分類器。讀客人這句話，判斷「意圖」與「是否依賴上一輪」。
+
+intent 擇一：
+- greeting：純打招呼（你好、嗨、在嗎、早安）
+- thanks：純道謝（謝謝、感謝、感恩、3Q）
+- farewell：純道別（掰掰、再見、bye）
+- find_human：明確要求真人 / 客服專員（我要找真人、轉接專員、要跟人講）
+- sensitive：涉及退費退款、法律糾紛、醫療診斷、投資建議、個資外洩 等需真人處理的敏感情境
+- question：其他一般詢問（產品、規格、價格、運費、流程、用法等）
+
+重要：
+- 若一句話同時有社交詞與實際問題（例「謝謝，但我想問運費」「你好，這台多少錢」），以實際問題為準 → question。
+- 只有「真的在打招呼 / 道謝 / 道別」才歸 greeting / thanks / farewell。**單獨的產品名、品牌、品類、型號（例「小獴友」「除濕機」「ibarista」「LG小蘑菇」）不是社交語句，一律 → question。**
+
+isFollowup：這句話是否「脫離上一輪對話就看不懂在問什麼」。
+- 「多少錢」「可以無線充電嗎」「那這個呢」「有貨嗎」→ true
+- 「除濕機多少錢」「你們有賣什麼」「小獴友怎麼連wifi」自帶主題 → false
+
+回傳 JSON：{ "intent": "...", "isFollowup": true/false }`
+
+/**
+ * 用 flash-lite 對訊息做意圖分類。失敗回 null（呼叫端 fallback）。
+ * 帶最近 2 則對話讓它判 isFollowup。
+ */
+export async function classifyIntent(text: string, history?: AiChatTurn[]): Promise<IntentResult | null> {
+  const recent = (history ?? []).slice(-2)
+    .map(t => `${t.role === 'user' ? '客人' : '客服'}：${t.text.trim().slice(0, 120)}`)
+    .join('\n')
+  const prompt = [
+    recent ? `【最近對話】\n${recent}` : '',
+    `【客人這句】\n${text}`,
+  ].filter(Boolean).join('\n\n')
+
+  try {
+    const { data, inputTokens, outputTokens } = await generateJson<{ intent?: unknown; isFollowup?: unknown }>(prompt, {
+      systemInstruction: INTENT_SYSTEM_INSTRUCTION,
+      temperature: 0,
+      maxOutputTokens: 80,
+      model: 'gemini-2.5-flash-lite',
+      thinkingBudget: 0,
+    })
+    const intent = VALID_INTENTS.includes(data?.intent as MessageIntent)
+      ? (data!.intent as MessageIntent)
+      : 'question'
+    return { intent, isFollowup: data?.isFollowup === true, inputTokens, outputTokens }
+  }
+  catch (err) {
+    console.warn('[ai-answer] classifyIntent failed, fallback to heuristics:', err)
+    return null
+  }
+}
+
+/**
+ * 「依賴上下文的追問」偵測：只問屬性、沒帶產品主題的短句
+ * （價格 / 庫存 / 用法 / 規格 / 指代詞）。命中代表這句話本身撈不準，要靠上一輪鎖主題。
+ * 刻意只認「屬性詞 / 指代詞」而不靠長度——「空氣清淨機有什麼」雖短但有主題詞，不該被當追問
+ * 去併上下文（會把它從『精準反問某類』拉歪成『答總覽』）。
+ */
+const FOLLOWUP_MARKERS = /多少錢|價格|價錢|售價|怎麼賣|有沒有貨|有貨|現貨|缺貨|何時|什麼時候|出貨|怎麼用|怎麼操作|如何使用|規格|顏色|尺寸|重量|材質|保固|多重|多大|多久|這個|那個|這款|那款|這台|那台|它|哪裡買/
+
+export function isContextDependentFollowup(text: string): boolean {
+  return FOLLOWUP_MARKERS.test(String(text || ''))
+}
+
+/** 短於此長度的提問一律當追問、併上一輪重檢索（取 max，誤併也不會拉低）。 */
+export const FOLLOWUP_MAX_LEN = 12
+
+/**
+ * 把「主題錨點 → 本次提問」這串併起來，給追問補救檢索用。
+ *
+ * 多輪斷鏈修正（D-2）：不是只併「前一句」——往回找到最後一句「自帶主題」(非追問)的
+ * 客人訊息當錨點，再把錨點之後到現在的所有客人訊息接起來。
+ * 例：「奇美的燈」→「保固多久」→「怎麼申請」，第三句會併成
+ *    「奇美的燈\n保固多久\n怎麼申請」，主題不會在第二跳就掉。
+ * 若往回全是追問句（找不到錨點），退回只併前一句（舊行為）。
+ * 沒有可用的上一輪（無 history、只剩本次）回 null。
  */
 export function buildContextualQuery(
   history: AiChatTurn[] | undefined,
@@ -73,11 +204,18 @@ export function buildContextualQuery(
 ): string | null {
   if (!history?.length) return null
   const cur = current.trim()
-  const prevUser = [...history].reverse().find(
-    t => t.role === 'user' && t.text.trim() && t.text.trim() !== cur,
-  )
-  if (!prevUser) return null
-  return `${prevUser.text.trim()}\n${cur}`.slice(0, 1000)
+  const userTurns = history
+    .filter(t => t.role === 'user' && t.text.trim() && t.text.trim() !== cur)
+    .map(t => t.text.trim())
+  if (!userTurns.length) return null
+
+  // 用「關鍵字追問」判斷哪句是追問（不靠長度——「奇美的燈」短但自帶主題，不該被當追問跳過）
+  let anchorIdx = -1
+  for (let i = userTurns.length - 1; i >= 0; i--) {
+    if (!isContextDependentFollowup(userTurns[i]!)) { anchorIdx = i; break }
+  }
+  const start = anchorIdx >= 0 ? anchorIdx : userTurns.length - 1
+  return [...userTurns.slice(start), cur].join('\n').slice(0, 1000)
 }
 
 export interface AnswerOutput extends AiAnswerResult {
@@ -123,15 +261,18 @@ export function truncateAtSentence(text: string, maxLen: number): string {
 }
 
 /**
- * 同 sourceId 只留分數最高那張；無 sourceId 的卡視為各自獨立。
- * 結果保持原本由高到低的順序。
+ * 同 sourceId 只留分數最高那張；無 sourceId 的卡視為各自獨立。結果保持由高到低順序。
+ *
+ * exemptSourceIds：「型錄/列表來源」(generateOverview) 的 sourceId —— 這類來源旗下是**不同產品**
+ * 共用同一 sourceId，不能當「同主題」併掉（否則「有沒有除濕機」只剩 1 個產品、其餘被雜卡填位）。
+ * 列在豁免集合的卡視為各自獨立、全部保留；近似重複仍由 dedupeNearIdentical 處理。
  */
-export function dedupeBySource(chunks: SimilarChunk[]): SimilarChunk[] {
+export function dedupeBySource(chunks: SimilarChunk[], exemptSourceIds?: Set<string>): SimilarChunk[] {
   const seen = new Set<string>()
   const out: SimilarChunk[] = []
   for (const c of chunks) {
     const key = c.sourceId
-    if (!key) {
+    if (!key || exemptSourceIds?.has(key)) {
       out.push(c)
       continue
     }
@@ -161,6 +302,42 @@ export function dedupeNearIdentical(chunks: SimilarChunk[]): SimilarChunk[] {
     out.push(c)
   }
   return out
+}
+
+/**
+ * 「通用主題卡」標記：說明 / 政策 / 出貨 / 抽獎 / 流程這類**非產品**卡。
+ * 反問選項應優先呈現實際產品，不要塞「現貨庫存說明」「出廠測試現象」這種給客人選。
+ */
+const GENERIC_TOPIC_RE = /說明|政策|辦法|聲明|提醒|查詢|進度|出貨|抽獎|測試|現象|聯絡|客服|統編|發票|退稅|退還|認證|價格調整/
+
+/**
+ * 穩定排序：把通用主題卡排到產品卡之後（同組內維持原相似度順序）。
+ * 只在「產品卡與主題卡並存」時改變選項；若候選全是主題卡（例「保固多久」）順序不變。
+ */
+export function preferProductCards(chunks: SimilarChunk[]): SimilarChunk[] {
+  const isGeneric = (c: SimilarChunk) => GENERIC_TOPIC_RE.test(c.title)
+  return [...chunks].sort((a, b) => Number(isGeneric(a)) - Number(isGeneric(b)))
+}
+
+/**
+ * 同產品變體卡去重（D-3）：同一個產品被多來源匯入（首頁 + FAQ）會產生標題略異的卡
+ * （「NWT 16L高效抽取型除濕機」vs「…除濕機專案資訊」），dedupeNearIdentical 抓不到。
+ * 這裡用「標題去空白後互為前綴/包含」判同產品，保留排前面（分數高）那張。
+ * 較短標題需 ≥ 4 字才比對，避免「燈」這類短詞誤吃掉不同產品。不同型號（高效 vs AI）不會被併。
+ */
+export function dedupeByTitleContainment(chunks: SimilarChunk[]): SimilarChunk[] {
+  const norm = (s: string) => s.replace(/\s+/g, '').toLowerCase()
+  const kept: Array<{ chunk: SimilarChunk; key: string }> = []
+  for (const c of chunks) {
+    const key = norm(c.title)
+    const dup = kept.some(({ key: k }) => {
+      const shorter = key.length <= k.length ? key : k
+      const longer = key.length <= k.length ? k : key
+      return shorter.length >= 4 && longer.includes(shorter)
+    })
+    if (!dup) kept.push({ chunk: c, key })
+  }
+  return kept.map(k => k.chunk)
 }
 
 /**
@@ -322,9 +499,9 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   }
 
   // ── 2. quota 護欄 ────────────────────────────────────────
+  // 放在 router/embed 之前：超量且 handoff_all 時不要再花 LLM。
   // 注意：「先讀用量再答題、答完才記帳」並非嚴格原子——併發訊息可能讓當月用量
-  // 略為超過 cap（誤差約為同時在途的幾次呼叫）。cap 是軟性護欄，可接受此誤差；
-  // 若未來要做硬性計費上限，需改用 transaction 預扣。
+  // 略為超過 cap（誤差約為同時在途的幾次呼叫）。cap 是軟性護欄，可接受此誤差。
   let answerModel = settings.answerModel
   if (settings.quota.monthlyTokenCap > 0) {
     const used = await getCurrentMonthTokens(workspaceId, db)
@@ -340,10 +517,18 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
     }
   }
 
-  // ── 3. 向量搜尋 ──────────────────────────────────────────
+  // ── 3. 意圖路由 ∥ 向量檢索（並行，延遲幾乎不增加）──────────
+  // classifyIntent 用整句語意判斷意圖（解決關鍵字列不完 / 「謝謝但後面有問題」），
+  // 與 embedQuery 同時跑；classifyIntent 失敗回 null，fallback 回 regex/heuristic。
+  let intentRes: IntentResult | null
   let queryVector: number[]
   try {
-    queryVector = await embedQuery(text)
+    const [ir, qv] = await Promise.all([
+      classifyIntent(text, input.history),
+      embedQuery(text),
+    ])
+    intentRes = ir
+    queryVector = qv
   }
   catch (err) {
     console.error('[ai-answer] embedQuery failed:', err)
@@ -352,15 +537,53 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
     }
     return handoff('llm_error')
   }
+  const routerIn = intentRes?.inputTokens ?? 0
+  const routerOut = intentRes?.outputTokens ?? 0
+
+  // ── 3.5 意圖分流（router 失敗則用 regex/heuristic fallback）──
+  // 語意敏感（關鍵字漏抓的換句話說）→ 轉真人。關鍵字硬擋已在步驟 1 做過，這裡是補抓。
+  if (intentRes?.intent === 'sensitive') {
+    if (!input.isFollowup) {
+      await recordAiUsage(workspaceId, { invocations: 1, handoffs: 1, inputTokens: routerIn, outputTokens: routerOut }, db)
+    }
+    return handoff('sensitive_topic')
+  }
+  // 明確要求真人
+  if (intentRes?.intent === 'find_human') {
+    if (!input.isFollowup) {
+      await recordAiUsage(workspaceId, { invocations: 1, handoffs: 1, inputTokens: routerIn, outputTokens: routerOut }, db)
+    }
+    return handoff('user_request')
+  }
+  // 社交（招呼 / 道謝 / 道別）→ 罐頭，不走 RAG
+  const social = intentRes ? socialReplyForIntent(intentRes.intent) : socialCannedReply(text)
+  if (social) {
+    if (!input.isFollowup) {
+      await recordAiUsage(workspaceId, { invocations: 1, answered: 1, inputTokens: routerIn, outputTokens: routerOut }, db)
+    }
+    return { decision: 'answered', answer: social, confidence: 1, sources: [], handoffReason: null }
+  }
+
   let embedTokenEstimate = estimateTokens(text)
 
   let chunks = await searchSimilarChunks(db, workspaceId, queryVector, DEFAULT_TOP_K_CHUNKS)
   let topSimilarity = chunks[0]?.similarity ?? 0
 
-  // 追問補救：單句檢索不過 grounding 門檻時（典型如「那運費呢？」缺主題詞），
-  // 併上一輪客人訊息重新檢索一次，取分數較高的結果。只在低分時多花一次 embed。
+  // 追問補救：併上一輪客人訊息重新檢索一次，取「單句 vs 併上下文」分數較高者。
+  // 兩種情況觸發：
+  //   (a) 單句檢索不過 grounding 門檻（典型如「那運費呢？」缺主題詞，撈不到卡）；
+  //   (b) 本次是「依賴上下文的追問」——只問屬性沒帶主題（「買多少錢」「有貨嗎」「怎麼用」
+  //       「這個呢」）。即使單句剛好命中某張通用卡（分數過 grounding），主題也多半是錯的，
+  //       不併上一輪就會用錯主題去檢索 / 反問（例：談 LG 清淨機後問「多少錢」撈到除濕機價格卡）。
+  // 取 max 保護「真的換主題」的短句：併入反而拉低時，仍保留單句結果。
+  // 觸發條件：屬性追問關鍵詞、或「短句」(規格型追問如「可以無線充電嗎」關鍵詞列不完，
+  // 用長度兜底)、或單句沒過 grounding。一律取 max，所以對「自帶主題的短句」不會誤併拉歪。
+  // isFollowup 優先用 intent router 的判斷；router 失敗才退回關鍵字/長度 heuristic
   const contextualQuery = buildContextualQuery(input.history, text)
-  if (contextualQuery && topSimilarity < getGroundingThreshold(settings)) {
+  const looksLikeFollowup = intentRes
+    ? intentRes.isFollowup
+    : (isContextDependentFollowup(text) || text.length <= FOLLOWUP_MAX_LEN)
+  if (contextualQuery && (looksLikeFollowup || topSimilarity < getGroundingThreshold(settings))) {
     try {
       const ctxVector = await embedQuery(contextualQuery)
       embedTokenEstimate += estimateTokens(contextualQuery)
@@ -398,9 +621,13 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   // ── 4. disambiguation 偵測（先於 grounding）──────────────
   // 「多張卡同樣相關」是比 grounding 更強的訊號 — 即使 top-1 略低於 grounding 門檻，
   // 也應該主動反問澄清而不是默默 handoff。disambiguation 條件不過再走 grounding gate。
-  const dedupedChunks = dedupeNearIdentical(dedupeBySource(chunks))
+  // 型錄/列表來源豁免：其旗下是不同產品，不可當同主題併掉（否則產品列表反問只剩 1 個 + 雜卡）
+  const catalogSourceIds = await getCatalogSourceIds(db, workspaceId)
+  const dedupedChunks = dedupeNearIdentical(dedupeBySource(chunks, catalogSourceIds))
   if (!input.skipDisambiguation && shouldDisambiguate(dedupedChunks, settings)) {
-    const candidates = dedupedChunks.slice(0, settings.disambiguation.maxOptions)
+    // 反問選項優先產品卡，把「說明/政策/出貨」等通用主題卡排後面
+    // 先把「同產品變體卡」併掉（避免 3 個都是同一台），再產品優先排序
+    const candidates = preferProductCards(dedupeByTitleContainment(dedupedChunks)).slice(0, settings.disambiguation.maxOptions)
     const dis = await generateDisambiguation(candidates, text, settings)
     if (dis) {
       if (!input.isFollowup) {
@@ -408,8 +635,8 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
           invocations: 1,
           disambiguations: 1,
           embeddingTokens: embedTokenEstimate,
-          inputTokens: dis.inputTokens,
-          outputTokens: dis.outputTokens,
+          inputTokens: dis.inputTokens + routerIn,
+          outputTokens: dis.outputTokens + routerOut,
         }, db)
       }
       return {
@@ -431,6 +658,8 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
         invocations: 1,
         handoffs: 1,
         embeddingTokens: embedTokenEstimate,
+        inputTokens: routerIn,
+        outputTokens: routerOut,
       }, db)
     }
     return handoff('no_grounding', chunks)
@@ -465,6 +694,12 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
     '請依「知識卡內容」回答，回覆文字放在 answer。',
     `answer 字數**硬性限制 ${settings.replyMaxLen} 字以內**，超過會被截斷，務必在限制內把話收完整、句子要結束（最後一個字必須是。！？或結尾語助詞）。`,
     '若知識卡沒有足夠資訊回答這個問題，hasInfo 設為 false、answer 留空字串；不要編造。',
+    // 價格 / 購買類問題的連結處理：優先用卡片內的連結，否則用 workspace 設定的官網網址當 fallback。
+    '若客人是在問價格、購買、哪裡買、下單：',
+    '  - 知識卡內若有「連結：<網址>」，請把該連結附在回覆中，並說明最新價格 / 購買以該頁為準。',
+    ...(settings.shopUrl
+      ? [`  - 知識卡內若沒有連結，請回覆：最新價格與購買請見 ${settings.shopUrl}（此時 hasInfo 設為 true）。`]
+      : []),
   ].join('\n')
 
   let answerText = ''
@@ -487,8 +722,9 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
     })
     answerText = String(res.data?.answer ?? '').trim()
     hasInfo = res.data?.hasInfo !== false
-    inputTokens = res.inputTokens
-    outputTokens = res.outputTokens
+    // 併入 intent router 的 token（與 embedding 並行的那次 flash-lite 分類）
+    inputTokens = res.inputTokens + routerIn
+    outputTokens = res.outputTokens + routerOut
   }
   catch (err) {
     console.error('[ai-answer] generateText failed:', err)
@@ -497,6 +733,8 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
         invocations: 1,
         handoffs: 1,
         embeddingTokens: embedTokenEstimate,
+        inputTokens: routerIn,
+        outputTokens: routerOut,
       }, db)
     }
     return handoff('llm_error', chunks)

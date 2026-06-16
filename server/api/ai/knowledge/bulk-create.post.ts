@@ -2,6 +2,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { invalidateCatalogSourceCache } from '~~/server/utils/ai-knowledge-sources'
 import {
   createKnowledgeChunk,
   normalizeChunkInput,
@@ -84,6 +85,8 @@ export default defineEventHandler(async (event) => {
       createdAt: now,
       updatedAt: now,
     })
+    // 新型錄來源要讓答題端的 dedupeBySource 豁免立刻生效（不必等 60s 快取過期）
+    if (overviewInput) invalidateCatalogSourceCache(workspaceId)
   }
 
   // ── 批次建立 chunks（含 embedding），用 concurrency 控速 ──────────

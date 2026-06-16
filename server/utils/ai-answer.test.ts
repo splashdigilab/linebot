@@ -6,6 +6,10 @@ import {
   shouldDisambiguate,
   matchCandidateTitle,
   buildContextualQuery,
+  isContextDependentFollowup,
+  socialCannedReply,
+  preferProductCards,
+  dedupeByTitleContainment,
 } from './ai-answer'
 import type { SimilarChunk } from './ai-knowledge-chunks'
 import { detectSensitiveTopic } from '~~/shared/types/ai-knowledge'
@@ -72,6 +76,17 @@ describe('dedupeBySource', () => {
       chunk({ id: 'b', sourceId: null }),
     ]
     expect(dedupeBySource(input)).toHaveLength(2)
+  })
+
+  it('豁免來源（型錄）的同源卡全部保留（不同產品不可併）', () => {
+    const input = [
+      chunk({ id: 'a', sourceId: 'catalog', similarity: 0.9 }),
+      chunk({ id: 'b', sourceId: 'catalog', similarity: 0.8 }),
+      chunk({ id: 'c', sourceId: 's2', similarity: 0.7 }),
+      chunk({ id: 'd', sourceId: 's2', similarity: 0.6 }),
+    ]
+    // catalog 豁免 → a、b 都留；s2 非豁免 → 只留 c
+    expect(dedupeBySource(input, new Set(['catalog'])).map(x => x.id)).toEqual(['a', 'b', 'c'])
   })
 })
 
@@ -205,6 +220,87 @@ describe('buildContextualQuery', () => {
     expect(buildContextualQuery([], '運費？')).toBeNull()
     expect(buildContextualQuery([{ role: 'user', text: '運費？' }], '運費？')).toBeNull()
     expect(buildContextualQuery([{ role: 'bot', text: '您好' }], '運費？')).toBeNull()
+  })
+
+  it('多輪斷鏈修正：往回找自帶主題的錨點，串起整條（D-2）', () => {
+    const history = [
+      { role: 'user' as const, text: '奇美的燈' },
+      { role: 'bot' as const, text: '...' },
+      { role: 'user' as const, text: '保固多久' }, // 追問句（含「保固/多久」）
+      { role: 'bot' as const, text: '...' },
+    ]
+    // 「怎麼申請」往回跳過「保固多久」、錨到「奇美的燈」，整條串起來
+    expect(buildContextualQuery(history, '怎麼申請')).toBe('奇美的燈\n保固多久\n怎麼申請')
+  })
+})
+
+describe('dedupeByTitleContainment', () => {
+  const c = (id: string, title: string): SimilarChunk => chunk({ id, title })
+  it('同產品變體卡（標題互為包含）只留前面那張（D-3）', () => {
+    const input = [
+      c('1', 'NWT 威技 16L高效抽取型除濕機'),
+      c('2', 'NWT威技16L高效抽取型除濕機專案資訊'), // 含 1 的標題 → 視為同產品
+      c('3', 'NWT 威技 一級能效16L超威AI智能除濕機'), // 不同型號 → 保留
+    ]
+    expect(dedupeByTitleContainment(input).map(x => x.id)).toEqual(['1', '3'])
+  })
+  it('短標題（<4字）不互吃，避免誤併不同產品', () => {
+    const input = [c('1', '燈'), c('2', '檯燈')]
+    expect(dedupeByTitleContainment(input).map(x => x.id)).toEqual(['1', '2'])
+  })
+})
+
+describe('isContextDependentFollowup', () => {
+  it('只問屬性 / 指代詞的追問 → true', () => {
+    for (const q of ['買多少錢呢', '價格多少', '有貨嗎', '什麼時候出貨', '怎麼用', '這個呢', '那台多少錢', '保固多久']) {
+      expect(isContextDependentFollowup(q)).toBe(true)
+    }
+  })
+
+  it('帶產品主題的獨立問題 → false（不該被併上下文拉歪）', () => {
+    for (const q of ['空氣清淨機有什麼', '你們有賣什麼產品', 'LG 小蘑菇是什麼', '除濕機推薦']) {
+      expect(isContextDependentFollowup(q)).toBe(false)
+    }
+  })
+})
+
+describe('socialCannedReply', () => {
+  it('招呼 → 招呼罐頭', () => {
+    for (const q of ['你好', '您好', '哈囉', '嗨', 'hi', 'Hello', '在嗎', '有人嗎', '早安', '你好！']) {
+      expect(socialCannedReply(q)).toMatch(/為您服務/)
+    }
+  })
+  it('道謝 → 不客氣罐頭', () => {
+    for (const q of ['謝謝', '謝謝你', '感謝', '感恩', 'thanks', 'thx', '3Q']) {
+      expect(socialCannedReply(q)).toMatch(/不客氣/)
+    }
+  })
+  it('道別 → 再見罐頭', () => {
+    for (const q of ['掰掰', '拜拜', '再見', 'bye']) {
+      expect(socialCannedReply(q)).toMatch(/再見/)
+    }
+  })
+  it('帶實際問題的句子 → null（不可誤攔）', () => {
+    for (const q of ['你好我想問除濕機', '謝謝但這個多少錢', '哈囉小獴友多少錢', '請問營業時間']) {
+      expect(socialCannedReply(q)).toBeNull()
+    }
+  })
+})
+
+describe('preferProductCards', () => {
+  const c = (id: string, title: string): SimilarChunk => chunk({ id, title })
+  it('把通用主題卡排到產品卡之後（穩定）', () => {
+    const input = [
+      c('1', '現貨庫存與預購說明'),
+      c('2', 'NWT 威技 16L 除濕機'),
+      c('3', '除濕機出廠測試現象說明'),
+      c('4', 'GPLUS 居不可濕 除濕機'),
+    ]
+    expect(preferProductCards(input).map(x => x.id)).toEqual(['2', '4', '1', '3'])
+  })
+  it('候選全是主題卡時順序不變', () => {
+    const input = [c('1', '除濕機保固政策'), c('2', '台灣在地保固與安全認證')]
+    expect(preferProductCards(input).map(x => x.id)).toEqual(['1', '2'])
   })
 })
 

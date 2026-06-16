@@ -14,6 +14,48 @@ import type {
 
 export const KNOWLEDGE_SOURCES_COLLECTION = 'knowledgeSources'
 
+// ── Catalog source ids cache ──────────────────────────────────────
+// 「型錄/列表來源」(generateOverview=true) 旗下有很多*不同產品*共用同一個 sourceId。
+// 答題時 dedupeBySource 不該把它們當「同主題」併掉，所以需要快速查出哪些 sourceId 是型錄。
+// 小量資料 + 答題熱路徑，快取 60s 避免每次答題多打 Firestore。
+const CATALOG_SRC_TTL_MS = 60_000
+const catalogSrcCache = new Map<string, { expiresAt: number; ids: Set<string> }>()
+
+export function invalidateCatalogSourceCache(workspaceId: string) {
+  catalogSrcCache.delete(workspaceId)
+}
+
+/**
+ * 回傳此 workspace 中「型錄/列表來源」(generateOverview=true) 的 sourceId 集合。
+ * 通用——只看 generateOverview 旗標，不綁任何特定站台/租戶。
+ */
+export async function getCatalogSourceIds(
+  db: Firestore,
+  workspaceId: string,
+): Promise<Set<string>> {
+  const cached = catalogSrcCache.get(workspaceId)
+  if (cached && cached.expiresAt > Date.now()) return cached.ids
+
+  const ids = new Set<string>()
+  try {
+    // 只用 workspaceId 過濾（單欄位、免複合索引），generateOverview 在程式端篩。
+    // 加上限：型錄來源本來就少，避免在答題熱路徑做無上限讀取。
+    const snap = await db.collection(KNOWLEDGE_SOURCES_COLLECTION)
+      .where('workspaceId', '==', workspaceId)
+      .limit(200)
+      .get()
+    for (const d of snap.docs) {
+      if (d.data()?.generateOverview === true) ids.add(d.id)
+    }
+  }
+  catch (e) {
+    // 查詢失敗（缺 index 等）不擋答題：回空集合 = 維持舊行為（全部 dedupe）
+    console.warn('[ai-knowledge-sources] getCatalogSourceIds failed:', e)
+  }
+  catalogSrcCache.set(workspaceId, { expiresAt: Date.now() + CATALOG_SRC_TTL_MS, ids })
+  return ids
+}
+
 export interface SourceSummary {
   id: string
   type: KnowledgeSourceType
@@ -157,6 +199,7 @@ export async function deleteSourceWithChunks(
   batch.delete(db.collection(KNOWLEDGE_SOURCES_COLLECTION).doc(sourceId))
   await batch.commit()
   invalidateTagIndexCache(workspaceId)
+  invalidateCatalogSourceCache(workspaceId)
 
   return { chunksDeleted: chunksSnap.size }
 }

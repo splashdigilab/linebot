@@ -143,6 +143,12 @@ export interface AiSettingsDoc {
   groundingThreshold: number
   /** 給 AI 的系統指示（語氣、禁則） */
   systemPrompt: string
+  /**
+   * 商店 / 官網網址（per-workspace）。客人問價格 / 購買但命中的知識卡沒有連結時，
+   * AI 用這個當 fallback（「最新價格與購買請見 <shopUrl>」）。空字串 = 不啟用。
+   * 注意：價格、商品頁這類「各租戶不同」的東西一律走此設定，不寫死在共用程式。
+   */
+  shopUrl: string
   /** 回覆長度上限（字數） */
   replyMaxLen: number
   /** 敏感主題：命中即直接 handoff，不讓 AI 答 */
@@ -327,7 +333,9 @@ export const DEFAULT_REPLY_MAX_LEN = 300
 
 /** 反問澄清預設值 */
 export const DEFAULT_DISAMBIGUATION_ENABLED = true
-export const DEFAULT_DISAMBIGUATION_TOP1_MIN = 0.65
+// 0.70（原 0.65）：低於此的多卡群多半是「沒有好答案、被迫湊近似卡」，反問會塞不相關選項
+// （例：問淨水器卻列出吸塵器/除濕機）。拉高門檻讓弱匹配改走 grounding/answer 而非亂反問。
+export const DEFAULT_DISAMBIGUATION_TOP1_MIN = 0.70
 export const DEFAULT_DISAMBIGUATION_TOP1_MAX = 0.78
 export const DEFAULT_DISAMBIGUATION_MAX_SPREAD = 0.05
 export const DEFAULT_DISAMBIGUATION_MAX_OPTIONS = 3
@@ -409,6 +417,7 @@ export function buildDefaultAiSettings(): Omit<AiSettingsDoc, 'updatedAt'> {
     confidenceThreshold: DEFAULT_CONFIDENCE_THRESHOLD,
     groundingThreshold: DEFAULT_GROUNDING_SIMILARITY_THRESHOLD,
     systemPrompt: DEFAULT_SYSTEM_PROMPT,
+    shopUrl: '',
     replyMaxLen: DEFAULT_REPLY_MAX_LEN,
     sensitiveTopics: [...DEFAULT_SENSITIVE_TOPICS],
     quota: {

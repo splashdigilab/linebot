@@ -140,6 +140,26 @@
           </div>
         </div>
 
+        <!-- ── 商店網址 ──────────────────────── -->
+        <div class="message-card ai-section-card">
+          <div class="message-card-header">
+            <div class="card-header-main">
+              <span class="badge badge-green">🔗 商店 / 官網網址</span>
+            </div>
+          </div>
+          <div class="card-section-stack">
+            <p class="ai-section-hint">
+              客人問價格 / 購買、但知識卡裡沒有對應連結時,AI 會用這個網址回覆「最新價格與購買請見…」。留空則不啟用。
+            </p>
+            <el-input
+              v-model="form.shopUrl"
+              :maxlength="500"
+              placeholder="https://your-shop.example.com/"
+              clearable
+            />
+          </div>
+        </div>
+
         <!-- ── 轉真人通知 ─────────────────────── -->
         <div class="message-card ai-section-card">
           <div class="message-card-header">
@@ -467,6 +487,7 @@ interface FormShape {
   confidenceThreshold: number
   groundingThreshold: number
   systemPrompt: string
+  shopUrl: string
   replyMaxLen: number
   sensitiveTopics: string[]
   quota: { monthlyTokenCap: number; onExceed: AiSettingsDoc['quota']['onExceed'] }
@@ -484,6 +505,7 @@ function defaultForm(): FormShape {
     confidenceThreshold: 0.75,
     groundingThreshold: 0.7,
     systemPrompt: '',
+    shopUrl: '',
     replyMaxLen: 300,
     sensitiveTopics: [],
     quota: { monthlyTokenCap: 1_000_000, onExceed: 'handoff_all' },
@@ -705,6 +727,7 @@ async function loadSettings(_resetOnly = false) {
       confidenceThreshold: data.confidenceThreshold,
       groundingThreshold: data.groundingThreshold,
       systemPrompt: data.systemPrompt,
+      shopUrl: data.shopUrl ?? '',
       replyMaxLen: data.replyMaxLen,
       sensitiveTopics: [...data.sensitiveTopics],
       quota: { ...data.quota },
