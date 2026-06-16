@@ -284,6 +284,10 @@ async function send(text: string, opts: { skipDisambiguation?: boolean; isFollow
   if (!trimmed) return
   // 帶入「本次提問之前」的對話脈絡，讓 playground 跟正式 LINE 一樣支援多輪追問
   const historyPayload = buildHistoryPayload()
+  // 模擬正式環境的反問冷卻：上一個 AI 回合若是反問，這句就跳過反問（避免鬼打牆）。
+  // 正式 LINE 用 disambiguation.cooldownMinutes 做時間冷卻，playground 用「連續反問」近似。
+  const lastAi = [...history.value].reverse().find((t): t is AiTurn => t.role === 'ai')
+  const autoSkipDisambiguation = lastAi?.result.decision === 'disambiguate'
   history.value.push({ role: 'user', text: trimmed })
   await scrollToBottom()
   running.value = true
@@ -293,7 +297,7 @@ async function send(text: string, opts: { skipDisambiguation?: boolean; isFollow
       body: {
         query: trimmed,
         history: historyPayload,
-        skipDisambiguation: opts.skipDisambiguation === true,
+        skipDisambiguation: opts.skipDisambiguation === true || autoSkipDisambiguation,
         isFollowup: opts.isFollowup === true,
       },
     })

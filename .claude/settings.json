@@ -108,7 +108,9 @@
       "Bash(node /tmp/ai_probe.mjs)",
       "Bash(node _ai_probe.mjs)",
       "Bash(echo \"total errors: $\\(npm run typecheck 2>&1)",
-      "Bash(echo \"typecheck errors: $\\(npm run typecheck 2>&1)"
+      "Bash(echo \"typecheck errors: $\\(npm run typecheck 2>&1)",
+      "Bash(echo \"typecheck: $\\(npm run typecheck 2>&1)",
+      "WebFetch(domain:www.myfeel-tw.com)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",

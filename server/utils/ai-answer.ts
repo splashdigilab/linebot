@@ -109,7 +109,7 @@ export function socialCannedReply(text: string): string | null {
 //  通用、不綁租戶；敏感詞另由 detectSensitiveTopic 關鍵字硬擋,這裡只是語意補抓。
 // ═══════════════════════════════════════════════════════════════════
 
-export type MessageIntent = 'greeting' | 'thanks' | 'farewell' | 'find_human' | 'sensitive' | 'question'
+export type MessageIntent = 'greeting' | 'thanks' | 'farewell' | 'find_human' | 'sensitive' | 'compare' | 'question'
 
 export interface IntentResult {
   intent: MessageIntent
@@ -119,7 +119,7 @@ export interface IntentResult {
   outputTokens: number
 }
 
-const VALID_INTENTS: MessageIntent[] = ['greeting', 'thanks', 'farewell', 'find_human', 'sensitive', 'question']
+const VALID_INTENTS: MessageIntent[] = ['greeting', 'thanks', 'farewell', 'find_human', 'sensitive', 'compare', 'question']
 
 const INTENT_SYSTEM_INSTRUCTION = `你是客服訊息分類器。讀客人這句話，判斷「意圖」與「是否依賴上一輪」。
 
@@ -129,7 +129,8 @@ intent 擇一：
 - farewell：純道別（掰掰、再見、bye）
 - find_human：明確要求真人 / 客服專員（我要找真人、轉接專員、要跟人講）
 - sensitive：涉及退費退款、法律糾紛、醫療診斷、投資建議、個資外洩 等需真人處理的敏感情境
-- question：其他一般詢問（產品、規格、價格、運費、流程、用法等）
+- compare：想「比較多個產品 / 在多個之間挑選」（例「A 跟 B 哪個好」「這幾台比一下」「差在哪」「A vs B」「哪台比較適合我」）
+- question：其他一般詢問——針對「單一主題」的產品、規格、價格、運費、流程、用法等
 
 重要：
 - 若一句話同時有社交詞與實際問題（例「謝謝，但我想問運費」「你好，這台多少錢」），以實際問題為準 → question。
@@ -564,6 +565,10 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
     return { decision: 'answered', answer: social, confidence: 1, sources: [], handoffReason: null }
   }
 
+  // 比較意圖：客人想比較多個產品。**不要反問叫他選一個**（那是反意圖、會鬼打牆），
+  // 改走 RAG 用比較導向 prompt 客觀條列；主觀好壞交給真人（見生成段規則）。
+  const isCompare = intentRes?.intent === 'compare'
+
   let embedTokenEstimate = estimateTokens(text)
 
   let chunks = await searchSimilarChunks(db, workspaceId, queryVector, DEFAULT_TOP_K_CHUNKS)
@@ -624,7 +629,7 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   // 型錄/列表來源豁免：其旗下是不同產品，不可當同主題併掉（否則產品列表反問只剩 1 個 + 雜卡）
   const catalogSourceIds = await getCatalogSourceIds(db, workspaceId)
   const dedupedChunks = dedupeNearIdentical(dedupeBySource(chunks, catalogSourceIds))
-  if (!input.skipDisambiguation && shouldDisambiguate(dedupedChunks, settings)) {
+  if (!input.skipDisambiguation && !isCompare && shouldDisambiguate(dedupedChunks, settings)) {
     // 反問選項優先產品卡，把「說明/政策/出貨」等通用主題卡排後面
     // 先把「同產品變體卡」併掉（避免 3 個都是同一台），再產品優先排序
     const candidates = preferProductCards(dedupeByTitleContainment(dedupedChunks)).slice(0, settings.disambiguation.maxOptions)
@@ -694,6 +699,15 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
     '請依「知識卡內容」回答，回覆文字放在 answer。',
     `answer 字數**硬性限制 ${settings.replyMaxLen} 字以內**，超過會被截斷，務必在限制內把話收完整、句子要結束（最後一個字必須是。！？或結尾語助詞）。`,
     '若知識卡沒有足夠資訊回答這個問題，hasInfo 設為 false、answer 留空字串；不要編造。',
+    // 比較意圖：客觀條列差異即可，不要替客人做主觀的好壞 / 推薦判斷。
+    ...(isCompare
+      ? [
+          '客人想比較多個產品。請依知識卡用簡短的方式條列各產品的客觀差異（類型 / 主要規格 / 特色）。',
+          '只比較「知識卡裡有、且與客人問題同類」的產品；**若知識卡並未包含客人想比的那些產品，不要拿不相關的產品硬湊**，直接 hasInfo 設為 false（轉真人）。',
+          '**不要**說「哪個比較好 / 比較划算 / 推薦哪個」這類主觀判斷；若客人問的正是主觀好壞，請在客觀差異後補一句「想知道哪個更適合您，我幫您轉接專員」。',
+          '若知識卡資訊不足以做有意義的比較，hasInfo 設為 false、answer 留空（轉真人）。',
+        ]
+      : []),
     // 價格 / 購買類問題的連結處理：優先用卡片內的連結，否則用 workspace 設定的官網網址當 fallback。
     '若客人是在問價格、購買、哪裡買、下單：',
     '  - 知識卡內若有「連結：<網址>」，請把該連結附在回覆中，並說明最新價格 / 購買以該頁為準。',
