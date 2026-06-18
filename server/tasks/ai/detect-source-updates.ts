@@ -22,6 +22,7 @@ import {
   markSourceOutdated,
 } from '~~/server/utils/ai-knowledge-sources'
 import { extractUrlText } from '~~/server/utils/ai-source-extractors'
+import { syncGoogleSheetSource } from '~~/server/utils/gsheet-sync'
 import type { KnowledgeSourceDoc } from '~~/shared/types/ai-knowledge'
 
 const SCAN_LIMIT = 50 // 單次跑最多幾張 source（避免一次塞太多 fetch）
@@ -43,7 +44,7 @@ async function sha256(input: string): Promise<string> {
 
 interface CheckResult {
   sourceId: string
-  outcome: 'unchanged' | 'changed_notified' | 'changed_logged' | 'error'
+  outcome: 'unchanged' | 'changed_notified' | 'changed_logged' | 'gsheet_synced' | 'error'
   message?: string
 }
 
@@ -53,6 +54,15 @@ async function checkOneSource(
   data: KnowledgeSourceDoc,
 ): Promise<CheckResult> {
   try {
+    // Google Sheet：自動同步（一列一卡，直接套用新增/更新/刪除，不走人工 resync）。
+    // autoApply === false 的來源視為「商家自管」，這支不動它。
+    if (data.type === 'gsheet') {
+      if (data.gsheetAutoApply === false) return { sourceId, outcome: 'unchanged' }
+      const r = await syncGoogleSheetSource(db, data.workspaceId, sourceId, data)
+      if (r.outcome === 'unchanged') return { sourceId, outcome: 'unchanged' }
+      return { sourceId, outcome: 'gsheet_synced', message: `+${r.added} ~${r.updated} -${r.deleted}` }
+    }
+
     if (data.type !== 'url' || !data.url) {
       return { sourceId, outcome: 'unchanged' } // 不該被撈到，保險
     }
@@ -111,11 +121,11 @@ export default defineTask({
   },
   async run() {
     const db = getDb()
-    // 撈候選來源：type='url' AND refreshIntervalMinutes > 0
+    // 撈候選來源：refreshIntervalMinutes > 0（url 偵測 + gsheet 自動同步共用此排程）。
+    // 只用單一不等式查詢（免複合索引），type 在 JS 端篩。
     // 進一步用 lastFetchedAt 過濾「到時間了」會比較準，但 Firestore 不易做時間區間查詢，
     // 一律撈出來後用 JS 過濾 — 工作區 source 通常不會多到爆。
     const snap = await db.collection(KNOWLEDGE_SOURCES_COLLECTION)
-      .where('type', '==', 'url')
       .where('refreshIntervalMinutes', '>', 0)
       .limit(SCAN_LIMIT * 5) // 撈寬一點，過濾後再砍到 SCAN_LIMIT
       .get()
@@ -124,6 +134,7 @@ export default defineTask({
     const dueDocs: Array<{ id: string; data: KnowledgeSourceDoc }> = []
     for (const d of snap.docs) {
       const data = d.data() as KnowledgeSourceDoc
+      if (data.type !== 'url' && data.type !== 'gsheet') continue
       const lastMs = tsToMs(data.lastFetchedAt)
       const intervalMs = Number(data.refreshIntervalMinutes || 0) * 60_000
       if (!intervalMs) continue
@@ -154,9 +165,10 @@ export default defineTask({
       unchanged: results.filter(r => r.outcome === 'unchanged').length,
       changedNotified: results.filter(r => r.outcome === 'changed_notified').length,
       changedLogged: results.filter(r => r.outcome === 'changed_logged').length,
+      gsheetSynced: results.filter(r => r.outcome === 'gsheet_synced').length,
       errors: results.filter(r => r.outcome === 'error').length,
     }
-    if (tally.changedNotified || tally.errors) {
+    if (tally.changedNotified || tally.gsheetSynced || tally.errors) {
       console.log('[ai:detect-source-updates]', tally)
     }
     return { result: tally }

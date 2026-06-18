@@ -124,7 +124,15 @@
       "Bash(node --env-file=.env --experimental-strip-types ./ls-ws.mjs.ts)",
       "Bash(PORT=3939 NITRO_PORT=3939 nohup npm run dev)",
       "Bash(echo \"started pid $!\")",
-      "Bash(node --env-file=.env --experimental-strip-types ./ai-test.mjs.ts)"
+      "Bash(node --env-file=.env --experimental-strip-types ./ai-test.mjs.ts)",
+      "Bash(git --no-pager status)",
+      "Bash(git --no-pager diff --stat)",
+      "Bash(git --no-pager log --oneline -3)",
+      "Bash(git --no-pager stash list)",
+      "Bash(git --no-pager show --stat --oneline 48cb65e)",
+      "Bash(git --no-pager show 48cb65e:server/utils/ai-answer.ts)",
+      "Bash(node -e \"console.log\\('google-auth-library version:', require\\('google-auth-library/package.json'\\).version\\)\")",
+      "Bash(echo \"EXIT=$?\")"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",

@@ -37,6 +37,30 @@
           />
         </el-tab-pane>
 
+        <el-tab-pane label="📊 Google Sheet" name="gsheet">
+          <p class="kb-section-hint">
+            貼上 Google Sheet 連結，<strong>每一列自動變成一張知識卡</strong>（第一欄當標題，其餘欄位當內容）。
+            之後你在 Sheet 改內容，機器人會<strong>每小時自動同步</strong>（你在後台手動編輯過的卡不會被覆蓋）。
+          </p>
+          <el-alert
+            v-if="serviceAccountEmail"
+            type="info"
+            :closable="false"
+            show-icon
+            class="kb-gsheet-share-hint"
+          >
+            <template #title>
+              請先把這份 Sheet「分享」給下列帳號（檢視權限即可），否則讀不到：
+            </template>
+            <code class="kb-gsheet-email">{{ serviceAccountEmail }}</code>
+          </el-alert>
+          <el-input
+            v-model="gsheetInput"
+            placeholder="https://docs.google.com/spreadsheets/d/.../edit"
+            clearable
+          />
+        </el-tab-pane>
+
         <el-tab-pane label="📋 貼上文字" name="text">
           <p class="kb-section-hint">貼一大段文字（最多 100,000 字），由 AI 幫你切成多張卡。</p>
           <el-input
@@ -50,7 +74,7 @@
         </el-tab-pane>
       </el-tabs>
 
-      <div class="kb-overview-toggle">
+      <div v-if="mode !== 'gsheet'" class="kb-overview-toggle">
         <el-checkbox v-model="generateOverview">
           這是商品 / 列表頁（額外產生一張「總覽卡」）
         </el-checkbox>
@@ -67,9 +91,9 @@
           :disabled="!canPreview"
           @click="runPreview"
         >
-          {{ previewing ? 'AI 切卡中⋯' : '🪄 預覽切卡' }}
+          {{ previewing ? (mode === 'gsheet' ? '讀取中⋯' : 'AI 切卡中⋯') : (mode === 'gsheet' ? '📊 讀取 Sheet' : '🪄 預覽切卡') }}
         </el-button>
-        <span v-if="previewing" class="text-muted text-xs">
+        <span v-if="previewing && mode !== 'gsheet'" class="text-muted text-xs">
           Gemini 正在分析內容、預估 5–15 秒
         </span>
       </div>
@@ -266,7 +290,7 @@ void props // 只在 template 用到 modelValue
 const { apiFetch } = useWorkspace()
 const { showToast } = useAdminToast()
 
-type ImportMode = 'file' | 'url' | 'text'
+type ImportMode = 'file' | 'url' | 'text' | 'gsheet'
 type Step = 'input' | 'preview' | 'result'
 
 const step = ref<Step>('input')
@@ -312,6 +336,18 @@ function fileToBase64(file: File): Promise<string> {
 const urlInput = ref('')
 const textInput = ref('')
 
+// ── Google Sheet ──────────────────────────────────────────
+const gsheetInput = ref('')
+const serviceAccountEmail = ref('')
+// 載入要分享給哪個服務帳號 email（提示用；失敗不擋）
+onMounted(async () => {
+  try {
+    const res = await apiFetch<{ serviceAccountEmail: string }>('/api/ai/knowledge/gsheet-account')
+    serviceAccountEmail.value = res.serviceAccountEmail
+  }
+  catch { /* 提示性質，讀不到就不顯示 */ }
+})
+
 // ── Overview（列表頁總覽卡）──────────────────────────────
 const generateOverview = ref(false)
 type OverviewCard = { included: boolean; title: string; content: string; tags: string[]; questions: string[] }
@@ -332,6 +368,7 @@ const sourceMeta = ref({
 const canPreview = computed(() => {
   if (mode.value === 'file') return Boolean(fileBase64.value)
   if (mode.value === 'url') return /^https?:\/\//i.test(urlInput.value.trim())
+  if (mode.value === 'gsheet') return /docs\.google\.com\/spreadsheets|^[a-zA-Z0-9-_]{20,}$/.test(gsheetInput.value.trim())
   return textInput.value.trim().length > 0
 })
 
@@ -348,6 +385,9 @@ async function runPreview() {
     }
     else if (mode.value === 'url') {
       body.url = urlInput.value.trim()
+    }
+    else if (mode.value === 'gsheet') {
+      body.url = gsheetInput.value.trim()
     }
     else {
       body.text = textInput.value.trim()
@@ -506,6 +546,7 @@ function resetAll() {
   fileContentType.value = ''
   urlInput.value = ''
   textInput.value = ''
+  gsheetInput.value = ''
   chunks.value = []
   overviewCard.value = null
   generateOverview.value = false

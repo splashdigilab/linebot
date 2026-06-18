@@ -12,6 +12,7 @@ import { chunkTextWithLlm, summarizeAsOverviewCard } from '~~/server/utils/ai-kn
 import { getDb } from '~~/server/utils/firebase'
 import { KNOWLEDGE_SOURCES_COLLECTION } from '~~/server/utils/ai-knowledge-sources'
 import { recordAiUsage } from '~~/server/utils/ai-usage'
+import { parseGoogleSheetUrl, readGoogleSheetAsCards } from '~~/server/utils/google-sheets'
 
 /**
  * POST /api/ai/knowledge/preview-chunks
@@ -29,6 +30,29 @@ export default defineEventHandler(async (event) => {
   const type = String(body?.type ?? '').trim()
   // 列表頁（商品首頁等）：除了切碎成個別卡，再額外合成一張「總覽卡」接列舉型問題
   const wantOverview = body?.generateOverview === true
+
+  // ── Google Sheet：一列一卡，程式直接對應，不走 LLM 切卡（零 token、結果穩定）──
+  if (type === 'gsheet') {
+    const url = String(body?.url ?? '').trim()
+    const ref = parseGoogleSheetUrl(url)
+    if (!ref) {
+      throw createError({ statusCode: 400, statusMessage: '請貼有效的 Google Sheet 連結或試算表 ID' })
+    }
+    const sheet = await readGoogleSheetAsCards(ref)
+    return {
+      sourceName: `Google Sheet（${sheet.sheetTitle}）`,
+      sourceUrl: url,
+      sourceType: 'gsheet',
+      rawLength: 0,
+      truncated: sheet.truncated,
+      meta: { rows: sheet.rowCount, sheet: sheet.sheetTitle },
+      ocrUsed: false,
+      chunks: sheet.cards.map(c => ({ title: c.title, content: c.content, tags: c.tags, questions: [] })),
+      overviewCard: null,
+      existingMatches: [],
+      usage: { inputTokens: 0, outputTokens: 0 },
+    }
+  }
 
   let extracted: { text: string; rawLength: number; meta: Record<string, string | number> }
   let sourceName = ''

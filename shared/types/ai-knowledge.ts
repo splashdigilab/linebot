@@ -50,7 +50,7 @@ export interface KnowledgeChunkDoc {
 //  上傳檔案或網址的「原始來源」；一份來源會自動切成多張 chunk
 // ═══════════════════════════════════════════════════════════════════
 
-export type KnowledgeSourceType = 'file' | 'url' | 'manual'
+export type KnowledgeSourceType = 'file' | 'url' | 'manual' | 'gsheet'
 export type KnowledgeSourceStatus = 'fetching' | 'splitting' | 'ready' | 'failed'
 
 // ═══════════════════════════════════════════════════════════════════
@@ -75,10 +75,22 @@ export interface KnowledgeSourceDoc {
   type: KnowledgeSourceType
   /** 顯示名稱：檔名 / 網址 / 手打標題 */
   name: string
-  /** type === 'url' 時填，其它為空字串 */
+  /** type === 'url' / 'gsheet' 時填（gsheet 存使用者貼的原始連結，供顯示/重抓） */
   url: string
   /** type === 'file' 時填，指向 Storage path */
   filePath: string
+  /**
+   * type === 'gsheet' 專用：解析後的試算表 id 與分頁 gid（gid 為 null = 第一個分頁）。
+   * 比對用 id，不靠 url 字串（url 可能帶不同 query/hash）。
+   */
+  gsheetId?: string
+  gsheetGid?: string | null
+  /**
+   * type === 'gsheet' 專用：偵測到變動時是否「自動套用」(重讀列→新增/更新/刪除卡)。
+   * Sheet 是商家自己的結構化表格，預設 true（自動同步）；手動編輯過的卡仍保留不覆蓋。
+   * false 時退回與 url 一樣的「標記 outdated 等人工確認」行為。
+   */
+  gsheetAutoApply?: boolean
   /** 內容 hash，網址同步時用來判斷是否需要重新切卡 */
   contentHash: string
   /** HTTP etag 與 lastModified（網址同步用） */
@@ -400,6 +412,7 @@ export const KNOWLEDGE_SOURCE_TYPE_LABELS: Record<KnowledgeSourceType, string> =
   file: '檔案',
   url: '網址',
   manual: '手打',
+  gsheet: 'Google Sheet',
 }
 
 export const QUOTA_EXCEED_STRATEGY_LABELS: Record<QuotaExceedStrategy, string> = {

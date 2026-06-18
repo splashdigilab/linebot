@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import { invalidateCatalogSourceCache } from '~~/server/utils/ai-knowledge-sources'
+import { parseGoogleSheetUrl } from '~~/server/utils/google-sheets'
 import {
   createKnowledgeChunk,
   normalizeChunkInput,
@@ -61,23 +62,41 @@ export default defineEventHandler(async (event) => {
   // ── 建 knowledgeSource（type=text 不建） ────────────────────────
   let sourceId: string | null = null
   const sourceType = String(body?.source?.type ?? '').trim() as KnowledgeSourceType | 'text'
-  if (sourceType === 'file' || sourceType === 'url') {
+  if (sourceType === 'file' || sourceType === 'url' || sourceType === 'gsheet') {
     sourceId = uuidv4()
     const now = FieldValue.serverTimestamp()
+    const sourceUrl = String(body?.source?.url ?? '').trim()
+
+    // gsheet：解析出 id/gid 供自動同步比對（不靠 url 字串），預設每小時自動同步
+    let gsheetFields: Record<string, unknown> = {}
+    if (sourceType === 'gsheet') {
+      const ref = parseGoogleSheetUrl(sourceUrl)
+      if (!ref) throw createError({ statusCode: 400, statusMessage: '無效的 Google Sheet 連結' })
+      gsheetFields = {
+        gsheetId: ref.spreadsheetId,
+        gsheetGid: ref.gid,
+        gsheetAutoApply: body?.source?.autoApply !== false,
+      }
+    }
+
+    // 自動同步頻率（分鐘）：gsheet 每小時、url 每天、檔案不自動
+    const refreshIntervalMinutes = sourceType === 'gsheet' ? 60 : sourceType === 'url' ? 1440 : 0
+
     await db.collection(KNOWLEDGE_SOURCES_COLLECTION).doc(sourceId).set({
       workspaceId,
       type: sourceType,
       name: String(body?.source?.name ?? '').trim(),
-      url: String(body?.source?.url ?? '').trim(),
+      url: sourceUrl,
       folderId: typeof body?.source?.folderId === 'string' ? body.source.folderId : null,
       filePath: '', // Phase 1b 不存原檔；要存到 Storage 可以擴
       contentHash: String(body?.source?.contentHash ?? '').trim(),
       etag: '',
       lastModified: '',
       refreshIntervalSec: 0,
-      refreshIntervalMinutes: sourceType === 'url' ? 1440 : 0, // URL 預設每天偵測；檔案不自動
+      refreshIntervalMinutes,
       onChangeBehavior: 'notify',
       generateOverview: Boolean(overviewInput),
+      ...gsheetFields,
       lastFetchedAt: now,
       outdatedAt: null,
       status: 'ready',
