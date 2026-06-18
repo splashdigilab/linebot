@@ -2113,6 +2113,23 @@ async function triggerHandoff(
 /** 客人明確要求真人的句子（disambiguation quick reply 的「找真人」按鈕送出的文字） */
 const HUMAN_REQUEST_TEXTS = new Set(['找真人', '🙋 找真人', '轉真人', '真人客服'])
 
+// ── 轉接前的二次確認（「需要幫您轉接專員嗎?」）──────────────────────
+// AI 自己「推斷」答不了（信心不足 / 知識庫無依據）時，先問客人要不要轉真人並給按鈕，
+// 把 session 留在 bot；客人確認才真的轉接。降低誤判直接占用真人、也避免轉進「無人接」黑洞。
+// 敏感詞 / 額度用罄 / LLM 失敗 / 客人明講 不在此列（見呼叫端），維持直接轉接。
+const HANDOFF_CONFIRM_REASONS = new Set<HandoffReason>(['low_confidence', 'no_grounding'])
+
+/** 二次確認 quick-reply 按鈕送回的文字 */
+const HANDOFF_CONFIRM_YES_TEXT = '轉接專員'
+const HANDOFF_CONFIRM_NO_TEXT = '我再問問'
+
+// 客人沒按鈕、自己打字回應「需要轉接嗎?」時的口語判斷。先比對否定（「不要」含「要」會誤中肯定）。
+const CONFIRM_NO_RE = /不用|不要|不需要|不必|不轉|先不|沒事|沒關係|算了|自己/
+const CONFIRM_YES_RE = /^(好|要|是|對|需要|麻煩|請|轉接|轉|可以|嗯|ok|okay|yes)/i
+
+const HANDOFF_CONFIRM_PROMPT = '這個問題我不太確定該怎麼回答 😅 需要幫您轉接專員嗎？'
+const HANDOFF_DECLINE_REPLY = '好的～您可以換個方式描述，或直接告訴我想了解什麼，我再幫您看看 😊'
+
 // ── 回答品質 proxy：「AI 答完不久客人又被轉真人」────────────────────
 // AI answered 後 30 分鐘內發生 handoff，多半代表那次回答沒解決問題。
 // 聚合進 aiUsage.answeredThenHandoffs，給監控頁當品質指標（調門檻的依據）。
@@ -2311,6 +2328,45 @@ async function tryAiFallback(params: {
   ])
   const prevAiMeta = (convoSnap?.data() as any)?.aiMeta as AiConversationMeta | undefined
 
+  // ── 客人對「需要幫您轉接專員嗎?」的回應 ───────────────────────────
+  // 上一輪是二次確認；這輪若是肯定 → 執行真正轉接（handoffs 已在 ask 時計過，不重複計）；
+  // 否定 → 安撫並把狀態收掉；其他 → 當作新問題往下跑正常 AI。
+  if (prevAiMeta?.lastDecision === 'handoff_confirm') {
+    const t = textContent.trim()
+    const declined = t === HANDOFF_CONFIRM_NO_TEXT || CONFIRM_NO_RE.test(t)
+    const confirmed = !declined && (t === HANDOFF_CONFIRM_YES_TEXT || CONFIRM_YES_RE.test(t))
+    if (confirmed) {
+      const reason = prevAiMeta.lastHandoffReason ?? 'user_request'
+      await deliverHandoffReply({
+        workspaceId, lineUserId, replyToken, userAttributes, channelSecret,
+        sessionId, requestOrigin,
+        customerMessage: textContent,
+        reason,
+      })
+      await writeAiMeta(fsUserDocId, {
+        lastDecision: 'handoff',
+        lastConfidence: prevAiMeta.lastConfidence ?? 0,
+        lastHandoffReason: reason,
+        lastQuery: prevAiMeta.lastQuery || textContent,
+        lastSourceChunkIds: prevAiMeta.lastSourceChunkIds ?? [],
+        suggestedReply: prevAiMeta.suggestedReply ?? '',
+      })
+      return
+    }
+    if (declined) {
+      if (replyToken) {
+        const msg: messagingApi.TextMessage = { type: 'text', text: HANDOFF_DECLINE_REPLY }
+        await replyMessage(replyToken, [msg], workspaceId)
+        saveOutgoingConversationMessagesByWorkspace(lineUserId, [msg], workspaceId)
+          .catch(e => console.error('[ai-fallback] save outgoing error:', e))
+      }
+      // 收掉 pending 狀態（'skipped' 不入轉真人案例列表、也不算 answeredThenHandoff）
+      await writeAiMeta(fsUserDocId, { lastDecision: 'skipped', lastQuery: textContent })
+      return
+    }
+    // 既非肯定也非否定 → 客人改問新問題，往下走正常 AI 流程
+  }
+
   // 組裝最近對話（最舊在前）；排除剛存進去的本次訊息，最多帶 6 則
   let history: AiChatTurn[] = (historySnap?.docs ?? [])
     .map(d => d.data() as { direction?: string; text?: string })
@@ -2457,7 +2513,36 @@ async function tryAiFallback(params: {
     return
   }
 
-  // ── C. Handoff：用 sys_live_agent 的訊息回覆 + 進入 live_agent 模組 ─
+  // ── C. Handoff ──────────────────────────────────────────────
+  // C-0. AI 自己推斷答不了（信心不足 / 無依據）→ 先問客人要不要轉接、給按鈕，session 留在 bot。
+  //      客人確認（上面的 handoff_confirm 回應分支）才真的轉接。
+  //      草稿模式不發問（不對客人發話），照舊只通知客服走下面直接 handoff。
+  if (!draftMode && replyToken && result.handoffReason && HANDOFF_CONFIRM_REASONS.has(result.handoffReason)) {
+    const quickReplyItems: messagingApi.QuickReplyItem[] = [
+      { type: 'action', action: { type: 'message', label: '🙋 轉接專員', text: HANDOFF_CONFIRM_YES_TEXT } },
+      { type: 'action', action: { type: 'message', label: '💬 我再問問', text: HANDOFF_CONFIRM_NO_TEXT } },
+    ]
+    const msg: messagingApi.TextMessage = {
+      type: 'text',
+      text: HANDOFF_CONFIRM_PROMPT,
+      quickReply: { items: quickReplyItems },
+    }
+    await replyMessage(replyToken, [msg], workspaceId)
+    saveOutgoingConversationMessagesByWorkspace(lineUserId, [msg], workspaceId)
+      .catch(e => console.error('[ai-fallback] save outgoing error:', e))
+    // handoffs 已在 answerWithAi 記過；這裡只多送一則確認、不重複計。
+    await writeAiMeta(fsUserDocId, {
+      lastDecision: 'handoff_confirm',
+      lastConfidence: result.confidence,
+      lastHandoffReason: result.handoffReason,
+      lastQuery: textContent,
+      lastSourceChunkIds: result.sources.map(s => s.chunkId),
+      suggestedReply: result.decision === 'handoff' && result.answer.trim() ? result.answer : '',
+    })
+    return
+  }
+
+  // C-1. 直接轉接：用 sys_live_agent 的訊息回覆 + 進入 live_agent 模組
   // 品質指標：AI 剛回答完又走到 handoff = 上次回答沒解決問題。
   // 草稿模式不計——上次「answered」客人根本沒看到，計了會讓指標在試用期讀數爆表。
   if (!draftMode && wasRecentlyAnswered(prevAiMeta)) {

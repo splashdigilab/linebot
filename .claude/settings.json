@@ -117,7 +117,14 @@
       "Bash(cp /tmp/repro.mjs ./repro.mjs)",
       "Bash(sed -i '' \"s#/Users/kevin/Documents/Github/linebot/node_modules/xlsx/xlsx.mjs#xlsx#\" repro.mjs)",
       "Bash(node repro.mjs)",
-      "Bash(node -e \"const x=require\\('xlsx'\\); console.log\\('read'in x, 'utils' in x\\)\")"
+      "Bash(node -e \"const x=require\\('xlsx'\\); console.log\\('read'in x, 'utils' in x\\)\")",
+      "Bash(npx vue-tsc *)",
+      "Bash(grep -v '^$')",
+      "Bash(node --env-file=.env --experimental-strip-types /tmp/ls-ws.ts)",
+      "Bash(node --env-file=.env --experimental-strip-types ./ls-ws.mjs.ts)",
+      "Bash(PORT=3939 NITRO_PORT=3939 nohup npm run dev)",
+      "Bash(echo \"started pid $!\")",
+      "Bash(node --env-file=.env --experimental-strip-types ./ai-test.mjs.ts)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",

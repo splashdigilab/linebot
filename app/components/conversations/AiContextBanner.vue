@@ -79,6 +79,7 @@ const decisionEmoji = computed(() => {
   if (!ctx.value?.hasMeta) return ''
   if (ctx.value.lastDecision === 'answered') return '✅'
   if (ctx.value.lastDecision === 'handoff') return '🙋‍♂️'
+  if (ctx.value.lastDecision === 'handoff_confirm') return '🤔'
   if (ctx.value.lastDecision === 'disambiguate') return '❓'
   return '💤'
 })
@@ -87,6 +88,7 @@ const summaryText = computed(() => {
   if (!ctx.value?.hasMeta) return ''
   if (ctx.value.lastDecision === 'answered') return `AI 已回答（信心 ${ctx.value.lastConfidence.toFixed(2)}）`
   if (ctx.value.lastDecision === 'handoff') return `AI 轉真人 — ${handoffLabel.value}`
+  if (ctx.value.lastDecision === 'handoff_confirm') return `AI 詢問是否轉接專員（${handoffLabel.value}），等客人確認`
   if (ctx.value.lastDecision === 'disambiguate') return `AI 反問澄清，等客人從選項挑一個`
   return ctx.value.lastQuery || '—'
 })
@@ -99,6 +101,7 @@ const handoffLabel = computed(() => {
 const bannerClass = computed(() => {
   if (!ctx.value?.hasMeta) return ''
   if (ctx.value.lastDecision === 'handoff') return 'conv-ai-banner--handoff'
+  if (ctx.value.lastDecision === 'handoff_confirm') return 'conv-ai-banner--disambiguate'
   if (ctx.value.lastDecision === 'disambiguate') return 'conv-ai-banner--disambiguate'
   return 'conv-ai-banner--answered'
 })

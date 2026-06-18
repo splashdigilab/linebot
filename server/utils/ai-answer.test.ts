@@ -6,6 +6,7 @@ import {
   shouldDisambiguate,
   matchCandidateTitle,
   buildContextualQuery,
+  isReplyingToBotQuestion,
   isContextDependentFollowup,
   socialCannedReply,
   preferProductCards,
@@ -231,6 +232,32 @@ describe('buildContextualQuery', () => {
     ]
     // 「怎麼申請」往回跳過「保固多久」、錨到「奇美的燈」，整條串起來
     expect(buildContextualQuery(history, '怎麼申請')).toBe('奇美的燈\n保固多久\n怎麼申請')
+  })
+})
+
+describe('isReplyingToBotQuestion', () => {
+  it('bot 反問澄清後，客人回一個短主題詞 → 視為回答反問', () => {
+    const history = [
+      { role: 'user' as const, text: '買很久了為什麼都還沒到貨' },
+      { role: 'bot' as const, text: '請問您想了解的是哪項商品的到貨時間呢？' },
+    ]
+    expect(isReplyingToBotQuestion(history, '枕頭')).toBe(true)
+  })
+
+  it('上一則不是 bot、或 bot 不是在發問 → false', () => {
+    expect(isReplyingToBotQuestion([{ role: 'user' as const, text: '哪個好呢？' }], '枕頭')).toBe(false)
+    expect(isReplyingToBotQuestion([{ role: 'bot' as const, text: '好的，已為您處理。' }], '枕頭')).toBe(false)
+  })
+
+  it('客人自己又是一句完整提問、或太長 → 不算回答反問', () => {
+    const h = [{ role: 'bot' as const, text: '是哪一台呢？' }]
+    expect(isReplyingToBotQuestion(h, '那除濕機多少錢？')).toBe(false)
+    expect(isReplyingToBotQuestion(h, '我想問一下你們那台除濕機的詳細規格')).toBe(false)
+  })
+
+  it('無 history → false', () => {
+    expect(isReplyingToBotQuestion(undefined, '枕頭')).toBe(false)
+    expect(isReplyingToBotQuestion([], '枕頭')).toBe(false)
   })
 })
 

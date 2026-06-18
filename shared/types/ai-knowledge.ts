@@ -227,7 +227,7 @@ export interface AiUsageDoc {
 //  存「最近一次 AI 互動」的快取，主要給收件匣顯示「AI 整理脈絡」用
 // ═══════════════════════════════════════════════════════════════════
 
-export type AiDecision = 'answered' | 'handoff' | 'skipped' | 'disambiguate'
+export type AiDecision = 'answered' | 'handoff' | 'skipped' | 'disambiguate' | 'handoff_confirm'
 export type HandoffReason =
   | 'low_confidence'
   | 'sensitive_topic'
@@ -373,10 +373,11 @@ export const DEFAULT_SENSITIVE_TOPICS: readonly string[] = [
 export const DEFAULT_SYSTEM_PROMPT = [
   '你是專業的 LINE 官方帳號客服助理。',
   '回覆原則：',
-  '1. 只能根據提供的「知識卡內容」回答，沒寫到的事情一律說「這部分我幫您轉接專員」。',
+  '1. 只能根據提供的「知識卡內容」回答；知識卡沒寫到的，不要自己編、也不要拿沾邊的內容硬湊。',
+  '   （需要轉真人時，系統會自動安排，你不必、也不要在回覆裡寫「我幫您轉接」之類的話。）',
   '2. 回覆要簡短、口語、有禮貌；不要使用 markdown 或項目符號。',
   '3. 不要編造資訊、不要承諾沒寫的事。',
-  '4. 涉及金額、退費、法律、醫療建議請直接轉真人，不要自己回答。',
+  '4. 涉及退費、法律糾紛、醫療診斷等，務必交給專人，不要自己給建議。',
 ].join('\n')
 
 export const HANDOFF_REASON_LABELS: Record<HandoffReason, string> = {
