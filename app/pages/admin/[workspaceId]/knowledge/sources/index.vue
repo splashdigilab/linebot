@@ -190,6 +190,15 @@
         >
           🔄 重新同步
         </el-button>
+        <el-button
+          v-if="selectedSource?.type === 'gsheet'"
+          type="primary"
+          plain
+          :loading="gsheetSyncing"
+          @click="syncGsheetNow"
+        >
+          🔄 立即同步
+        </el-button>
         <el-button type="danger" plain :loading="deleting" @click="deleteSource">
           🗑️ 刪除
         </el-button>
@@ -262,6 +271,42 @@
                 <el-radio value="notify">通知我（在來源頁掛 ⚠️ 提示）</el-radio>
                 <el-radio value="log_only">只記錄不通知</el-radio>
               </el-radio-group>
+            </div>
+            <div class="src-settings-actions">
+              <el-button
+                type="primary"
+                size="small"
+                :loading="savingSettings"
+                :disabled="!settingsDirty"
+                @click="saveSettings"
+              >
+                儲存設定
+              </el-button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 自動同步設定（只給 Google Sheet）-->
+        <div v-if="selectedSource.type === 'gsheet'" class="message-card src-section-card">
+          <div class="message-card-header">
+            <div class="card-header-main">
+              <span class="badge badge-green">⏰ 自動同步</span>
+            </div>
+          </div>
+          <div class="card-section-stack">
+            <p class="src-section-hint">
+              排程會定期重讀這份 Sheet，**一列一卡自動套用**（新增/更新/刪除）。你在後台手動編輯過的卡（🔒）會保留、不被覆蓋。
+            </p>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="同步頻率" tight />
+              <el-select v-model="settingsForm.refreshIntervalMinutes" class="control-full">
+                <el-option label="不自動同步（只手動）" :value="0" />
+                <el-option label="每 30 分鐘" :value="30" />
+                <el-option label="每小時" :value="60" />
+                <el-option label="每天" :value="1440" />
+                <el-option label="每週" :value="10080" />
+                <el-option label="每月" :value="43200" />
+              </el-select>
             </div>
             <div class="src-settings-actions">
               <el-button
@@ -559,7 +604,7 @@ import { ElMessageBox } from 'element-plus'
 
 definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
 
-type SourceType = 'file' | 'url' | 'manual'
+type SourceType = 'file' | 'url' | 'manual' | 'gsheet'
 type SourceStatus = 'fetching' | 'splitting' | 'ready' | 'failed'
 
 interface SourceSummary {
@@ -799,6 +844,7 @@ const savingSettings = ref(false)
 const deleting = ref(false)
 
 const resyncing = ref(false)
+const gsheetSyncing = ref(false)
 const applying = ref(false)
 const diffOpen = ref(false)
 const diffData = ref<DiffData | null>(null)
@@ -1043,6 +1089,30 @@ async function startResync() {
   }
   finally {
     resyncing.value = false
+  }
+}
+
+async function syncGsheetNow() {
+  if (!selectedId.value) return
+  gsheetSyncing.value = true
+  try {
+    const res = await apiFetch<{ outcome: 'unchanged' | 'synced'; added: number; updated: number; deleted: number; kept: number }>(
+      `/api/ai/sources/${selectedId.value}/gsheet-sync`,
+      { method: 'POST', body: {} },
+    )
+    await loadSourceDetail(selectedId.value)
+    if (res.outcome === 'unchanged') {
+      showToast('已是最新，無變動', 'success')
+    }
+    else {
+      showToast(`同步完成：新增 ${res.added}、更新 ${res.updated}、刪除 ${res.deleted}`, 'success')
+    }
+  }
+  catch (err: any) {
+    showToast(err?.statusMessage || '同步失敗', 'error')
+  }
+  finally {
+    gsheetSyncing.value = false
   }
 }
 
@@ -1309,10 +1379,10 @@ function removeChunkTag(t: string) {
 
 // ─── Display helpers ───────────────────────────────────
 function typeEmoji(t: string | undefined) {
-  return t === 'url' ? '🔗' : t === 'file' ? '📄' : '✍️'
+  return t === 'url' ? '🔗' : t === 'file' ? '📄' : t === 'gsheet' ? '📊' : '✍️'
 }
 function typeLabel(t: string) {
-  return t === 'url' ? '網址' : t === 'file' ? '檔案' : '手打'
+  return t === 'url' ? '網址' : t === 'file' ? '檔案' : t === 'gsheet' ? 'Google Sheet' : '手打'
 }
 function statusLabel(s: string) {
   return s === 'ready' ? '可用' : s === 'fetching' ? '抓取中' : s === 'splitting' ? '切卡中' : '失敗'
