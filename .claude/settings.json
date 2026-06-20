@@ -132,7 +132,13 @@
       "Bash(git --no-pager show --stat --oneline 48cb65e)",
       "Bash(git --no-pager show 48cb65e:server/utils/ai-answer.ts)",
       "Bash(node -e \"console.log\\('google-auth-library version:', require\\('google-auth-library/package.json'\\).version\\)\")",
-      "Bash(echo \"EXIT=$?\")"
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(node -e \"console.log\\(require\\('firebase-admin/package.json'\\).version\\)\")",
+      "Bash(node --input-type=module -e \"import\\('firebase-admin/app'\\).then\\(m=>console.log\\('ok', typeof m.initializeApp\\)\\).catch\\(e=>console.log\\('ERR', e.message\\)\\)\")",
+      "Bash(node /tmp/diag.mjs .env_splash \"你們有賣什麼\")",
+      "Bash(node ./diag-tmp.mjs .env_splash \"你們有賣什麼\")",
+      "Bash(node ./diag-tmp.mjs .env \"你們有賣什麼\")",
+      "Bash(node ./diag2-tmp.mjs)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",

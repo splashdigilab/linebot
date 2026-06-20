@@ -4,6 +4,7 @@ import {
   dedupeBySource,
   dedupeNearIdentical,
   shouldDisambiguate,
+  effectiveConfidenceThreshold,
   matchCandidateTitle,
   buildContextualQuery,
   isReplyingToBotQuestion,
@@ -165,6 +166,28 @@ describe('shouldDisambiguate', () => {
       chunk({ id: 'b', similarity: 0.58 }),
     ]
     expect(shouldDisambiguate(withOverview, settings)).toBe(false)
+  })
+})
+
+describe('effectiveConfidenceThreshold', () => {
+  const settings = { confidenceThreshold: 0.75, groundingThreshold: 0.7 }
+
+  it('一般卡 → 用 confidenceThreshold', () => {
+    expect(effectiveConfidenceThreshold(chunk({ id: 'a' }), settings)).toBe(0.75)
+  })
+
+  it('top-1 是總覽卡 → 降回 grounding 門檻（被品項清單稀釋、分數結構性偏低）', () => {
+    expect(effectiveConfidenceThreshold(chunk({ id: 'a', isOverview: true }), settings)).toBe(0.7)
+  })
+
+  it('沒有 top-1（空結果）→ 用 confidenceThreshold', () => {
+    expect(effectiveConfidenceThreshold(undefined, settings)).toBe(0.75)
+  })
+
+  it('總覽卡的 0.738 在新門檻下會過、舊門檻下不過', () => {
+    const overview = chunk({ id: 'a', isOverview: true, similarity: 0.738 })
+    expect(0.738 >= effectiveConfidenceThreshold(overview, settings)).toBe(true)
+    expect(0.738 >= settings.confidenceThreshold).toBe(false)
   })
 })
 

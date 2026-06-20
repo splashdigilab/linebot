@@ -16,6 +16,7 @@
  *   5. grounding：top-1 similarity < 門檻 → handoff: no_grounding
  *   6. LLM 生成回答（用知識卡內容當 context）
  *   7. confidence：使用 top-1 similarity 作為信心；< confidenceThreshold → handoff: low_confidence
+ *      （例外：top-1 命中總覽卡 isOverview 時改用 grounding 門檻，因其 embedding 被品項清單稀釋分數偏低）
  *   8. 否則 → answered，回傳 answer + sources
  */
 import { searchChunksByIdentifierTag, searchSimilarChunks, type SimilarChunk } from './ai-knowledge-chunks'
@@ -407,6 +408,20 @@ export function shouldDisambiguate(
   const top2 = b.similarity
   if (top1 < cfg.top1Min || top1 >= cfg.top1Max) return false
   return (top1 - top2) < cfg.maxSpread
+}
+
+/**
+ * 信心門檻：一般用 confidenceThreshold；但 top-1 命中「總覽卡」(isOverview) 時改用 grounding 門檻。
+ * 理由：總覽卡是列舉型問題（「你們有賣什麼」）的正解，其 embedding 被一長串品項清單稀釋，
+ * 相似度結構上偏低（實測 0.67–0.74），幾乎到不了 confidenceThreshold，會害得「找到對的卡、
+ * 還排 top-1」卻每次轉真人。「命中總覽卡」本身已是高信心訊號（shouldDisambiguate 亦為其設特例），
+ * 故降回它已通過的 grounding 門檻判定。
+ */
+export function effectiveConfidenceThreshold(
+  topChunk: Pick<SimilarChunk, 'isOverview'> | undefined,
+  settings: Pick<AiSettingsDoc, 'confidenceThreshold' | 'groundingThreshold'>,
+): number {
+  return topChunk?.isOverview ? getGroundingThreshold(settings) : settings.confidenceThreshold
 }
 
 /**
@@ -817,7 +832,8 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   // v1：使用 top-1 retrieval similarity 作為信心分數。
   // 未來可加 LLM self-eval 做加權平均（簡報 p29 spike 點）。
   const confidence = topSimilarity
-  const passesConfidence = confidence >= settings.confidenceThreshold
+  // top-1 命中總覽卡時門檻降回 grounding（見 effectiveConfidenceThreshold）
+  const passesConfidence = confidence >= effectiveConfidenceThreshold(chunks[0], settings)
   const passesContent = hasInfo && answerText.length > 0
 
   const sourcesPayload = chunks.map(c => ({
