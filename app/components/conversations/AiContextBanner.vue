@@ -10,6 +10,11 @@
     </div>
 
     <div v-if="expanded" class="conv-ai-banner-body">
+      <div v-if="ctx.handoffSummary" class="conv-ai-row conv-ai-row--block">
+        <span class="conv-ai-row__label">📋 對話摘要</span>
+        <div class="conv-ai-draft">{{ ctx.handoffSummary }}</div>
+      </div>
+
       <div v-if="ctx.lastQuery" class="conv-ai-row">
         <span class="conv-ai-row__label">客人提問</span>
         <span class="conv-ai-row__value">{{ ctx.lastQuery }}</span>
@@ -57,6 +62,7 @@ interface AiContextResponse {
   lastHandoffReason: HandoffReason | null
   lastQuery: string
   suggestedReply: string
+  handoffSummary: string
   sources: Array<{ chunkId: string; title: string }>
   updatedAtMs: number
 }

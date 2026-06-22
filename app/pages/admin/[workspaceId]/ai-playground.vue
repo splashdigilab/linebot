@@ -45,6 +45,17 @@
             <!-- AI 訊息 -->
             <div v-else class="pg-msg pg-msg--ai">
               <div class="pg-bubble pg-bubble--ai">
+                <!-- 腳本觸發：正式 LINE 會由腳本接手，不跑 AI -->
+                <div v-if="turn.result.scriptTrigger" class="pg-script-trigger">
+                  <div class="pg-bubble-head">
+                    <span class="badge badge-blue">🧩 觸發腳本</span>
+                    <span class="text-xs text-muted">{{ turn.result.scriptTrigger.mode === 'semantic' ? '看意思命中' : '關鍵字命中' }}</span>
+                  </div>
+                  <p class="pg-script-name">會啟動腳本：<strong>{{ turn.result.scriptTrigger.name }}</strong></p>
+                  <p class="text-muted">實際 LINE 對話會由這條腳本接手（AI 不會介入）。playground 不模擬腳本後續的多輪問答，請到「腳本」頁編輯流程。</p>
+                </div>
+
+                <template v-else>
                 <div class="pg-bubble-head">
                   <span :class="['badge', decisionBadge(turn.result)]">{{ decisionLabel(turn.result) }}</span>
                   <span v-if="turn.result.handoffReason" class="text-xs text-muted">{{ handoffReasonLabel(turn.result) }}</span>
@@ -105,6 +116,12 @@
                 </div>
                 <div v-else class="pg-handoff-notice">
                   <p>本題會自動轉真人客服。</p>
+                  <p
+                    v-if="turn.result.handoffReason === 'no_grounding' || turn.result.handoffReason === 'low_confidence'"
+                    class="text-muted pg-confirm-note"
+                  >
+                    💡 實際 LINE 對話中，這種情況會先問客人「需要幫您轉接專員嗎？」並附按鈕，客人按「轉接專員」才真的轉接（這裡是試答，直接顯示判定結果）。
+                  </p>
                   <p v-if="turn.result.handoffReason === 'no_grounding'" class="text-muted">
                     知識庫沒有足夠相關內容。建議補一張對應的卡，再試一次。
                   </p>
@@ -158,6 +175,7 @@
                     <pre class="pg-debug-pre">{{ turn.result.debugPrompt }}</pre>
                   </details>
                 </div>
+                </template>
               </div>
             </div>
           </template>
@@ -210,7 +228,11 @@ const { apiFetch, workspaceId } = useWorkspace()
 const router = useRouter()
 const { showToast } = useAdminToast()
 
-type AiResult = AiAnswerResult & { debugPrompt?: string }
+type AiResult = AiAnswerResult & {
+  debugPrompt?: string
+  /** 有值代表這句在正式 LINE 會觸發腳本、不跑 AI */
+  scriptTrigger?: { name: string; mode: 'keyword' | 'semantic' }
+}
 type UserTurn = { role: 'user'; text: string }
 type AiTurn = { role: 'ai'; result: AiResult; expanded: boolean }
 type Turn = UserTurn | AiTurn

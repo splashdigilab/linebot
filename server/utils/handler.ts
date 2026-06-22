@@ -36,13 +36,14 @@ import {
 } from './conversation-session'
 import type { ModuleType } from '~~/shared/types/conversation-stats'
 import { SYSTEM_MODULE_IDS } from '~~/shared/types/conversation-stats'
-import { answerWithAi, type AiChatTurn } from './ai-answer'
+import { answerWithAi, summarizeHandoffContext, type AiChatTurn } from './ai-answer'
 import { getAiSettings } from './ai-settings'
 import { recordAiUsage } from './ai-usage'
 import { notifyHandoffToStaff } from './ai-handoff-notify'
 import type { AiConversationMeta, HandoffReason } from '~~/shared/types/ai-knowledge'
 import type { ActiveScriptState } from '~~/shared/types/ai-script'
-import { advanceScript, findMatchingScript, loadActiveScripts, startScript } from './ai-scripts'
+import { advanceScript, findMatchingScriptLazy, loadActiveScripts, startScript } from './ai-scripts'
+import { embedQuery } from './gemini'
 import {
   lineUserFirestoreDocId,
   lineUserIdFromFirestoreDocId,
@@ -1937,7 +1938,7 @@ async function handleIncomingText(
     })
     if (!rule) {
       // 1. 規則沒命中 → 嘗試啟動腳本
-      const scriptHandled = await runScriptStart(
+      const { handled: scriptHandled, queryVector } = await runScriptStart(
         textContent,
         userAttributes,
         fsUserDocId,
@@ -1950,7 +1951,7 @@ async function handleIncomingText(
       )
       if (scriptHandled) return
 
-      // 2. 還是沒命中 → AI 保底
+      // 2. 還是沒命中 → AI 保底（沿用腳本階段算過的 query 向量，省一次 embed）
       await tryAiFallback({
         workspaceId: wid,
         lineUserId,
@@ -1960,6 +1961,7 @@ async function handleIncomingText(
         channelSecret,
         sessionId: sessionId ?? null,
         requestOrigin: options.requestOrigin || '',
+        queryVector,
       })
       return
     }
@@ -2030,19 +2032,22 @@ async function runScriptStart(
   sessionId: string | null,
   requestOrigin: string,
   channelSecret: string,
-): Promise<boolean> {
+): Promise<{ handled: boolean; queryVector: number[] | null }> {
   const scripts = await loadActiveScripts(workspaceId).catch(() => [])
-  if (!scripts.length) return false
-  const matched = findMatchingScript(scripts, textContent)
-  if (!matched) return false
+  if (!scripts.length) return { handled: false, queryVector: null }
+
+  // 依 priority 惰性比對：關鍵字先命中就不 embed；只有掃到語意節點才算一次向量，
+  // 算出的向量往下傳給 AI 保底重用，不重複 embed。
+  const { script: matched, queryVector } = await findMatchingScriptLazy(scripts, textContent, embedQuery)
+  if (!matched) return { handled: false, queryVector }
 
   const result = await startScript(matched, fsUserDocId, userAttributes)
   invalidateUserDocCache(fsUserDocId)
-  await sendScriptReply(result.replyText, replyToken, lineUserId, workspaceId)
+  await sendScriptReply(result.replyText, replyToken, lineUserId, workspaceId, result.quickReplies)
   if (result.finished && result.thenHandoff) {
     await triggerHandoff(userAttributes, lineUserId, workspaceId, sessionId, requestOrigin, channelSecret, /*alreadyReplied*/ true)
   }
-  return true
+  return { handled: true, queryVector }
 }
 
 async function runScriptAdvance(
@@ -2063,7 +2068,7 @@ async function runScriptAdvance(
     // 過期或狀態壞掉 → 不算處理過，讓主流程往下走（rule / AI）
     return false
   }
-  await sendScriptReply(result.replyText, replyToken, lineUserId, workspaceId)
+  await sendScriptReply(result.replyText, replyToken, lineUserId, workspaceId, result.quickReplies)
   if (result.finished && result.thenHandoff) {
     await triggerHandoff(userAttributes, lineUserId, workspaceId, sessionId, requestOrigin, channelSecret, true)
   }
@@ -2075,9 +2080,20 @@ async function sendScriptReply(
   replyToken: string | undefined,
   lineUserId: string,
   workspaceId: string,
+  quickReplies?: string[],
 ): Promise<void> {
   if (!text || !replyToken) return
   const msg: messagingApi.TextMessage = { type: 'text', text: text.slice(0, 5000) }
+  // quickReply 節點：把選項做成 LINE Quick Reply 按鈕（label = 送出文字，供 advanceScript 比對）
+  const labels = (quickReplies ?? []).map(l => String(l).trim()).filter(Boolean).slice(0, 13)
+  if (labels.length) {
+    msg.quickReply = {
+      items: labels.map(label => ({
+        type: 'action',
+        action: { type: 'message', label: label.slice(0, 20), text: label },
+      })),
+    }
+  }
   await replyMessage(replyToken, [msg], workspaceId)
   saveOutgoingConversationMessagesByWorkspace(lineUserId, [msg], workspaceId)
     .catch(e => console.error('[script] save outgoing error:', e))
@@ -2201,6 +2217,11 @@ async function deliverHandoffReply(params: {
   /** 觸發 handoff 的客人訊息（給通知用） */
   customerMessage: string
   reason: HandoffReason | null
+  /**
+   * AI 生成的對話摘要（best-effort，可為空）。可傳 Promise——客人回覆會先送出，
+   * 摘要在送出後才 await，避免摘要的 LLM 延遲卡住客人的「已安排專員」回覆。
+   */
+  summary?: string | Promise<string>
 }): Promise<void> {
   const { workspaceId, lineUserId, replyToken, userAttributes, channelSecret, sessionId, requestOrigin } = params
 
@@ -2225,6 +2246,9 @@ async function deliverHandoffReply(params: {
       .catch(e => console.error('[ai-fallback] enterModule(live_agent) error:', e))
   }
 
+  // 摘要在客人回覆送出後才 await（summarizeHandoffContext 不會 reject、最壞 4s 逾時回空字串）
+  const resolvedSummary = params.summary instanceof Promise ? await params.summary : params.summary
+
   // 通知值班客服（fire-and-forget，內含節流與 enabled 判斷）
   notifyHandoffToStaff({
     workspaceId,
@@ -2232,6 +2256,7 @@ async function deliverHandoffReply(params: {
     customerName: userAttributes.displayName || lineUserId,
     customerMessage: params.customerMessage,
     reason: params.reason,
+    summary: resolvedSummary,
   }).catch(e => console.error('[ai-fallback] notifyHandoffToStaff error:', e))
 }
 
@@ -2255,6 +2280,8 @@ async function tryAiFallback(params: {
   channelSecret: string
   sessionId: string | null
   requestOrigin: string
+  /** 腳本語意觸發階段已算好的 textContent 向量；可省下 answerWithAi 內的重複 embed */
+  queryVector?: number[] | null
 }): Promise<void> {
   const { workspaceId, lineUserId, textContent, replyToken, userAttributes, channelSecret, sessionId, requestOrigin } = params
 
@@ -2423,7 +2450,9 @@ async function tryAiFallback(params: {
 
   let result
   try {
-    result = await answerWithAi({ workspaceId, query, isFollowup, skipDisambiguation, history })
+    // 預算向量只在 query 仍等於原訊息（非 followup 改寫）時可重用，否則向量與 query 不一致
+    const reusableVector = !isFollowup && query === textContent ? params.queryVector ?? undefined : undefined
+    result = await answerWithAi({ workspaceId, query, isFollowup, skipDisambiguation, history, queryVector: reusableVector })
   }
   catch (e) {
     console.error('[ai-fallback] answerWithAi failed:', e)
@@ -2550,6 +2579,11 @@ async function tryAiFallback(params: {
       .catch(e => console.error('[ai-fallback] record answeredThenHandoffs error:', e))
   }
 
+  // AI 對話摘要：給接手的真人客服快速掌握前因後果。best-effort、≤4s 逾時、失敗回空字串。
+  // 不在這裡 await——先把客人的「已安排專員」回覆送出，摘要由下游在送出後才 await，
+  // 避免摘要的 LLM 延遲卡住客人回覆（非草稿路徑）。
+  const summaryPromise = summarizeHandoffContext(history, textContent, result.handoffReason)
+
   // 草稿模式不對客人發話、也不鎖 session（沒承諾過客人「安排專員」），但仍通知值班客服。
   if (draftMode) {
     notifyHandoffToStaff({
@@ -2558,6 +2592,7 @@ async function tryAiFallback(params: {
       customerName: userAttributes.displayName || lineUserId,
       customerMessage: textContent,
       reason: result.handoffReason,
+      summary: await summaryPromise,
     }).catch(e => console.error('[ai-fallback] notifyHandoffToStaff error:', e))
   }
   else {
@@ -2566,6 +2601,7 @@ async function tryAiFallback(params: {
       sessionId, requestOrigin,
       customerMessage: textContent,
       reason: result.handoffReason,
+      summary: summaryPromise,
     })
   }
 
@@ -2577,6 +2613,7 @@ async function tryAiFallback(params: {
     lastQuery: textContent,
     lastSourceChunkIds: result.sources.map(s => s.chunkId),
     suggestedReply: result.decision === 'handoff' && result.answer.trim() ? result.answer : '',
+    handoffSummary: await summaryPromise,
   })
 }
 
@@ -2589,6 +2626,7 @@ const AI_META_DEFAULTS: Omit<AiConversationMeta, 'updatedAt' | 'lastDecision'> =
   intent: '',
   collectedFields: {},
   suggestedReply: '',
+  handoffSummary: '',
   lastDisambiguation: null,
 }
 

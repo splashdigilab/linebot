@@ -11,6 +11,7 @@ interface AiContextResponse {
   lastHandoffReason: AiConversationMeta['lastHandoffReason']
   lastQuery: string
   suggestedReply: string
+  handoffSummary: string
   sources: Array<{ chunkId: string; title: string }>
   updatedAtMs: number
 }
@@ -46,6 +47,7 @@ export default defineEventHandler(async (event): Promise<AiContextResponse> => {
     lastHandoffReason: null,
     lastQuery: '',
     suggestedReply: '',
+    handoffSummary: '',
     sources: [],
     updatedAtMs: 0,
   }
@@ -79,6 +81,7 @@ export default defineEventHandler(async (event): Promise<AiContextResponse> => {
     lastHandoffReason: meta.lastHandoffReason ?? null,
     lastQuery: String(meta.lastQuery ?? ''),
     suggestedReply: String(meta.suggestedReply ?? ''),
+    handoffSummary: String(meta.handoffSummary ?? ''),
     sources: ids.map(id => ({ chunkId: id, title: titleByChunkId[id] ?? '(卡片已刪除)' })),
     updatedAtMs: tsToMs(meta.updatedAt),
   }
