@@ -36,7 +36,8 @@ export const SCRIPT_TEMPLATES: ScriptTemplate[] = [
     description: '客人要退貨 → 問訂單編號 → 收到後轉真人處理',
     rootNodeId: 't',
     nodes: [
-      { id: 't', type: 'trigger', matchMode: 'keyword', keywords: ['退貨', '退換貨', '退款', '要退', '換貨'], examples: [], priority: DEFAULT_SCRIPT_PRIORITY, next: 'c_order' },
+      // 不放「退款」：退款/退費屬敏感詞，讓它走 AI 敏感詞護欄直接轉真人，不被腳本攔截
+      { id: 't', type: 'trigger', matchMode: 'keyword', keywords: ['退貨', '退換貨', '要退', '換貨'], examples: [], priority: DEFAULT_SCRIPT_PRIORITY, next: 'c_order' },
       { id: 'c_order', type: 'collect', question: '好的，請提供您的訂單編號，我們為您處理 🙂', fieldName: 'order_id', expireMs: DEFAULT_COLLECT_EXPIRE_MS, format: 'any', next: 'r' },
       { id: 'r', type: 'reply', text: '已收到您的訂單 {{order_id}}，將由專人盡快為您處理退換貨，謝謝您 🙇', thenHandoff: true },
     ],
@@ -58,13 +59,15 @@ export const SCRIPT_TEMPLATES: ScriptTemplate[] = [
   },
 
   // 4) 服務分流：用快速回覆按鈕分三條路
+  // ⚠️ 觸發詞要「窄、specific」：別用「你好/在嗎/請問/服務」這種高頻泛用字（會被子字串比對
+  //    劫持大量正常問句，例「請問運費多少」會誤觸選單）。想做「招呼即出選單」用圖文選單/歡迎訊息較合適。
   {
     key: 'service-menu',
     label: '服務分流（快速回覆按鈕）',
-    description: '出三顆按鈕讓客人點選：出貨查詢 / 退換貨 / 找真人',
+    description: '客人想看服務選單時出三顆按鈕：出貨查詢 / 退換貨 / 找真人',
     rootNodeId: 't',
     nodes: [
-      { id: 't', type: 'trigger', matchMode: 'keyword', keywords: ['你好', '客服', '服務', '在嗎', '請問'], examples: [], priority: DEFAULT_SCRIPT_PRIORITY, next: 'q' },
+      { id: 't', type: 'trigger', matchMode: 'keyword', keywords: ['客服選單', '服務選單', '人工客服'], examples: [], priority: DEFAULT_SCRIPT_PRIORITY, next: 'q' },
       {
         id: 'q',
         type: 'quickReply',
