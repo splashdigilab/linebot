@@ -501,6 +501,21 @@ export function matchesScriptTrigger(script: Pick<ScriptDoc, 'nodes' | 'rootNode
   return keywords.some(k => text.includes(k))
 }
 
+/**
+ * 關鍵字子字串比對——**不分 matchMode**。把 keywords 一律當「明確觸發詞」的確定性快速通道：
+ * 即使腳本是 semantic 模式，只要填了 keywords，核心詞（預約/退貨/找真人）也能被確定性命中，
+ * 不必每次都靠 LLM 路由（避免明顯意圖偶爾被路由判錯）。語意範例則留給 LLM 路由補捉變體說法。
+ */
+export function matchesScriptKeywords(script: Pick<ScriptDoc, 'nodes' | 'rootNodeId' | 'enabled'>, inputText: string): boolean {
+  if (!script.enabled) return false
+  const text = String(inputText || '').trim().toLowerCase()
+  if (!text) return false
+  const root = script.nodes.find(n => n.id === script.rootNodeId)
+  if (!root || root.type !== 'trigger') return false
+  const keywords = (root.keywords ?? []).map(k => String(k).trim().toLowerCase()).filter(Boolean)
+  return keywords.some(k => text.includes(k))
+}
+
 /** 餘弦相似度（gemini 768 維截斷向量未必正規化，須完整計算 dot/|a||b|） */
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (!a?.length || !b?.length || a.length !== b.length) return 0

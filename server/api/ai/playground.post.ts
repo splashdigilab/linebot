@@ -1,8 +1,7 @@
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
-import { answerWithAi, type AiChatTurn } from '~~/server/utils/ai-answer'
-import { findMatchingScriptLazy, loadActiveScripts } from '~~/server/utils/ai-scripts'
-import { embedQuery } from '~~/server/utils/gemini'
-import type { ScriptTriggerNode } from '~~/shared/types/ai-script'
+import { answerWithAi, routeMessage, type AiChatTurn } from '~~/server/utils/ai-answer'
+import { loadActiveScripts } from '~~/server/utils/ai-scripts'
+import { matchesScriptKeywords, type ScriptDoc, type ScriptTriggerNode } from '~~/shared/types/ai-script'
 
 /**
  * POST /api/ai/playground
@@ -32,15 +31,17 @@ export default defineEventHandler(async (event) => {
         .slice(-6)
     : []
 
-  // ── 先模擬腳本觸發（與正式 LINE 同一套比對；命中就由腳本接手、不跑 AI）──
-  // 只判「會不會觸發」，不真的啟動 / 持久化 activeScript。語意腳本算過的 queryVector 會傳給
-  // answerWithAi 重用，避免重複 embed。
+  // ── 先模擬腳本觸發（與正式 LINE 同一套：關鍵字快速通道 → 統一意圖路由）──
+  // 只判「會不會觸發」，不真的啟動 / 持久化 activeScript。
   const scripts = await loadActiveScripts(workspaceId).catch(() => [])
-  const { script: triggered, queryVector } = scripts.length
-    ? await findMatchingScriptLazy(scripts, query, embedQuery)
-    : { script: null, queryVector: null }
+  let triggered: (ScriptDoc & { id: string }) | null = scripts.find(s => matchesScriptKeywords(s, query)) ?? null
+  if (!triggered && scripts.length) {
+    const hints = scripts.map(s => ({ id: s.id, name: s.name, hints: triggerHintsOf(s) }))
+    const route = await routeMessage(query, hints, history).catch(() => null)
+    if (route?.scriptId) triggered = scripts.find(s => s.id === route.scriptId) ?? null
+  }
   if (triggered) {
-    const root = triggered.nodes.find(n => n.id === triggered.rootNodeId) as ScriptTriggerNode | undefined
+    const root = triggered.nodes.find(n => n.id === triggered!.rootNodeId) as ScriptTriggerNode | undefined
     return {
       decision: 'skipped' as const,
       answer: '',
@@ -61,6 +62,12 @@ export default defineEventHandler(async (event) => {
     debug: true,
     skipDisambiguation: body?.skipDisambiguation === true,
     isFollowup: body?.isFollowup === true,
-    queryVector: queryVector ?? undefined,
   })
 })
+
+/** 腳本觸發情境提示（關鍵字 + 語意範例）給意圖路由參考 */
+function triggerHintsOf(script: ScriptDoc & { id: string }): string[] {
+  const root = script.nodes.find(n => n.id === script.rootNodeId)
+  if (root?.type !== 'trigger') return []
+  return [...new Set([...(root.keywords ?? []), ...(root.examples ?? [])].map(s => String(s).trim()).filter(Boolean))]
+}

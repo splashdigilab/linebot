@@ -25,11 +25,8 @@ import type {
 } from '~~/shared/types/ai-script'
 import {
   DEFAULT_COLLECT_REASK,
-  DEFAULT_SEMANTIC_TRIGGER_THRESHOLD,
   MAX_TRIGGER_EXAMPLES,
   extractCollectValue,
-  matchesScriptTrigger,
-  matchesSemanticTrigger,
   renderScriptTemplate,
   resolveBranchNext,
 } from '~~/shared/types/ai-script'
@@ -62,45 +59,6 @@ export async function loadActiveScripts(workspaceId: string, db: Firestore = get
   }))
   cache.set(workspaceId, { data: rows, expires: Date.now() + CACHE_TTL_MS })
   return rows
-}
-
-/**
- * 找到第一個（priority 最高）能被觸發的腳本，並「惰性」計算 inbound 向量。
- * scripts 必須已依 priority 降序排列（loadActiveScripts 已處理），故首個命中即最高優先。
- *
- * 依 priority 順序逐一比對：keyword 子字串（便宜、sync）；遇到語意觸發節點才呼叫 embedFn
- * 算一次 inbound 向量（之後重用）。因此「更高或同優先序的關鍵字腳本先命中」時完全不會 embed，
- * 同時仍嚴格尊重 priority（不會讓低優先關鍵字腳本越過高優先語意腳本）。
- *
- * 回傳命中腳本與（若算過的）queryVector，供下游 AI 保底重用、避免重複 embed。
- * embedFn 失敗時記錄並回 null，語意腳本當作不命中（keyword 腳本不受影響）。
- */
-export async function findMatchingScriptLazy(
-  scripts: Array<ScriptDoc & { id: string }>,
-  inputText: string,
-  embedFn: (text: string) => Promise<number[]>,
-): Promise<{ script: (ScriptDoc & { id: string }) | null; queryVector: number[] | null }> {
-  let queryVector: number[] | null = null
-  let embedTried = false
-  for (const s of scripts) {
-    if (matchesScriptTrigger(s, inputText)) return { script: s, queryVector }
-    const root = s.nodes.find(n => n.id === s.rootNodeId)
-    const isSemantic = root?.type === 'trigger'
-      && (root.matchMode ?? 'keyword') === 'semantic'
-      && (root.exampleEmbeddings?.length ?? 0) > 0
-    if (!isSemantic) continue
-    if (!embedTried) {
-      embedTried = true
-      queryVector = await embedFn(inputText).catch((e) => {
-        console.error('[ai-scripts] embedQuery for semantic trigger failed:', e)
-        return null
-      })
-    }
-    if (queryVector && matchesSemanticTrigger(s, queryVector, DEFAULT_SEMANTIC_TRIGGER_THRESHOLD)) {
-      return { script: s, queryVector }
-    }
-  }
-  return { script: null, queryVector }
 }
 
 /**

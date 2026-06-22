@@ -36,14 +36,13 @@ import {
 } from './conversation-session'
 import type { ModuleType } from '~~/shared/types/conversation-stats'
 import { SYSTEM_MODULE_IDS } from '~~/shared/types/conversation-stats'
-import { answerWithAi, summarizeHandoffContext, type AiChatTurn } from './ai-answer'
+import { answerWithAi, routeMessage, summarizeHandoffContext, type AiChatTurn } from './ai-answer'
 import { getAiSettings } from './ai-settings'
 import { recordAiUsage } from './ai-usage'
 import { notifyHandoffToStaff } from './ai-handoff-notify'
-import type { AiConversationMeta, HandoffReason } from '~~/shared/types/ai-knowledge'
-import type { ActiveScriptState } from '~~/shared/types/ai-script'
-import { advanceScript, findMatchingScriptLazy, loadActiveScripts, startScript } from './ai-scripts'
-import { embedQuery } from './gemini'
+import { detectSensitiveTopic, type AiConversationMeta, type HandoffReason } from '~~/shared/types/ai-knowledge'
+import { matchesScriptKeywords, type ActiveScriptState, type ScriptDoc } from '~~/shared/types/ai-script'
+import { advanceScript, loadActiveScripts, startScript } from './ai-scripts'
 import {
   lineUserFirestoreDocId,
   lineUserIdFromFirestoreDocId,
@@ -1937,8 +1936,8 @@ async function handleIncomingText(
       ruleCooldowns: userState.ruleCooldowns,
     })
     if (!rule) {
-      // 1. 規則沒命中 → 嘗試啟動腳本
-      const { handled: scriptHandled, queryVector } = await runScriptStart(
+      // 1. 規則沒命中 → 嘗試啟動腳本（關鍵字快速通道 + 統一意圖路由）
+      const scriptHandled = await runScriptStart(
         textContent,
         userAttributes,
         fsUserDocId,
@@ -1951,7 +1950,7 @@ async function handleIncomingText(
       )
       if (scriptHandled) return
 
-      // 2. 還是沒命中 → AI 保底（沿用腳本階段算過的 query 向量，省一次 embed）
+      // 2. 還是沒命中 → AI 保底
       await tryAiFallback({
         workspaceId: wid,
         lineUserId,
@@ -1961,7 +1960,6 @@ async function handleIncomingText(
         channelSecret,
         sessionId: sessionId ?? null,
         requestOrigin: options.requestOrigin || '',
-        queryVector,
       })
       return
     }
@@ -2018,6 +2016,13 @@ async function handleIncomingText(
   }
 }
 
+/** 一條腳本的「觸發情境提示」（關鍵字 + 語意範例，去重）給統一意圖路由參考 */
+function triggerHints(script: ScriptDoc & { id: string }): string[] {
+  const root = script.nodes.find(n => n.id === script.rootNodeId)
+  if (root?.type !== 'trigger') return []
+  return [...new Set([...(root.keywords ?? []), ...(root.examples ?? [])].map(s => String(s).trim()).filter(Boolean))]
+}
+
 /**
  * 嘗試從使用者輸入啟動腳本。
  * 回傳 true 表示已處理（已回覆使用者）；false 表示沒有任何腳本命中。
@@ -2032,14 +2037,29 @@ async function runScriptStart(
   sessionId: string | null,
   requestOrigin: string,
   channelSecret: string,
-): Promise<{ handled: boolean; queryVector: number[] | null }> {
+): Promise<boolean> {
   const scripts = await loadActiveScripts(workspaceId).catch(() => [])
-  if (!scripts.length) return { handled: false, queryVector: null }
+  if (!scripts.length) return false
 
-  // 依 priority 惰性比對：關鍵字先命中就不 embed；只有掃到語意節點才算一次向量，
-  // 算出的向量往下傳給 AI 保底重用，不重複 embed。
-  const { script: matched, queryVector } = await findMatchingScriptLazy(scripts, textContent, embedQuery)
-  if (!matched) return { handled: false, queryVector }
+  // 0) 安全層優先：敏感情境（退費退款/法律/醫療…）用確定性比對先攔截，**不進任何腳本**，
+  //    交給 AI 敏感詞護欄直接轉真人（業界「safety first」；比靠 LLM 路由判斷可靠）。
+  const settings = await getAiSettings(workspaceId).catch(() => null)
+  if (settings && detectSensitiveTopic(textContent, settings.sensitiveTopics)) return false
+
+  // 1) 關鍵字快速通道：明確、零成本、確定性（不分模式；keywords 一律當明確觸發詞）
+  let matched = scripts.find(s => matchesScriptKeywords(s, textContent)) ?? null
+
+  // 2) 沒命中 → 統一意圖路由（一次 LLM 呼叫，由 LLM 理解意圖+優先序決定走哪條腳本或交給 AI）。
+  //    取代舊的「每條腳本各自比語意向量」：敏感情境(退款/法律…)不會被腳本攔截、相近意圖不會誤觸。
+  if (!matched) {
+    const hints = scripts.map(s => ({ id: s.id, name: s.name, hints: triggerHints(s) }))
+    const route = await routeMessage(textContent, hints).catch((e) => {
+      console.error('[script] routeMessage error:', e)
+      return null
+    })
+    if (route?.scriptId) matched = scripts.find(s => s.id === route.scriptId) ?? null
+  }
+  if (!matched) return false
 
   const result = await startScript(matched, fsUserDocId, userAttributes)
   invalidateUserDocCache(fsUserDocId)
@@ -2047,7 +2067,7 @@ async function runScriptStart(
   if (result.finished && result.thenHandoff) {
     await triggerHandoff(userAttributes, lineUserId, workspaceId, sessionId, requestOrigin, channelSecret, /*alreadyReplied*/ true)
   }
-  return { handled: true, queryVector }
+  return true
 }
 
 async function runScriptAdvance(
@@ -2280,8 +2300,6 @@ async function tryAiFallback(params: {
   channelSecret: string
   sessionId: string | null
   requestOrigin: string
-  /** 腳本語意觸發階段已算好的 textContent 向量；可省下 answerWithAi 內的重複 embed */
-  queryVector?: number[] | null
 }): Promise<void> {
   const { workspaceId, lineUserId, textContent, replyToken, userAttributes, channelSecret, sessionId, requestOrigin } = params
 
@@ -2451,8 +2469,7 @@ async function tryAiFallback(params: {
   let result
   try {
     // 預算向量只在 query 仍等於原訊息（非 followup 改寫）時可重用，否則向量與 query 不一致
-    const reusableVector = !isFollowup && query === textContent ? params.queryVector ?? undefined : undefined
-    result = await answerWithAi({ workspaceId, query, isFollowup, skipDisambiguation, history, queryVector: reusableVector })
+    result = await answerWithAi({ workspaceId, query, isFollowup, skipDisambiguation, history })
   }
   catch (e) {
     console.error('[ai-fallback] answerWithAi failed:', e)

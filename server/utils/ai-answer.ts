@@ -219,6 +219,97 @@ export async function classifyIntent(text: string, history?: AiChatTurn[]): Prom
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+//  統一意圖路由（一次 LLM 呼叫：決定走哪條腳本 / 或交給 AI 答題）
+//  取代「每條腳本各自比關鍵字/語意」的脆弱比對：LLM 真的理解意圖+範圍+優先序，
+//  誤觸少；且這一次呼叫同時產出答題用的 intent（answerWithAi 可重用、不重複分類）。
+// ═══════════════════════════════════════════════════════════════════
+
+/** 給路由器看的單條腳本「意圖描述」 */
+export interface ScriptIntentHint {
+  id: string
+  name: string
+  /** 觸發情境提示（關鍵字 + 語意範例合起來） */
+  hints: string[]
+}
+
+export interface RouteResult extends IntentResult {
+  /** 命中的腳本 id；null = 不交給任何腳本、走 AI 答題 */
+  scriptId: string | null
+}
+
+/**
+ * 路由一則訊息：判斷該交給哪條腳本，或走 AI 答題。一次 flash-lite 呼叫。
+ * 失敗回 null（呼叫端退回關鍵字比對 + 內部 classifyIntent）。
+ */
+export async function routeMessage(text: string, scripts: ScriptIntentHint[], history?: AiChatTurn[]): Promise<RouteResult | null> {
+  const recent = (history ?? []).slice(-4)
+    .map(t => `${t.role === 'user' ? '客人' : '客服'}：${t.text.trim().slice(0, 120)}`)
+    .join('\n')
+  const scriptList = scripts.length
+    ? scripts.map(s => `- id=${s.id}　名稱「${s.name}」　情境：${s.hints.filter(Boolean).slice(0, 12).join('、') || '(未設定)'}`).join('\n')
+    : '（目前沒有腳本）'
+  const validIds = new Set(scripts.map(s => s.id))
+
+  const systemInstruction = `你是客服訊息路由器。先判斷客人這句話該交給哪一條「腳本流程」處理，或走一般 AI 答題；同時判斷 intent。
+
+【可選腳本】（scriptId 只能填下列其中一個 id，或 null）
+${scriptList}
+
+scriptId 規則：
+- 客人這句明確屬於某腳本的情境 → 填該腳本 id（看「意思」，不必字面相同；例「東西壞了想退」屬退換貨）。
+- 不確定 / 都不符合 → 填 null，交給 AI。**寧可 null 也不要硬塞**。
+- **敏感情境優先**：涉及退費/退款/法律糾紛/醫療診斷/投資建議/個資外洩 → scriptId 一律 null 且 intent=sensitive（即使有相關腳本，也讓真人處理）。
+
+intent 擇一：greeting（純打招呼）/ thanks（純道謝）/ farewell（純道別）/ find_human（要求真人）/ sensitive（上述敏感情境）/ compare（比較已點名的多個產品）/ list（問某類別「有哪些」）/ question（其他一般詢問）。
+- 同時有社交詞與實際問題（「謝謝，但想問運費」）以實際問題為準。
+- 單獨產品名/品類（小獴友、除濕機）一律 question，不是社交。
+
+isFollowup：脫離上一輪就看不懂（多少錢、有貨嗎、那這個呢 = true；自帶主題 = false）。
+standaloneQuery：把這句改寫成不靠上下文也看得懂的完整問題（從【最近對話】補主題、解指代詞；本來就完整就原樣）。
+compareItems：intent=compare 時列出要比的品項（2–4 個），否則 []。
+
+回傳 JSON：{ "scriptId": string|null, "intent": "...", "isFollowup": true/false, "standaloneQuery": "...", "compareItems": [] }`
+
+  const prompt = [
+    recent ? `【最近對話】\n${recent}` : '',
+    `【客人這句】\n${text}`,
+  ].filter(Boolean).join('\n\n')
+
+  try {
+    const { data, inputTokens, outputTokens } = await generateJson<{ scriptId?: unknown; intent?: unknown; isFollowup?: unknown; standaloneQuery?: unknown; compareItems?: unknown }>(prompt, {
+      systemInstruction,
+      temperature: 0,
+      maxOutputTokens: 320,
+      model: 'gemini-2.5-flash-lite',
+      thinkingBudget: 0,
+    })
+    const intent = VALID_INTENTS.includes(data?.intent as MessageIntent) ? (data!.intent as MessageIntent) : 'question'
+    const rawScriptId = String(data?.scriptId ?? '').trim()
+    // 防 LLM 亂編 id：只接受清單裡的 id；敏感情境一律不進腳本
+    const scriptId = rawScriptId && rawScriptId !== 'null' && validIds.has(rawScriptId) && intent !== 'sensitive'
+      ? rawScriptId
+      : null
+    const rewritten = String(data?.standaloneQuery ?? '').trim().slice(0, 200)
+    const compareItems = intent === 'compare' && Array.isArray(data?.compareItems)
+      ? data.compareItems.map((s: unknown) => String(s).trim()).filter(Boolean).slice(0, 4)
+      : []
+    return {
+      scriptId,
+      intent,
+      isFollowup: data?.isFollowup === true,
+      standaloneQuery: rewritten || text,
+      compareItems,
+      inputTokens,
+      outputTokens,
+    }
+  }
+  catch (err) {
+    console.warn('[ai-answer] routeMessage failed, caller will fall back:', err)
+    return null
+  }
+}
+
 const HANDOFF_SUMMARY_SYSTEM_INSTRUCTION = `你是客服交接助理。讀客人與客服機器人的對話，為「即將接手的真人客服」寫一段 2–3 句的繁體中文摘要。
 要求：
 - 點出客人想解決什麼 / 在問什麼、目前卡在哪，以及對話中已提供的關鍵資訊（訂單編號、商品名、聯絡方式等）。

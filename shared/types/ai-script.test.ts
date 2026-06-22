@@ -3,6 +3,7 @@ import { SCRIPT_TEMPLATES } from './ai-script-templates'
 import {
   cosineSimilarity,
   extractCollectValue,
+  matchesScriptKeywords,
   matchesScriptTrigger,
   matchesSemanticTrigger,
   outgoingNodeIds,
@@ -50,6 +51,16 @@ describe('matchesScriptTrigger (keyword)', () => {
   it('does not match a disabled script', () => {
     const s = { ...buildScript({ id: 't1', type: 'trigger', keywords: ['退貨'] }), enabled: false }
     expect(matchesScriptTrigger(s, '退貨')).toBe(false)
+  })
+})
+
+describe('matchesScriptKeywords (mode-agnostic fast-path)', () => {
+  it('matches keywords even in semantic mode (keywords = definite triggers)', () => {
+    const s = buildScript({ id: 't1', type: 'trigger', matchMode: 'semantic', keywords: ['預約'], examples: ['想約個時間'] })
+    // matchesScriptTrigger 會因 semantic 模式回 false；matchesScriptKeywords 仍命中 keyword
+    expect(matchesScriptTrigger(s, '我要預約')).toBe(false)
+    expect(matchesScriptKeywords(s, '我要預約')).toBe(true)
+    expect(matchesScriptKeywords(s, '今天天氣好')).toBe(false)
   })
 })
 
