@@ -115,12 +115,12 @@
           </div>
           <div class="card-section-stack">
             <div class="scripts-node-list">
-              <div v-for="(node, idx) in form.nodes" :key="node.id" class="scripts-node-card">
+              <div v-for="node in form.nodes" :key="node.id" class="scripts-node-card">
                 <div class="scripts-node-header">
                   <span class="scripts-node-badge" :class="nodeBadgeClass(node.type)">
                     {{ nodeIcon(node.type) }} {{ nodeTypeLabel(node.type) }}
                   </span>
-                  <span class="text-xs text-muted">節點 {{ idx + 1 }}</span>
+                  <span v-if="nodeHeaderHint(node)" class="text-xs text-muted">{{ nodeHeaderHint(node) }}</span>
                   <el-button
                     v-if="node.type !== 'trigger'"
                     size="small"
@@ -180,7 +180,7 @@
                     <el-input v-model="node.question" placeholder="例：請輸入您的訂單編號" />
                   </div>
                   <div class="admin-field-group">
-                    <AdminFieldLabel text="變數名稱（後面 {{ variable }} 取用）" tight />
+                    <AdminFieldLabel text="欄位名稱（分支／寫名單／回覆都用它取值）" tight />
                     <el-input v-model="node.fieldName" placeholder="例：order_id" />
                   </div>
                   <div class="admin-field-group">
@@ -206,13 +206,29 @@
                 <!-- Reply -->
                 <template v-else-if="node.type === 'reply'">
                   <div class="admin-field-group">
-                    <AdminFieldLabel text="回覆文字（可用 {{ 變數名 }}）" tight />
+                    <AdminFieldLabel text="回覆文字（可插入收集到的欄位）" tight />
                     <el-input
                       v-model="node.text"
                       type="textarea"
                       :rows="3"
-                      placeholder="例：您的訂單 {{ order_id }} 已收到，將盡快為您處理"
+                      placeholder="例：已收到您的訂單，將盡快為您處理 🙇"
                     />
+                    <el-dropdown
+                      v-if="collectFieldOptions.length"
+                      size="small"
+                      trigger="click"
+                      class="scripts-var-insert"
+                      @command="(f) => insertReplyVar(node, f)"
+                    >
+                      <el-button size="small" plain>＋ 插入欄位變數 ▾</el-button>
+                      <template #dropdown>
+                        <el-dropdown-menu>
+                          <el-dropdown-item v-for="f in collectFieldOptions" :key="f.value" :command="f.value">
+                            {{ varLabel(f.value) }}
+                          </el-dropdown-item>
+                        </el-dropdown-menu>
+                      </template>
+                    </el-dropdown>
                   </div>
                   <div class="admin-field-group">
                     <AdminFieldLabel text="回覆後直接轉真人" tight />
@@ -225,7 +241,9 @@
                   <p class="scripts-section-hint">依「已收集的欄位」決定往哪走。由上而下，第一個成立的條件勝出。</p>
                   <div v-for="(c, ci) in node.cases" :key="ci" class="scripts-branch-case">
                     <span class="text-xs text-muted">如果</span>
-                    <el-input v-model="c.field" placeholder="欄位名（如 order_id）" class="scripts-branch-field" />
+                    <el-select :model-value="c.field" filterable size="small" placeholder="選欄位" class="scripts-branch-field" @change="c.field = $event">
+                      <el-option v-for="f in collectFieldOptions" :key="f.value" :label="f.label" :value="f.value" />
+                    </el-select>
                     <el-select :model-value="c.op" size="small" class="scripts-branch-op" @change="setBranchOp(c, $event)">
                       <el-option label="有填寫" value="exists" />
                       <el-option label="等於" value="equals" />
@@ -290,8 +308,10 @@
                   <p class="scripts-section-hint">把收集到的欄位存成使用者屬性（持久化、後台可見，之後回覆文字也能用屬性變數取用）。</p>
                   <div v-for="(m, mi) in node.fieldMap" :key="mi" class="scripts-branch-case">
                     <span class="text-xs text-muted">收集欄位</span>
-                    <el-input v-model="m.fromField" placeholder="如 order_id" class="scripts-branch-field" />
-                    <span class="text-xs text-muted">→ 屬性</span>
+                    <el-select :model-value="m.fromField" filterable size="small" placeholder="選欄位" class="scripts-branch-field" @change="m.fromField = $event">
+                      <el-option v-for="f in collectFieldOptions" :key="f.value" :label="f.label" :value="f.value" />
+                    </el-select>
+                    <span class="text-xs text-muted">→ 屬性名稱</span>
                     <el-input v-model="m.attrKey" placeholder="如 訂單編號" class="scripts-branch-field" />
                     <el-button size="small" type="danger" plain @click="removeSaveLeadField(node, mi)">✕</el-button>
                   </div>
@@ -492,6 +512,28 @@ function autoNextLabel(node: ScriptNode): string | null {
     return node.thenHandoff ? '流程結束，並轉真人客服' : '流程結束'
   }
   return null
+}
+
+/** 目前腳本裡所有 collect 節點的欄位名（給分支/寫名單/變數插入下拉選，避免手打 typo） */
+const collectFieldOptions = computed(() =>
+  form.value.nodes
+    .filter((n): n is ScriptCollectNode => n.type === 'collect' && !!n.fieldName.trim())
+    .map(n => ({ value: n.fieldName, label: n.fieldName })),
+)
+/** 節點標頭的用途提示（取代誤導的「節點 N」序號——分支圖裡順序≠流程） */
+function nodeHeaderHint(node: ScriptNode): string {
+  if (node.type === 'collect') return node.fieldName ? `欄位「${node.fieldName}」` : '（未命名欄位）'
+  if (node.type === 'reply') return node.thenHandoff ? '結束 → 轉真人' : '結束'
+  return ''
+}
+/** 在回覆文字尾端插入一個欄位變數 */
+function insertReplyVar(node: ScriptReplyNode, field: string) {
+  if (!field) return
+  node.text = `${node.text || ''}{{${field}}}`
+}
+/** 變數插入選單的顯示文字（用函式回傳，避免在 template mustache 裡寫巢狀大括號被誤解析） */
+function varLabel(field: string): string {
+  return `{{ ${field} }}`
 }
 
 function addSaveLeadField(node: ScriptSaveLeadNode) {
