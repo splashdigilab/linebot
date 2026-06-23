@@ -15,20 +15,11 @@ vi.mock('firebase-admin/firestore', () => ({
   },
 }))
 vi.mock('./firebase', () => ({ getDb: vi.fn() }))
-vi.mock('./gemini', () => ({ embedDocument: vi.fn(async () => [0.11, 0.22, 0.33]), embedQuery: vi.fn() }))
 const { addTagsToUser } = vi.hoisted(() => ({ addTagsToUser: vi.fn(async () => ({ added: [], skipped: [] })) }))
 vi.mock('./tagging', () => ({ addTagsToUser }))
 
-import { startScript, advanceScript, embedTriggerExamples } from './ai-scripts'
-import { matchesSemanticTrigger } from '~~/shared/types/ai-script'
+import { startScript, advanceScript } from './ai-scripts'
 import type { ActiveScriptState, ScriptDoc, ScriptNode } from '~~/shared/types/ai-script'
-
-/** 遞迴檢查：是否有「陣列直接包陣列」——Firestore 會拒這種結構 */
-function hasNestedArray(v: any): boolean {
-  if (Array.isArray(v)) return v.some(el => Array.isArray(el) || hasNestedArray(el))
-  if (v && typeof v === 'object') return Object.values(v).some(hasNestedArray)
-  return false
-}
 
 // ── 記憶體假 Firestore（只實作引擎用到的 get/update/set） ──────────────
 function deepMerge(target: any, src: any) {
@@ -163,24 +154,6 @@ describe('腳本引擎整輪對話：快速回覆路由 + 分支判斷', () => {
     await startScript(s, UID, {}, db)
     const r = await advanceScript(activeScriptOf(store)!, '  退貨  ', {}, UID, db)
     expect(r.replyText).toBe('退貨流程')
-  })
-})
-
-describe('語意觸發 embedding 存檔結構（Firestore 不接受巢狀陣列）', () => {
-  const triggerNode: ScriptNode = { id: 't', type: 'trigger', matchMode: 'semantic', keywords: [], examples: ['我要退貨', '想退'], priority: 50, next: 'r' }
-
-  it('embedTriggerExamples 產出的節點不含巢狀陣列，且可正常語意比對', async () => {
-    const [out] = await embedTriggerExamples([triggerNode]) as any[]
-    // 關鍵：整個節點不能有「陣列裝陣列」（否則 Firestore 寫入會 INVALID_ARGUMENT）
-    expect(hasNestedArray(out)).toBe(false)
-    expect(out.exampleEmbeddings).toEqual([{ values: [0.11, 0.22, 0.33] }, { values: [0.11, 0.22, 0.33] }])
-
-    const sim = matchesSemanticTrigger(
-      { enabled: true, rootNodeId: 't', nodes: [out, { id: 'r', type: 'reply', text: '', thenHandoff: false }] },
-      [0.11, 0.22, 0.33],
-      0.8,
-    )
-    expect(sim).toBeCloseTo(1)
   })
 })
 

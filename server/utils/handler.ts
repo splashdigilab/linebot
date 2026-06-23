@@ -1913,6 +1913,23 @@ async function handleIncomingText(
   }
 
   if (!handledByInput && !suppressBotAutomation) {
+    // 安全層（最優先）：敏感情境（退費退款／法律／醫療…）用確定性比對先攔截，**在推進進行中腳本、
+    // 自動回覆規則、啟動新腳本之前**——一律交給 AI 敏感詞護欄轉真人，不被任何腳本/規則攔截。
+    const safetySettings = await getAiSettings(wid).catch(() => null)
+    if (safetySettings && detectSensitiveTopic(textContent, safetySettings.sensitiveTopics)) {
+      await tryAiFallback({
+        workspaceId: wid,
+        lineUserId,
+        textContent,
+        replyToken,
+        userAttributes,
+        channelSecret,
+        sessionId: sessionId ?? null,
+        requestOrigin: options.requestOrigin || '',
+      })
+      return
+    }
+
     // 0. 使用者已在某條腳本中 → 推進、處理回覆 / handoff，結束
     if (userState.activeScript) {
       const advanced = await runScriptAdvance(
@@ -2040,11 +2057,7 @@ async function runScriptStart(
 ): Promise<boolean> {
   const scripts = await loadActiveScripts(workspaceId).catch(() => [])
   if (!scripts.length) return false
-
-  // 0) 安全層優先：敏感情境（退費退款/法律/醫療…）用確定性比對先攔截，**不進任何腳本**，
-  //    交給 AI 敏感詞護欄直接轉真人（業界「safety first」；比靠 LLM 路由判斷可靠）。
-  const settings = await getAiSettings(workspaceId).catch(() => null)
-  if (settings && detectSensitiveTopic(textContent, settings.sensitiveTopics)) return false
+  // 註：敏感情境已在編排最上層（呼叫此函式之前）攔截，這裡不需再檢查。
 
   // 1) 關鍵字快速通道：明確、零成本、確定性（不分模式；keywords 一律當明確觸發詞）
   let matched = scripts.find(s => matchesScriptKeywords(s, textContent)) ?? null
@@ -2057,6 +2070,11 @@ async function runScriptStart(
       console.error('[script] routeMessage error:', e)
       return null
     })
+    if (route) {
+      // 路由也是一次 LLM 呼叫，token 要記帳（否則月用量低估）
+      recordAiUsage(workspaceId, { inputTokens: route.inputTokens, outputTokens: route.outputTokens })
+        .catch(e => console.error('[script] recordAiUsage(route) error:', e))
+    }
     if (route?.scriptId) matched = scripts.find(s => s.id === route.scriptId) ?? null
   }
   if (!matched) return false

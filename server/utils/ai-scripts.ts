@@ -25,12 +25,10 @@ import type {
 } from '~~/shared/types/ai-script'
 import {
   DEFAULT_COLLECT_REASK,
-  MAX_TRIGGER_EXAMPLES,
   extractCollectValue,
   renderScriptTemplate,
   resolveBranchNext,
 } from '~~/shared/types/ai-script'
-import { embedDocument } from './gemini'
 import { addTagsToUser } from './tagging'
 
 export const SCRIPTS_COLLECTION = 'scripts'
@@ -59,50 +57,6 @@ export async function loadActiveScripts(workspaceId: string, db: Firestore = get
   }))
   cache.set(workspaceId, { data: rows, expires: Date.now() + CACHE_TTL_MS })
   return rows
-}
-
-/**
- * 存檔前計算 semantic 觸發節點的範例 embedding（server 端專用）。
- * - 只處理 matchMode==='semantic' 的 trigger；其餘節點原樣回傳。
- * - 範例與「上一版」逐字相同且已有等量 embedding 時沿用舊向量，省掉重複的 Gemini 呼叫
- *   （改個無關欄位存檔不會白白重算）；範例有變才重算（避免 stale）。
- * - 範例用 embedDocument（RETRIEVAL_DOCUMENT），與 inbound 的 embedQuery 配對。
- * - 非語意模式會清掉殘留的 examples/exampleEmbeddings，避免切模式後留髒資料。
- *
- * @param prevNodes 既有腳本的舊 nodes（update 時帶入；create 時省略），用來比對範例是否未變。
- */
-export async function embedTriggerExamples(nodes: ScriptNode[], prevNodes?: ScriptNode[]): Promise<ScriptNode[]> {
-  const prevById = new Map((prevNodes ?? []).map(n => [n.id, n]))
-  return Promise.all(nodes.map(async (node) => {
-    if (node.type !== 'trigger') return node
-    if ((node.matchMode ?? 'keyword') !== 'semantic') {
-      // keyword 模式：不保留範例與向量
-      const { examples: _e, exampleEmbeddings: _ee, ...rest } = node as ScriptTriggerNode
-      return rest as ScriptNode
-    }
-    const examples = (node.examples ?? [])
-      .map(e => String(e).trim())
-      .filter(Boolean)
-      .slice(0, MAX_TRIGGER_EXAMPLES)
-
-    // 範例未變且舊向量齊備 → 沿用，不重算
-    const prev = prevById.get(node.id)
-    if (prev?.type === 'trigger') {
-      const prevExamples = prev.examples ?? []
-      const prevEmbeddings = prev.exampleEmbeddings ?? []
-      if (
-        prevEmbeddings.length === examples.length
-        && prevExamples.length === examples.length
-        && examples.every((e, i) => e === prevExamples[i])
-      ) {
-        return { ...node, examples, exampleEmbeddings: prevEmbeddings }
-      }
-    }
-
-    // 每個向量包一層 { values }——Firestore 不接受「陣列直接包陣列」
-    const exampleEmbeddings = await Promise.all(examples.map(async e => ({ values: await embedDocument(e) })))
-    return { ...node, examples, exampleEmbeddings }
-  }))
 }
 
 // ── Active script lifecycle ──────────────────────────────────────────────
