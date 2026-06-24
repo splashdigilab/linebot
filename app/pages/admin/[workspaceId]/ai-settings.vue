@@ -513,7 +513,9 @@ function defaultForm(): FormShape {
     handbackIdleMinutes: 0,
     disambiguation: {
       enabled: true,
-      top1Min: 0.65,
+      // 與後端 DEFAULT_DISAMBIGUATION_TOP1_MIN 一致(0.70）：低於此的多卡群多半是
+      // 「沒有好答案被迫湊近似卡」,反問會塞不相關選項。改這裡記得同步後端常數。
+      top1Min: 0.7,
       top1Max: 0.78,
       maxSpread: 0.05,
       maxOptions: 3,
@@ -537,7 +539,7 @@ type PresetName = 'strict' | 'balanced' | 'loose'
 
 const PRESETS: Record<PresetName, { conf: number; grounding: number; top1Min: number; top1Max: number }> = {
   strict: { conf: 0.8, grounding: 0.75, top1Min: 0.7, top1Max: 0.82 },
-  balanced: { conf: 0.75, grounding: 0.7, top1Min: 0.65, top1Max: 0.78 },
+  balanced: { conf: 0.75, grounding: 0.7, top1Min: 0.7, top1Max: 0.78 },
   loose: { conf: 0.65, grounding: 0.6, top1Min: 0.55, top1Max: 0.7 },
 }
 

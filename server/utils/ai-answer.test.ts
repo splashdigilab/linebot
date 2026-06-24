@@ -12,6 +12,8 @@ import {
   socialCannedReply,
   preferProductCards,
   dedupeByTitleContainment,
+  collapseSameProduct,
+  productNamedInQuery,
 } from './ai-answer'
 import type { SimilarChunk } from './ai-knowledge-chunks'
 import { detectSensitiveTopic } from '~~/shared/types/ai-knowledge'
@@ -365,5 +367,85 @@ describe('detectSensitiveTopic', () => {
   it('未命中 / 空輸入 → null', () => {
     expect(detectSensitiveTopic('請問營業時間', topics)).toBeNull()
     expect(detectSensitiveTopic('', topics)).toBeNull()
+  })
+})
+
+describe('collapseSameProduct', () => {
+  const c = (id: string, title: string, similarity: number, sourceId: string | null = null): SimilarChunk =>
+    chunk({ id, title, similarity, sourceId })
+
+  it('同產品不同面向卡（共用品牌/型號 run）併成一張代表卡，保留分數高者', () => {
+    const input = [
+      c('a', 'SHARP頂級A咖iBarista智慧咖啡機', 0.76, 's1'),
+      c('b', 'iBarista 咖啡機隨附配件', 0.74, 's2'),
+      c('c', 'iBarista 咖啡機募資資訊', 0.74, 's2'),
+    ]
+    // 三張都含 "ibarista" → 併成一組，rep 是分數最高的 a
+    expect(collapseSameProduct(input).map(x => x.id)).toEqual(['a'])
+  })
+
+  it('不同品牌（gplus vs nwt）標題無共用 run → 各自獨立', () => {
+    const input = [
+      c('g', 'GPLUS居不可濕除濕機GD-B001', 0.74),
+      c('n', 'NWT威技抽取式除濕機WDH31B16E', 0.73),
+    ]
+    expect(collapseSameProduct(input).map(x => x.id)).toEqual(['g', 'n'])
+  })
+
+  it('純中文品名無英數 → 退回 sourceId 判定（同 source 併、否則獨立）', () => {
+    const input = [
+      c('a', '兩全奇美燈保固政策', 0.74, 'lamp'),
+      c('b', '兩全奇美燈產品特色', 0.73, 'lamp'),
+      c('d', '上好ㄟ抽取式除濕機', 0.72, 'dehum'),
+    ]
+    // 前兩張同 source → 併；第三張不同 source → 留
+    expect(collapseSameProduct(input).map(x => x.id)).toEqual(['a', 'd'])
+  })
+})
+
+describe('productNamedInQuery', () => {
+  const c = (id: string, title: string): SimilarChunk => chunk({ id, title })
+  const g = (...members: SimilarChunk[]): SimilarChunk[] => members
+
+  it('query 用品牌詞指名唯一一個產品 → 回該群組代表卡', () => {
+    const groups = [
+      g(c('bal', 'Balzano百佳諾義式咖啡機')),
+      g(c('ib', 'iBarista 咖啡機保固與客服')),
+    ]
+    expect(productNamedInQuery('ibarista保固多久', groups)?.id).toBe('ib')
+  })
+
+  it('精確型號落在「非代表卡」的成員上也能指名 → 回該組代表卡（P1-2/P1-3 交互）', () => {
+    const groups = [
+      // NWT 組：代表卡是 16L高效（無 WDH 型號），成員裡才有 WDH-16EF
+      g(c('nwt-rep', 'NWT威技16L高效抽取型除濕機'), c('nwt-wdh', 'NWT威技一級能效16L除濕機WDH-16EF')),
+      g(c('up', '上好ㄟ抽取式除濕機')),
+    ]
+    expect(productNamedInQuery('WDH-16EF這台保固多久', groups)?.id).toBe('nwt-rep')
+  })
+
+  it('純中文 query（無英數品牌詞）→ 不算指名 → null（避免中文 bigram 跨界假命中）', () => {
+    const groups = [
+      g(c('bal', 'Balzano百佳諾義式咖啡機')),
+      g(c('ib', 'iBarista 咖啡機保固與客服')),
+    ]
+    expect(productNamedInQuery('咖啡機好用嗎', groups)).toBeNull()
+  })
+
+  it('中文品類+屬性詞（除濕機保固）不該誤判成指名某品牌 → null', () => {
+    const groups = [
+      g(c('a', 'GPLUS除濕機保固優惠')),
+      g(c('b', '上好ㄟ抽取式除濕機')),
+    ]
+    // 只認英數品牌詞;query 全中文 → null（不會被跨界 bigram「機保」誤命中 GPLUS）
+    expect(productNamedInQuery('除濕機保固多久', groups)).toBeNull()
+  })
+
+  it('英數品類詞被多群組共用（都含 coffee）→ 不算指名 → null', () => {
+    const groups = [
+      g(c('bal', 'Balzano coffee machine')),
+      g(c('ib', 'iBarista coffee machine')),
+    ]
+    expect(productNamedInQuery('coffee good?', groups)).toBeNull()
   })
 })

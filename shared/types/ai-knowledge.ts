@@ -251,6 +251,8 @@ export type HandoffReason =
   | 'manual'
   /** 客人明確要求真人（「找真人」按鈕或自行輸入），不經 AI 直接轉接 */
   | 'user_request'
+  /** 業務洽詢（議價殺價 / 團購批發 / 客製包裝禮盒等），需業務人員處理，知識庫答不了 */
+  | 'commercial_inquiry'
 
 export interface AiConversationMeta {
   /** 最近一次 AI 介入的決定 */
@@ -400,6 +402,7 @@ export const HANDOFF_REASON_LABELS: Record<HandoffReason, string> = {
   llm_error: 'AI 服務暫時失敗',
   manual: '人工指定',
   user_request: '客人要求真人',
+  commercial_inquiry: '業務洽詢',
 }
 
 export const KNOWLEDGE_CHUNK_STATUS_LABELS: Record<KnowledgeChunkStatus, string> = {

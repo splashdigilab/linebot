@@ -117,7 +117,7 @@ export function socialCannedReply(text: string): string | null {
 //  通用、不綁租戶；敏感詞另由 detectSensitiveTopic 關鍵字硬擋,這裡只是語意補抓。
 // ═══════════════════════════════════════════════════════════════════
 
-export type MessageIntent = 'greeting' | 'thanks' | 'farewell' | 'find_human' | 'sensitive' | 'compare' | 'question'
+export type MessageIntent = 'greeting' | 'thanks' | 'farewell' | 'find_human' | 'sensitive' | 'compare' | 'commercial' | 'question'
 
 export interface IntentResult {
   intent: MessageIntent
@@ -133,7 +133,7 @@ export interface IntentResult {
   outputTokens: number
 }
 
-const VALID_INTENTS: MessageIntent[] = ['greeting', 'thanks', 'farewell', 'find_human', 'sensitive', 'compare', 'question']
+const VALID_INTENTS: MessageIntent[] = ['greeting', 'thanks', 'farewell', 'find_human', 'sensitive', 'compare', 'commercial', 'question']
 
 const INTENT_SYSTEM_INSTRUCTION = `你是客服訊息分類器。讀客人這句話，判斷「意圖」與「是否依賴上一輪」。
 
@@ -144,11 +144,13 @@ intent 擇一：
 - find_human：明確要求真人 / 客服專員（我要找真人、轉接專員、要跟人講）
 - sensitive：涉及退費退款、法律糾紛、醫療診斷、投資建議、個資外洩 等需真人處理的敏感情境
 - compare：想「比較多個產品 / 在多個之間挑選」（例「A 跟 B 哪個好」「這幾台比一下」「差在哪」「A vs B」「哪台比較適合我」）
+- commercial：業務洽詢——殺價議價（「便宜一點」「算我便宜」「可以折嗎」）、大量/團購/批發採購（「買 10 台有團購價嗎」「公司大量採購」）、客製化包裝或禮盒、企業合作方案等需「業務人員」處理的商務需求。
 - question：其他一般詢問——針對「單一主題」的產品、規格、價格、運費、流程、用法等
 
 重要：
 - 若一句話同時有社交詞與實際問題（例「謝謝，但我想問運費」「你好，這台多少錢」），以實際問題為準 → question。
 - 只有「真的在打招呼 / 道謝 / 道別」才歸 greeting / thanks / farewell。**單獨的產品名、品牌、品類、型號（例「小獴友」「除濕機」「ibarista」「LG小蘑菇」）不是社交語句，一律 → question。**
+- commercial 只給「殺價議價 / 大量團購批發 / 客製包裝禮盒」這種要業務談的需求；**一般詢問價格、問有沒有折扣碼、問優惠活動、開發票、要統編、退稅、運費，全都是 question**（那些知識庫可能有答案，不要歸 commercial）。
 
 isFollowup：這句話是否「脫離上一輪對話就看不懂在問什麼」。
 - 「多少錢」「可以無線充電嗎」「那這個呢」「有貨嗎」→ true
@@ -360,6 +362,14 @@ export function dedupeNearIdentical(chunks: SimilarChunk[]): SimilarChunk[] {
 const GENERIC_TOPIC_RE = /說明|政策|辦法|聲明|提醒|查詢|進度|出貨|抽獎|測試|現象|聯絡|客服|統編|發票|退稅|退還|認證|價格調整/
 
 /**
+ * 「全公司單一正解」的政策／資訊主題：統編、發票、退稅、詐騙防制、隱私條款、EZWAY…
+ * 這類問題答案唯一，top-1 命中就該直接回答；反問「你要哪一個」幾乎都是反效果，
+ * 而且正解卡會被 preferProductCards 降權擠出選項，反問選到的全是不相關產品卡。
+ * 刻意**不含**「保固 / 客服 / 出貨」等「逐產品而異」的主題——那些反而適合反問選產品。
+ */
+const SINGLE_ANSWER_TOPIC_RE = /統編|統一編號|發票|退稅|退還|貨物稅|詐騙|防詐|隱私|條款|個資|EZWAY|實名/i
+
+/**
  * 穩定排序：把通用主題卡排到產品卡之後（同組內維持原相似度順序）。
  * 只在「產品卡與主題卡並存」時改變選項；若候選全是主題卡（例「保固多久」）順序不變。
  */
@@ -389,6 +399,81 @@ export function dedupeByTitleContainment(chunks: SimilarChunk[]): SimilarChunk[]
   return kept.map(k => k.chunk)
 }
 
+/** 取標題裡的「品牌/型號識別碼」：連續英數 run（≥3 碼）小寫化。 */
+function brandTokens(title: string): Set<string> {
+  return new Set(String(title || '').toLowerCase().match(/[a-z0-9]{3,}/g) ?? [])
+}
+
+/**
+ * 同產品收斂（反問用）：把「同一個產品的不同面向卡」併成一張代表卡（保留分數最高那張）。
+ * 判定同產品：兩張卡標題共用一段品牌/型號識別碼（英數 run ≥3），或同一 sourceId。
+ *
+ * 解決跨三輪的頭號殘留——單一產品被拆成十幾張屬性卡（iBarista 保固/配件/規格/水箱…，
+ * 或 SHARP HEALSIO 零水鍋 尺寸/規格/功能），向量檢索一次撈回多張、分數又接近，
+ * 誤觸反問「你要哪一個」（其實都是同一台）。收斂後反問只會在『真的不同產品』間發生。
+ *
+ * 純中文品名（奇美燈）無英數時退回 sourceId 判定；不同品牌（gplus≠nwt）標題無共用 run 不會被併。
+ * 邊角：共用上位品牌字（如多個 SHARP 產品都含 "sharp"）會被併成一群——此時退化為「直接答 top-1」，
+ * 可接受（瀏覽型「SHARP 有什麼」走總覽卡，比較型走 compare 分支，都不經這裡）。
+ */
+export function groupSameProduct(chunks: SimilarChunk[]): SimilarChunk[][] {
+  const groups: Array<{ members: SimilarChunk[]; tokens: Set<string>; sourceId: string | null }> = []
+  for (const c of chunks) {
+    const tokens = brandTokens(c.title)
+    const sid = c.sourceId ?? null
+    const g = groups.find(grp =>
+      (!!grp.sourceId && !!sid && grp.sourceId === sid)
+      || [...tokens].some(t => grp.tokens.has(t)),
+    )
+    if (g) {
+      // 併入既有群組：擴充識別碼集合，讓「SHARP iBarista…」與「iBarista 咖啡機…」串起來
+      for (const t of tokens) g.tokens.add(t)
+      g.members.push(c) // chunks 已由高到低排序，members[0] 即分數最高的代表卡
+    }
+    else {
+      groups.push({ members: [c], tokens, sourceId: sid })
+    }
+  }
+  return groups.map(g => g.members)
+}
+
+/** 同產品收斂成「一產品一代表卡」（每組最高分那張）。 */
+export function collapseSameProduct(chunks: SimilarChunk[]): SimilarChunk[] {
+  return groupSameProduct(chunks).map(g => g[0]!)
+}
+
+/**
+ * P1-3：客人這句是否已用「英數品牌 / 型號詞」明確指名其中一個產品群組
+ * （例 query 含 "ibarista" / "gplus" / "nwt" / "balzano" / 型號 "wdh-16ef" / "b001"）。
+ *
+ * 只認英數 run（≥3 碼、whole-run 比對）：這類是無歧義的產品識別碼，且不像中文 bigram
+ * 會在詞界產生假命中（「除濕機保固」會切出跨界 bigram「機保」誤命中）。純中文品名
+ * （奇美燈、威技）不在此處理——那屬知識庫資料層（補卡 / 標題補品牌字）。
+ *
+ * 識別碼取「整個群組所有成員卡」標題的英數 run 聯集（不只代表卡）——否則客人給的精確型號
+ * （WDH-16EF）若落在非代表卡，會因為代表卡標題沒這串而判不出指名。
+ * 條件：某英數詞同時出現在 query 與「唯一一個」群組（被多群組共用的品類英文詞不算指名）。
+ * 唯一命中 → 回該群組代表卡（指名了就別反問，直接作答）；否則 null。
+ */
+export function productNamedInQuery(query: string, groups: SimilarChunk[][]): SimilarChunk | null {
+  const latin = (s: string): Set<string> => new Set(String(s || '').toLowerCase().match(/[a-z0-9]{3,}/g) ?? [])
+  const q = latin(query)
+  if (!q.size) return null
+  const groupTokens = groups.map((members) => {
+    const s = new Set<string>()
+    for (const m of members) for (const t of latin(m.title)) s.add(t)
+    return s
+  })
+  const hits: number[] = []
+  groupTokens.forEach((tt, idx) => {
+    const discriminating = [...tt].some(tok =>
+      q.has(tok) && groupTokens.every((other, j) => j === idx || !other.has(tok)),
+    )
+    if (discriminating) hits.push(idx)
+  })
+  return hits.length === 1 ? groups[hits[0]!]![0]! : null
+}
+
 /**
  * 判斷是否進入 disambiguation 分支。
  * 條件：top-1 ∈ [top1Min, top1Max)，(top1 − top2) < maxSpread，dedupe 後至少 2 張。
@@ -404,6 +489,10 @@ export function shouldDisambiguate(
   // top-1 命中「總覽卡」：客人問的是列舉型問題（你們有賣什麼），總覽卡贏了本身就是答案，
   // 不該再反問「你要哪一個」。直接放行去 answer。
   if (a.isOverview) return false
+  // top-1 命中「全公司單一正解卡」（統編 / 發票 / 退稅 / 詐騙 / 隱私…）：答案唯一，
+  // 反問「你要哪一個」是反效果，且正解卡會被 preferProductCards 降權擠出選項。直接放行去 answer。
+  // （保固 / 客服 / 出貨等「逐產品而異」主題不在此列，仍可正常反問選產品。）
+  if (SINGLE_ANSWER_TOPIC_RE.test(a.title)) return false
   const top1 = a.similarity
   const top2 = b.similarity
   if (top1 < cfg.top1Min || top1 >= cfg.top1Max) return false
@@ -467,7 +556,14 @@ async function generateDisambiguation(
 
   const prompt = [
     '客人問的問題太籠統，知識庫有多張卡可能都相關。',
-    '請生成一句反問，幫客人澄清想了解哪一張卡的內容；並從下方候選清單裡挑出實際要呈現的選項。',
+    '請判斷是否真的需要反問客人；若需要，再生成一句反問並從下方候選清單裡挑出實際要呈現的選項。',
+    '',
+    '【先做這個判斷——什麼時候「不要」反問】',
+    '- 候選卡其實在講「同一個產品 / 同一件事」，只是不同面向（保固、配件、價格、規格、出貨…）：',
+    '  例「SHARP iBarista 咖啡機保固」「iBarista 咖啡機隨附配件」「iBarista 咖啡機募資資訊」都是同一台咖啡機。',
+    '- 客人的問題其實可以直接回答，不需要客人再選一次。',
+    '以上情況請回傳空陣列 options: []（系統會改成直接作答），**不要硬湊反問**。',
+    '只有當候選代表「客人可能指的是不同產品 / 不同主題」時，才生成反問與選項。',
     '',
     '【候選卡片標題（你只能從這裡選 option）】',
     titlesList,
@@ -476,6 +572,7 @@ async function generateDisambiguation(
     query,
     '',
     '回傳 JSON：{ "clarification": string, "options": [{ "title": string, "label": string }] }',
+    '（不需要反問時：clarification 留空字串、options 留空陣列）',
     '',
     '【clarification 規則】',
     `- 控制在 50 字內、自然口語、不要疊敬語（不要「您好」「請問」開頭）。`,
@@ -618,6 +715,14 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
     }
     return handoff('user_request')
   }
+  // 業務洽詢（議價 / 團購 / 客製包裝）：需業務人員談，知識庫答不了。直接轉真人，
+  // 不走 RAG / 反問（否則只會亂反問選產品，且選了也沒對應卡）。
+  if (intentRes?.intent === 'commercial') {
+    if (!input.isFollowup) {
+      await recordAiUsage(workspaceId, { invocations: 1, handoffs: 1, inputTokens: routerIn, outputTokens: routerOut }, db)
+    }
+    return handoff('commercial_inquiry')
+  }
   // 社交（招呼 / 道謝 / 道別）→ 罐頭，不走 RAG
   const social = intentRes ? socialReplyForIntent(intentRes.intent) : socialCannedReply(text)
   if (social) {
@@ -694,10 +799,14 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   // 型錄/列表來源豁免：其旗下是不同產品，不可當同主題併掉（否則產品列表反問只剩 1 個 + 雜卡）
   const catalogSourceIds = await getCatalogSourceIds(db, workspaceId)
   const dedupedChunks = dedupeNearIdentical(dedupeBySource(chunks, catalogSourceIds))
-  if (!input.skipDisambiguation && !isCompare && shouldDisambiguate(dedupedChunks, settings)) {
-    // 反問選項優先產品卡，把「說明/政策/出貨」等通用主題卡排後面
-    // 先把「同產品變體卡」併掉（避免 3 個都是同一台），再產品優先排序
-    const candidates = preferProductCards(dedupeByTitleContainment(dedupedChunks)).slice(0, settings.disambiguation.maxOptions)
+  // P1-2 同產品收斂：把「同一台機器的不同面向卡」分到同一組，反問只在『真的不同產品』間發生。
+  const groups = groupSameProduct(dedupedChunks)
+  const productGroups = groups.map(g => g[0]!) // 每組代表卡（最高分）
+  // P1-3 指名豁免：客人這句已用英數品牌/型號詞點名單一產品（例「WDH-16EF 保固」）→ 不反問，直接作答。
+  const namedProduct = productNamedInQuery(text, groups)
+  if (!input.skipDisambiguation && !isCompare && !namedProduct && shouldDisambiguate(productGroups, settings)) {
+    // 反問選項優先產品卡，把「說明/政策/出貨」等通用主題卡排後面（同產品已由 groupSameProduct 併掉）
+    const candidates = preferProductCards(productGroups).slice(0, settings.disambiguation.maxOptions)
     const dis = await generateDisambiguation(candidates, text, settings)
     if (dis) {
       if (!input.isFollowup) {
