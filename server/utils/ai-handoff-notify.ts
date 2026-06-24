@@ -27,6 +27,8 @@ export interface HandoffNotifyParams {
   customerMessage: string
   /** null = 非 AI 護欄觸發（例如腳本設定轉真人） */
   reason: HandoffReason | null
+  /** AI 生成的 2–3 句對話摘要（best-effort，可為空字串 → 不顯示該行） */
+  summary?: string
   /** SLA 提醒模式：轉真人後超過 N 分鐘無人回應的再提醒（訊息格式不同） */
   slaReminderMinutes?: number
 }
@@ -56,6 +58,7 @@ export async function notifyHandoffToStaff(params: HandoffNotifyParams): Promise
     : [
         '🙋 真人客服請求',
         `客人：${params.customerName}`,
+        ...(params.summary?.trim() ? [`📋 摘要：${params.summary.trim()}`] : []),
         ...(params.customerMessage.trim() ? [`訊息：${params.customerMessage.trim().slice(0, 200)}`] : []),
         `原因：${reasonLabel}`,
         '請至後台「對話」頁回覆。',

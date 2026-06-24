@@ -150,13 +150,14 @@ const navItems = computed(() => {
   ]
 })
 
-// AI 相關功能暫時只開放 super admin(之後會開放,先隱藏入口)。
-// ai-scripts 與自動回覆/flow 功能重疊、無人使用,頁面保留但不給導覽入口。
+// AI 區開放給所有內部角色（編輯權限仍由各 API 的 requireWorkspaceAccess 把關，
+// 例如腳本建立/修改需 admin、列表需 viewer，看得到不等於改得動）。
 const aiNavItems = computed(() => {
   const wid = workspaceId.value
-  if (!wid || !isSuperAdmin.value) return []
+  if (!wid) return []
   return [
     { to: `/admin/${wid}/knowledge/sources`, icon: '📚', label: '知識庫' },
+    { to: `/admin/${wid}/ai-scripts`, icon: '🧩', label: '客服腳本' },
     { to: `/admin/${wid}/ai-playground`, icon: '🎮', label: '測試對話' },
     { to: `/admin/${wid}/ai-usage`, icon: '📈', label: '用量監控' },
     { to: `/admin/${wid}/ai-settings`, icon: '⚙️', label: 'AI 設定' },

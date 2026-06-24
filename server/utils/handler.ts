@@ -36,13 +36,13 @@ import {
 } from './conversation-session'
 import type { ModuleType } from '~~/shared/types/conversation-stats'
 import { SYSTEM_MODULE_IDS } from '~~/shared/types/conversation-stats'
-import { answerWithAi, type AiChatTurn } from './ai-answer'
+import { answerWithAi, routeMessage, summarizeHandoffContext, type AiChatTurn } from './ai-answer'
 import { getAiSettings } from './ai-settings'
 import { recordAiUsage } from './ai-usage'
 import { notifyHandoffToStaff } from './ai-handoff-notify'
-import type { AiConversationMeta, HandoffReason } from '~~/shared/types/ai-knowledge'
-import type { ActiveScriptState } from '~~/shared/types/ai-script'
-import { advanceScript, findMatchingScript, loadActiveScripts, startScript } from './ai-scripts'
+import { detectSensitiveTopic, type AiConversationMeta, type HandoffReason } from '~~/shared/types/ai-knowledge'
+import { matchesScriptKeywords, type ActiveScriptState, type ScriptDoc } from '~~/shared/types/ai-script'
+import { advanceScript, loadActiveScripts, startScript } from './ai-scripts'
 import {
   lineUserFirestoreDocId,
   lineUserIdFromFirestoreDocId,
@@ -1913,6 +1913,23 @@ async function handleIncomingText(
   }
 
   if (!handledByInput && !suppressBotAutomation) {
+    // 安全層（最優先）：敏感情境（退費退款／法律／醫療…）用確定性比對先攔截，**在推進進行中腳本、
+    // 自動回覆規則、啟動新腳本之前**——一律交給 AI 敏感詞護欄轉真人，不被任何腳本/規則攔截。
+    const safetySettings = await getAiSettings(wid).catch(() => null)
+    if (safetySettings && detectSensitiveTopic(textContent, safetySettings.sensitiveTopics)) {
+      await tryAiFallback({
+        workspaceId: wid,
+        lineUserId,
+        textContent,
+        replyToken,
+        userAttributes,
+        channelSecret,
+        sessionId: sessionId ?? null,
+        requestOrigin: options.requestOrigin || '',
+      })
+      return
+    }
+
     // 0. 使用者已在某條腳本中 → 推進、處理回覆 / handoff，結束
     if (userState.activeScript) {
       const advanced = await runScriptAdvance(
@@ -1936,7 +1953,7 @@ async function handleIncomingText(
       ruleCooldowns: userState.ruleCooldowns,
     })
     if (!rule) {
-      // 1. 規則沒命中 → 嘗試啟動腳本
+      // 1. 規則沒命中 → 嘗試啟動腳本（關鍵字快速通道 + 統一意圖路由）
       const scriptHandled = await runScriptStart(
         textContent,
         userAttributes,
@@ -2016,6 +2033,13 @@ async function handleIncomingText(
   }
 }
 
+/** 一條腳本的「觸發情境提示」（關鍵字 + 語意範例，去重）給統一意圖路由參考 */
+function triggerHints(script: ScriptDoc & { id: string }): string[] {
+  const root = script.nodes.find(n => n.id === script.rootNodeId)
+  if (root?.type !== 'trigger') return []
+  return [...new Set([...(root.keywords ?? []), ...(root.examples ?? [])].map(s => String(s).trim()).filter(Boolean))]
+}
+
 /**
  * 嘗試從使用者輸入啟動腳本。
  * 回傳 true 表示已處理（已回覆使用者）；false 表示沒有任何腳本命中。
@@ -2033,12 +2057,31 @@ async function runScriptStart(
 ): Promise<boolean> {
   const scripts = await loadActiveScripts(workspaceId).catch(() => [])
   if (!scripts.length) return false
-  const matched = findMatchingScript(scripts, textContent)
+  // 註：敏感情境已在編排最上層（呼叫此函式之前）攔截，這裡不需再檢查。
+
+  // 1) 關鍵字快速通道：明確、零成本、確定性（不分模式；keywords 一律當明確觸發詞）
+  let matched = scripts.find(s => matchesScriptKeywords(s, textContent)) ?? null
+
+  // 2) 沒命中 → 統一意圖路由（一次 LLM 呼叫，由 LLM 理解意圖+優先序決定走哪條腳本或交給 AI）。
+  //    取代舊的「每條腳本各自比語意向量」：敏感情境(退款/法律…)不會被腳本攔截、相近意圖不會誤觸。
+  if (!matched) {
+    const hints = scripts.map(s => ({ id: s.id, name: s.name, hints: triggerHints(s) }))
+    const route = await routeMessage(textContent, hints).catch((e) => {
+      console.error('[script] routeMessage error:', e)
+      return null
+    })
+    if (route) {
+      // 路由也是一次 LLM 呼叫，token 要記帳（否則月用量低估）
+      recordAiUsage(workspaceId, { inputTokens: route.inputTokens, outputTokens: route.outputTokens })
+        .catch(e => console.error('[script] recordAiUsage(route) error:', e))
+    }
+    if (route?.scriptId) matched = scripts.find(s => s.id === route.scriptId) ?? null
+  }
   if (!matched) return false
 
   const result = await startScript(matched, fsUserDocId, userAttributes)
   invalidateUserDocCache(fsUserDocId)
-  await sendScriptReply(result.replyText, replyToken, lineUserId, workspaceId)
+  await sendScriptReply(result.replyText, replyToken, lineUserId, workspaceId, result.quickReplies)
   if (result.finished && result.thenHandoff) {
     await triggerHandoff(userAttributes, lineUserId, workspaceId, sessionId, requestOrigin, channelSecret, /*alreadyReplied*/ true)
   }
@@ -2063,7 +2106,7 @@ async function runScriptAdvance(
     // 過期或狀態壞掉 → 不算處理過，讓主流程往下走（rule / AI）
     return false
   }
-  await sendScriptReply(result.replyText, replyToken, lineUserId, workspaceId)
+  await sendScriptReply(result.replyText, replyToken, lineUserId, workspaceId, result.quickReplies)
   if (result.finished && result.thenHandoff) {
     await triggerHandoff(userAttributes, lineUserId, workspaceId, sessionId, requestOrigin, channelSecret, true)
   }
@@ -2075,9 +2118,20 @@ async function sendScriptReply(
   replyToken: string | undefined,
   lineUserId: string,
   workspaceId: string,
+  quickReplies?: string[],
 ): Promise<void> {
   if (!text || !replyToken) return
   const msg: messagingApi.TextMessage = { type: 'text', text: text.slice(0, 5000) }
+  // quickReply 節點：把選項做成 LINE Quick Reply 按鈕（label = 送出文字，供 advanceScript 比對）
+  const labels = (quickReplies ?? []).map(l => String(l).trim()).filter(Boolean).slice(0, 13)
+  if (labels.length) {
+    msg.quickReply = {
+      items: labels.map(label => ({
+        type: 'action',
+        action: { type: 'message', label: label.slice(0, 20), text: label },
+      })),
+    }
+  }
   await replyMessage(replyToken, [msg], workspaceId)
   saveOutgoingConversationMessagesByWorkspace(lineUserId, [msg], workspaceId)
     .catch(e => console.error('[script] save outgoing error:', e))
@@ -2201,6 +2255,11 @@ async function deliverHandoffReply(params: {
   /** 觸發 handoff 的客人訊息（給通知用） */
   customerMessage: string
   reason: HandoffReason | null
+  /**
+   * AI 生成的對話摘要（best-effort，可為空）。可傳 Promise——客人回覆會先送出，
+   * 摘要在送出後才 await，避免摘要的 LLM 延遲卡住客人的「已安排專員」回覆。
+   */
+  summary?: string | Promise<string>
 }): Promise<void> {
   const { workspaceId, lineUserId, replyToken, userAttributes, channelSecret, sessionId, requestOrigin } = params
 
@@ -2225,6 +2284,9 @@ async function deliverHandoffReply(params: {
       .catch(e => console.error('[ai-fallback] enterModule(live_agent) error:', e))
   }
 
+  // 摘要在客人回覆送出後才 await（summarizeHandoffContext 不會 reject、最壞 4s 逾時回空字串）
+  const resolvedSummary = params.summary instanceof Promise ? await params.summary : params.summary
+
   // 通知值班客服（fire-and-forget，內含節流與 enabled 判斷）
   notifyHandoffToStaff({
     workspaceId,
@@ -2232,6 +2294,7 @@ async function deliverHandoffReply(params: {
     customerName: userAttributes.displayName || lineUserId,
     customerMessage: params.customerMessage,
     reason: params.reason,
+    summary: resolvedSummary,
   }).catch(e => console.error('[ai-fallback] notifyHandoffToStaff error:', e))
 }
 
@@ -2423,6 +2486,7 @@ async function tryAiFallback(params: {
 
   let result
   try {
+    // 預算向量只在 query 仍等於原訊息（非 followup 改寫）時可重用，否則向量與 query 不一致
     result = await answerWithAi({ workspaceId, query, isFollowup, skipDisambiguation, history })
   }
   catch (e) {
@@ -2550,6 +2614,11 @@ async function tryAiFallback(params: {
       .catch(e => console.error('[ai-fallback] record answeredThenHandoffs error:', e))
   }
 
+  // AI 對話摘要：給接手的真人客服快速掌握前因後果。best-effort、≤4s 逾時、失敗回空字串。
+  // 不在這裡 await——先把客人的「已安排專員」回覆送出，摘要由下游在送出後才 await，
+  // 避免摘要的 LLM 延遲卡住客人回覆（非草稿路徑）。
+  const summaryPromise = summarizeHandoffContext(history, textContent, result.handoffReason)
+
   // 草稿模式不對客人發話、也不鎖 session（沒承諾過客人「安排專員」），但仍通知值班客服。
   if (draftMode) {
     notifyHandoffToStaff({
@@ -2558,6 +2627,7 @@ async function tryAiFallback(params: {
       customerName: userAttributes.displayName || lineUserId,
       customerMessage: textContent,
       reason: result.handoffReason,
+      summary: await summaryPromise,
     }).catch(e => console.error('[ai-fallback] notifyHandoffToStaff error:', e))
   }
   else {
@@ -2566,6 +2636,7 @@ async function tryAiFallback(params: {
       sessionId, requestOrigin,
       customerMessage: textContent,
       reason: result.handoffReason,
+      summary: summaryPromise,
     })
   }
 
@@ -2577,6 +2648,7 @@ async function tryAiFallback(params: {
     lastQuery: textContent,
     lastSourceChunkIds: result.sources.map(s => s.chunkId),
     suggestedReply: result.decision === 'handoff' && result.answer.trim() ? result.answer : '',
+    handoffSummary: await summaryPromise,
   })
 }
 
@@ -2589,6 +2661,7 @@ const AI_META_DEFAULTS: Omit<AiConversationMeta, 'updatedAt' | 'lastDecision'> =
   intent: '',
   collectedFields: {},
   suggestedReply: '',
+  handoffSummary: '',
   lastDisambiguation: null,
 }
 

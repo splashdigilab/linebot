@@ -269,6 +269,8 @@ export interface AiConversationMeta {
   collectedFields: Record<string, string>
   /** AI 建議的回覆草稿（給真人客服一鍵採用） */
   suggestedReply: string
+  /** 轉真人時 AI 生成的 2–3 句對話摘要（給接手的真人客服快速掌握脈絡；非 handoff 時為空） */
+  handoffSummary: string
   /** 最近一次反問澄清；非 null 時表示在等客人從 options 中選一個 */
   lastDisambiguation?: {
     options: Array<{ chunkId: string; title: string }>

@@ -2,7 +2,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import { invalidateScriptsCache, SCRIPTS_COLLECTION } from '~~/server/utils/ai-scripts'
-import { normalizeScriptInput } from '~~/server/utils/ai-script-validation'
+import { normalizeScriptInput, stripTriggerEmbeddings } from '~~/server/utils/ai-script-validation'
 import { validateScriptDoc } from '~~/shared/types/ai-script'
 
 export default defineEventHandler(async (event) => {
@@ -32,5 +32,6 @@ export default defineEventHandler(async (event) => {
     updatedAt: FieldValue.serverTimestamp(),
   })
   invalidateScriptsCache(workspaceId)
-  return { id: scriptId, ...input }
+  // stripTriggerEmbeddings：清掉舊資料殘留的 embedding，不回傳給前端
+  return { id: scriptId, ...input, nodes: stripTriggerEmbeddings(input.nodes) }
 })

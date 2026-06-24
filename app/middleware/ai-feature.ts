@@ -1,15 +1,10 @@
 /**
- * AI 相關頁面暫時只開放 super admin。
- * 之後正式開放時，移除此 middleware 與各頁面 definePageMeta 的引用即可。
+ * AI 相關頁面的進入守門。
+ * 已開放給所有已登入的工作區成員——僅擋未登入；編輯/異動權限改由各 API 的
+ * requireWorkspaceAccess 把關（例如腳本建立/修改需 admin、列表需 viewer）。
  */
 export default defineNuxtRouteMiddleware(async (to) => {
   const { user, waitForAuthReady } = useAuth()
   await waitForAuthReady()
   if (!user.value) return navigateTo({ path: '/login', query: { redirect: to.fullPath } })
-
-  const tokenResult = await user.value.getIdTokenResult()
-  if (tokenResult.claims.superAdmin === true) return
-
-  const wid = to.params.workspaceId
-  return navigateTo(wid ? `/admin/${wid}` : '/admin/workspaces')
 })
