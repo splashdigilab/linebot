@@ -1,0 +1,188 @@
+/**
+ * 工作區「設定就緒度」資料 + 白話文能力註冊表。
+ *
+ * 教學 agent 的核心地基：所有「你哪裡沒做完」都來自後端 setup-status 的真實訊號，
+ * 這裡只負責抓資料、配上白話文文案/路由/對應導覽，並算出完成度。
+ * agent 只能「轉述」這份狀態，不能自己臆測。
+ */
+
+import type { SetupCapabilityId, SetupItemStatus, SetupStatusResponse } from '~~/shared/types/setup'
+
+export interface SetupCapability {
+  id: SetupCapabilityId
+  icon: string
+  /** 一句話、零術語：這是什麼 */
+  title: string
+  /** 白話文：為什麼要做 / 不做會怎樣 */
+  why: string
+  /** 必要能力（會算進「還差幾項」與按鈕上的紅點） */
+  required: boolean
+  /** 設定此項所需角色（對齊後端 write API）：settings=admin、operate=agent 以上 */
+  requires: 'settings' | 'operate'
+  /** 沒做完時，前往設定的頁面 */
+  route: (workspaceId: string) => string
+  /** 若有對應的逐步導覽，填教學主題 id（對應 useTutorial 的 topic） */
+  tourId?: string
+  /** 側欄入口的 data-tour 選擇器，給「缺項巡覽」高亮用 */
+  navTarget: string
+}
+
+export interface ResolvedCapability extends SetupCapability {
+  status: SetupItemStatus
+}
+
+/**
+ * 能力註冊表。要新增一個會被體檢的設定項，往這裡加一筆，並在後端 setup-status 加上對應訊號。
+ * 文案一律白話、把使用者當第一次來的人。
+ */
+const CAPABILITIES: SetupCapability[] = [
+  {
+    id: 'lineConnected',
+    icon: '🔗',
+    title: '接上 LINE 官方帳號',
+    why: '這是一切的前提。沒接好，機器人就收不到、也回不了訊息。',
+    required: true,
+    requires: 'settings',
+    route: wid => `/admin/${wid}/settings/organization`,
+    tourId: 'organization',
+    navTarget: '[data-tour="nav-organization"]',
+  },
+  {
+    id: 'aiEnabled',
+    icon: '🤖',
+    title: '開啟 AI 自動回覆',
+    why: '這個開關關著的話，就算建了知識庫、腳本也都不會生效。',
+    required: true,
+    requires: 'settings',
+    route: wid => `/admin/${wid}/ai-settings`,
+    tourId: 'ai-settings',
+    navTarget: '[data-tour="nav-ai-settings"]',
+  },
+  {
+    id: 'knowledgeReady',
+    icon: '📚',
+    title: '建立知識庫',
+    why: 'AI 靠它來回答客人的問題。空的話，能回的內容會很有限。',
+    required: false,
+    requires: 'operate',
+    route: wid => `/admin/${wid}/knowledge/sources`,
+    tourId: 'knowledge',
+    navTarget: '[data-tour="nav-knowledge"]',
+  },
+  {
+    id: 'scriptReady',
+    icon: '🧩',
+    title: '啟用一支客服腳本',
+    why: '用來處理固定流程，例如預約、報名、領取優惠。沒有也能運作。',
+    required: false,
+    requires: 'settings',
+    route: wid => `/admin/${wid}/ai-scripts`,
+    tourId: 'ai-scripts',
+    navTarget: '[data-tour="nav-ai-scripts"]',
+  },
+]
+
+export function useSetupStatus() {
+  const { workspaceId, getBearer, canManageSettings, canOperate } = useWorkspace()
+
+  // 全域共享，FAB 與面板共用同一份狀態
+  const statusMap = useState<Record<string, SetupItemStatus>>('setup-status-map', () => ({}))
+  const loaded = useState('setup-status-loaded', () => false)
+  const loading = useState('setup-status-loading', () => false)
+
+  let inflight: Promise<void> | null = null
+
+  async function refresh(): Promise<void> {
+    const wid = workspaceId.value
+    if (!wid)
+      return
+    if (inflight)
+      return inflight
+    loading.value = true
+    inflight = (async () => {
+      try {
+        const token = await getBearer()
+        const data = await $fetch<SetupStatusResponse>('/api/admin/setup-status', {
+          query: { workspaceId: wid },
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const next: Record<string, SetupItemStatus> = {}
+        for (const item of data.items)
+          next[item.id] = item.status
+        statusMap.value = next
+        loaded.value = true
+      }
+      catch {
+        // 靜默失敗，保留前一次結果；不要把查不到誤報成沒做
+      }
+      finally {
+        loading.value = false
+        inflight = null
+      }
+    })()
+    return inflight
+  }
+
+  const capabilities = computed<ResolvedCapability[]>(() =>
+    CAPABILITIES.map(c => ({ ...c, status: statusMap.value[c.id] ?? 'unknown' })),
+  )
+
+  /** 只保留「這個帳號有權限去做」的能力——沒權限的不顯示、也不算進進度與紅點 */
+  const visibleCapabilities = computed(() =>
+    capabilities.value.filter(c =>
+      c.requires === 'settings' ? canManageSettings.value : canOperate.value,
+    ),
+  )
+
+  /** 這個帳號有沒有任何「可動手」的設定項（沒有就整個健康卡都不顯示，例如觀察者） */
+  const hasItems = computed(() => visibleCapabilities.value.length > 0)
+
+  const requiredCaps = computed(() => visibleCapabilities.value.filter(c => c.required))
+  const optionalCaps = computed(() => visibleCapabilities.value.filter(c => !c.required))
+
+  const requiredTotal = computed(() => requiredCaps.value.length)
+  const requiredDone = computed(() => requiredCaps.value.filter(c => c.status === 'done').length)
+  const optionalTotal = computed(() => optionalCaps.value.length)
+  const optionalDone = computed(() => optionalCaps.value.filter(c => c.status === 'done').length)
+
+  /** 主進度只看「必要」項：必要全完成 = 100%（可以上線）。沒有必要項時視為 100%。 */
+  const requiredPercent = computed(() =>
+    requiredTotal.value === 0
+      ? 100
+      : Math.round((requiredDone.value / requiredTotal.value) * 100),
+  )
+
+  /** 必要項全部完成（沒有必要項＝視為完成；unknown 不算數，用 done 數比對） */
+  const allRequiredDone = computed(() => requiredDone.value === requiredTotal.value)
+
+  const incompleteRequired = computed(() =>
+    requiredCaps.value.filter(c => c.status === 'incomplete'),
+  )
+
+  /** 沒做完的項目（必要在前、進階在後，沿用註冊表順序） */
+  const incompleteAll = computed(() =>
+    visibleCapabilities.value.filter(c => c.status === 'incomplete'),
+  )
+
+  /** 這次查不到狀態的項目（要在 UI 現形，不能偷偷扣分又不解釋） */
+  const unknownCaps = computed(() =>
+    visibleCapabilities.value.filter(c => c.status === 'unknown'),
+  )
+
+  return {
+    capabilities,
+    hasItems,
+    incompleteRequired,
+    incompleteAll,
+    unknownCaps,
+    requiredTotal,
+    requiredDone,
+    optionalTotal,
+    optionalDone,
+    requiredPercent,
+    allRequiredDone,
+    loaded,
+    loading,
+    refresh,
+  }
+}

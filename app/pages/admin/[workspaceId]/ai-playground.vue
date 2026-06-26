@@ -28,7 +28,7 @@
         </el-alert>
 
         <!-- ── 對話歷史 ─────────────────────── -->
-        <div ref="historyEl" class="pg-chat">
+        <div ref="historyEl" class="pg-chat" data-tour="pg-chat">
           <p v-if="!history.length" class="pg-chat-empty">
             👋 在下方輸入測試問題，AI 會以「真實 LINE 對話」的方式回應。<br>
             遇到模糊問題會反問並出按鈕，可點選模擬客人回答。
@@ -182,7 +182,7 @@
         </div>
 
         <!-- ── 輸入區 ──────────────────────── -->
-        <div class="pg-composer">
+        <div class="pg-composer" data-tour="pg-composer">
           <el-input
             v-model="query"
             type="textarea"

@@ -3,7 +3,7 @@
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
       <span class="split-sidebar-title">🧩 腳本</span>
-      <el-button type="primary" size="small" @click="openCreate">➕ 新增</el-button>
+      <el-button type="primary" size="small" data-tour="scr-new" @click="openCreate">➕ 新增</el-button>
     </template>
 
     <!-- ── Sidebar List ── -->
@@ -41,7 +41,7 @@
       <span class="empty-icon">🧩</span>
       <h3>選擇一條腳本開始編輯</h3>
       <p>從範本快速建立，或點「從空白開始」自己組</p>
-      <div class="scripts-template-gallery">
+      <div class="scripts-template-gallery" data-tour="scr-templates">
         <button
           v-for="tpl in scriptTemplates"
           :key="tpl.key"

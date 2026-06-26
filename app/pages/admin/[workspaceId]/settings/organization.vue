@@ -8,13 +8,13 @@
       />
       <div class="flex gap-2 admin-header-actions">
         <el-button :loading="loading" @click="reloadAll">重新載入</el-button>
-        <el-button type="primary" :loading="saving" @click="save">儲存</el-button>
+        <el-button type="primary" :loading="saving" data-tour="org-save" @click="save">儲存</el-button>
       </div>
     </template>
 
     <template #editor-body>
       <div class="ls-page-body admin-panel-stack">
-        <div class="message-card ar-section-card">
+        <div class="message-card ar-section-card" data-tour="org-identity">
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="badge badge-green">🏢 組織與官方帳號</span>
@@ -46,7 +46,7 @@
             <p class="ar-section-hint">
               請到 LINE Developers → Messaging API 複製貼上。
             </p>
-            <div class="admin-field-group">
+            <div class="admin-field-group" data-tour="org-liff">
               <AdminFieldLabel text="預設 LIFF（必填）" tight />
               <el-input
                 v-model="form.defaultLiffId"
@@ -64,7 +64,7 @@
                 <el-button @click="copyLiffEndpointUrl">複製</el-button>
               </div>
             </div>
-            <div class="admin-field-group">
+            <div class="admin-field-group" data-tour="org-token">
               <AdminFieldLabel text="Channel Access Token（必填）" tight />
               <div
                 v-if="showMaskedAccessToken"
@@ -90,7 +90,7 @@
                 @blur="onAccessTokenBlur"
               />
             </div>
-            <div class="admin-field-group">
+            <div class="admin-field-group" data-tour="org-secret">
               <AdminFieldLabel text="Channel Secret（必填）" tight />
               <div
                 v-if="showMaskedSecret"
@@ -133,7 +133,7 @@
               >LINE Developers</a>
               → Messaging API → Webhook URL 貼下面這個（須為 https、網路上連得到）。Secret 要跟上面同一組。後台按「Verify」若回 401，幾乎都是 Secret 與伺服器上的不一致或部署環境未帶入 Secret。
             </p>
-            <div class="admin-field-group">
+            <div class="admin-field-group" data-tour="org-webhook">
               <AdminFieldLabel text="Webhook 網址（複製貼到 LINE）" tight />
               <div v-if="suggestedWebhookUrl" class="cmp-url-row">
                 <el-input :model-value="suggestedWebhookUrl" readonly />
@@ -141,7 +141,7 @@
               </div>
               <p v-else class="text-xs text-muted">開啟本頁後會自動帶入。</p>
             </div>
-            <div class="admin-field-group">
+            <div class="admin-field-group" data-tour="org-verify">
               <AdminFieldLabel text="測試有沒有通" tight />
               <div class="flex flex-wrap gap-2">
                 <el-button :loading="verifyingWebhook" type="primary" plain @click="verifyWebhook(true)">

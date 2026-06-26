@@ -6,7 +6,7 @@
         title="📊 客服對話統計"
         caption="依日期區間檢視會話量、首接類型、轉真人與結案比例；趨勢表可匯出 CSV。"
       />
-      <div class="conv-stats-header-actions admin-header-actions">
+      <div class="conv-stats-header-actions admin-header-actions" data-tour="cs-filter">
         <el-date-picker
           v-model="dateRange"
           type="daterange"
@@ -39,7 +39,7 @@
           <div class="spinner" />
           <span>載入中…</span>
         </div>
-        <el-row v-else :gutter="16">
+        <el-row v-else :gutter="16" data-tour="cs-kpi">
           <el-col :xs="24" :sm="12" :md="8">
             <el-card shadow="hover" class="conv-stats-kpi-card">
               <div class="conv-stats-kpi-body">

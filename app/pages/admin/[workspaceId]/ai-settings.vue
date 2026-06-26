@@ -8,7 +8,7 @@
       />
       <div class="flex gap-1 admin-header-actions">
         <el-button :disabled="!dirty" @click="loadSettings(true)">取消</el-button>
-        <el-button type="primary" :loading="saving" :disabled="!dirty" @click="save">儲存設定</el-button>
+        <el-button type="primary" :loading="saving" :disabled="!dirty" data-tour="ais-save" @click="save">儲存設定</el-button>
       </div>
     </template>
 
@@ -56,7 +56,7 @@
         </div>
 
         <!-- ── 總開關 ─────────────────────────── -->
-        <div class="message-card ai-section-card">
+        <div class="message-card ai-section-card" data-tour="ais-toggle">
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="badge badge-green">🔌 總開關</span>
@@ -87,7 +87,7 @@
         </div>
 
         <!-- ── 回答風格 ──────────────────────── -->
-        <div class="message-card ai-section-card">
+        <div class="message-card ai-section-card" data-tour="ais-style">
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="badge badge-green">🎯 回答風格</span>

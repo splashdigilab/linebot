@@ -47,6 +47,7 @@
               :key="item.to"
               :to="item.to"
               class="nav-item"
+              :data-tour="item.tour"
               :class="{ active: route.path.startsWith(item.to) }"
             >
               <span class="nav-icon">{{ item.icon }}</span>
@@ -64,6 +65,7 @@
             <NuxtLink
               :to="`/admin/${workspaceId}/settings/organization`"
               class="nav-item"
+              data-tour="nav-organization"
               :class="{
                 active:
                   route.path.includes('/settings/organization')
@@ -101,6 +103,7 @@
       <slot />
     </main>
     <AdminToastHost />
+    <TutorialAgent v-if="workspaceId" />
   </div>
 </template>
 
@@ -156,11 +159,11 @@ const aiNavItems = computed(() => {
   const wid = workspaceId.value
   if (!wid) return []
   return [
-    { to: `/admin/${wid}/knowledge/sources`, icon: '📚', label: '知識庫' },
-    { to: `/admin/${wid}/ai-scripts`, icon: '🧩', label: '客服腳本' },
+    { to: `/admin/${wid}/knowledge/sources`, icon: '📚', label: '知識庫', tour: 'nav-knowledge' },
+    { to: `/admin/${wid}/ai-scripts`, icon: '🧩', label: '客服腳本', tour: 'nav-ai-scripts' },
     { to: `/admin/${wid}/ai-playground`, icon: '🎮', label: '測試對話' },
     { to: `/admin/${wid}/ai-usage`, icon: '📈', label: '用量監控' },
-    { to: `/admin/${wid}/ai-settings`, icon: '⚙️', label: 'AI 設定' },
+    { to: `/admin/${wid}/ai-settings`, icon: '⚙️', label: 'AI 設定', tour: 'nav-ai-settings' },
   ]
 })
 </script>

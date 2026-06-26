@@ -2,13 +2,13 @@
   <AdminSplitLayout :is-empty="!selectedSource">
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
-      <span class="split-sidebar-title">📁 來源</span>
+      <span class="split-sidebar-title" data-tour="kb-sources">📁 來源</span>
       <div class="flex gap-1">
         <el-tooltip content="新增資料夾" placement="bottom" :show-after="300">
           <el-button size="small" plain @click="createFolderPrompt">📂</el-button>
         </el-tooltip>
         <el-tooltip content="匯入檔案 / 網址 / 大段文字" placement="bottom" :show-after="300">
-          <el-button size="small" type="primary" plain @click="goImport">📥 匯入</el-button>
+          <el-button size="small" type="primary" plain data-tour="kb-import" @click="goImport">📥 匯入</el-button>
         </el-tooltip>
       </div>
     </template>

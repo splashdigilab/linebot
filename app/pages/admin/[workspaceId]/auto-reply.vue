@@ -2,8 +2,8 @@
   <AdminSplitLayout :is-empty="!selectedRule && !isCreating">
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
-      <span class="split-sidebar-title">⚡ 自動回覆</span>
-      <el-button type="primary" size="small" @click="openCreate">➕ 新增</el-button>
+      <span class="split-sidebar-title" data-tour="ar-title">⚡ 自動回覆</span>
+      <el-button type="primary" size="small" data-tour="ar-new" @click="openCreate">➕ 新增</el-button>
     </template>
 
     <!-- ── Sidebar List ── -->

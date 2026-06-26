@@ -184,7 +184,17 @@
       "Read(//Users/kevin/.claude/**)",
       "Bash(grep -rnE *)",
       "Bash(node -e \"JSON.parse\\(require\\('fs'\\).readFileSync\\('.claude/settings.json','utf8'\\)\\); console.log\\('  valid JSON ✓'\\)\")",
-      "Bash(node --env-file=.env ./node_modules/vitest/vitest.mjs run server/utils/zzz-merge.test.ts)"
+      "Bash(node --env-file=.env ./node_modules/vitest/vitest.mjs run server/utils/zzz-merge.test.ts)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\)\")",
+      "Bash(npx eslint *)",
+      "Bash(node -e \"const p=require\\('./package.json'\\); const all={...p.dependencies,...p.devDependencies}; console.log\\(Object.keys\\(all\\).filter\\(k=>/playwright|puppeteer|cypress/i.test\\(k\\)\\).join\\(','\\)||'none'\\)\")",
+      "Bash(awk 'NR>=120 && NR<=210 {print NR\": \"$0} /<\\\\/template>/{if\\(NR>120\\)exit}' \"app/pages/admin/[workspaceId]/ai-playground.vue\")",
+      "Bash(awk 'NR>=190 && NR<=260 {print NR\": \"$0}' \"app/pages/admin/[workspaceId]/ai-playground.vue\")",
+      "Bash(grep -E \"\\\\.ts$\")",
+      "Bash(awk '/function addMessage|const addMessage/{f=1} f{print NR\": \"$0} f&&/^}/{c++} c>=1&&f&&/^}/{exit}' app/pages/admin/'[workspaceId]'/flow.vue)",
+      "Bash(awk 'NR>=1820 && NR<=1850 {print NR\": \"$0}' app/pages/admin/'[workspaceId]'/flow.vue)",
+      "Bash(grep -nE \"^[0-9]+: }$|function |const .* =|watch\\\\\\(|onMounted\")",
+      "Bash(awk '/useSetupStatus\\\\\\(\\\\\\)/{found=NR} END{print found}' app/components/TutorialAgent.vue)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",

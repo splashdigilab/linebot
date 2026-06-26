@@ -2,14 +2,14 @@
   <AdminSplitLayout :is-empty="!selectedFlow && !isCreating">
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
-      <span class="split-sidebar-title">🤖 機器人模組</span>
+      <span class="split-sidebar-title" data-tour="flow-title">🤖 機器人模組</span>
       <AdminOperateGate>
         <div class="flex gap-1">
           <el-tooltip content="新增資料夾" placement="bottom" :show-after="300">
             <el-button size="small" plain @click="createFlowFolderPrompt">📂</el-button>
           </el-tooltip>
           <el-tooltip content="新增模組" placement="bottom" :show-after="300">
-            <el-button type="primary" size="small" plain @click="openCreate">➕</el-button>
+            <el-button type="primary" size="small" plain data-tour="flow-new" @click="openCreate">➕</el-button>
           </el-tooltip>
         </div>
       </AdminOperateGate>
@@ -31,6 +31,7 @@
         <AdminSplitListItem
           v-for="flow in systemFlows"
           :key="flow.id"
+          :data-tour="`flow-sys-${flow.moduleType}`"
           :title="`🔒 ${flow.name}`"
           :active="selectedId === flow.id"
           :meta-text="moduleTypeLabel(flow.moduleType)"
@@ -185,7 +186,7 @@
         :caption="`共 ${form.messages.length} 則回覆訊息；關鍵字觸發請到「自動回覆」設定`"
         :is-creating="isCreating"
       />
-      <div v-if="selectedFlow || isCreating" class="flow-module-meta">
+      <div v-if="selectedFlow || isCreating" class="flow-module-meta" data-tour="flow-type">
         <el-tag v-if="isSystemFlow" type="warning" size="small" disable-transitions>🔒 系統模組</el-tag>
         <!-- System modules: type is locked, show label only -->
         <el-tag v-if="isSystemFlow" size="small" disable-transitions>
@@ -221,23 +222,23 @@
     <template #editor-body>
       <div class="flow-editor-messages">
         <!-- Sticky header -->
-        <div class="fem-header">
+        <div class="fem-header" data-tour="flow-messages">
           <AdminPanelTitle tag="span" text="💬 回覆訊息" tight />
           <div class="msg-type-btns">
-            <el-button size="small" @click="addMessage('text')">＋ 文字</el-button>
-            <el-button size="small" @click="addMessage('image')">＋ 圖片</el-button>
-            <el-button size="small" @click="addMessage('video')">＋ 影片</el-button>
-            <el-button size="small" @click="addMessage('richMessage')">＋ 圖文訊息</el-button>
-            <el-button size="small" @click="addMessage('flexImageCarousel')">＋ 輪播訊息</el-button>
+            <el-button size="small" data-tour="fmt-text" @click="addMessage('text')">＋ 文字</el-button>
+            <el-button size="small" data-tour="fmt-image" @click="addMessage('image')">＋ 圖片</el-button>
+            <el-button size="small" data-tour="fmt-video" @click="addMessage('video')">＋ 影片</el-button>
+            <el-button size="small" data-tour="fmt-rich" @click="addMessage('richMessage')">＋ 圖文訊息</el-button>
+            <el-button size="small" data-tour="fmt-carousel" @click="addMessage('flexImageCarousel')">＋ 輪播訊息</el-button>
             <el-button v-if="showLegacyCarousel" size="small" @click="addMessage('carousel')">＋ 輪播（舊）</el-button>
             <el-button v-if="showLegacyImageCarousel" size="small" @click="addMessage('imageCarousel')">＋ 圖片輪播</el-button>
-            <el-button size="small" @click="addMessage('quickReply')">＋ 快速回覆</el-button>
-            <el-button v-if="showUserInput" size="small" @click="addMessage('userInput')">＋ 用戶輸入</el-button>
+            <el-button size="small" data-tour="fmt-quick" @click="addMessage('quickReply')">＋ 快速回覆</el-button>
+            <el-button v-if="showUserInput" size="small" data-tour="fmt-userinput" @click="addMessage('userInput')">＋ 用戶輸入</el-button>
           </div>
         </div>
 
         <!-- Card rail (horizontal scroll) -->
-        <div class="fem-rail">
+        <div class="fem-rail" data-tour="flow-rail">
           <div v-if="!form.messages.length" class="fem-empty">
             <span>尚無訊息</span>
             <p class="text-xs text-muted">點擊上方按鈕新增</p>
@@ -418,7 +419,7 @@
                       <span class="text-sm text-muted">開啟後保留透明像素</span>
                     </div>
                   </div>
-                  <div class="admin-field-group">
+                  <div class="admin-field-group" data-tour="rich-hero">
                     <AdminFieldLabel text="背景圖片" tight />
                     <FlowUploadZone
                       v-model="msg.heroImageUrl"
@@ -440,6 +441,7 @@
                     :flat="true"
                   />
                   <AdminLayoutPresetPicker
+                    data-tour="rich-layout"
                     flat
                     title="圖文樣式"
                     :layouts="RICH_LAYOUT_PRESETS"
@@ -480,7 +482,7 @@
               >
                 <!-- Text input for the bubble! -->
                 <div class="carousel-alt-wrap card-section-stack">
-                  <div class="admin-field-group">
+                  <div class="admin-field-group" data-tour="quick-prompt">
                     <AdminFieldLabel tight>
                       搭配的文字內容 <span class="text-muted">(必需輸入，最多 5000 字)</span>
                     </AdminFieldLabel>
@@ -521,7 +523,7 @@
                   </div>
                   <div class="carousel-sub-body carousel-sub-body-top-gap">
                     <!-- Action Config -->
-                      <div class="carousel-actions">
+                      <div class="carousel-actions" data-tour="quick-button">
                       <FlowActionEditor
                         :action="qr.action"
                         :type-options="quickReplyActionTypeOptions"
@@ -537,7 +539,7 @@
                 </div>
 
                 <!-- Add Button -->
-                <button v-if="!msg.quickReplies || msg.quickReplies.length < 13" class="carousel-add-card" @click="addQuickReply(msg)">
+                <button v-if="!msg.quickReplies || msg.quickReplies.length < 13" class="carousel-add-card" data-tour="quick-add" @click="addQuickReply(msg)">
                   <span class="add-card-plus">＋</span>
                 </button>
               </div>
@@ -562,7 +564,7 @@
               @remove="removeMessage(i)"
             >
               <div class="message-bubble-wrap user-input-content">
-                <div class="ui-field admin-field-group">
+                <div class="ui-field admin-field-group" data-tour="ui-question">
                   <AdminFieldLabel tight>
                     向用戶提問 <span class="text-muted">(必填，最多 500 字)</span>
                   </AdminFieldLabel>
@@ -583,7 +585,7 @@
                 </div>
 
                 <div class="ui-settings">
-                  <div v-if="showUserInputAttribute" class="ui-field admin-field-group">
+                  <div v-if="showUserInputAttribute" class="ui-field admin-field-group" data-tour="ui-attribute">
                     <AdminFieldLabel tight>
                       儲存屬性名稱 <span class="text-muted">(選填)</span>
                     </AdminFieldLabel>
@@ -606,7 +608,7 @@
                     </el-select>
                   </div>
 
-                  <div class="ui-field admin-field-group">
+                  <div class="ui-field admin-field-group" data-tour="ui-next-module">
                     <AdminFieldLabel tight>
                       收到回覆後，觸發下一個模組 <span class="text-muted">(必填)</span>
                     </AdminFieldLabel>
@@ -706,7 +708,7 @@
                     固定 1:1 正方形顯示，超出部分會置中裁切
                   </p>
                   <template v-if="msg.type === 'flexImageCarousel'">
-                    <div class="admin-field-group">
+                    <div class="admin-field-group" data-tour="flex-enable-image">
                       <AdminFieldLabel text="開啟圖片" tight />
                       <el-switch v-model="msg.enableImage" active-text="開啟" inactive-text="關閉" />
                     </div>
@@ -893,7 +895,7 @@
                           :preview-frame="flexImageCarouselPreviewFrame(msg)"
                         />
                       </template>
-                      <div class="admin-field-group">
+                      <div class="admin-field-group" data-tour="flex-col-title">
                         <AdminFieldLabel tight>
                           標題 <span class="text-muted">({{ flexCarouselUsesImage(msg) ? '選填' : '必填' }}，最多 80 字)</span>
                         </AdminFieldLabel>
@@ -983,6 +985,7 @@
                 <button
                   v-if="msg.columns.length < 10"
                   class="carousel-add-card"
+                  data-tour="flex-add-column"
                   @click="msg.type === 'carousel' ? addCarouselColumn(msg) : msg.type === 'flexImageCarousel' ? addFlexImageCarouselColumn(msg) : addImageCarouselColumn(msg)"
                 >
                   <span class="add-card-plus">＋</span>
@@ -1289,14 +1292,8 @@ function insertVariableToken(target: Record<string, any>, key: string, token: st
   target[key] = `${current}${token}`
 }
 
-/** template 圖片輪播：保留類型與載入，可關閉新增按鈕 */
-const showLegacyImageCarousel = true
-/** 舊版 template 輪播訊息：保留類型與載入，僅隱藏新增按鈕 */
-const showLegacyCarousel = false
-/** 用戶輸入卡片：保留類型與載入，可關閉新增按鈕 */
-const showUserInput = true
-/** 用戶輸入卡片：儲存屬性名稱欄位，可關閉顯示 */
-const showUserInputAttribute = false
+// 訊息類型可用性開關（共用於教學 agent，讓不可用功能的教學自動隱藏）
+const { showLegacyImageCarousel, showLegacyCarousel, showUserInput, showUserInputAttribute } = useFlowFeatures()
 
 // ── Badge helpers ─────────────────────────────────────
 const MSG_META: Record<string, { label: string; badge: string }> = {
@@ -1830,6 +1827,47 @@ function addMessage(type: string) {
   }
 }
 
+// ── 教學示範橋接：tour 指定要示範哪種訊息，這裡在「只屬於示範的空白草稿」放一張那種卡 ──
+// 安全原則：只在「沒有開任何模組」時自己開空白草稿示範；絕不動到既有/真實模組或使用者自己的草稿。
+const { demoType: flowDemoType, demoNonce: flowDemoNonce } = useFlowDemo()
+const flowDemoActive = ref(false)
+function applyFlowDemo(type: string | null) {
+  if (type == null) {
+    // 結束示範：把示範草稿清空
+    if (flowDemoActive.value && isCreating.value) {
+      form.value.messages = []
+      markClean()
+    }
+    flowDemoActive.value = false
+    return
+  }
+  // 已在示範草稿中 → 直接換成新類型的卡
+  if (flowDemoActive.value && isCreating.value) {
+    form.value.messages = []
+    addMessage(type)
+    return
+  }
+  // 要進示範，但可能正在編輯別的模組／自己的草稿 → 先確認可離開（有未存變更會跳確認；不放棄就不開示範）
+  if ((isCreating.value || selectedFlow.value) && !confirmLeaveIfDirty())
+    return
+  // 重設成空白示範草稿並放一張卡（含操作權限把關；沒權限則不動作）
+  guardOperate(() => {
+    isCreating.value = true
+    selectedId.value = null
+    form.value = defaultForm()
+    markClean()
+    flowDemoActive.value = true
+    form.value.messages = []
+    addMessage(type)
+  })
+}
+// 監看 nonce（而非 demoType），確保「設成同一個類型」也會重放
+watch(flowDemoNonce, () => applyFlowDemo(flowDemoType.value), { flush: 'post' })
+// 進頁時若示範已被先觸發（startTopic 在導航後就 setDemo），補跑一次
+onMounted(() => {
+  if (flowDemoType.value)
+    applyFlowDemo(flowDemoType.value)
+})
 
 function newCarouselColumn() {
   return {

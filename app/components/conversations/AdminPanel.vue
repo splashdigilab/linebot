@@ -2,14 +2,14 @@
   <AdminSplitLayout class="conversations-page" :is-empty="!selectedUserId">
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
-      <span class="split-sidebar-title conv-sidebar-title-row">💬 對話</span>
+      <span class="split-sidebar-title conv-sidebar-title-row" data-tour="conv-list">💬 對話</span>
       <el-button size="small" :loading="listLoading" @click="loadList(true)">重整</el-button>
     </template>
 
     <!-- ── Sidebar List ── -->
     <template #sidebar-list>
       <!-- Status Tabs -->
-      <div class="conv-status-tabs">
+      <div class="conv-status-tabs" data-tour="conv-tabs">
         <button
           v-for="tab in STATUS_TABS"
           :key="tab.value"

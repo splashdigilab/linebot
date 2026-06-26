@@ -1,8 +1,8 @@
 <template>
   <AdminSplitLayout :is-empty="!selectedMenu && !isCreating">
     <template #sidebar-header>
-      <span class="split-sidebar-title">🗂️ 圖文選單</span>
-      <el-button type="primary" size="small" @click="openCreate">➕ 新增</el-button>
+      <span class="split-sidebar-title" data-tour="rm-title">🗂️ 圖文選單</span>
+      <el-button type="primary" size="small" data-tour="rm-new" @click="openCreate">➕ 新增</el-button>
     </template>
 
     <template #sidebar-list>
@@ -55,7 +55,7 @@
           🗑️ 刪除
         </el-button>
         <el-button @click="cancelEdit">取消</el-button>
-        <el-button type="primary" :loading="creating" @click="submitForm">
+        <el-button type="primary" :loading="creating" data-tour="rm-save" @click="submitForm">
           {{ isCreating ? '建立圖文選單' : '儲存變更' }}
         </el-button>
       </div>
@@ -70,7 +70,7 @@
             </div>
           </div>
           <div class="card-section-stack">
-            <div class="admin-field-group">
+            <div class="admin-field-group" data-tour="rm-chatbar">
               <AdminFieldLabel text="Chat Bar 文字" tight />
               <el-input v-model="form.chatBarText" placeholder="選單" />
             </div>
@@ -83,7 +83,7 @@
               </div>
             </div>
 
-            <div class="admin-field-group">
+            <div class="admin-field-group" data-tour="rm-default">
               <AdminFieldLabel text="設為預設選單" tight />
               <div class="admin-inline-control">
                 <el-switch v-model="form.setAsDefault" />
@@ -91,7 +91,7 @@
               </div>
             </div>
 
-            <div class="admin-field-group">
+            <div class="admin-field-group" data-tour="rm-image">
               <AdminFieldLabel :text="`1. 上傳選單背景圖 (${isCreating ? '必要' : '選填，若不上傳則自動沿用舊圖'})`" tight />
               <FlowUploadZone
                 v-model="form.previewUrl"
@@ -103,7 +103,7 @@
               />
             </div>
 
-            <div class="rm-layout-in-card admin-field-group">
+            <div class="rm-layout-in-card admin-field-group" data-tour="rm-layout">
               <AdminLayoutPresetPicker
                 flat
                 title="圖文樣式"
