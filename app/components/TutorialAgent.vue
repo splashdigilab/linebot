@@ -276,7 +276,7 @@ function onPick(topic: Parameters<typeof startTopic>[0]) {
 }
 
 // 複習教學分組的展開狀態；預設展開「開始設定」
-const expandedGroups = ref<Set<string>>(new Set(['setup']))
+const expandedGroups = ref<Set<string>>(new Set(['setup', 'ai']))
 function toggleGroup(id: string) {
   const next = new Set(expandedGroups.value)
   if (next.has(id))

@@ -151,7 +151,7 @@ function buildTopics(): TutorialTopic[] {
       id: 'knowledge',
       requiresOperate: true,
       icon: '📚',
-      label: '建立知識庫',
+      label: '知識庫：建立與匯入',
       blurb: '我帶你看怎麼把知識餵給 AI，四種來源一次搞懂，共 7 步。',
       route: wid => `/admin/${wid}/knowledge/sources`,
       steps: [
@@ -215,44 +215,37 @@ function buildTopics(): TutorialTopic[] {
       id: 'knowledge-manage',
       requiresOperate: true,
       icon: '🗂️',
-      label: '整理與更新知識',
-      blurb: '匯入之後怎麼分類、修改、跟著來源自動更新，我帶你看一遍，共 5 步。',
+      label: '知識庫：整理與更新',
+      blurb: '匯入之後，怎麼分類、微調、讓知識自動保持最新，我帶你看一遍，共 4 步。',
       route: wid => `/admin/${wid}/knowledge/sources`,
       steps: [
         {
           target: '[data-tour="kb-sources"]',
-          title: '第 1 步：所有來源列在這',
+          title: '第 1 步：匯入的知識都在這裡管理',
           description:
-            '每一份匯入的知識都會列在這個「<strong>來源</strong>」清單。點一份進去，右邊就會顯示它的設定與底下的卡片。AI 回答時就是從這些來源裡找。',
+            '你匯入的每一份資料，都會變成一筆「<strong>來源</strong>」列在這份清單。<strong>點一份</strong>進去，右邊就能看它的內容、改東西、或設定更新。這一頁就是你日後照顧知識庫的地方。',
           placement: 'right',
         },
         {
           target: '[data-tour="kb-folder-new"]',
-          title: '第 2 步：用資料夾分類',
+          title: '第 2 步：來源變多了，用資料夾分類',
           description:
-            '來源多了會亂。點「<strong>📂</strong>」開資料夾（例：商品、政策、活動），再把來源<strong>拖曳</strong>進去整理。純後台分類，不影響 AI 找答案。',
+            '來源一多就會找不到。點「<strong>📂</strong>」開資料夾（例如：商品、退換貨、活動），再把來源<strong>拖進去</strong>歸類。這只是後台整理方便你找，不影響 AI 回答。',
           placement: 'bottom',
         },
         {
           target: '[data-tour="kb-chunks"]',
-          title: '第 3 步：一份來源＝一疊卡片',
+          title: '第 3 步：AI 把資料切成一張張「卡片」，你能微調',
           description:
-            '點開來源會看到它被切成的一張張「<strong>卡片</strong>」。每張都能按「✏️ 編輯」改標題／內容，或用「AI 整理一下」讓它更好被搜到。<strong>手動改過的卡會標 🔒</strong>，之後自動同步時不會被覆蓋掉。',
+            '每份來源會被拆成一張張「<strong>卡片</strong>」，AI 就是一張卡一張卡地找答案。覺得哪張不對，按「<strong>✏️ 編輯</strong>」改標題和內容，或用「<strong>AI 整理一下</strong>」讓它更好被找到。<strong>你親手改過的卡會標上 🔒</strong>，日後自動更新時不會被蓋掉，可以放心改。',
           placement: 'left',
         },
         {
           target: '[data-tour="kb-sync-settings"]',
-          title: '第 4 步：設定自動更新頻率',
+          title: '第 4 步：原始資料改了，知識會自動跟上',
           description:
-            '<strong>網址</strong>與 <strong>Google Sheet</strong> 這兩種來源可以設定多久重讀一次。（選一份網址或 Sheet 來源才會看到這塊。）',
+            '從<strong>網址</strong>或 <strong>Google Sheet</strong> 來的知識，萬一原始網頁 / 表格改了怎麼辦？系統會<strong>定期自動重讀</strong>（多久讀一次可以自己設）。你也能隨時在該來源右上按「<strong>重新同步</strong>」，它會先<strong>列出哪裡不一樣</strong>、讓你確認後再套用——<strong>不會偷偷覆蓋</strong>你的知識庫。（用檔案、手打文字建立的來源不會自動更新，改了要重新匯入。）',
           placement: 'left',
-        },
-        {
-          target: '[data-tour="kb-resync"]',
-          title: '第 5 步：內容變了就重新同步',
-          description:
-            '原始網頁 / Sheet 內容改了，這裡按一下就會<strong>重抓並列出差異</strong>，讓你看過再決定要不要套用——<strong>不會偷偷覆蓋</strong>你的知識庫。',
-          placement: 'bottom',
         },
       ],
     },
@@ -758,13 +751,14 @@ function buildTopics(): TutorialTopic[] {
 /** 教學主題的分類（給「想複習教學」分組收合用）；對應 topic id */
 const TOPIC_CATEGORY: Record<string, string> = {
   organization: 'setup',
-  'ai-settings': 'setup',
-  knowledge: 'setup',
-  'knowledge-manage': 'setup',
-  'ai-scripts': 'setup',
   members: 'setup',
+  // AI 客服一整組：開機 → 餵知識 → 維護 → 腳本 → 測試（獨立於平台接通的「開始設定」）
+  'ai-settings': 'ai',
+  knowledge: 'ai',
+  'knowledge-manage': 'ai',
+  'ai-scripts': 'ai',
+  'ai-playground': 'ai',
   conversations: 'daily',
-  'ai-playground': 'daily',
   flow: 'bot',
   'msg-basic': 'bot',
   'msg-rich': 'bot',
@@ -781,6 +775,7 @@ const TOPIC_CATEGORY: Record<string, string> = {
 /** 分類顯示順序與名稱 */
 const CATEGORY_META: { id: string, label: string }[] = [
   { id: 'setup', label: '開始設定' },
+  { id: 'ai', label: 'AI 客服' },
   { id: 'daily', label: '日常客服' },
   { id: 'bot', label: '機器人模組' },
   { id: 'growth', label: '經營工具' },
