@@ -1,12 +1,12 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
-import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { requireCapability } from '~~/server/utils/workspace-auth'
 import { invalidateScriptsCache, SCRIPTS_COLLECTION } from '~~/server/utils/ai-scripts'
 import { normalizeScriptInput, stripTriggerEmbeddings } from '~~/server/utils/ai-script-validation'
 import { validateScriptDoc } from '~~/shared/types/ai-script'
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireCapability(event, 'scripts.write')
   const scriptId = String(getRouterParam(event, 'scriptId') ?? '').trim()
   if (!scriptId) throw createError({ statusCode: 400, statusMessage: 'scriptId required' })
 

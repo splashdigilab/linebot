@@ -1,5 +1,5 @@
 import { getDb } from '~~/server/utils/firebase'
-import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { requireCapability } from '~~/server/utils/workspace-auth'
 import { updateSourceSettings } from '~~/server/utils/ai-knowledge-sources'
 
 /**
@@ -9,7 +9,7 @@ import { updateSourceSettings } from '~~/server/utils/ai-knowledge-sources'
  * 只動使用者可配置欄位；hash / etag / lastFetchedAt 等系統欄位不在這支處理。
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireCapability(event, 'sources.write')
   const sourceId = String(getRouterParam(event, 'sourceId') ?? '').trim()
   if (!sourceId) throw createError({ statusCode: 400, statusMessage: 'sourceId required' })
 

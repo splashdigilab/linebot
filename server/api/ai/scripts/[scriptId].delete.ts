@@ -1,9 +1,9 @@
 import { getDb } from '~~/server/utils/firebase'
-import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { requireCapability } from '~~/server/utils/workspace-auth'
 import { invalidateScriptsCache, SCRIPTS_COLLECTION } from '~~/server/utils/ai-scripts'
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireCapability(event, 'scripts.write')
   const scriptId = String(getRouterParam(event, 'scriptId') ?? '').trim()
   if (!scriptId) throw createError({ statusCode: 400, statusMessage: 'scriptId required' })
 

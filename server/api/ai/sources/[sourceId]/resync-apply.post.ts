@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
-import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { requireCapability } from '~~/server/utils/workspace-auth'
 import {
   clearSourceOutdated,
   countSourceChunks,
@@ -102,7 +102,7 @@ async function regenerateOverviewCard(
  * 套用後：清掉 outdatedAt 旗標、更新 source.lastFetchedAt / chunkCount。
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireCapability(event, 'sources.write')
   const sourceId = String(getRouterParam(event, 'sourceId') ?? '').trim()
   if (!sourceId) throw createError({ statusCode: 400, statusMessage: 'sourceId required' })
 

@@ -2,20 +2,15 @@ import type { H3Event } from 'h3'
 import type { DecodedIdToken } from 'firebase-admin/auth'
 import { FieldValue } from 'firebase-admin/firestore'
 import type { WorkspaceMemberRole, OrgMemberRole } from '~~/shared/types/organization'
+import type { Capability } from '~~/shared/permissions'
+import { ROLE_LEVEL, CAPABILITIES } from '~~/shared/permissions'
 import { getFirebaseAuth, getDb } from './firebase'
 import { capMapSize } from './bounded-cache'
 
 // 以 uid / email 為 key 的快取會隨用戶數成長，設上限防無上限增長
 const AUTH_CACHE_MAX_ENTRIES = 2000
 
-// ── 角色層級（數字越大權限越高）────────────────────────────────────
-
-const ROLE_LEVEL: Record<WorkspaceMemberRole, number> = {
-  viewer: 1,
-  agent: 2,
-  admin: 3,
-  owner: 4,
-}
+// 角色層級與能力對照表為權限單一事實來源，見 ~~/shared/permissions.ts
 
 // ── In-memory caches ────────────────────────────────────────────────
 // 注意：serverless 多實例下 invalidate 只作用於單一實例，其他實例要等 TTL 過期。
@@ -109,6 +104,23 @@ export async function requireSuperAdmin(event: H3Event) {
     throw createError({ statusCode: 403, statusMessage: 'Super admin only' })
   }
   return { uid: token.uid, token }
+}
+
+/**
+ * 組織層權限守衛（email-based）：super admin 直接放行，否則需為該 org 的 orgMembers.admin。
+ * 用於「建立官方帳號 / 查組織配額」等組織級操作——這類操作跨越單一 workspace，
+ * 不走 requireWorkspaceAccess。組織停用檢查交由呼叫端視情況處理。
+ */
+export async function requireOrgAdmin(event: H3Event, orgId: string) {
+  const token = await verifyToken(event)
+  if (isSuperAdmin(token)) {
+    return { uid: token.uid, email: token.email?.trim().toLowerCase() ?? null, token, isSuperAdmin: true }
+  }
+  const email = token.email?.trim().toLowerCase()
+  if (!email || await getOrgMember(email, orgId) !== 'admin') {
+    throw createError({ statusCode: 403, statusMessage: '你不是此組織的管理員' })
+  }
+  return { uid: token.uid, email, token, isSuperAdmin: false }
 }
 
 // ── Core: 驗證 token ─────────────────────────────────────────────
@@ -279,8 +291,9 @@ export async function requireWorkspaceAccess(
   let isOrgAdmin = false
 
   // 非 workspace 直接成員 → 改用 email 查 org admin（組織管理員可存取組織內全部 workspace）
+  // orgMembers 的 email 一律以小寫正規化儲存，查詢也要正規化，否則大小寫不符會漏查
   if (!role && orgId && token.email) {
-    const orgRole = await getOrgMember(token.email, orgId)
+    const orgRole = await getOrgMember(token.email.trim().toLowerCase(), orgId)
     if (orgRole === 'admin') {
       role = 'admin'
       isOrgAdmin = true
@@ -305,9 +318,28 @@ export async function requireWorkspaceAccess(
   if (ROLE_LEVEL[role] < ROLE_LEVEL[minRole]) {
     throw createError({
       statusCode: 403,
-      statusMessage: `Forbidden: requires at least '${minRole}' role`,
+      statusMessage: ROLE_DENIED_MESSAGE[minRole],
     })
   }
 
   return { uid, workspaceId, role, token, isSuperAdmin: false, isOrgAdmin }
+}
+
+// 角色不足時回給前端的人性化訊息（保底：正常情況 UI 已依角色隱藏，不該按到）
+const ROLE_DENIED_MESSAGE: Record<WorkspaceMemberRole, string> = {
+  viewer: '此操作需要成員權限',
+  agent: '此操作需要客服（含）以上權限',
+  admin: '此操作需要管理員權限',
+  owner: '此操作需要擁有者權限',
+}
+
+/**
+ * 以「能力」為單位的權限守衛，門檻由 ~~/shared/permissions.ts 的 CAPABILITIES 決定。
+ * 前端 can() 與此處讀同一張表，確保「看得到＝改得動」。
+ */
+export async function requireCapability(
+  event: H3Event,
+  capability: Capability,
+): Promise<WorkspaceAuthContext> {
+  return requireWorkspaceAccess(event, CAPABILITIES[capability])
 }

@@ -1,5 +1,5 @@
 import { getDb } from '~~/server/utils/firebase'
-import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { requireCapability } from '~~/server/utils/workspace-auth'
 import {
   buildEmbeddingText,
   KNOWLEDGE_CHUNKS_COLLECTION,
@@ -24,7 +24,7 @@ const BATCH_LIMIT = 300
  * 冪等，可中斷重跑。
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireCapability(event, 'knowledge.reindexAll')
   const body = await readBody(event).catch(() => ({}))
   const cursor = String(body?.cursor ?? '').trim()
 

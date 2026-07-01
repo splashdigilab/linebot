@@ -4,10 +4,10 @@
     <template #sidebar-header>
       <span class="split-sidebar-title" data-tour="kb-sources">📁 來源</span>
       <div class="flex gap-1">
-        <el-tooltip content="新增資料夾" placement="bottom" :show-after="300">
+        <el-tooltip v-if="canEditFolders" content="新增資料夾" placement="bottom" :show-after="300">
           <el-button size="small" plain @click="createFolderPrompt">📂</el-button>
         </el-tooltip>
-        <el-tooltip content="匯入檔案 / 網址 / 大段文字" placement="bottom" :show-after="300">
+        <el-tooltip v-if="canEditKb" content="匯入檔案 / 網址 / 大段文字" placement="bottom" :show-after="300">
           <el-button size="small" type="primary" plain data-tour="kb-import" @click="goImport">📥 匯入</el-button>
         </el-tooltip>
       </div>
@@ -24,6 +24,7 @@
           舊版手寫單張卡沒被「來源」管理，整理後每張會變成一筆手寫條目顯示在下方。
         </p>
         <el-button
+          v-if="canEditSources"
           size="small"
           type="primary"
           plain
@@ -40,7 +41,7 @@
       <div v-else-if="!sources.length && !orphanCount" class="split-sidebar-empty">
         <span>沒有任何來源</span>
         <p class="text-xs text-muted">每個來源代表一份知識（PDF / 網址 / 文字），AI 從這些來源裡找答案。</p>
-        <div class="flex gap-1" style="margin-top:8px;">
+        <div v-if="canEditKb" class="flex gap-1" style="margin-top:8px;">
           <el-button size="small" type="primary" plain @click="goImport">📥 匯入</el-button>
         </div>
       </div>
@@ -112,7 +113,7 @@
               📂 {{ folder.name }}
               <span class="src-folder-count">（{{ countByFolder[folder.id] ?? 0 }}）</span>
             </span>
-            <span class="src-folder-actions">
+            <span v-if="canEditFolders" class="src-folder-actions">
               <el-tooltip content="編輯資料夾" placement="top" :show-after="300">
                 <button class="src-folder-icon-btn" @click.stop="openFolderEdit(folder)">✏️</button>
               </el-tooltip>
@@ -160,8 +161,8 @@
     <template #editor-empty>
       <span class="empty-icon">📁</span>
       <h3>選擇一個來源開始管理</h3>
-      <p>或匯入新的 PDF、網址、文字</p>
-      <div class="flex gap-2" style="margin-top:8px;">
+      <p>{{ canEditKb ? '或匯入新的 PDF、網址、文字' : '（僅檢視）' }}</p>
+      <div v-if="canEditKb" class="flex gap-2" style="margin-top:8px;">
         <el-button type="primary" @click="goImport">📥 匯入</el-button>
       </div>
     </template>
@@ -179,7 +180,7 @@
           </div>
         </div>
       </div>
-      <div class="flex gap-1 admin-header-actions">
+      <div v-if="canEditSources" class="flex gap-1 admin-header-actions">
         <el-button plain @click="renameSource">✏️ 重新命名</el-button>
         <el-button
           v-if="selectedSource?.type === 'url'"
@@ -272,7 +273,7 @@
                 <el-radio value="log_only">只記錄不通知</el-radio>
               </el-radio-group>
             </div>
-            <div class="src-settings-actions">
+            <div v-if="canEditSources" class="src-settings-actions">
               <el-button
                 type="primary"
                 size="small"
@@ -308,7 +309,7 @@
                 <el-option label="每月" :value="43200" />
               </el-select>
             </div>
-            <div class="src-settings-actions">
+            <div v-if="canEditSources" class="src-settings-actions">
               <el-button
                 type="primary"
                 size="small"
@@ -342,7 +343,7 @@
                   <span v-if="c.manuallyEditedAtMs > 0" class="src-chunk-lock" :title="`手動編輯過：${relativeTime(c.manuallyEditedAtMs)}`">🔒</span>
                 </div>
                 <span class="src-chunk-meta">{{ chunkStatusLabel(c.status) }} · {{ relativeTime(c.updatedAtMs) }}</span>
-                <el-button size="small" plain @click="openEditChunk(c)">✏️ 編輯</el-button>
+                <el-button v-if="canEditKb" size="small" plain @click="openEditChunk(c)">✏️ 編輯</el-button>
               </div>
             </div>
           </div>
@@ -658,7 +659,11 @@ interface DiffData {
   }
 }
 
-const { apiFetch, workspaceId } = useWorkspace()
+const { apiFetch, workspaceId, can } = useWorkspace()
+// 內容維護一律 agent+；來源/資料夾/知識卡目前同層級，分開判斷以便日後政策若拆分只改一處
+const canEditKb = computed(() => can('knowledge.write'))
+const canEditSources = computed(() => can('sources.write'))
+const canEditFolders = computed(() => can('folders.write'))
 const { showToast } = useAdminToast()
 
 const sources = ref<SourceSummary[]>([])

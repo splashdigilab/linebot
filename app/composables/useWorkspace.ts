@@ -1,4 +1,6 @@
 import type { WorkspaceMemberRole } from '~~/shared/types/organization'
+import type { Capability } from '~~/shared/permissions'
+import { can as canWithRole } from '~~/shared/permissions'
 import { useWorkspaceApiFetch } from './useWorkspaceApiFetch'
 
 export interface WorkspaceItem {
@@ -86,6 +88,10 @@ export const useWorkspace = () => {
 
   const isOwner = computed(() => currentRole.value === 'owner')
 
+  // 能力判斷：讀 ~~/shared/permissions.ts 的 CAPABILITIES，與後端 requireCapability 同一份表。
+  // 用法：can('scripts.write')、can('ai.settings.write') …
+  const can = (capability: Capability) => canWithRole(currentRole.value, capability)
+
   return {
     workspaceId,
     currentRole,
@@ -97,6 +103,7 @@ export const useWorkspace = () => {
     isViewer,
     canWrite,
     isOwner,
+    can,
     getBearer,
     apiFetch,
     loadWorkspaceList,

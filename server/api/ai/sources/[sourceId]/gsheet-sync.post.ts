@@ -1,5 +1,5 @@
 import { getDb } from '~~/server/utils/firebase'
-import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { requireCapability } from '~~/server/utils/workspace-auth'
 import { getSource } from '~~/server/utils/ai-knowledge-sources'
 import { syncGoogleSheetSource } from '~~/server/utils/gsheet-sync'
 
@@ -10,7 +10,7 @@ import { syncGoogleSheetSource } from '~~/server/utils/gsheet-sync'
  * 一列一卡直接套用：新增 / 更新 / 刪除；人工編輯過的卡保留不覆蓋。
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireCapability(event, 'sources.write')
   const sourceId = String(getRouterParam(event, 'sourceId') ?? '').trim()
   if (!sourceId) throw createError({ statusCode: 400, statusMessage: 'sourceId required' })
 

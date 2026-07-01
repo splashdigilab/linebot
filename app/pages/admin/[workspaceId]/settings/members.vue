@@ -88,7 +88,7 @@
 </template>
 
 <script setup lang="ts">
-definePageMeta({ middleware: 'auth', layout: 'default' })
+definePageMeta({ middleware: ['auth', 'workspace-settings'], layout: 'default' })
 useHead({ title: '成員管理 — LINE Bot 管理系統' })
 
 const { showToast } = useAdminToast()

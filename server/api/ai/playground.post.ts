@@ -1,4 +1,4 @@
-import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { requireCapability } from '~~/server/utils/workspace-auth'
 import { answerWithAi, routeMessage, type AiChatTurn } from '~~/server/utils/ai-answer'
 import { loadActiveScripts } from '~~/server/utils/ai-scripts'
 import { matchesScriptKeywords, type ScriptDoc, type ScriptTriggerNode } from '~~/shared/types/ai-script'
@@ -15,7 +15,7 @@ import { matchesScriptKeywords, type ScriptDoc, type ScriptTriggerNode } from '~
  * 不影響正式對話（不寫 conversation 紀錄；usage 仍會記，這部分跟正式呼叫共用）。
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
+  const { workspaceId } = await requireCapability(event, 'playground.use')
   const body = await readBody(event)
   const query = String(body?.query ?? '').trim()
   if (!query) throw createError({ statusCode: 400, statusMessage: '請輸入 query' })

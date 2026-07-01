@@ -3,7 +3,7 @@
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
       <span class="split-sidebar-title">🧩 腳本</span>
-      <el-button type="primary" size="small" data-tour="scr-new" @click="openCreate">➕ 新增</el-button>
+      <el-button v-if="canEditScripts" type="primary" size="small" data-tour="scr-new" @click="openCreate">➕ 新增</el-button>
     </template>
 
     <!-- ── Sidebar List ── -->
@@ -14,7 +14,7 @@
       <div v-else-if="!scripts.length" class="split-sidebar-empty">
         <span>尚無腳本</span>
         <p class="text-xs text-muted">建一條情境流程，把多步驟客服變成自動流程</p>
-        <el-button size="small" type="primary" plain @click="openCreate">立即新增</el-button>
+        <el-button v-if="canEditScripts" size="small" type="primary" plain @click="openCreate">立即新增</el-button>
       </div>
       <div v-else ref="listEl" class="split-list" @scroll.passive="onSidebarListScroll">
         <AdminSplitListItem
@@ -39,21 +39,23 @@
     <!-- ── Empty State ── -->
     <template #editor-empty>
       <span class="empty-icon">🧩</span>
-      <h3>選擇一條腳本開始編輯</h3>
-      <p>從範本快速建立，或點「從空白開始」自己組</p>
-      <div class="scripts-template-gallery" data-tour="scr-templates">
-        <button
-          v-for="tpl in scriptTemplates"
-          :key="tpl.key"
-          type="button"
-          class="scripts-template-card"
-          @click="createFromTemplate(tpl)"
-        >
-          <span class="scripts-template-card__title">{{ tpl.label }}</span>
-          <span class="scripts-template-card__desc">{{ tpl.description }}</span>
-        </button>
-      </div>
-      <el-button text @click="openCreate">從空白開始</el-button>
+      <h3>選擇一條腳本開始{{ canEditScripts ? '編輯' : '檢視' }}</h3>
+      <template v-if="canEditScripts">
+        <p>從範本快速建立，或點「從空白開始」自己組</p>
+        <div class="scripts-template-gallery" data-tour="scr-templates">
+          <button
+            v-for="tpl in scriptTemplates"
+            :key="tpl.key"
+            type="button"
+            class="scripts-template-card"
+            @click="createFromTemplate(tpl)"
+          >
+            <span class="scripts-template-card__title">{{ tpl.label }}</span>
+            <span class="scripts-template-card__desc">{{ tpl.description }}</span>
+          </button>
+        </div>
+        <el-button text @click="openCreate">從空白開始</el-button>
+      </template>
     </template>
 
     <!-- ── Editor Header ── -->
@@ -68,9 +70,9 @@
         @enter="submitForm"
       />
       <div class="flex gap-2 admin-header-actions">
-        <el-button v-if="!isCreating && selectedScript" type="danger" @click="deleteScript">🗑️ 刪除</el-button>
-        <el-button @click="cancelEdit">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitForm">
+        <el-button v-if="canEditScripts && !isCreating && selectedScript" type="danger" @click="deleteScript">🗑️ 刪除</el-button>
+        <el-button @click="cancelEdit">{{ canEditScripts ? '取消' : '關閉' }}</el-button>
+        <el-button v-if="canEditScripts" type="primary" :loading="saving" @click="submitForm">
           {{ isCreating ? '建立腳本' : '儲存變更' }}
         </el-button>
       </div>
@@ -364,7 +366,8 @@ import { SCRIPT_TEMPLATES, type ScriptTemplate } from '~~/shared/types/ai-script
 
 definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
 
-const { apiFetch } = useWorkspace()
+const { apiFetch, can } = useWorkspace()
+const canEditScripts = computed(() => can('scripts.write'))
 const { showToast } = useAdminToast()
 
 interface ScriptRow extends ScriptDoc { id: string }

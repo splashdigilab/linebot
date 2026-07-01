@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
-import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { requireCapability } from '~~/server/utils/workspace-auth'
 import { KNOWLEDGE_CHUNKS_COLLECTION } from '~~/server/utils/ai-knowledge-chunks'
 import { KNOWLEDGE_SOURCES_COLLECTION } from '~~/server/utils/ai-knowledge-sources'
 
@@ -18,7 +18,7 @@ import { KNOWLEDGE_SOURCES_COLLECTION } from '~~/server/utils/ai-knowledge-sourc
 const MAX_BATCH = 200
 
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireCapability(event, 'sources.write')
 
   const db = getDb()
   const orphanSnap = await db.collection(KNOWLEDGE_CHUNKS_COLLECTION)

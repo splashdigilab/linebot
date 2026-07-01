@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
-import { getFirebaseAuth, getDb } from '~~/server/utils/firebase'
+import { getDb } from '~~/server/utils/firebase'
+import { requireOrgAdmin } from '~~/server/utils/workspace-auth'
 import { requireWorkspaceQuota } from '~~/server/utils/workspace-quota'
 import { addSystemModulesToBatch } from '~~/server/utils/workspace-system-modules'
 
@@ -11,33 +12,14 @@ import { addSystemModulesToBatch } from '~~/server/utils/workspace-system-module
  * Body: { name }
  */
 export default defineEventHandler(async (event) => {
-  const header = getHeader(event, 'authorization') || ''
-  const match = /^Bearer\s+(.+)$/i.exec(header)
-  const token = match?.[1]?.trim()
-  if (!token) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
-
-  const decoded = await getFirebaseAuth().verifyIdToken(token).catch(() => {
-    throw createError({ statusCode: 401, statusMessage: 'Invalid or expired token' })
-  })
-
   const orgId = event.context.params?.orgId
   if (!orgId) throw createError({ statusCode: 400, statusMessage: 'orgId is required' })
 
-  const email = decoded.email?.trim().toLowerCase()
-  if (!email) throw createError({ statusCode: 403, statusMessage: 'Email is required' })
+  const { uid, email } = await requireOrgAdmin(event, orgId)
+  // super admin 可能沒有 orgMembers email；建立時以其 token email 記錄，無則留空
+  const inviterEmail = email ?? null
 
   const db = getDb()
-
-  // 確認此 user 是該 org 的管理員
-  const orgMemberSnap = await db.collection('orgMembers')
-    .where('orgId', '==', orgId)
-    .where('email', '==', email)
-    .limit(1)
-    .get()
-
-  if (orgMemberSnap.empty) {
-    throw createError({ statusCode: 403, statusMessage: '你不是此組織的管理員' })
-  }
 
   // 確認組織未停用
   const orgSnap = await db.collection('organizations').doc(orgId).get()
@@ -62,13 +44,13 @@ export default defineEventHandler(async (event) => {
     updatedAt: FieldValue.serverTimestamp(),
   })
 
-  batch.set(db.collection('workspaceMembers').doc(`${decoded.uid}_${workspaceId}`), {
-    uid: decoded.uid,
+  batch.set(db.collection('workspaceMembers').doc(`${uid}_${workspaceId}`), {
+    uid,
     workspaceId,
     organizationId: orgId,
     role: 'owner',
     invitedBy: null,
-    invitedEmail: email,
+    invitedEmail: inviterEmail,
     joinedAt: FieldValue.serverTimestamp(),
     createdAt: FieldValue.serverTimestamp(),
   })

@@ -1,5 +1,5 @@
 import { getDb } from '~~/server/utils/firebase'
-import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { requireCapability } from '~~/server/utils/workspace-auth'
 import { renameFolder } from '~~/server/utils/ai-knowledge-folders'
 
 /**
@@ -7,7 +7,7 @@ import { renameFolder } from '~~/server/utils/ai-knowledge-folders'
  * Body: { name }
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireCapability(event, 'folders.write')
   const folderId = String(getRouterParam(event, 'folderId') ?? '').trim()
   if (!folderId) throw createError({ statusCode: 400, statusMessage: 'folderId required' })
 

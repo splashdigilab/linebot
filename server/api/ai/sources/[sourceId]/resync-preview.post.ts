@@ -1,5 +1,5 @@
 import { getDb } from '~~/server/utils/firebase'
-import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
+import { requireCapability } from '~~/server/utils/workspace-auth'
 import { getSource } from '~~/server/utils/ai-knowledge-sources'
 import { extractUrlText } from '~~/server/utils/ai-source-extractors'
 import { chunkTextWithLlm } from '~~/server/utils/ai-knowledge-chunker'
@@ -15,7 +15,7 @@ import { recordAiUsage } from '~~/server/utils/ai-usage'
  * 目前只支援 type='url'（檔案需要重新上傳當新 source；手打不需要 re-sync）。
  */
 export default defineEventHandler(async (event) => {
-  const { workspaceId } = await requireWorkspaceAccess(event, 'admin')
+  const { workspaceId } = await requireCapability(event, 'sources.write')
   const sourceId = String(getRouterParam(event, 'sourceId') ?? '').trim()
   if (!sourceId) throw createError({ statusCode: 400, statusMessage: 'sourceId required' })
 

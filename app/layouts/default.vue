@@ -153,11 +153,11 @@ const navItems = computed(() => {
   ]
 })
 
-// AI 區開放給所有內部角色（編輯權限仍由各 API 的 requireWorkspaceAccess 把關，
-// 例如腳本建立/修改需 admin、列表需 viewer，看得到不等於改得動）。
+// 開發期：整片 AI 暫時只給 admin+（與後端 ai-feature-gate 一致）。
+// 未來開放給 agent/viewer 時，改回依 can(...) 逐項判斷即可。
 const aiNavItems = computed(() => {
   const wid = workspaceId.value
-  if (!wid) return []
+  if (!wid || !canManageSettings.value) return []
   return [
     { to: `/admin/${wid}/knowledge/sources`, icon: '📚', label: '知識庫', tour: 'nav-knowledge' },
     { to: `/admin/${wid}/ai-scripts`, icon: '🧩', label: '客服腳本', tour: 'nav-ai-scripts' },

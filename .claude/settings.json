@@ -194,14 +194,27 @@
       "Bash(awk '/function addMessage|const addMessage/{f=1} f{print NR\": \"$0} f&&/^}/{c++} c>=1&&f&&/^}/{exit}' app/pages/admin/'[workspaceId]'/flow.vue)",
       "Bash(awk 'NR>=1820 && NR<=1850 {print NR\": \"$0}' app/pages/admin/'[workspaceId]'/flow.vue)",
       "Bash(grep -nE \"^[0-9]+: }$|function |const .* =|watch\\\\\\(|onMounted\")",
-      "Bash(awk '/useSetupStatus\\\\\\(\\\\\\)/{found=NR} END{print found}' app/components/TutorialAgent.vue)"
+      "Bash(awk '/useSetupStatus\\\\\\(\\\\\\)/{found=NR} END{print found}' app/components/TutorialAgent.vue)",
+      "Bash(grep -oE \"[^/]+$\")",
+      "Bash(cat > *)",
+      "Bash(cd /Users/kevin/Documents/Github/linebot; echo \"=== orgAdminOf usage & create button gating ===\"; grep -n \"orgAdminOf\\\\|openCreate\\\\|建立\\\\|canCreate\\\\|v-if\" app/pages/admin/workspaces.vue | head -40; echo; echo \"=== quota.get.ts auth ===\"; sed -n '1,40p' server/api/admin/org/[orgId]/quota.get.ts)",
+      "Bash(perl -pi -e \"s{\\\\Qimport { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'\\\\E}{import { requireCapability } from '~~/server/utils/workspace-auth'}g; s{\\\\QrequireWorkspaceAccess\\(event, 'admin'\\)\\\\E}{requireCapability\\(event, 'ai.settings.write'\\)}g\" server/api/ai/settings.put.ts)",
+      "Bash(perl -pi -e \"s{\\\\Qimport { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'\\\\E}{import { requireCapability } from '~~/server/utils/workspace-auth'}g; s{\\\\QrequireWorkspaceAccess\\(event, 'admin'\\)\\\\E}{requireCapability\\(event, 'knowledge.reindexAll'\\)}g\" server/api/ai/knowledge/reindex-all.post.ts)",
+      "Bash(perl -pi -e \"s{\\\\Qimport { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'\\\\E}{import { requireCapability } from '~~/server/utils/workspace-auth'}g; s{\\\\QrequireWorkspaceAccess\\(event, 'agent'\\)\\\\E}{requireCapability\\(event, 'playground.use'\\)}g\" server/api/ai/playground.post.ts)",
+      "Bash(git rm *)",
+      "Bash(echo \"typecheck exit=$?\")",
+      "Bash(echo \"tests exit=$?\")",
+      "Bash(node /tmp/test_hoisting.js)",
+      "Bash(node /tmp/test_hoisting_func.js)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",
       "/Users/kevin/Documents/Github/linebot/server/api/admin/super/organizations",
       "/Users/kevin/Documents/Github/linebot/server/api/admin/super/users",
       "/Users/kevin/Documents/Github/linebot/server/api/admin/super/organizations/[id]/members",
-      "/private/tmp"
+      "/private/tmp",
+      "/tmp",
+      "/Users/kevin/Documents/Github/linebot/server/api/admin/org/[orgId]"
     ]
   }
 }

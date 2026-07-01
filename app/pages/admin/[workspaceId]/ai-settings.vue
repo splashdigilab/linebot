@@ -6,10 +6,11 @@
         title="⚙️ AI 設定"
         caption="開關、回覆模式、語氣與轉真人規則;細部參數收在最下方「進階調校」"
       />
-      <div class="flex gap-1 admin-header-actions">
+      <div v-if="canEditSettings" class="flex gap-1 admin-header-actions">
         <el-button :disabled="!dirty" @click="loadSettings(true)">取消</el-button>
         <el-button type="primary" :loading="saving" :disabled="!dirty" data-tour="ais-save" @click="save">儲存設定</el-button>
       </div>
+      <div v-else class="text-xs text-muted">僅檢視;修改 AI 設定需要管理員權限</div>
     </template>
 
     <template #editor-body>
@@ -475,7 +476,8 @@ import type { AiSettingsDoc } from '~~/shared/types/ai-knowledge'
 
 definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
 
-const { apiFetch, workspaceId } = useWorkspace()
+const { apiFetch, workspaceId, can } = useWorkspace()
+const canEditSettings = computed(() => can('ai.settings.write'))
 const { showToast } = useAdminToast()
 const { isSuperAdmin, checkIsSuperAdmin } = useSuperAdmin()
 
