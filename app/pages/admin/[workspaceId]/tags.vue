@@ -7,7 +7,7 @@
         caption="建立與管理會員標籤，用於分眾推播"
       />
       <div class="flex gap-1 admin-header-actions">
-        <el-button type="primary" @click="openCreate">➕ 新增標籤</el-button>
+        <el-button type="primary" data-tour="tag-new" @click="openCreate">➕ 新增標籤</el-button>
       </div>
     </template>
 
@@ -20,7 +20,7 @@
             </div>
           </div>
           <div class="card-section-stack">
-            <div class="tags-toolbar">
+            <div class="tags-toolbar" data-tour="tag-filter">
               <div class="tags-toolbar__field tags-toolbar__field--search">
                 <AdminFieldLabel text="搜尋（標籤名稱或英文代號）" tight />
                 <el-input v-model="searchText" placeholder="輸入關鍵字…" clearable />
@@ -133,7 +133,7 @@
           <span class="tags-hint">停用的標籤不會出現在貼標選單，但仍可在此編輯</span>
         </div>
 
-        <div class="admin-field-group">
+        <div class="admin-field-group" data-tour="tag-code">
           <AdminFieldLabel text="英文代號（系統辨識用，建立後就不能改）" tight />
           <el-input
             v-model="form.code"
@@ -144,7 +144,7 @@
           <span class="tags-hint">給系統認的英文代號（不會給客人看到）：只能用英文小寫、數字、底線，開頭要是英文字母</span>
         </div>
 
-        <div class="admin-field-group">
+        <div class="admin-field-group" data-tour="tag-name">
           <AdminFieldLabel text="顯示名稱（最多 30 字）" tight />
           <el-input v-model="form.name" placeholder="例如 美食愛好者" maxlength="30" />
         </div>

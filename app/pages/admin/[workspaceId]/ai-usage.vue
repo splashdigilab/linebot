@@ -7,7 +7,7 @@
         caption="這個月的 AI 用量、自動回覆率、待補知識清單"
       />
       <div class="flex gap-2 admin-header-actions">
-        <el-select v-model="period" size="small" style="width: 130px" @change="loadAll">
+        <el-select v-model="period" size="small" data-tour="usg-period" style="width: 130px" @change="loadAll">
           <el-option
             v-for="opt in periodOptions"
             :key="opt.value"
@@ -22,7 +22,7 @@
     <template #editor-body>
       <div class="usage-body admin-panel-stack">
         <!-- ── KPI cards ─────────────────────── -->
-        <div class="message-card usage-card">
+        <div class="message-card usage-card" data-tour="usg-kpi">
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="badge badge-green">📈 核心指標</span>
@@ -98,7 +98,7 @@
         </div>
 
         <!-- ── 低信心 / 轉真人案例 ──────────────── -->
-        <div class="message-card usage-card">
+        <div class="message-card usage-card" data-tour="usg-cases">
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="badge badge-green">🚨 近期轉真人案例</span>

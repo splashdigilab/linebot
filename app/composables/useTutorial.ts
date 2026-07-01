@@ -297,6 +297,37 @@ function buildTopics(): TutorialTopic[] {
       ],
     },
     {
+      id: 'ai-usage',
+      requiresSettings: true,
+      icon: '📈',
+      label: '看 AI 用量與監控',
+      blurb: '看 AI 幫你分擔多少、哪裡答不好要補知識。共 3 步。',
+      route: wid => `/admin/${wid}/ai-usage`,
+      steps: [
+        {
+          target: '[data-tour="usg-kpi"]',
+          title: '第 1 步：看 AI 幫你分擔多少',
+          description:
+            '這排是重點：<strong>AI 介入次數、自動回覆率、轉真人率</strong>，還有「<strong>答後仍轉真人</strong>」（AI 答了客人還是要找真人，越低越好）和每對話成本——一眼看出 AI 顧得好不好。',
+          placement: 'bottom',
+        },
+        {
+          target: '[data-tour="usg-cases"]',
+          title: '第 2 步：答不出來的就地補知識',
+          description:
+            '這裡列出<strong>客人問了但 AI 答不出來</strong>的案例。點某筆的「<strong>📥 補知識</strong>」會直接跳到知識庫、幫你補一張對應的卡——這是持續把 AI 養好的關鍵動作。',
+          placement: 'top',
+        },
+        {
+          target: '[data-tour="usg-period"]',
+          title: '第 3 步：切換統計區間',
+          description:
+            '在這裡換<strong>統計區間</strong>（本月／上月…），上面所有數字會跟著重算，方便你比較不同時期的表現。',
+          placement: 'bottom',
+        },
+      ],
+    },
+    {
       id: 'conversations',
       icon: '💬',
       label: '看懂對話收件匣',
@@ -675,6 +706,114 @@ function buildTopics(): TutorialTopic[] {
       ],
     },
     {
+      id: 'tags',
+      requiresOperate: true,
+      icon: '🏷️',
+      label: '建立會員標籤',
+      blurb: '標籤把好友分群，之後推播、活動都能鎖定分眾。我帶你建第一個，共 4 步。',
+      route: wid => `/admin/${wid}/tags`,
+      steps: [
+        {
+          target: '[data-tour="tag-new"]',
+          title: '第 1 步：標籤用來分眾',
+          description:
+            '標籤是把好友<strong>分群</strong>的基礎——貼了標籤，之後<strong>推播</strong>就能只發給某群人、<strong>活動</strong>也能自動貼標歸類。點右上「<strong>➕ 新增標籤</strong>」建第一個。',
+          placement: 'bottom-end',
+        },
+        {
+          target: '[data-tour="tag-filter"]',
+          title: '第 2 步：搜尋與篩選',
+          description:
+            '標籤變多時，用這排<strong>搜尋、分類、狀態</strong>快速找到要的那個。停用的標籤不會出現在貼標選單，但仍可在這裡編輯。',
+          placement: 'bottom',
+        },
+        {
+          target: '[data-tour="tag-code"]',
+          clickBefore: '[data-tour="tag-new"]',
+          title: '第 3 步：英文代號（建立後不能改）',
+          description:
+            '這是<strong>給系統認的代號</strong>（客人看不到）：英文小寫開頭，可含數字、底線，例如 <code>vip</code>、<code>interest_food</code>。建立後就固定，先想好再填。',
+          placement: 'bottom',
+        },
+        {
+          target: '[data-tour="tag-name"]',
+          title: '第 4 步：顯示名稱、分類與顏色',
+          description:
+            '這裡填<strong>給人看的名字</strong>（例：VIP 會員），再選分類、挑個顏色方便一眼認出。都填好按「<strong>建立標籤</strong>」就完成 🎉',
+          placement: 'bottom',
+        },
+      ],
+    },
+    {
+      id: 'campaigns',
+      requiresOperate: true,
+      icon: '📋',
+      label: '活動貼標（名單分眾）',
+      blurb: '用一條連結收名單、加好友自動貼標。我帶你開一個活動，共 4 步。',
+      route: wid => `/admin/${wid}/campaigns`,
+      steps: [
+        {
+          target: '[data-tour="cmp-new"]',
+          title: '第 1 步：活動貼標是什麼',
+          description:
+            '活動貼標給你一條<strong>活動進入網址</strong>：客人點入先綁 LINE，之後<strong>加官方帳號好友時，系統自動幫他貼上這個活動的標籤</strong>。很適合問卷、廣告、線下活動的<strong>名單分眾</strong>。點「<strong>➕ 新增</strong>」開一個。',
+          placement: 'right',
+        },
+        {
+          target: '[data-tour="cmp-tagsection"]',
+          clickBefore: '[data-tour="cmp-new"]',
+          title: '第 2 步：選要貼的標籤（必填）',
+          description:
+            '設定這波活動的名單，加好友時要<strong>自動貼上哪些標籤</strong>——至少選一個。（還沒有標籤的話，先去「<strong>標籤管理</strong>」建，再回來這裡。）',
+          placement: 'top',
+        },
+        {
+          target: '[data-tour="cmp-action"]',
+          title: '第 3 步：貼標後要不要多做一件事（選填）',
+          description:
+            '除了貼標，還能順手<strong>觸發一個機器人模組、回一段文字或開網址</strong>——例如發一則歡迎訊息。不需要就留「<strong>不觸發動作</strong>」。',
+          placement: 'top',
+        },
+        {
+          target: '',
+          title: '第 4 步：儲存後拿到活動網址',
+          description:
+            '按「<strong>建立活動</strong>」後，系統會給一條<strong>活動進入網址</strong>——把它貼到問卷完成頁、廣告按鈕或簡訊就能開始收名單。下方「<strong>行銷成效</strong>」還能看多少人綁定、貼標完成率 🎉',
+        },
+      ],
+    },
+    {
+      id: 'users',
+      requiresOperate: true,
+      icon: '👥',
+      label: '管理會員與貼標',
+      blurb: '看好友名單、依標籤篩選、批次貼標。我帶你看一遍，共 3 步。',
+      route: wid => `/admin/${wid}/users`,
+      steps: [
+        {
+          target: '[data-tour="usr-sync"]',
+          title: '第 1 步：好友名單從哪來',
+          description:
+            '這頁列出所有 LINE 好友。清單來自資料庫——若少了只加好友、還沒互動過的人，按「<strong>從 LINE 同步好友</strong>」拉官方好友名單（好友多時會分批，可連按數次直到完成）。',
+          placement: 'bottom-end',
+        },
+        {
+          target: '[data-tour="usr-filter"]',
+          title: '第 2 步：搜尋與依標籤分眾',
+          description:
+            '用<strong>顯示名稱搜尋</strong>，或<strong>依標籤篩選</strong>看某一群人（例如只看「VIP」）。這就是把標籤變成可用名單的地方。',
+          placement: 'bottom',
+        },
+        {
+          target: '[data-tour="usr-list"]',
+          title: '第 3 步：查看與批次貼標',
+          description:
+            '<strong>點一位會員</strong>看他的資料與標籤；<strong>勾選多位</strong>後，上方會出現「<strong>批次加標／移標</strong>」，一次幫一群人貼上或拿掉標籤，整理名單很快。',
+          placement: 'top',
+        },
+      ],
+    },
+    {
       id: 'support-presets',
       requiresOperate: true,
       icon: '📦',
@@ -758,6 +897,7 @@ const TOPIC_CATEGORY: Record<string, string> = {
   'knowledge-manage': 'ai',
   'ai-scripts': 'ai',
   'ai-playground': 'ai',
+  'ai-usage': 'ai',
   conversations: 'daily',
   flow: 'bot',
   'msg-basic': 'bot',
@@ -768,6 +908,9 @@ const TOPIC_CATEGORY: Record<string, string> = {
   'auto-reply': 'growth',
   richmenu: 'growth',
   broadcasts: 'growth',
+  tags: 'growth',
+  campaigns: 'growth',
+  users: 'growth',
   'support-presets': 'growth',
   'conversation-stats': 'growth',
 }

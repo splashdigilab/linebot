@@ -3,7 +3,7 @@
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
       <span class="split-sidebar-title">📋 活動貼標</span>
-      <el-button type="primary" size="small" @click="openCreate">➕ 新增</el-button>
+      <el-button type="primary" size="small" data-tour="cmp-new" @click="openCreate">➕ 新增</el-button>
     </template>
 
     <!-- ── Sidebar List ── -->
@@ -191,7 +191,7 @@
         </div>
 
         <!-- 貼標與觸發設定 -->
-        <div class="message-card cmp-section-card">
+        <div class="message-card cmp-section-card" data-tour="cmp-tagsection">
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="badge badge-green">🎯 貼標與觸發設定</span>
@@ -231,7 +231,7 @@
             <div v-if="modulesLoading" class="ar-modules-loading">
               <div class="spinner" />
             </div>
-            <div v-else class="admin-field-group">
+            <div v-else class="admin-field-group" data-tour="cmp-action">
               <FlowActionEditor
                 :action="form.action"
                 :type-options="campaignActionTypeOptions"

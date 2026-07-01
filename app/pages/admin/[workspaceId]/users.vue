@@ -7,7 +7,7 @@
         caption="管理 LINE 好友，查看與操作會員標籤"
       />
       <div class="flex gap-1 admin-header-actions">
-        <el-button size="small" type="primary" :loading="syncingLine" @click="syncFromLine">
+        <el-button size="small" type="primary" data-tour="usr-sync" :loading="syncingLine" @click="syncFromLine">
           從 LINE 同步好友
         </el-button>
         <el-button size="small" @click="loadData">重新整理</el-button>
@@ -23,14 +23,14 @@
           <el-button size="small" text @click="selectedIds = []">取消選取</el-button>
         </div>
 
-        <div class="message-card users-page-card">
+        <div class="message-card users-page-card" data-tour="usr-list">
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="badge badge-green">🔎 篩選與表格</span>
             </div>
           </div>
           <div class="card-section-stack">
-            <div class="users-toolbar">
+            <div class="users-toolbar" data-tour="usr-filter">
               <div class="users-toolbar__field users-toolbar__field--search">
                 <AdminFieldLabel text="搜尋顯示名稱" tight />
                 <el-input v-model="searchText" placeholder="輸入關鍵字…" clearable />
