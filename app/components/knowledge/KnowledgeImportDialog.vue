@@ -12,8 +12,14 @@
     <div v-if="step === 'input'">
       <p class="kb-step-label">1️⃣ 選擇來源 — 把 PDF、Excel、網址或一大段文字交給 AI 切成知識卡</p>
       <el-tabs v-model="mode" class="kb-import-tabs">
-        <el-tab-pane label="📄 檔案" name="file">
-          <p class="kb-section-hint">支援 PDF、Excel（.xlsx / .xls）。單檔上限 10MB。掃描檔 / 圖片型 PDF 會自動用 AI 辨識文字（30 頁以內）。</p>
+        <el-tab-pane name="file">
+          <template #label><span data-tour="kb-tab-file">📄 檔案</span></template>
+          <p class="kb-section-hint">
+            支援 PDF、Excel（.xlsx / .xls），單檔上限 10MB。
+            <br><strong>Excel 表格</strong>：跟 Google Sheet 一樣「<strong>一列變成一張卡</strong>」——<strong>第一欄當卡片標題</strong>（例：商品名稱），其餘欄位當內容；第一列請放欄位名稱（例：商品、價格、庫存）。最適合商品表、問答表。
+            <br><strong>PDF 或內容比較零散的檔案</strong>：改由 AI 自動判斷怎麼分段。掃描檔（用拍的、掃的）會由 AI 認字，請逐張核對數字、價格有沒有看錯。
+            <br>提醒：檔案是<strong>上傳一次就固定</strong>，之後改了要重新上傳；想要「改了會自動更新」請改用 Google Sheet。
+          </p>
           <div class="kb-file-zone">
             <input
               ref="fileInputEl"
@@ -28,8 +34,9 @@
           </div>
         </el-tab-pane>
 
-        <el-tab-pane label="🔗 網址" name="url">
-          <p class="kb-section-hint">系統會抓取網頁文字（不破解防爬／不渲染 JS）。若抓不到請改用上傳檔案。</p>
+        <el-tab-pane name="url">
+          <template #label><span data-tour="kb-tab-url">🔗 網址</span></template>
+          <p class="kb-section-hint">系統會抓取網頁上的文字做成卡片。若那個網頁需要先登入、或要按按鈕才會顯示內容，可能抓不到，請改用上傳檔案。</p>
           <el-input
             v-model="urlInput"
             placeholder="https://example.com/faq"
@@ -37,10 +44,13 @@
           />
         </el-tab-pane>
 
-        <el-tab-pane label="📊 Google Sheet" name="gsheet">
+        <el-tab-pane name="gsheet">
+          <template #label><span data-tour="kb-tab-gsheet">📊 Google Sheet</span></template>
           <p class="kb-section-hint">
-            貼上 Google Sheet 連結，<strong>每一列自動變成一張知識卡</strong>（第一欄當標題，其餘欄位當內容）。
-            之後你在 Sheet 改內容，機器人會<strong>每小時自動同步</strong>（你在後台手動編輯過的卡不會被覆蓋）。
+            貼上 Google Sheet 連結，<strong>每一列自動變成一張知識卡</strong>：
+            <strong>第一欄當卡片標題</strong>，其餘欄位當內容——
+            兩欄的表格就是「問題／答案」，多欄的表格會逐欄列成「<strong>欄名：內容</strong>」。第一列請放欄位名稱（例：商品、價格、庫存）。
+            之後你在 Sheet 改內容，機器人會<strong>定期自動更新</strong>（自動更新時靠第一欄的標題認出是同一列；你在後台手動改過的卡不會被蓋掉）。
           </p>
           <el-alert
             v-if="serviceAccountEmail"
@@ -61,7 +71,8 @@
           />
         </el-tab-pane>
 
-        <el-tab-pane label="📋 貼上文字" name="text">
+        <el-tab-pane name="text">
+          <template #label><span data-tour="kb-tab-text">📋 貼上文字</span></template>
           <p class="kb-section-hint">貼一大段文字（最多 100,000 字），由 AI 幫你切成多張卡。</p>
           <el-input
             v-model="textInput"
@@ -74,7 +85,7 @@
         </el-tab-pane>
       </el-tabs>
 
-      <div v-if="mode !== 'gsheet'" class="kb-overview-toggle">
+      <div v-if="mode !== 'gsheet'" class="kb-overview-toggle" data-tour="kb-overview">
         <el-checkbox v-model="generateOverview">
           這是商品 / 列表頁（額外產生一張「總覽卡」）
         </el-checkbox>
@@ -87,6 +98,7 @@
       <div class="kb-import-actions">
         <el-button
           type="primary"
+          data-tour="kb-preview"
           :loading="previewing"
           :disabled="!canPreview"
           @click="runPreview"

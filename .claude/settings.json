@@ -205,7 +205,12 @@
       "Bash(echo \"typecheck exit=$?\")",
       "Bash(echo \"tests exit=$?\")",
       "Bash(node /tmp/test_hoisting.js)",
-      "Bash(node /tmp/test_hoisting_func.js)"
+      "Bash(node /tmp/test_hoisting_func.js)",
+      "Bash(sed -n '1481,1800p' /Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/knowledge/sources/index.vue | grep -E \"class=|data-tour\")",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
+      "Bash(echo \"TYPECHECK EXIT: $?\")",
+      "Bash(echo \"TEST EXIT: $?\")"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",
@@ -214,7 +219,8 @@
       "/Users/kevin/Documents/Github/linebot/server/api/admin/super/organizations/[id]/members",
       "/private/tmp",
       "/tmp",
-      "/Users/kevin/Documents/Github/linebot/server/api/admin/org/[orgId]"
+      "/Users/kevin/Documents/Github/linebot/server/api/admin/org/[orgId]",
+      "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/knowledge/sources"
     ]
   }
 }

@@ -160,12 +160,12 @@
               @update:model-value="onContentActionUpdate"
             />
             <p class="bc-click-hint text-muted">
-              成效「開封數」來自 LINE 官方聚合（發送後自動帶彙總單位）。「追蹤連結點擊」僅在使用者經由
+              「開封數」是有多少人看到這則推播，數字由 LINE 官方統計提供。「追蹤連結點擊」只有在客人點的是我們系統轉出的追蹤連結（網址會經過
               <code class="bc-click-hint__code">/api/r</code>
-              開啟 https 目標時累加（需設定
-              <code class="bc-click-hint__code">PUBLIC_BASE_URL</code>，或相容舊名
+              並開啟 https 網頁）時才會算，需要工程人員先設定好
+              <code class="bc-click-hint__code">PUBLIC_BASE_URL</code>（或舊名
               <code class="bc-click-hint__code">LINE_IMAGEMAP_BASE_URL</code>／
-              <code class="bc-click-hint__code">CLICK_TRACKING_BASE_URL</code>）。純文字與 postback 不會增加追蹤連結點擊。
+              <code class="bc-click-hint__code">CLICK_TRACKING_BASE_URL</code>）。純文字或按鈕回傳不會算進點擊數。
             </p>
           </div>
         </div>
@@ -196,10 +196,10 @@
                 :disabled-date="disabledPastDate"
               />
               <p v-if="selectedItem?.status === 'scheduled'" class="tags-hint">
-                已排程，到期後約每分鐘自動發送（推播列表頁開著時會自動觸發；伺服器亦需設定 CRON_SECRET）。可「儲存變更」或「取消排程」。
+                已排程，時間到後系統會自動發送（開著這個推播列表頁最保險；若要完全自動、關頁也能發，需請工程人員設定好伺服器）。可以「儲存變更」或「取消排程」。
               </p>
               <p v-else class="tags-hint">
-                確認排程後不會立即發送；受眾名單於排程時間到時計算。
+                按下確認後不會馬上發，要到排程時間才送出；發送對象也是到那個時間點才計算。
               </p>
             </div>
           </div>
@@ -238,7 +238,7 @@
             </div>
             <div class="admin-field-stack">
               <div class="admin-field-group">
-                <AdminFieldLabel text="開封率（LINE 聚合／非即時）" tight />
+                <AdminFieldLabel text="開封率（LINE 官方統計，非即時、通常會延遲）" tight />
                 <span class="bc-ctr-value">{{ formatPercentRate(report.openRate) }}</span>
               </div>
               <div class="admin-field-group">
@@ -246,20 +246,20 @@
                 <span class="bc-ctr-value">{{ (report.ctr * 100).toFixed(2) }}%</span>
               </div>
               <div v-if="report.lineUniqueClick != null" class="admin-field-group">
-                <AdminFieldLabel text="LINE 官方．訊息內網址點擊人數（聚合）" tight />
+                <AdminFieldLabel text="LINE 官方統計：點過訊息內網址的人數" tight />
                 <span class="bc-ctr-value">{{ report.lineUniqueClick }}</span>
               </div>
               <p v-if="report.lineInsightError === 'LINE_AGGREGATION_SKIPPED'" class="bc-insight-warn text-muted">
-                此推播發送時未帶入 LINE 彙總單位（常見原因：LINE 回 400 不支援，系統已改為一般 multicast），後台無法向 LINE Insight 查開封數。請再發新推播並確認日誌未出現「改為不帶彙總重試」；開封可改由 LINE Official Account Manager 查看。
+                這則推播在發送時沒有帶到 LINE 的統計標記（多半是 LINE 當下不接受，系統只好改用一般方式送出），所以這裡查不到開封數。可以再發一則新推播試試；這則的開封數請改到 LINE 官方帳號管理後台（LINE Official Account Manager）查看。
               </p>
               <p v-else-if="report.lineInsightError" class="bc-insight-warn text-muted">
-                LINE Insight：{{ report.lineInsightError }}（發送後常需數小時才有數字；請稍後按「重新整理」）
+                LINE 統計：{{ report.lineInsightError }}（剛發送完通常要等幾個小時才會有數字；請稍後再按「重新整理」）
               </p>
               <p
                 v-else-if="report.lineUniqueImpression == null && report.lineInsightAggregationApplied !== false"
                 class="bc-insight-warn text-muted"
               >
-                開封數為 —：LINE 彙總通常非即時；若實際互動人數很少，LINE 會因隱私政策回傳空值（與聊天室「已讀」顯示未必同步出現在 API）。
+                開封數顯示「—」：LINE 官方統計通常不是即時的；而且如果實際看過的人太少，LINE 基於隱私會直接不給數字（跟聊天室看到的「已讀」不一定同步）。
               </p>
             </div>
           </div>

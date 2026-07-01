@@ -416,7 +416,7 @@
                     <AdminFieldLabel text="保留 PNG 透明區域" tight />
                     <div class="flow-rich-toggle-row">
                       <el-switch v-model="msg.transparentBackground" />
-                      <span class="text-sm text-muted">開啟後保留透明像素</span>
+                      <span class="text-sm text-muted">開啟後，圖片透明的地方會維持透明、不會補上白底</span>
                     </div>
                   </div>
                   <div class="admin-field-group" data-tour="rich-hero">
@@ -681,7 +681,7 @@
                     <div class="flow-input-inset-wrap control-full">
                       <el-input
                         v-model="msg.altText"
-                        :placeholder="msg.type === 'carousel' ? '訊息提醒文字（不支援 Flex 時顯示，最多 400 字）' : '訊息提醒文字（最多 400 字）'"
+                        :placeholder="msg.type === 'carousel' ? '訊息提醒文字（客人裝置顯示不出卡片時，改顯示這行字，最多 400 字）' : '訊息提醒文字（最多 400 字）'"
                         maxlength="400"
                       />
                       <FlowVariableInset

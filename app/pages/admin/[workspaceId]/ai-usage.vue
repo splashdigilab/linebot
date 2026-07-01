@@ -49,7 +49,7 @@
               <div class="usage-kpi usage-kpi--warning">
                 <span class="usage-kpi__label">答後仍轉真人</span>
                 <strong>{{ formatPercent(summary?.answeredThenHandoffRate) }}</strong>
-                <span class="usage-kpi__sub">{{ formatNumber(summary?.answeredThenHandoffs) }} 次（回答沒解決問題的 proxy，越低越好）</span>
+                <span class="usage-kpi__sub">{{ formatNumber(summary?.answeredThenHandoffs) }} 次（AI 回答後客人還是要找真人，可視為「沒答到重點」，越低越好）</span>
               </div>
               <div class="usage-kpi">
                 <span class="usage-kpi__label">每對話成本</span>
@@ -64,7 +64,7 @@
         <div class="message-card usage-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🔢 Token 用量明細</span>
+              <span class="badge badge-green">🔢 用量明細（Token）</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -72,7 +72,7 @@
               <div class="usage-token-row">
                 <span class="text-muted">Input</span>
                 <strong>{{ formatNumber(summary?.inputTokens) }}</strong>
-                <span class="text-xs text-muted">提示 + 知識卡內容</span>
+                <span class="text-xs text-muted">送進 AI 的內容（客人問題 + 參考的知識卡）</span>
               </div>
               <div class="usage-token-row">
                 <span class="text-muted">Output</span>
@@ -82,17 +82,17 @@
               <div class="usage-token-row">
                 <span class="text-muted">Embedding</span>
                 <strong>{{ formatNumber(summary?.embeddingTokens) }}</strong>
-                <span class="text-xs text-muted">查詢向量化</span>
+                <span class="text-xs text-muted">把客人問題轉成可搜尋的形式，用來找對應的知識卡</span>
               </div>
               <div class="usage-token-row">
                 <span class="text-muted">匯入 / 整理</span>
                 <strong>{{ formatNumber((summary?.importInputTokens ?? 0) + (summary?.importOutputTokens ?? 0)) }}</strong>
-                <span class="text-xs text-muted">切卡與 AI 整理（已含在上方 Input / Output 內）</span>
+                <span class="text-xs text-muted">匯入資料時，AI 幫忙切成知識卡、整理內容所花的量（已含在上方 Input / Output 內）</span>
               </div>
             </div>
             <p class="usage-hint">
-              成本估算依 Gemini Flash 公開計價（input ${{ pricing.inputPerM }} / output ${{ pricing.outputPerM }} / embed ${{ pricing.embedPerM }} per 1M tokens）。
-              實際帳單以 Google 為準。
+              這裡的金額是依 Gemini Flash 公開價格估算的參考值（每 100 萬用量：送入 ${{ pricing.inputPerM }} / 產生 ${{ pricing.outputPerM }} / 搜尋 ${{ pricing.embedPerM }}）。
+              實際費用還是以 Google 帳單為準。
             </p>
           </div>
         </div>

@@ -284,7 +284,7 @@ onMounted(async () => {
 
   if (!liffId) {
     phase.value = 'error'
-    errorText.value = '連結缺少 LIFF 識別。請回後台重新儲存活動以產生新連結，再重新開啟。'
+    errorText.value = '這個連結不完整、沒辦法辨識活動。請回後台重新儲存一次活動，用產生的新連結再打開。'
     debugInfo.value = buildDebugInfo({ reason: 'missing_liff_id', mergedParsed: parsed, ...ctx })
     return
   }
@@ -331,8 +331,8 @@ onMounted(async () => {
     phase.value = 'error'
     const malformedCtOnly = typeof window !== 'undefined' && window.location.search === '?ct'
     errorText.value = malformedCtOnly
-      ? '目前收到的是「/liff/lead?ct」：ct 參數只有名稱、沒有值。這通常是把 LIFF Endpoint 網址當成活動網址，或連結在傳遞時被截斷。請回後台重新複製「活動進入網址（直接網址，非 liff.line.me 開頭）」再測試。'
-      : '連結缺少必要參數。請回後台重新儲存活動以取得最新連結，再重新開啟。'
+      ? '這個連結少了活動資料，通常是複製到錯的網址、或連結在轉傳時被截斷了。請回後台重新複製「活動進入網址（開頭不是 liff.line.me 的那組直接網址）」再試一次。'
+      : '這個連結不完整、少了必要資料。請回後台重新儲存一次活動，取得最新連結後再重新打開。'
     debugInfo.value = buildDebugInfo({ reason: 'missing_ct', mergedParsed: parsed, ...ctx })
     return
   }

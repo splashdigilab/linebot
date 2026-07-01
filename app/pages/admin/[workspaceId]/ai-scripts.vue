@@ -97,12 +97,12 @@
                 active-text="啟用"
                 inactive-text="停用"
               />
-              <p class="scripts-section-hint">關掉後此腳本不會被觸發；AI 保底仍照常運作。</p>
+              <p class="scripts-section-hint">關掉後這條流程就不會啟動；就算關掉，AI 客服還是會照常回答客人。</p>
             </div>
             <div class="admin-field-group">
               <AdminFieldLabel :text="`觸發優先度（${form.priority}）`" tight />
               <el-slider v-model="form.priority" :min="1" :max="100" :step="1" />
-              <p class="scripts-section-hint">多個腳本同時命中時，數字越大越優先。預設 50。</p>
+              <p class="scripts-section-hint">如果同一句話同時命中好幾條流程，數字越大的會先跑。預設 50，通常不用動。</p>
             </div>
           </div>
         </div>
@@ -160,7 +160,7 @@
 
                   <template v-else>
                     <div class="admin-field-group">
-                      <AdminFieldLabel text="意圖範例（一行一句，系統用「意思」比對）" tight />
+                      <AdminFieldLabel text="範例句（一行一句；比對的是「意思」，就算客人用字不一樣也算命中）" tight />
                       <el-input
                         :model-value="(node.examples ?? []).join('\n')"
                         type="textarea"
@@ -182,21 +182,21 @@
                     <el-input v-model="node.question" placeholder="例：請輸入您的訂單編號" />
                   </div>
                   <div class="admin-field-group">
-                    <AdminFieldLabel text="欄位名稱（分支／寫名單／回覆都用它取值）" tight />
+                    <AdminFieldLabel text="欄位名稱（給答案取個代號，後面判斷、存名單、回覆帶入時都靠它）" tight />
                     <el-input v-model="node.fieldName" placeholder="例：order_id" />
                   </div>
                   <div class="admin-field-group">
-                    <AdminFieldLabel text="答案格式（自動從訊息抽出、格式不符會重問）" tight />
+                    <AdminFieldLabel text="答案格式（系統會自動從客人訊息抓出答案；格式不對會再問一次）" tight />
                     <el-select :model-value="node.format ?? 'any'" size="small" @change="node.format = $event">
                       <el-option label="不限制（整句存）" value="any" />
                       <el-option label="電話" value="phone" />
                       <el-option label="Email" value="email" />
                       <el-option label="純數字" value="number" />
-                      <el-option label="自訂（正則）" value="custom" />
+                      <el-option label="自訂（進階比對規則）" value="custom" />
                     </el-select>
                   </div>
                   <div v-if="node.format === 'custom'" class="admin-field-group">
-                    <AdminFieldLabel text="自訂格式（正則表達式）" tight />
+                    <AdminFieldLabel text="自訂格式（進階比對規則，需懂正規表達式；不確定可先用上面的預設格式）" tight />
                     <el-input v-model="node.pattern" placeholder="例：[A-Za-z]\d{3,}（訂單編號 A123）" />
                   </div>
                   <div v-if="(node.format ?? 'any') !== 'any'" class="admin-field-group">
@@ -240,7 +240,7 @@
 
                 <!-- Branch -->
                 <template v-else-if="node.type === 'branch'">
-                  <p class="scripts-section-hint">依「已收集的欄位」決定往哪走。由上而下，第一個成立的條件勝出。</p>
+                  <p class="scripts-section-hint">依照前面問到的答案決定接下來走哪條路。由上往下檢查，第一個符合的條件就走它。</p>
                   <div v-for="(c, ci) in node.cases" :key="ci" class="scripts-branch-case">
                     <span class="text-xs text-muted">如果</span>
                     <el-select :model-value="c.field" filterable size="small" placeholder="選欄位" class="scripts-branch-field" @change="c.field = $event">
@@ -307,7 +307,7 @@
 
                 <!-- Save lead -->
                 <template v-else-if="node.type === 'saveLead'">
-                  <p class="scripts-section-hint">把收集到的欄位存成使用者屬性（持久化、後台可見，之後回覆文字也能用屬性變數取用）。</p>
+                  <p class="scripts-section-hint">把這次問到的答案長期存進這位客人的資料裡，之後在後台看得到，回覆文字也能帶入使用。</p>
                   <div v-for="(m, mi) in node.fieldMap" :key="mi" class="scripts-branch-case">
                     <span class="text-xs text-muted">收集欄位</span>
                     <el-select :model-value="m.fromField" filterable size="small" placeholder="選欄位" class="scripts-branch-field" @change="m.fromField = $event">
@@ -337,7 +337,7 @@
             </div>
 
             <p class="scripts-section-hint">
-              💡 線性節點由上而下自動串接；分支節點則用「前往…」下拉自己指定每條路要去哪個節點。
+              💡 一般步驟會由上到下自動接下去；只有「分支」要自己用「前往…」下拉，指定每條路各接到哪一步。
             </p>
           </div>
         </div>

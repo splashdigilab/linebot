@@ -164,10 +164,28 @@ export async function readGoogleSheetAsCards(ref: ParsedSheetRef): Promise<ReadS
   const data = await sheetsApi<ValuesResponse>(
     `${encodeURIComponent(ref.spreadsheetId)}/values/${encodeURIComponent(sheetTitle)}?majorDimension=ROWS`,
   )
-  const rows = (data.values ?? []).filter(r => r.some(c => String(c ?? '').trim()))
-  if (rows.length < 2) {
+  const { cards, rowCount } = rowsToCards(data.values ?? [])
+  if (!rowCount) {
     throw createError({ statusCode: 422, statusMessage: '這份分頁沒有足夠資料（需要表頭列 + 至少一列資料）' })
   }
+
+  return {
+    cards,
+    rowCount,
+    truncated: rowCount > cards.length,
+    sheetTitle,
+  }
+}
+
+/**
+ * 一份「表格」（rows[0] = 表頭，其餘為資料）→ 一疊知識卡。
+ * Google Sheet 與上傳的 Excel 乾淨表格共用同一套一列一卡邏輯，確保兩邊結果一致。
+ * - 過濾整列皆空的列；有效資料列不足 2（表頭 + 至少一列）時回空、rowCount = 0。
+ * - 逐列走 rowToCard；套用 GSHEET_MAX_ROWS 上限。
+ */
+export function rowsToCards(rawRows: string[][]): { cards: SheetCard[]; rowCount: number } {
+  const rows = (rawRows ?? []).filter(r => Array.isArray(r) && r.some(c => String(c ?? '').trim()))
+  if (rows.length < 2) return { cards: [], rowCount: 0 }
 
   const headers = rows[0]!.map(h => String(h ?? '').trim())
   const dataRows = rows.slice(1)
@@ -177,13 +195,7 @@ export async function readGoogleSheetAsCards(ref: ParsedSheetRef): Promise<ReadS
     if (card) cards.push(card)
     if (cards.length >= GSHEET_MAX_ROWS) break
   }
-
-  return {
-    cards,
-    rowCount: dataRows.length,
-    truncated: dataRows.length > cards.length,
-    sheetTitle,
-  }
+  return { cards, rowCount: dataRows.length }
 }
 
 /**

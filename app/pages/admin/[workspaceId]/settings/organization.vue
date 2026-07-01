@@ -55,7 +55,7 @@
               <p class="text-xs text-muted">活動沒填 LIFF 時會用這一組。</p>
             </div>
             <p class="ar-section-hint">
-              在 LINE Developers 建立／編輯<strong>同一個</strong> LIFF 時，Endpoint URL 請設為下方「活動 LIFF 頁」，<strong>不可</strong>填 Webhook 路徑（<code>/webhook</code>），否則點活動連結會 404。
+              在 LINE Developers 建立／編輯<strong>同一個</strong> LIFF 時，Endpoint URL 要填下方的「活動 LIFF 頁」網址，<strong>不要</strong>填 Webhook 那組（結尾是 <code>/webhook</code>），不然客人點活動連結會打不開、看到錯誤頁。
             </p>
             <div v-if="suggestedLiffEndpointUrl" class="admin-field-group">
               <AdminFieldLabel text="活動 LIFF 頁（貼到 LINE Developers → 該 LIFF 的 Endpoint URL）" tight />
@@ -131,7 +131,7 @@
                 rel="noopener noreferrer"
                 class="ar-link"
               >LINE Developers</a>
-              → Messaging API → Webhook URL 貼下面這個（須為 https、網路上連得到）。Secret 要跟上面同一組。後台按「Verify」若回 401，幾乎都是 Secret 與伺服器上的不一致或部署環境未帶入 Secret。
+              → Messaging API → Webhook URL 貼下面這個網址（要 https 開頭、外面連得到）。這裡的 Channel Secret 要跟上面填的同一組。如果按「測試連線」失敗，多半是 Channel Secret 兩邊填得不一樣。
             </p>
             <div class="admin-field-group" data-tour="org-webhook">
               <AdminFieldLabel text="Webhook 網址（複製貼到 LINE）" tight />
@@ -151,7 +151,7 @@
                   只看登記網址
                 </el-button>
               </div>
-              <p class="text-xs text-muted">用現在的 Token 問 LINE。測試有額度，別狂按。</p>
+              <p class="text-xs text-muted">會用上面填的 Channel Access Token 去問 LINE。測試次數有限，別連續猛按。</p>
             </div>
             <div v-if="webhookVerifyResult" class="admin-field-group">
               <AdminFieldLabel text="結果" tight />
@@ -188,7 +188,7 @@
                         v-if="!webhookVerifyResult.test.success && webhookVerifyResult.test.statusCode === 401"
                         class="ar-section-hint"
                       >
-                        HTTP 401 表示你的網站有收到 LINE 的 POST，但<strong>驗簽失敗</strong>。請確認本頁儲存的 Channel Secret 與 LINE Developers → Messaging API 的 Channel secret 為<strong>同一組</strong>。目前系統只吃 Firestore 憑證，Secret 錯誤、未儲存，或部署環境無法讀取 Firestore 都會 401。
+                        LINE 有連上你的網站，但<strong>認證沒過、被系統擋下來</strong>。請確認本頁存的 Channel Secret 跟 LINE Developers → Messaging API 的 Channel secret 是<strong>同一組</strong>。Channel Secret 填錯、沒存到，都會卡在這一步。
                       </p>
                     </template>
                   </template>

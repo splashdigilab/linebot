@@ -91,7 +91,7 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="org-secret"]',
           title: '第 5 步：貼 Channel Secret',
           description:
-            '同一個 channel 的 <strong>Channel Secret</strong> 貼這裡。一定要跟 LINE 後台同一組，否則 Webhook 驗簽會回 401。',
+            '同一個 channel 的 <strong>Channel Secret</strong> 貼這裡。<strong>一定要跟 LINE 後台同一組</strong>，填錯的話 LINE 會拒絕連線、機器人就收不到客人訊息。',
           placement: 'top',
         },
         {
@@ -152,22 +152,107 @@ function buildTopics(): TutorialTopic[] {
       requiresOperate: true,
       icon: '📚',
       label: '建立知識庫',
-      blurb: '我帶你看怎麼把第一份知識放進來，AI 才有料可回答，共 2 步。',
+      blurb: '我帶你看怎麼把知識餵給 AI，四種來源一次搞懂，共 7 步。',
       route: wid => `/admin/${wid}/knowledge/sources`,
       steps: [
         {
           target: '[data-tour="kb-import"]',
-          title: '第 1 步：匯入第一份知識',
+          title: '第 1 步：從「匯入」開始',
           description:
-            '知識庫是由一份份「<strong>來源</strong>」組成的（PDF、網址、或整段文字）。點「<strong>📥 匯入</strong>」加入第一份，系統會自動切段並建立索引。',
+            '知識庫是由一份份「<strong>來源</strong>」組成的，AI 只會用這些來源裡的內容回答。點「<strong>📥 匯入</strong>」開始——有 <strong>4 種餵料方式</strong>，我一個一個帶你看。',
           placement: 'bottom',
         },
         {
-          target: '[data-tour="kb-sources"]',
-          title: '第 2 步：來源都列在這',
+          target: '[data-tour="kb-tab-file"]',
+          clickBefore: '[data-tour="kb-import"]',
+          title: '方式 1：上傳檔案（PDF、Excel）',
           description:
-            '匯入後，每一份知識會列在這個「來源」清單，AI 就從這些來源裡找答案。來源多了可以用「📂」分資料夾整理。',
+            '把現成的檔案丟進來（單檔 10MB 內）。<br><strong>Excel 表格</strong>：跟 Google Sheet 一樣「<strong>一列變成一張卡</strong>」——第一欄當卡片標題、其餘欄位當內容。商品表、問答表最適合。<br><strong>PDF 或內容零散的檔案</strong>：由 AI 幫你分段（用拍的、掃的檔案會由 AI 認字，記得核對數字、價格）。<br>提醒：檔案<strong>上傳一次就固定</strong>，之後改了要重傳；想「改了自動更新」請用 Google Sheet。',
+          placement: 'bottom',
+        },
+        {
+          target: '[data-tour="kb-tab-url"]',
+          clickBefore: '[data-tour="kb-tab-url"]',
+          title: '方式 2：貼網址',
+          description:
+            '貼一個網頁網址，系統會抓網頁上的<strong>文字</strong>做成卡片。如果抓不到（例如那個網頁要先登入、或要按按鈕才會顯示內容），就改用上傳檔案。',
+          placement: 'bottom',
+        },
+        {
+          target: '[data-tour="kb-tab-gsheet"]',
+          clickBefore: '[data-tour="kb-tab-gsheet"]',
+          title: '方式 3：Google Sheet（會自動同步）',
+          description:
+            '最適合「常常在改」的資料（商品、價目表）。規則是<strong>一列一張卡</strong>：<strong>第一欄當卡片標題</strong>，其餘欄位當內容。所以第一欄要放「看得懂的名字」（例：商品名），<strong>不要放編號</strong>。記得先把 Sheet <strong>分享給畫面上那個服務帳號</strong>，之後改內容會定期自動同步（你手動改過的卡不會被蓋掉）。',
+          placement: 'bottom',
+        },
+        {
+          target: '[data-tour="kb-tab-text"]',
+          clickBefore: '[data-tour="kb-tab-text"]',
+          title: '方式 4：貼整段文字',
+          description:
+            '手邊只有一段文字（FAQ、政策原文）就貼這裡，<strong>AI 幫你切成多張卡</strong>。最快、不用準備檔案。',
+          placement: 'bottom',
+        },
+        {
+          target: '[data-tour="kb-overview"]',
+          clickBefore: '[data-tour="kb-tab-file"]',
+          title: '列表頁記得勾「總覽卡」',
+          description:
+            '如果這份是<strong>商品型錄 / 列表頁</strong>，勾這個會多做一張「總覽卡」，客人問「你們有賣什麼」時 AI 能一次答完，不會被一項項問倒。（Google Sheet 免勾。）',
+          placement: 'top',
+        },
+        {
+          target: '[data-tour="kb-preview"]',
+          title: '最後：預覽切卡再匯入',
+          description:
+            '選好來源後按這裡，AI 會先<strong>切好卡片給你預覽</strong>。你可以逐張改標題／內容、取消不要的，確認沒問題再匯入——<strong>不會直接上線亂答</strong>。',
+          placement: 'top',
+        },
+      ],
+    },
+    {
+      id: 'knowledge-manage',
+      requiresOperate: true,
+      icon: '🗂️',
+      label: '整理與更新知識',
+      blurb: '匯入之後怎麼分類、修改、跟著來源自動更新，我帶你看一遍，共 5 步。',
+      route: wid => `/admin/${wid}/knowledge/sources`,
+      steps: [
+        {
+          target: '[data-tour="kb-sources"]',
+          title: '第 1 步：所有來源列在這',
+          description:
+            '每一份匯入的知識都會列在這個「<strong>來源</strong>」清單。點一份進去，右邊就會顯示它的設定與底下的卡片。AI 回答時就是從這些來源裡找。',
           placement: 'right',
+        },
+        {
+          target: '[data-tour="kb-folder-new"]',
+          title: '第 2 步：用資料夾分類',
+          description:
+            '來源多了會亂。點「<strong>📂</strong>」開資料夾（例：商品、政策、活動），再把來源<strong>拖曳</strong>進去整理。純後台分類，不影響 AI 找答案。',
+          placement: 'bottom',
+        },
+        {
+          target: '[data-tour="kb-chunks"]',
+          title: '第 3 步：一份來源＝一疊卡片',
+          description:
+            '點開來源會看到它被切成的一張張「<strong>卡片</strong>」。每張都能按「✏️ 編輯」改標題／內容，或用「AI 整理一下」讓它更好被搜到。<strong>手動改過的卡會標 🔒</strong>，之後自動同步時不會被覆蓋掉。',
+          placement: 'left',
+        },
+        {
+          target: '[data-tour="kb-sync-settings"]',
+          title: '第 4 步：設定自動更新頻率',
+          description:
+            '<strong>網址</strong>與 <strong>Google Sheet</strong> 這兩種來源可以設定多久重讀一次。（選一份網址或 Sheet 來源才會看到這塊。）',
+          placement: 'left',
+        },
+        {
+          target: '[data-tour="kb-resync"]',
+          title: '第 5 步：內容變了就重新同步',
+          description:
+            '原始網頁 / Sheet 內容改了，這裡按一下就會<strong>重抓並列出差異</strong>，讓你看過再決定要不要套用——<strong>不會偷偷覆蓋</strong>你的知識庫。',
+          placement: 'bottom',
         },
       ],
     },
@@ -308,7 +393,7 @@ function buildTopics(): TutorialTopic[] {
           demoType: 'text',
           title: '📝 文字',
           description:
-            '點「<strong>＋ 文字</strong>」加一則純文字（可放表情、帶入變數，文字下還能加按鈕）。下方就是它的卡片。',
+            '點「<strong>＋ 文字</strong>」加一則純文字（可放表情符號、自動帶入客人暱稱，文字下還能加按鈕）。下方就是它的卡片。',
           placement: 'bottom',
         },
         {
@@ -532,9 +617,9 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="rm-chatbar"]',
           clickBefore: '[data-tour="rm-new"]',
-          title: '① Chat Bar 文字',
+          title: '① 選單標籤文字',
           description:
-            '聊天室左下角會顯示的<strong>小標籤文字</strong>（例如「選單」「menu」），客人點它才展開選單。',
+            '聊天室左下角會顯示的<strong>小標籤文字</strong>（例如「選單」「menu」，LINE 稱為 Chat Bar），客人點它才會展開選單。',
           placement: 'right',
         },
         {
@@ -629,16 +714,16 @@ function buildTopics(): TutorialTopic[] {
       steps: [
         {
           target: '[data-tour="cs-filter"]',
-          title: '第 1 步：選區間與顆粒度',
+          title: '第 1 步：選日期範圍與統計單位',
           description:
-            '選<strong>日期區間</strong>和顆粒度（日／週／月），下面的數字會跟著變；右邊可「<strong>匯出 CSV</strong>」。',
+            '選<strong>日期範圍</strong>和統計單位（<strong>日／週／月</strong>），下面的數字會跟著變；右邊可「<strong>匯出報表</strong>」存成 Excel 檔。',
           placement: 'bottom',
         },
         {
           target: '[data-tour="cs-kpi"]',
-          title: '第 2 步：看關鍵指標',
+          title: '第 2 步：看關鍵數字',
           description:
-            '這排是重點：總會話、<strong>機器人首接</strong>、轉真人與結案比例——看 AI 幫你擋掉多少、哪裡還要再補知識或腳本。',
+            '這排是重點：總對話數、<strong>機器人先接住的比例</strong>（客人第一句就由 AI 回答）、轉真人和結案的比例——看 AI 幫你分擔了多少、哪裡還要再補知識或腳本。',
           placement: 'bottom',
         },
       ],
@@ -675,6 +760,7 @@ const TOPIC_CATEGORY: Record<string, string> = {
   organization: 'setup',
   'ai-settings': 'setup',
   knowledge: 'setup',
+  'knowledge-manage': 'setup',
   'ai-scripts': 'setup',
   members: 'setup',
   conversations: 'daily',

@@ -22,7 +22,7 @@
           <div class="card-section-stack">
             <div class="tags-toolbar">
               <div class="tags-toolbar__field tags-toolbar__field--search">
-                <AdminFieldLabel text="搜尋（名稱或 code）" tight />
+                <AdminFieldLabel text="搜尋（標籤名稱或英文代號）" tight />
                 <el-input v-model="searchText" placeholder="輸入關鍵字…" clearable />
               </div>
               <div class="tags-toolbar__field tags-toolbar__field--category">
@@ -134,14 +134,14 @@
         </div>
 
         <div class="admin-field-group">
-          <AdminFieldLabel text="Code（英文小寫+底線，建立後不可修改）" tight />
+          <AdminFieldLabel text="英文代號（系統辨識用，建立後就不能改）" tight />
           <el-input
             v-model="form.code"
             :disabled="isEditing"
             placeholder="例如 interest_food、vip"
             maxlength="40"
           />
-          <span class="tags-hint">只能使用英文小寫字母、數字、底線，並以英文開頭</span>
+          <span class="tags-hint">給系統認的英文代號（不會給客人看到）：只能用英文小寫、數字、底線，開頭要是英文字母</span>
         </div>
 
         <div class="admin-field-group">

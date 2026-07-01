@@ -100,7 +100,7 @@
             </div>
           </div>
           <div class="card-section-stack">
-            <p class="ar-section-hint">設定文字比對方式，可選擇包含任一、包含全部、內容完全一致，或輸入任何內容都觸發。</p>
+            <p class="ar-section-hint">設定客人訊息要「怎麼比對」才算命中：含到其中一個關鍵字、要全部關鍵字都出現、內容要一字不差，或是客人不管打什麼都會觸發。</p>
             <div class="admin-field-group">
               <AdminFieldLabel text="比對方式" tight />
               <el-select v-model="form.matchType" class="control-full">
@@ -143,7 +143,7 @@
                 />
               </el-select>
               <p class="ar-section-hint">
-                同一使用者在冷卻時間內再次輸入時，不會重複觸發此規則。
+                同一位客人在這段時間內又打了關鍵字，也不會再回一次，避免短時間內一直重複回覆。
               </p>
             </div>
           </div>

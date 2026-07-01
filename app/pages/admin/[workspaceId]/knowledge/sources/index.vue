@@ -5,7 +5,7 @@
       <span class="split-sidebar-title" data-tour="kb-sources">📁 來源</span>
       <div class="flex gap-1">
         <el-tooltip v-if="canEditFolders" content="新增資料夾" placement="bottom" :show-after="300">
-          <el-button size="small" plain @click="createFolderPrompt">📂</el-button>
+          <el-button size="small" plain data-tour="kb-folder-new" @click="createFolderPrompt">📂</el-button>
         </el-tooltip>
         <el-tooltip v-if="canEditKb" content="匯入檔案 / 網址 / 大段文字" placement="bottom" :show-after="300">
           <el-button size="small" type="primary" plain data-tour="kb-import" @click="goImport">📥 匯入</el-button>
@@ -186,6 +186,7 @@
           v-if="selectedSource?.type === 'url'"
           type="primary"
           plain
+          data-tour="kb-resync"
           :loading="resyncing"
           @click="startResync"
         >
@@ -195,6 +196,7 @@
           v-if="selectedSource?.type === 'gsheet'"
           type="primary"
           plain
+          data-tour="kb-resync"
           :loading="gsheetSyncing"
           @click="syncGsheetNow"
         >
@@ -246,7 +248,7 @@
         </div>
 
         <!-- 自動偵測設定（只給 URL） -->
-        <div v-if="selectedSource.type === 'url'" class="message-card src-section-card">
+        <div v-if="selectedSource.type === 'url'" class="message-card src-section-card" data-tour="kb-sync-settings">
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="badge badge-green">⏰ 自動偵測變動</span>
@@ -288,7 +290,7 @@
         </div>
 
         <!-- 自動同步設定（只給 Google Sheet）-->
-        <div v-if="selectedSource.type === 'gsheet'" class="message-card src-section-card">
+        <div v-if="selectedSource.type === 'gsheet'" class="message-card src-section-card" data-tour="kb-sync-settings">
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="badge badge-green">⏰ 自動同步</span>
@@ -324,7 +326,7 @@
         </div>
 
         <!-- 旗下 chunks -->
-        <div class="message-card src-section-card">
+        <div class="message-card src-section-card" data-tour="kb-chunks">
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="badge badge-green">📝 卡片（{{ chunks.length }}）</span>
@@ -362,8 +364,8 @@
   >
     <div v-if="diffData" class="diff-body">
       <p class="text-muted text-sm">
-        已重新抓取網頁並用 LLM 切卡，請逐張決定要採用新版本還是保留舊版本。
-        手動編輯過的卡（🔒）預設保留你的版本。
+        已重新抓一次網頁、重新整理成一張張卡片，請逐張決定要換成新的、還是保留舊的。
+        你手動改過的卡（🔒）預設保留你的版本。
       </p>
       <div class="diff-summary">
         <span class="diff-summary-chip diff-summary-chip--add">🟢 新增 {{ diffData.diff.summary.added }}</span>
@@ -453,7 +455,7 @@
       <!-- 索引狀態(編輯既有卡才有) -->
       <div v-if="chunkEditMode === 'edit'" class="chunk-status-row">
         <span :class="['badge', chunkStatusBadge(chunkEditStatus)]">{{ chunkStatusLabel(chunkEditStatus) }}</span>
-        <span v-if="chunkEditStatus === 'pending'" class="text-xs text-muted">背景索引中,約 5–30 秒</span>
+        <span v-if="chunkEditStatus === 'pending'" class="text-xs text-muted">處理中，約 5–30 秒後 AI 就能用這條回答</span>
         <span v-if="chunkEditFailureReason" class="chunk-status-failure">{{ chunkEditFailureReason }}</span>
         <el-button
           v-if="chunkEditStatus === 'failed'"
@@ -494,7 +496,7 @@
           >
             ✨ AI 整理一下
           </el-button>
-          <span class="text-xs text-muted">自動加重點摘要、移除系統碼,提高檢索準確度;整理後記得儲存</span>
+          <span class="text-xs text-muted">自動整理成重點、清掉沒用的雜訊，讓 AI 更容易找到這條;整理後記得儲存</span>
         </div>
       </div>
       <div class="admin-field-group">

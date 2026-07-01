@@ -306,7 +306,7 @@
                 <p class="ai-section-hint">低於此門檻 AI 會放棄回答、轉真人客服。建議 0.75 起手,跑兩週後依數據再降。</p>
               </div>
               <div class="admin-field-group">
-                <AdminFieldLabel :text="`知識庫相關度門檻(Grounding):${form.groundingThreshold.toFixed(2)}`" tight />
+                <AdminFieldLabel :text="`知識庫相關度門檻:${form.groundingThreshold.toFixed(2)}`" tight />
                 <el-slider
                   v-model="form.groundingThreshold"
                   :min="0"
@@ -315,8 +315,8 @@
                   show-stops
                 />
                 <p class="ai-section-hint">
-                  最佳知識卡的相似度需 ≥ 此值才允許 AI 回答;否則直接轉真人(標 <code>no_grounding</code>)。
-                  預設 0.7,常出現 0.65–0.69 擦邊 case 可以調低一點。
+                  AI 找到最接近的那張知識卡,必須夠相關(相關度 ≥ 此值)才准開口回答;不夠相關就轉真人,不硬掰。
+                  預設 0.7;如果客人問題常常只差一點點(0.65–0.69)就被擋下來、老是轉真人,可以把它調低一些。
                 </p>
               </div>
               <div class="admin-field-group">
@@ -340,8 +340,8 @@
             </div>
             <div class="card-section-stack">
               <p class="ai-section-hint">
-                客人問題太籠統、知識庫有多張卡都接近時,主動反問請客人點按鈕澄清,而不是硬答或直接轉真人。
-                觸發區間由「回答風格」帶入,通常不需手動調整。
+                當客人問題太籠統、知識庫剛好有好幾張卡都沾得上邊時,AI 會主動反問、給客人幾個按鈕點選,
+                而不是硬答或直接轉真人。什麼時候該反問,會依你選的「回答風格」自動設定,通常不用自己調。
               </p>
               <div class="admin-field-group">
                 <AdminFieldLabel text="啟用反問澄清" tight />
@@ -352,7 +352,7 @@
                 />
               </div>
               <div class="admin-field-group">
-                <AdminFieldLabel :text="`觸發區間下限(top1 ≥):${form.disambiguation.top1Min.toFixed(2)}`" tight />
+                <AdminFieldLabel :text="`反問下限(最相關卡 ≥):${form.disambiguation.top1Min.toFixed(2)}`" tight />
                 <el-slider
                   v-model="form.disambiguation.top1Min"
                   :min="0"
@@ -361,10 +361,10 @@
                   :disabled="!form.disambiguation.enabled"
                   show-stops
                 />
-                <p class="ai-section-hint">top-1 相似度低於此值就不反問(太低 = 知識庫沒料,照常 grounding)。</p>
+                <p class="ai-section-hint">如果最相關的那張卡相關度太低(低於此值),代表知識庫其實沒有對應內容,就不反問、照一般規則處理。</p>
               </div>
               <div class="admin-field-group">
-                <AdminFieldLabel :text="`觸發區間上限(top1 <):${form.disambiguation.top1Max.toFixed(2)}`" tight />
+                <AdminFieldLabel :text="`反問上限(最相關卡 <):${form.disambiguation.top1Max.toFixed(2)}`" tight />
                 <el-slider
                   v-model="form.disambiguation.top1Max"
                   :min="0"
@@ -373,10 +373,10 @@
                   :disabled="!form.disambiguation.enabled"
                   show-stops
                 />
-                <p class="ai-section-hint">top-1 相似度高於此值就不反問(夠肯定 = 直接答)。</p>
+                <p class="ai-section-hint">如果最相關的那張卡相關度夠高(高於此值),代表答案很明確,就不反問、直接回答。</p>
               </div>
               <div class="admin-field-group">
-                <AdminFieldLabel :text="`Top1−Top2 差距小於:${form.disambiguation.maxSpread.toFixed(2)}`" tight />
+                <AdminFieldLabel :text="`前兩張卡差距小於:${form.disambiguation.maxSpread.toFixed(2)}`" tight />
                 <el-slider
                   v-model="form.disambiguation.maxSpread"
                   :min="0"
@@ -384,7 +384,7 @@
                   :step="0.01"
                   :disabled="!form.disambiguation.enabled"
                 />
-                <p class="ai-section-hint">差距小於此值才算「多卡同樣相關」,值越大越容易觸發反問。</p>
+                <p class="ai-section-hint">最相關的前兩張卡分數很接近(差距小於此值)時,才算「分不出客人要問哪張」而反問;數字調越大越容易反問。</p>
               </div>
               <div class="admin-field-group">
                 <AdminFieldLabel text="最多選項數" tight />
@@ -419,7 +419,7 @@
             </div>
             <div class="card-section-stack">
               <div class="admin-field-group">
-                <AdminFieldLabel text="月 token 上限" tight />
+                <AdminFieldLabel text="每月用量上限（token）" tight />
                 <el-input-number
                   v-model="form.quota.monthlyTokenCap"
                   :min="0"
@@ -429,15 +429,15 @@
                   class="control-full"
                 />
                 <p class="ai-section-hint">
-                  含 input / output / embedding 全部 token。設 0 表示不限制。
-                  <template v-if="usageTokens !== null">本月已用 {{ formatTokens(usageTokens) }} tokens。</template>
+                  這裡算的是 AI 的總使用量（送進 AI 的、AI 產生的、搜尋知識庫用的都算在內）。設 0 表示不限制。
+                  <template v-if="usageTokens !== null">本月已用 {{ formatTokens(usageTokens) }}。</template>
                 </p>
               </div>
               <div class="admin-field-group">
-                <AdminFieldLabel text="超量處理" tight />
+                <AdminFieldLabel text="用量超過上限時" tight />
                 <el-radio-group v-model="form.quota.onExceed">
                   <el-radio value="handoff_all">全部轉真人(保守、推薦)</el-radio>
-                  <el-radio value="downgrade_model">降級為 Flash Lite(服務不中斷)</el-radio>
+                  <el-radio value="downgrade_model">改用更省的模型(服務不中斷)</el-radio>
                 </el-radio-group>
               </div>
             </div>

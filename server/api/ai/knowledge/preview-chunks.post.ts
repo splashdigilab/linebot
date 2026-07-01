@@ -2,6 +2,7 @@ import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import {
   extractPdfText,
   extractUrlText,
+  extractXlsxCards,
   extractXlsxText,
   isProbablyScannedPdf,
   MAX_OCR_PAGES,
@@ -24,6 +25,34 @@ import { parseGoogleSheetUrl, readGoogleSheetAsCards } from '~~/server/utils/goo
  * 流程：抽純文字 → LLM 切卡。
  * 純預覽：不寫入 Firestore。客戶端確認後再 POST /bulk-create。
  */
+/** 偵測同名來源（給前端顯示 dedup 警告用；不阻擋建立，只提醒）。查詢失敗回空陣列。 */
+async function findExistingSources(workspaceId: string, sourceName: string) {
+  if (!sourceName) return []
+  try {
+    const db = getDb()
+    const snap = await db.collection(KNOWLEDGE_SOURCES_COLLECTION)
+      .where('workspaceId', '==', workspaceId)
+      .where('name', '==', sourceName)
+      .limit(5)
+      .get()
+    return snap.docs.map((d) => {
+      const data = d.data() as any
+      const ts = data?.updatedAt
+      const sec = ts?._seconds ?? ts?.seconds
+      return {
+        id: d.id,
+        name: String(data?.name ?? ''),
+        chunkCount: Number(data?.chunkCount ?? 0),
+        updatedAtMs: typeof sec === 'number' ? sec * 1000 : 0,
+      }
+    })
+  }
+  catch (e) {
+    console.warn('[preview-chunks] dedup check failed:', e)
+    return []
+  }
+}
+
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'agent')
   const body = await readBody(event)
@@ -113,7 +142,56 @@ export default defineEventHandler(async (event) => {
         ocrUsed = true
       }
     }
-    else if (isXlsx) extracted = extractXlsxText(buffer)
+    else if (isXlsx) {
+      // 乾淨表格 → 比照 Google Sheet 一列一卡（不走 LLM、零 token、結果穩定）；
+      // 非表格（單欄清單、散裝文字）回 null，往下 fallback 到 extractXlsxText + LLM 切卡。
+      const xlsx = extractXlsxCards(buffer)
+      if (xlsx) {
+        let overviewCard: { title: string; content: string; tags: string[]; questions: string[] } | null = null
+        let ovInput = 0
+        let ovOutput = 0
+        if (wantOverview && xlsx.cards.length >= 2) {
+          try {
+            const ov = await summarizeAsOverviewCard(xlsx.cards, { hint: sourceName })
+            if (ov) {
+              overviewCard = {
+                title: ov.card.title,
+                content: ov.card.content,
+                tags: ov.card.tags,
+                questions: ov.card.questions ?? [],
+              }
+              ovInput = ov.inputTokens
+              ovOutput = ov.outputTokens
+            }
+          }
+          catch (e) {
+            console.warn('[preview-chunks] xlsx overview synthesis failed:', e)
+          }
+        }
+        if (ovInput || ovOutput) {
+          await recordAiUsage(workspaceId, {
+            inputTokens: ovInput,
+            outputTokens: ovOutput,
+            importInputTokens: ovInput,
+            importOutputTokens: ovOutput,
+          }).catch(() => {})
+        }
+        return {
+          sourceName,
+          sourceUrl: '',
+          sourceType: 'file',
+          rawLength: 0,
+          truncated: xlsx.truncated,
+          meta: { rows: xlsx.rowCount, sheets: xlsx.sheetCount },
+          ocrUsed: false,
+          chunks: xlsx.cards.map(c => ({ title: c.title, content: c.content, tags: c.tags, questions: [] as string[] })),
+          overviewCard,
+          existingMatches: await findExistingSources(workspaceId, sourceName),
+          usage: { inputTokens: ovInput, outputTokens: ovOutput },
+        }
+      }
+      extracted = extractXlsxText(buffer)
+    }
     else throw createError({ statusCode: 400, statusMessage: `不支援的檔案類型：${ext || contentType}` })
   }
   else if (type === 'url') {
@@ -180,31 +258,9 @@ export default defineEventHandler(async (event) => {
   }).catch(() => {})
 
   // 偵測同名來源（給前端顯示 dedup 警告用；不阻擋建立，只提醒）
-  let existingMatches: Array<{ id: string; name: string; chunkCount: number; updatedAtMs: number }> = []
-  if (sourceName && (type === 'file' || type === 'url')) {
-    try {
-      const db = getDb()
-      const snap = await db.collection(KNOWLEDGE_SOURCES_COLLECTION)
-        .where('workspaceId', '==', workspaceId)
-        .where('name', '==', sourceName)
-        .limit(5)
-        .get()
-      existingMatches = snap.docs.map((d) => {
-        const data = d.data() as any
-        const ts = data?.updatedAt
-        const sec = ts?._seconds ?? ts?.seconds
-        return {
-          id: d.id,
-          name: String(data?.name ?? ''),
-          chunkCount: Number(data?.chunkCount ?? 0),
-          updatedAtMs: typeof sec === 'number' ? sec * 1000 : 0,
-        }
-      })
-    }
-    catch (e) {
-      console.warn('[preview-chunks] dedup check failed:', e)
-    }
-  }
+  const existingMatches = (type === 'file' || type === 'url')
+    ? await findExistingSources(workspaceId, sourceName)
+    : []
 
   return {
     sourceName,

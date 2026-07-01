@@ -388,7 +388,7 @@
                     <span
                       v-if="msg.direction === 'outgoing' && msg.readByPeer"
                       class="conv-bubble-read"
-                      title="對方有傳訊或點選按鈕後，推定曾看到此則以前的官方訊息；與 LINE App 內建已讀不完全相同。"
+                      title="客人後來有回訊息或點按鈕，代表他應該已看過這則之前的訊息；這是系統推估的，跟 LINE App 裡的「已讀」不一定完全一樣。"
                     >已讀</span>
                   </div>
                 </div>
@@ -532,7 +532,7 @@
             </div>
           </el-popover>
         </div>
-        <span class="text-muted conv-input-hint">點按按鈕可在附近視窗直接選擇</span>
+        <span class="text-muted conv-input-hint">點上面的按鈕，可以直接挑圖片、貼圖、表情或客服預存來傳</span>
       </div>
 
       <div class="conv-input-row">

@@ -113,7 +113,7 @@
             </div>
             <div class="admin-field-group">
               <AdminFieldLabel text="完成後轉址網址（選填）" tight />
-              <p class="text-xs text-muted">使用者完成綁定後自動跳轉到此網址（如問卷感謝頁）。留空則停留在綁定成功頁。</p>
+              <p class="text-xs text-muted">客人綁定完成後，自動幫他跳到這個網址（例：問卷的感謝頁）。留空的話就停在「綁定成功」畫面。</p>
               <el-input
                 v-model="form.redirectUrl"
                 placeholder="https://example.com/thank-you"
