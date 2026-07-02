@@ -11,11 +11,13 @@ import {
 import {
   createKnowledgeChunk,
   KNOWLEDGE_CHUNKS_COLLECTION,
+  normalizeChunkInput,
   updateKnowledgeChunk,
+  validateChunkInput,
 } from '~~/server/utils/ai-knowledge-chunks'
 import { summarizeAsOverviewCard } from '~~/server/utils/ai-knowledge-chunker'
 import { recordAiUsage } from '~~/server/utils/ai-usage'
-import type { DiffAction, DiffEntry } from '~~/server/utils/ai-knowledge-resync'
+import { loadOldChunksForDiff, type DiffAction, type DiffEntry } from '~~/server/utils/ai-knowledge-resync'
 
 /**
  * 套用 diff 後，依「當下這個 source 旗下的子卡片」重新合成總覽卡（isOverview）。
@@ -117,6 +119,12 @@ export default defineEventHandler(async (event) => {
   const source = await getSource(db, sourceId, workspaceId)
   if (!source) throw createError({ statusCode: 404, statusMessage: 'source not found' })
 
+  // entries 整包由 client 提供:任何引用舊卡的動作（覆寫 / 刪除 / questions 回填）都必須
+  // 先驗證該卡確實屬於本 workspace + 本 source,否則帶任意 chunkId 就能跨租戶刪改。
+  const ownedChunkIds = new Set(
+    (await loadOldChunksForDiff(db, workspaceId, sourceId)).map(c => c.id),
+  )
+
   let added = 0
   let updated = 0
   let deleted = 0
@@ -127,6 +135,10 @@ export default defineEventHandler(async (event) => {
     const action = decisions[entry.id]
     if (!action) {
       kept++
+      continue
+    }
+    if (entry.oldChunk && !ownedChunkIds.has(entry.oldChunk.id)) {
+      errors.push({ entryId: entry.id, message: '卡片不屬於此來源，已略過' })
       continue
     }
     try {
@@ -153,28 +165,41 @@ export default defineEventHandler(async (event) => {
         continue
       }
       if (action === 'add_new' && entry.newChunk) {
+        // 新內容也由 client 提供:過品質/格式驗證（trim、5000 上限、過短 placeholder）
+        const input = normalizeChunkInput(entry.newChunk)
+        const verr = validateChunkInput(input)
+        if (verr) {
+          errors.push({ entryId: entry.id, message: verr })
+          continue
+        }
         await createKnowledgeChunk(db, {
           workspaceId,
           chunkId: uuidv4(),
-          title: entry.newChunk.title,
-          content: entry.newChunk.content,
-          tags: entry.newChunk.tags,
-          questions: entry.newChunk.questions ?? [],
+          title: input.title,
+          content: input.content,
+          tags: input.tags,
+          questions: input.questions ?? [],
           sourceId,
         })
         added++
         continue
       }
       if (action === 'use_new' && entry.oldChunk && entry.newChunk) {
+        const input = normalizeChunkInput(entry.newChunk)
+        const verr = validateChunkInput(input)
+        if (verr) {
+          errors.push({ entryId: entry.id, message: verr })
+          continue
+        }
         await updateKnowledgeChunk(db, {
           chunkId: entry.oldChunk.id,
-          title: entry.newChunk.title,
-          content: entry.newChunk.content,
-          tags: entry.newChunk.tags,
-          questions: entry.newChunk.questions ?? [],
+          title: input.title,
+          content: input.content,
+          tags: input.tags,
+          questions: input.questions ?? [],
           // title 也在 embedding 文字裡，title 或 content 變了都要重新索引
-          contentChanged: entry.oldChunk.content !== entry.newChunk.content
-            || entry.oldChunk.title !== entry.newChunk.title,
+          contentChanged: entry.oldChunk.content !== input.content
+            || entry.oldChunk.title !== input.title,
           manualEdit: false, // re-sync 是自動的，不算手動編輯
         })
         // 清掉 manuallyEditedAt（使用者已選擇用新版了）

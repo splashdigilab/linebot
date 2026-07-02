@@ -210,7 +210,13 @@
       "Bash(echo \"EXIT: $?\")",
       "Bash(grep -E \"\\\\.\\(ts|js\\)$\")",
       "Bash(echo \"TYPECHECK EXIT: $?\")",
-      "Bash(echo \"TEST EXIT: $?\")"
+      "Bash(echo \"TEST EXIT: $?\")",
+      "Bash(grep -n \"embedDocument\\\\|embedContent\\\\|async function embed\\\\|batchEmbed\" /Users/kevin/Documents/Github/linebot/server/utils/gemini.ts | head; echo ----; sed -n '/export async function embedDocument/,/^}/p' /Users/kevin/Documents/Github/linebot/server/utils/gemini.ts)",
+      "Bash(grep -rn \"handleMessageEvent\" /Users/kevin/Documents/Github/linebot/server/api --include=\"*.ts\" | head; echo ---; sed -n 1,60p /Users/kevin/Documents/Github/linebot/server/api/webhook/line/[workspaceId].post.ts 2>/dev/null || ls /Users/kevin/Documents/Github/linebot/server/api/webhook 2>/dev/null)",
+      "Bash(node --env-file=.env_myfeel --experimental-strip-types scripts/scan-short-chunks.ts)",
+      "Bash(node --env-file=.env_myfeel --experimental-strip-types scripts/scan-short-chunks.ts --apply)",
+      "Bash(node --env-file=.env_splash --experimental-strip-types scripts/scan-short-chunks.ts)",
+      "Bash(npx nuxi *)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",
@@ -220,7 +226,9 @@
       "/private/tmp",
       "/tmp",
       "/Users/kevin/Documents/Github/linebot/server/api/admin/org/[orgId]",
-      "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/knowledge/sources"
+      "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/knowledge/sources",
+      "/Users/kevin/Documents/Github/linebot/server/utils",
+      "/Users/kevin/Documents/Github/linebot/server/api/webhook/line"
     ]
   }
 }

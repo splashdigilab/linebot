@@ -150,6 +150,9 @@ export async function setAiSettings(
     ...partial,
     quota: { ...current.quota, ...(partial.quota ?? {}) },
     handoffNotify: { ...current.handoffNotify, ...(partial.handoffNotify ?? {}) },
+    // 深合併：partial 只帶部分子欄位（如 { enabled }）時，其餘門檻要保留工作區現值,
+    // 否則 normalize 會把缺欄位重設回出廠預設（top1Min 0.65 事故的同型結構）
+    disambiguation: { ...current.disambiguation, ...(partial.disambiguation ?? {}) },
   })
   await db.collection(AI_SETTINGS_COLLECTION).doc(workspaceId).set({
     ...merged,
