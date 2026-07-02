@@ -51,6 +51,11 @@
                 <strong>{{ formatPercent(summary?.answeredThenHandoffRate) }}</strong>
                 <span class="usage-kpi__sub">{{ formatNumber(summary?.answeredThenHandoffs) }} 次（AI 回答後客人還是要找真人，可視為「沒答到重點」，越低越好）</span>
               </div>
+              <div class="usage-kpi usage-kpi--warning">
+                <span class="usage-kpi__label">反問澄清率</span>
+                <strong>{{ formatPercent(summary?.disambiguationRate) }}</strong>
+                <span class="usage-kpi__sub">{{ formatNumber(summary?.disambiguations) }} 次反問（AI 先問客人「要哪一個」才作答；偏高通常代表知識卡標題太相近，或可到設定調整反問門檻）</span>
+              </div>
               <div class="usage-kpi">
                 <span class="usage-kpi__label">每對話成本</span>
                 <strong>${{ summary?.perConversationUsd?.toFixed(4) ?? '0.0000' }}</strong>
@@ -102,6 +107,7 @@
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="badge badge-green">🚨 近期轉真人案例</span>
+              <span class="text-xs text-muted">最近待處理・不分月份</span>
               <el-select v-model="reasonFilter" size="small" style="width: 150px" @change="loadHandoffs">
                 <el-option label="全部原因" value="" />
                 <el-option label="信心不足" value="low_confidence" />
@@ -115,7 +121,7 @@
               客人問了 AI 但答不出來的情況。點「📥 補知識」直接到知識庫補一張對應卡。
             </p>
             <div v-if="loadingHandoffs && !handoffs.length" class="usage-loading"><div class="spinner" /></div>
-            <div v-else-if="!handoffs.length" class="usage-empty">本期沒有低信心案例 🎉</div>
+            <div v-else-if="!handoffs.length" class="usage-empty">目前沒有待處理的轉真人案例 🎉</div>
             <div v-else class="usage-handoff-list">
               <div v-for="row in handoffs" :key="`${row.userId}-${row.updatedAtMs}`" class="usage-handoff-row">
                 <div class="usage-handoff-meta">
@@ -146,11 +152,13 @@
 
 <script setup lang="ts">
 import { HANDOFF_REASON_LABELS, type HandoffReason } from '~~/shared/types/ai-knowledge'
+import { useAdminToast } from '~~/app/composables/useAdminToast'
 
 definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
 
 const { apiFetch, workspaceId } = useWorkspace()
 const router = useRouter()
+const { showToast } = useAdminToast()
 
 interface Summary {
   period: string
@@ -159,6 +167,8 @@ interface Summary {
   handoffs: number
   answeredThenHandoffs: number
   answeredThenHandoffRate: number
+  disambiguations: number
+  disambiguationRate: number
   inputTokens: number
   outputTokens: number
   embeddingTokens: number
@@ -285,7 +295,8 @@ async function resolveHandoff(userId: string) {
     handoffs.value = handoffs.value.filter(r => r.userId !== userId)
   }
   catch {
-    // 失敗就保留在列表上，下次再按
+    // 保留在列表上讓使用者重試；沒有回饋會讓人以為按了沒反應而連點
+    showToast('標記失敗，請再試一次', 'error')
   }
   finally {
     resolvingUserId.value = null

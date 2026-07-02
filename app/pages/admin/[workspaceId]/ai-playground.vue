@@ -93,8 +93,10 @@
                 <div v-else-if="turn.result.handoffReason === 'llm_error'" class="pg-llm-error">
                   <p><strong>💥 AI 服務暫時失敗</strong></p>
                   <p class="text-muted">
-                    Gemini 呼叫拋例外（多半是過載 503 或網路抖動）。請<strong>重試</strong>看看；如果持續失敗，到 server log 找
-                    <code>[ai-answer] generateText failed</code> 或 <code>embedQuery failed</code> 查實際錯誤。
+                    通常是 AI 服務短暫過載，請按<strong>重試</strong>；若重試多次仍失敗，請聯絡系統管理員。
+                  </p>
+                  <p class="text-xs text-muted">
+                    （給管理員：server log 搜 <code>[ai-answer] generateText failed</code> 或 <code>embedQuery failed</code>）
                   </p>
                   <div class="pg-llm-error-actions">
                     <el-button
@@ -122,9 +124,14 @@
                   >
                     💡 實際 LINE 對話中，這種情況會先問客人「需要幫您轉接專員嗎？」並附按鈕，客人按「轉接專員」才真的轉接（這裡是試答，直接顯示判定結果）。
                   </p>
-                  <p v-if="turn.result.handoffReason === 'no_grounding'" class="text-muted">
-                    知識庫沒有足夠相關內容。建議補一張對應的卡，再試一次。
-                  </p>
+                  <template v-if="turn.result.handoffReason === 'no_grounding'">
+                    <p class="text-muted">
+                      知識庫沒有足夠相關內容。補一張對應的卡，回來再試一次就會生效。
+                    </p>
+                    <el-button size="small" type="primary" plain @click="goAddKnowledge(queryForTurn(idx))">
+                      📥 補這題的知識
+                    </el-button>
+                  </template>
                   <p v-else-if="turn.result.handoffReason === 'low_confidence'" class="text-muted">
                     AI 找到了卡但把握不足。可以調低信心門檻或補充更精準的卡。
                   </p>
@@ -389,8 +396,26 @@ function resetConversation() {
 }
 
 function goEditChunk(chunkId: string) {
-  // 帶 chunkId 過去；來源頁會反查所屬來源、自動選取並開啟該卡的編輯視窗
-  router.push(`/admin/${workspaceId.value}/knowledge/sources?chunkId=${encodeURIComponent(chunkId)}`)
+  // 帶 chunkId 過去；來源頁會反查所屬來源、自動選取並開啟該卡的編輯視窗。
+  // 開新分頁：整頁跳轉會弄丟這裡的整段測試對話，修完卡回來就無法接著驗證。
+  const href = router.resolve(`/admin/${workspaceId.value}/knowledge/sources?chunkId=${encodeURIComponent(chunkId)}`).href
+  window.open(href, '_blank')
+}
+
+/** 找出第 idx 個 AI 回合對應的客人提問（往前找最近的 user turn） */
+function queryForTurn(idx: number): string {
+  for (let i = idx - 1; i >= 0; i--) {
+    const t = history.value[i]
+    if (t?.role === 'user') return t.text
+  }
+  return ''
+}
+
+function goAddKnowledge(q: string) {
+  // 同監控頁「補知識」：來源頁自動開新增手寫視窗並預填。開新分頁保留測試對話。
+  const suffix = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''
+  const href = router.resolve(`/admin/${workspaceId.value}/knowledge/sources${suffix}`).href
+  window.open(href, '_blank')
 }
 
 async function loadSettings() {

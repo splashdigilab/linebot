@@ -2178,8 +2178,27 @@ const HANDOFF_CONFIRM_YES_TEXT = '轉接專員'
 const HANDOFF_CONFIRM_NO_TEXT = '我再問問'
 
 // 客人沒按鈕、自己打字回應「需要轉接嗎?」時的口語判斷。先比對否定（「不要」含「要」會誤中肯定）。
+// 否定用子字串比對但限短句（長句多半是新問題，「我不需要保固可以退嗎」不該被當拒絕）。
 const CONFIRM_NO_RE = /不用|不要|不需要|不必|不轉|先不|沒事|沒關係|算了|自己/
-const CONFIRM_YES_RE = /^(好|要|是|對|需要|麻煩|請|轉接|轉|可以|嗯|ok|okay|yes)/i
+const CONFIRM_NO_MAX_LEN = 12
+
+// 肯定必須「整句就是短肯定」白名單：只比開頭會把接著問的新問題吃掉
+// （「請問除濕機多少錢」「可以退貨嗎」「好像壞了」開頭都撞肯定詞 → 問題被丟掉直接轉真人）。
+const CONFIRM_YES_TEXTS = new Set([
+  '好', '好的', '好啊', '好呀', '好喔', '要', '是', '是的', '對', '對啊',
+  '需要', '麻煩', '麻煩了', '麻煩你了', '麻煩您了', '轉接', '轉', '幫我轉',
+  '可以', '可以啊', '嗯', '嗯嗯', 'ok', 'okay', 'yes',
+])
+
+function isConfirmYesText(raw: string): boolean {
+  // 去尾端語氣標點後整句精確比對；帶問號（「可以嗎?」）一律當新問題
+  const t = raw.trim().toLowerCase().replace(/[!！。．~〜～\s]+$/g, '')
+  return CONFIRM_YES_TEXTS.has(t)
+}
+
+// 「需要轉接嗎?」等待回應的時效：超過就不再用口語猜測（客人隔天回來的第一句
+// 不該被當成在回答昨天的問題）；quick-reply 按鈕文字不受時效限制（意圖明確）。
+const HANDOFF_CONFIRM_TTL_MS = 10 * 60 * 1000
 
 const HANDOFF_CONFIRM_PROMPT = '這個問題我不太確定該怎麼回答 😅 需要幫您轉接專員嗎？'
 const HANDOFF_DECLINE_REPLY = '好的～您可以換個方式描述，或直接告訴我想了解什麼，我再幫您看看 😊'
@@ -2274,9 +2293,16 @@ async function deliverHandoffReply(params: {
   }
 
   if (replyToken) {
-    await replyMessage(replyToken, handoffMessages, workspaceId)
-    saveOutgoingConversationMessagesByWorkspace(lineUserId, handoffMessages, workspaceId)
-      .catch(e => console.error('[ai-fallback] save outgoing error:', e))
+    // reply 失敗（token 過期 / LINE 5xx）不能讓整個轉接蒸發：客人這則沒收到「已安排專員」,
+    // 但 session 標記與值班通知必須照常執行——否則客服不知道有人在等,而統計已計入 handoff。
+    try {
+      await replyMessage(replyToken, handoffMessages, workspaceId)
+      saveOutgoingConversationMessagesByWorkspace(lineUserId, handoffMessages, workspaceId)
+        .catch(e => console.error('[ai-fallback] save outgoing error:', e))
+    }
+    catch (e) {
+      console.error('[ai-fallback] handoff reply failed, continuing enterModule/notify:', e)
+    }
   }
 
   if (sessionId) {
@@ -2396,8 +2422,12 @@ async function tryAiFallback(params: {
   // 否定 → 安撫並把狀態收掉；其他 → 當作新問題往下跑正常 AI。
   if (prevAiMeta?.lastDecision === 'handoff_confirm') {
     const t = textContent.trim()
-    const declined = t === HANDOFF_CONFIRM_NO_TEXT || CONFIRM_NO_RE.test(t)
-    const confirmed = !declined && (t === HANDOFF_CONFIRM_YES_TEXT || CONFIRM_YES_RE.test(t))
+    // 時效內才做口語猜測；按鈕文字（轉接專員 / 我再問問）永遠有效
+    const askedMs = (prevAiMeta.updatedAt as any)?.toMillis?.() ?? 0
+    const fresh = askedMs > 0 && (Date.now() - askedMs) <= HANDOFF_CONFIRM_TTL_MS
+    const declined = t === HANDOFF_CONFIRM_NO_TEXT
+      || (fresh && t.length <= CONFIRM_NO_MAX_LEN && CONFIRM_NO_RE.test(t))
+    const confirmed = !declined && (t === HANDOFF_CONFIRM_YES_TEXT || (fresh && isConfirmYesText(t)))
     if (confirmed) {
       const reason = prevAiMeta.lastHandoffReason ?? 'user_request'
       await deliverHandoffReply({

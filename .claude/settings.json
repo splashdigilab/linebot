@@ -216,7 +216,9 @@
       "Bash(node --env-file=.env_myfeel --experimental-strip-types scripts/scan-short-chunks.ts)",
       "Bash(node --env-file=.env_myfeel --experimental-strip-types scripts/scan-short-chunks.ts --apply)",
       "Bash(node --env-file=.env_splash --experimental-strip-types scripts/scan-short-chunks.ts)",
-      "Bash(npx nuxi *)"
+      "Bash(npx nuxi *)",
+      "Bash(node --env-file=.env_myfeel ./node_modules/vitest/vitest.mjs run server/utils/zzz-compare-check.test.ts)",
+      "Bash(node --env-file=.env ./node_modules/vitest/vitest.mjs run server/utils/zzz-compare-check.test.ts)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",

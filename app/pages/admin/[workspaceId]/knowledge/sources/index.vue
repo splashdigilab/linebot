@@ -994,6 +994,7 @@ async function deleteFolderFromModal() {
 
 async function selectSource(src: SourceSummary) {
   selectedId.value = src.id
+  indexPollStartedAt = 0 // 換來源重新起算輪詢時限
   await loadSourceDetail(src.id)
 }
 
@@ -1004,6 +1005,14 @@ async function loadSourceDetail(sourceId: string) {
     const idx = sources.value.findIndex(s => s.id === sourceId)
     if (idx >= 0) sources.value[idx] = res.source
     chunks.value = res.chunks
+    // 編輯視窗開著時同步該卡最新索引狀態（輪詢刷新列表,視窗裡的「處理中」也要跟著變）
+    if (chunkEditOpen.value && chunkEditingId.value) {
+      const row = res.chunks.find(c => c.id === chunkEditingId.value)
+      if (row) {
+        chunkEditStatus.value = row.status
+        chunkEditFailureReason.value = row.failureReason ?? ''
+      }
+    }
     settingsForm.value = {
       refreshIntervalMinutes: res.source.refreshIntervalMinutes,
       onChangeBehavior: res.source.onChangeBehavior,
@@ -1014,6 +1023,43 @@ async function loadSourceDetail(sourceId: string) {
     showToast(err?.statusMessage || '載入細節失敗', 'error')
   }
 }
+
+// ── 索引狀態輪詢 ─────────────────────────────────────
+// 卡片存檔後是 pending（「處理中，約 5–30 秒」），但畫面不會自己更新——使用者要
+// 手動點來點去才看得到變成「可用」，會以為壞掉。有 pending 卡就每 5 秒刷新一次
+// 選中的來源，全部完成即停；上限 2 分鐘（真卡住的交給排程重試 + 手動重新整理）。
+const INDEX_POLL_INTERVAL_MS = 5000
+const INDEX_POLL_MAX_MS = 2 * 60 * 1000
+let indexPollTimer: ReturnType<typeof setTimeout> | null = null
+let indexPollStartedAt = 0
+
+function stopIndexPolling() {
+  if (indexPollTimer) {
+    clearTimeout(indexPollTimer)
+    indexPollTimer = null
+  }
+}
+
+function maybeScheduleIndexPoll() {
+  const hasPending = chunks.value.some(c => c.status === 'pending')
+  if (!hasPending) {
+    stopIndexPolling()
+    indexPollStartedAt = 0
+    return
+  }
+  if (indexPollTimer) return
+  if (!indexPollStartedAt) indexPollStartedAt = Date.now()
+  if (Date.now() - indexPollStartedAt > INDEX_POLL_MAX_MS) return
+  indexPollTimer = setTimeout(async () => {
+    indexPollTimer = null
+    if (selectedId.value) await loadSourceDetail(selectedId.value)
+    else maybeScheduleIndexPoll()
+  }, INDEX_POLL_INTERVAL_MS)
+}
+
+// chunks 每次被 loadSourceDetail 整組替換都會觸發 → 完成即停、有 pending 就續排
+watch(chunks, () => maybeScheduleIndexPoll())
+onBeforeUnmount(stopIndexPolling)
 
 async function saveSettings() {
   if (!selectedId.value) return
