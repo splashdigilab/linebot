@@ -26,6 +26,23 @@
   margin-bottom: 12px;
 }
 
+.kb-source-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.kb-source-name-label {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.kb-source-name-input {
+  max-width: 360px;
+}
+
 .kb-dedup-body p {
   margin: 0 0 6px;
 }

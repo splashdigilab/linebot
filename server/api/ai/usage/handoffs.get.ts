@@ -1,6 +1,7 @@
 import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import { KNOWLEDGE_CHUNKS_COLLECTION } from '~~/server/utils/ai-knowledge-chunks'
+import { HANDOFF_REASON_LABELS } from '~~/shared/types/ai-knowledge'
 import type { AiConversationMeta } from '~~/shared/types/ai-knowledge'
 
 interface HandoffRow {
@@ -42,16 +43,24 @@ export default defineEventHandler(async (event): Promise<HandoffRow[]> => {
     .where('workspaceId', '==', workspaceId)
     .where('aiMeta.lastDecision', '==', 'handoff')
 
-  // 若指定特定 handoff 原因，多加一條 where（要對應到 indexes.json 的 composite index）
-  if (reason === 'low_confidence' || reason === 'no_grounding' || reason === 'user_request') {
+  // 若指定特定 handoff 原因，改用 lastHandoffReason 查詢（對應 indexes.json 的 composite index）。
+  // 注意:lastDecision 條件此時無法進查詢(會需要三欄複合索引),改在記憶體過濾——
+  // 否則「還在等客人確認、實際沒轉接」的 handoff_confirm 會混進清單。
+  // 白名單由共用標籤表導出(手抄第二份會漂移:新 reason 加了前端卻漏這裡,
+  // 篩選會靜默變成回全量);'manual' 是內部人工指定,不開放篩選。
+  const VALID_REASONS = new Set(Object.keys(HANDOFF_REASON_LABELS).filter(k => k !== 'manual'))
+  const reasonFiltered = VALID_REASONS.has(reason)
+  if (reasonFiltered) {
     q = db.collection('conversations')
       .where('workspaceId', '==', workspaceId)
       .where('aiMeta.lastHandoffReason', '==', reason)
   }
 
-  // resolved 過濾在記憶體做：已處理的會佔掉名額，所以多抓幾倍再 filter + slice，
-  // 避免「前 N 筆全是已處理」讓更舊的未處理案例被完全遮住
-  const fetchLimit = includeResolved ? limit : Math.min(100, limit * 3)
+  // resolved 與 lastDecision 過濾都在記憶體做,會吃掉查詢名額:只要任一種記憶體過濾
+  // 會發生（未含已處理、或帶 reason 篩選）就多抓幾倍再 filter + slice,
+  // 避免「前 N 筆都被濾掉」讓頁面短少、更舊的真實案例被遮住
+  const hasMemoryFilter = !includeResolved || reasonFiltered
+  const fetchLimit = hasMemoryFilter ? Math.min(100, limit * 3) : limit
   const snap = await q.orderBy('aiMeta.updatedAt', 'desc').limit(fetchLimit).get()
 
   // Hydrate chunk titles（一次撈完，避免每列再打）
@@ -62,11 +71,12 @@ export default defineEventHandler(async (event): Promise<HandoffRow[]> => {
   })
   const titleByChunkId: Record<string, string> = {}
   if (allChunkIds.size) {
-    const chunkDocs = await Promise.all(
-      Array.from(allChunkIds).map(id =>
-        db.collection(KNOWLEDGE_CHUNKS_COLLECTION).doc(id).get().catch(() => null),
-      ),
-    )
+    // getAll 一次批次讀,取代逐筆 doc().get()(最多 100 對話 × 數個 chunkId 的往返)。
+    // 批次失敗是全有全無——不能直接回空陣列,否則一次抖動會讓每列都顯示「(卡片已刪除)」;
+    // 退回逐筆讀當 fallback,只損失個別文件
+    const refs = Array.from(allChunkIds).map(id => db.collection(KNOWLEDGE_CHUNKS_COLLECTION).doc(id))
+    const chunkDocs = await db.getAll(...refs)
+      .catch(() => Promise.all(refs.map(r => r.get().catch(() => null))))
     chunkDocs.forEach((d) => {
       if (d?.exists) {
         const cd = d.data() as { workspaceId?: string; title?: string }
@@ -75,7 +85,10 @@ export default defineEventHandler(async (event): Promise<HandoffRow[]> => {
     })
   }
 
-  const rows = snap.docs.map((d) => {
+  const rows = snap.docs
+    // reason 查詢時 lastDecision 沒進 where:排除 handoff_confirm(等確認中)等非真正轉接的狀態
+    .filter(d => !reasonFiltered || ((d.data() as { aiMeta?: AiConversationMeta }).aiMeta?.lastDecision === 'handoff'))
+    .map((d) => {
     const data = d.data() as { aiMeta?: AiConversationMeta; userId?: string; displayName?: string }
     const meta = data.aiMeta!
     const updatedAtMs = tsToMs(meta.updatedAt)

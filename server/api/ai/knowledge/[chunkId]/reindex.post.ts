@@ -27,5 +27,5 @@ export default defineEventHandler(async (event) => {
     String(data.title ?? ''),
     content,
     Array.isArray(data.questions) ? data.questions.map(String) : [],
-  ))
+  ), workspaceId)
 })

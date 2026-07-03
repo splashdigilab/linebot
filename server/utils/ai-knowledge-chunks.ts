@@ -9,6 +9,7 @@
  */
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
 import { embedDocument, estimateTokens } from './gemini'
+import { recordAiUsage } from './ai-usage'
 import type { KnowledgeChunkDoc, KnowledgeChunkStatus } from '~~/shared/types/ai-knowledge'
 
 export const KNOWLEDGE_CHUNKS_COLLECTION = 'knowledgeChunks'
@@ -72,6 +73,11 @@ export function buildEmbeddingText(title: string, content: string, questions?: s
 interface CreateChunkParams extends ChunkInput {
   workspaceId: string
   chunkId: string
+  /**
+   * 批次呼叫端(bulk-create 等)設 true:跳過每卡一次的 embedding 記帳,
+   * 由呼叫端用回傳的 embeddingTokens 加總、整批記一次(避免打爆單一月用量文件)。
+   */
+  skipUsageRecording?: boolean
 }
 
 /**
@@ -81,7 +87,7 @@ interface CreateChunkParams extends ChunkInput {
 export async function createKnowledgeChunk(
   db: Firestore,
   params: CreateChunkParams,
-): Promise<{ id: string; status: KnowledgeChunkStatus; failureReason?: string }> {
+): Promise<{ id: string; status: KnowledgeChunkStatus; failureReason?: string; embeddingTokens: number }> {
   const ref = db.collection(KNOWLEDGE_CHUNKS_COLLECTION).doc(params.chunkId)
   const now = FieldValue.serverTimestamp()
 
@@ -103,7 +109,12 @@ export async function createKnowledgeChunk(
   } satisfies Omit<KnowledgeChunkDoc, 'createdAt' | 'updatedAt'> & { createdAt: any; updatedAt: any })
 
   invalidateTagIndexCache(params.workspaceId)
-  return runIndexOnChunk(db, params.chunkId, buildEmbeddingText(params.title, params.content, params.questions))
+  return runIndexOnChunk(
+    db,
+    params.chunkId,
+    buildEmbeddingText(params.title, params.content, params.questions),
+    params.skipUsageRecording ? undefined : params.workspaceId,
+  )
 }
 
 interface UpdateChunkParams extends ChunkInput {
@@ -171,20 +182,31 @@ export async function updateKnowledgeChunk(
     failureReason: FieldValue.delete(),
   })
 
-  return runIndexOnChunk(db, params.chunkId, buildEmbeddingText(params.title, params.content, questions))
+  return runIndexOnChunk(
+    db,
+    params.chunkId,
+    buildEmbeddingText(params.title, params.content, questions),
+    typeof existing.workspaceId === 'string' ? existing.workspaceId : undefined,
+  )
 }
 
 /**
  * 對單一卡跑 embedding。供 create / update / 排程 retry 共用。
  * embeddingText 請用 buildEmbeddingText(title, content, questions) 組出。
  * 不會 throw：embed 失敗就把卡標成 failed 並寫入失敗原因。
+ * workspaceId 有帶時把 embedding token 記入月用量（匯入/重建不入帳的話 quota 形同可繞過）。
+ * **批次呼叫端（reindex-all、排程 retry）請不要帶 workspaceId**：每卡一寫會對同一份
+ * 月用量文件連打（Firestore 單文件 ~1 write/s 建議值），被節流的寫入會靜默漏記——
+ * 改用回傳的 embeddingTokens 自行加總、每批記一次。
  */
 export async function runIndexOnChunk(
   db: Firestore,
   chunkId: string,
   embeddingText: string,
-): Promise<{ id: string; status: KnowledgeChunkStatus; failureReason?: string }> {
+  workspaceId?: string,
+): Promise<{ id: string; status: KnowledgeChunkStatus; failureReason?: string; embeddingTokens: number }> {
   const ref = db.collection(KNOWLEDGE_CHUNKS_COLLECTION).doc(chunkId)
+  const embeddingTokens = estimateTokens(embeddingText)
   try {
     const values = await embedDocument(embeddingText)
     await ref.update({
@@ -195,7 +217,11 @@ export async function runIndexOnChunk(
       failureReason: FieldValue.delete(),
       retryCount: FieldValue.delete(),
     })
-    return { id: chunkId, status: 'indexed' }
+    if (workspaceId) {
+      // fire-and-forget：記帳失敗不影響索引結果（recordAiUsage 內部已吞錯）
+      void recordAiUsage(workspaceId, { embeddingTokens }, db)
+    }
+    return { id: chunkId, status: 'indexed', embeddingTokens }
   }
   catch (err: any) {
     const reason = String(err?.statusMessage || err?.message || 'embed failed').slice(0, 300)
@@ -205,7 +231,7 @@ export async function runIndexOnChunk(
       retryCount: FieldValue.increment(1),
       updatedAt: FieldValue.serverTimestamp(),
     }).catch(() => {})
-    return { id: chunkId, status: 'failed', failureReason: reason }
+    return { id: chunkId, status: 'failed', failureReason: reason, embeddingTokens: 0 }
   }
 }
 
@@ -373,9 +399,14 @@ export async function retryStuckChunks(
   const stuckMs = opts.pendingStuckMs ?? PENDING_STUCK_MS
   const cutoff = new Date(Date.now() - stuckMs)
 
-  // 撿 failed
+  // 撿 failed。必須在查詢層就排除 retryCount 達上限的卡：只靠撈出後 skip 的話，
+  // 全平台累積 ≥maxBatch 張永久失敗卡（一份爛 PDF 就夠）後，每次撈到的都是同一批
+  // skippedPermanent，其他租戶的暫時性失敗卡永遠排不進 batch（餓死）。
+  // 註：failed 卡必有 retryCount（runIndexOnChunk 失敗路徑 increment 產生），
+  // 不會因 Firestore 不等式排除缺欄位文件而漏撈。需要 (status, retryCount) 複合索引。
   const failedSnap = await db.collection(KNOWLEDGE_CHUNKS_COLLECTION)
     .where('status', '==', 'failed')
+    .where('retryCount', '<', MAX_AUTO_RETRIES)
     .limit(maxBatch)
     .get()
 
@@ -389,6 +420,7 @@ export async function retryStuckChunks(
   const docs = [...failedSnap.docs, ...pendingSnap.docs]
   const seen = new Set<string>()
   let indexed = 0
+  const tokensByWorkspace = new Map<string, number>()
   let failed = 0
   let skippedPermanent = 0
   for (const doc of docs) {
@@ -408,13 +440,25 @@ export async function retryStuckChunks(
       failed++
       continue
     }
+    // 不帶 workspaceId:批次迴圈每卡一寫會打爆單一月用量文件,改累計、迴圈後每 workspace 一寫
     const result = await runIndexOnChunk(db, doc.id, buildEmbeddingText(
       String(data?.title ?? ''),
       content,
       Array.isArray(data?.questions) ? data.questions.map(String) : [],
     ))
-    if (result.status === 'indexed') indexed++
-    else failed++
+    if (result.status === 'indexed') {
+      indexed++
+      const ws = typeof data?.workspaceId === 'string' ? data.workspaceId : ''
+      if (ws) tokensByWorkspace.set(ws, (tokensByWorkspace.get(ws) ?? 0) + result.embeddingTokens)
+    }
+    else {
+      failed++
+    }
+  }
+
+  // 每個 workspace 記一次帳(排程跨租戶,不能混在同一份文件)
+  for (const [ws, tokens] of tokensByWorkspace) {
+    if (tokens > 0) await recordAiUsage(ws, { embeddingTokens: tokens }, db)
   }
 
   return { scanned: docs.length, retried: seen.size - skippedPermanent, indexed, failed, skippedPermanent }

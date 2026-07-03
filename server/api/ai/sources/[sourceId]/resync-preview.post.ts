@@ -1,3 +1,4 @@
+import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
 import { requireCapability } from '~~/server/utils/workspace-auth'
 import { getSource } from '~~/server/utils/ai-knowledge-sources'
@@ -30,7 +31,11 @@ export default defineEventHandler(async (event) => {
   }
 
   // ── 1. 取最新內容：優先用變動偵測任務暫存的全文（hash 對得上才用），否則重抓 ──
+  // contentHash 一律隨 diff 回傳給前端、由 resync-apply 帶回:apply 套用後回寫的 hash
+  // 必須對應「這份 diff 用的內容」——若 apply 自己去讀當下的 cache,排程任務在
+  // preview 與 apply 之間覆寫過 cache 時,新版變動會被永久吞掉(hash 對上了、內容卻是舊的)。
   let extracted: { text: string; rawLength: number }
+  let contentHash: string
   const cacheSnap = await db.collection('knowledgeSources').doc(sourceId)
     .collection('cache').doc('extracted')
     .get()
@@ -38,9 +43,22 @@ export default defineEventHandler(async (event) => {
   const cache = cacheSnap?.data() as { text?: string; hash?: string; rawLength?: number } | undefined
   if (cache?.text && cache.hash && cache.hash === source.data.contentHash) {
     extracted = { text: cache.text, rawLength: Number(cache.rawLength ?? cache.text.length) }
+    contentHash = cache.hash
   }
   else {
     extracted = await extractUrlText(source.data.url)
+    const { createHash } = await import('node:crypto')
+    contentHash = createHash('sha256').update(extracted.text).digest('hex')
+    // 重抓的版本也暫存,讓短時間內的第二次 preview 不必重抓
+    await db.collection('knowledgeSources').doc(sourceId)
+      .collection('cache').doc('extracted')
+      .set({
+        text: extracted.text,
+        hash: contentHash,
+        rawLength: extracted.rawLength,
+        fetchedAt: FieldValue.serverTimestamp(),
+      })
+      .catch(e => console.warn('[resync-preview] cache write failed:', e))
   }
   if (!extracted.text) {
     throw createError({ statusCode: 502, statusMessage: '抓到網頁但內容為空' })
@@ -67,6 +85,8 @@ export default defineEventHandler(async (event) => {
     sourceUrl: source.data.url,
     rawLength: extracted.rawLength,
     truncated: extracted.rawLength > extracted.text.length,
+    // apply 時帶回:對應這份 diff 內容的指紋(見上方註解)
+    contentHash,
     diff,
   }
 })

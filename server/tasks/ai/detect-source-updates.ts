@@ -70,11 +70,34 @@ async function checkOneSource(
     const extracted = await extractUrlText(data.url)
     const newHash = await sha256(extracted.text)
 
+    // 檢查成功：清掉先前的失敗標記。FieldValue.delete() 對不存在的欄位是 no-op,
+    // 不需要條件判斷(舊寫法 keys off 讀取時的快照,並發寫入的標記會漏清)。
+    // status 曾被本任務標成 'failed'(連續失敗 ≥3)的也要復原——否則來源永遠顯示
+    // 「失敗」且失敗原因已被清掉,使用者無從解釋、只能重新匯入。
+    const clearFailure = {
+      failureReason: FieldValue.delete(),
+      checkFailCount: FieldValue.delete(),
+      ...(data.status === 'failed' ? { status: 'ready' as const } : {}),
+    }
+
+    // 首次觀測（匯入時前端沒帶 hash → contentHash 為空）：只存 baseline,不標 outdated。
+    // 內容並沒有「變」,只是還沒有比較基準;沒有這個分支的話,每個新 URL 來源
+    // 第一次排程必被誤報「偵測到變動」,狼來了幾次使用者就不理警示了。
+    if (!data.contentHash) {
+      await db.collection(KNOWLEDGE_SOURCES_COLLECTION).doc(sourceId).update({
+        contentHash: newHash,
+        lastFetchedAt: FieldValue.serverTimestamp(),
+        ...clearFailure,
+      })
+      return { sourceId, outcome: 'unchanged' }
+    }
+
     // 比對 contentHash
-    if (data.contentHash && data.contentHash === newHash) {
+    if (data.contentHash === newHash) {
       // 沒變 → 只更新 lastFetchedAt
       await db.collection(KNOWLEDGE_SOURCES_COLLECTION).doc(sourceId).update({
         lastFetchedAt: FieldValue.serverTimestamp(),
+        ...clearFailure,
       })
       return { sourceId, outcome: 'unchanged' }
     }
@@ -84,6 +107,7 @@ async function checkOneSource(
     await db.collection(KNOWLEDGE_SOURCES_COLLECTION).doc(sourceId).update({
       contentHash: newHash,
       lastFetchedAt: FieldValue.serverTimestamp(),
+      ...clearFailure,
     })
 
     // 全文暫存到 subcollection：偵測時已抓過全文，丟掉的話使用者按「套用」還要重抓一次，
@@ -107,9 +131,20 @@ async function checkOneSource(
     return { sourceId, outcome: 'changed_logged' }
   }
   catch (err: any) {
-    // 失敗不要中斷整批；只 log
+    // 失敗不要中斷整批；但**不能只 log**——官網改版把頁面移走後,這裡每天失敗而
+    // UI 永遠顯示「正常」,知識庫悄悄過期沒人知道。把失敗寫回 source：
+    //   - failureReason：來源頁本來就會顯示「失敗原因：…」
+    //   - lastCheckedAt：退避基準（lastFetchedAt 保留「最後成功同步」語意不動）
+    //   - 連續失敗 ≥3 次 → status='failed'，列表狀態直接可見
     const msg = String(err?.statusMessage || err?.message || 'unknown error').slice(0, 200)
     console.warn(`[detect-source-updates] ${sourceId} check failed: ${msg}`)
+    const failCount = Number(data.checkFailCount ?? 0) + 1
+    await db.collection(KNOWLEDGE_SOURCES_COLLECTION).doc(sourceId).update({
+      failureReason: `自動檢查失敗：${msg}`,
+      checkFailCount: failCount,
+      lastCheckedAt: FieldValue.serverTimestamp(),
+      ...(failCount >= 3 ? { status: 'failed' } : {}),
+    }).catch(() => {})
     return { sourceId, outcome: 'error', message: msg }
   }
 }
@@ -135,7 +170,9 @@ export default defineTask({
     for (const d of snap.docs) {
       const data = d.data() as KnowledgeSourceDoc
       if (data.type !== 'url' && data.type !== 'gsheet') continue
-      const lastMs = tsToMs(data.lastFetchedAt)
+      // 退避：失敗的檢查不更新 lastFetchedAt，若只看它會每次排程都重打掛掉的網站。
+      // 以「最後一次嘗試」（成功或失敗）起算間隔。
+      const lastMs = Math.max(tsToMs(data.lastFetchedAt), tsToMs(data.lastCheckedAt))
       const intervalMs = Number(data.refreshIntervalMinutes || 0) * 60_000
       if (!intervalMs) continue
       if (lastMs && (now - lastMs) < intervalMs) continue

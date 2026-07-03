@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import { invalidateCatalogSourceCache } from '~~/server/utils/ai-knowledge-sources'
+import { recordAiUsage } from '~~/server/utils/ai-usage'
 import { parseGoogleSheetUrl } from '~~/server/utils/google-sheets'
 import {
   createKnowledgeChunk,
@@ -109,8 +110,11 @@ export default defineEventHandler(async (event) => {
   }
 
   // ── 批次建立 chunks（含 embedding），用 concurrency 控速 ──────────
+  // skipUsageRecording:150 卡逐卡記帳會對同一份月用量文件連打(~15 writes/s,被節流
+  // 的寫入靜默漏記),改累計 token、最後整批記一次
   type ResultRow = { id: string; status: KnowledgeChunkStatus; title: string; failureReason?: string }
   const results: ResultRow[] = new Array(inputs.length)
+  let totalEmbeddingTokens = 0
 
   let cursor = 0
   async function worker() {
@@ -123,7 +127,9 @@ export default defineEventHandler(async (event) => {
         chunkId,
         ...input,
         sourceId,
+        skipUsageRecording: true,
       })
+      if (r.status === 'indexed') totalEmbeddingTokens += r.embeddingTokens
       results[idx] = { id: r.id, status: r.status, title: input.title, failureReason: r.failureReason }
     }
   }
@@ -136,8 +142,15 @@ export default defineEventHandler(async (event) => {
       chunkId: uuidv4(),
       ...overviewInput,
       sourceId,
+      skipUsageRecording: true,
     })
+    if (r.status === 'indexed') totalEmbeddingTokens += r.embeddingTokens
     results.push({ id: r.id, status: r.status, title: overviewInput.title, failureReason: r.failureReason })
+  }
+
+  // 整批一次記帳
+  if (totalEmbeddingTokens > 0) {
+    await recordAiUsage(workspaceId, { embeddingTokens: totalEmbeddingTokens })
   }
 
   const indexed = results.filter(r => r.status === 'indexed').length

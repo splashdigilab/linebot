@@ -12,9 +12,24 @@ import type { AiUsageDoc } from '~~/shared/types/ai-knowledge'
  *   - input / output / embedding tokens
  *   - 估算成本（USD，依模型 list price 粗估）
  */
-const GEMINI_FLASH_INPUT_USD_PER_M = 0.075
-const GEMINI_FLASH_OUTPUT_USD_PER_M = 0.30
-const GEMINI_EMBED_USD_PER_M = 0.025
+/**
+ * Gemini 牌價（USD / 每百萬 token）。2026-07 查核之公開定價：
+ *   gemini-2.5-flash：input $0.30 / output $2.50
+ *   gemini-2.5-flash-lite：input $0.10 / output $0.40
+ *   gemini-embedding-001：$0.15
+ * 用量 doc 未分模型（router/反問走 flash-lite、答題走 flash 混計），
+ * 一律以 flash 費率估 → **估算值偏保守（上限）**；實際費用以 Google 帳單為準。
+ * 改價時只改這裡：pricing 會隨 API 回給前端顯示，前端不自帶一份。
+ */
+const GEMINI_FLASH_INPUT_USD_PER_M = 0.30
+const GEMINI_FLASH_OUTPUT_USD_PER_M = 2.50
+const GEMINI_EMBED_USD_PER_M = 0.15
+
+const PRICING = {
+  inputPerM: GEMINI_FLASH_INPUT_USD_PER_M,
+  outputPerM: GEMINI_FLASH_OUTPUT_USD_PER_M,
+  embedPerM: GEMINI_EMBED_USD_PER_M,
+}
 
 export default defineEventHandler(async (event) => {
   const { workspaceId } = await requireWorkspaceAccess(event, 'viewer')
@@ -42,6 +57,7 @@ export default defineEventHandler(async (event) => {
     disambiguationRate: 0,
     estimatedCostUsd: 0,
     perConversationUsd: 0,
+    pricing: PRICING,
   }
   if (!snap.exists) return empty
 
@@ -81,5 +97,6 @@ export default defineEventHandler(async (event) => {
     disambiguationRate: invocations ? disambiguations / invocations : 0,
     estimatedCostUsd: Number(cost.toFixed(4)),
     perConversationUsd: invocations ? Number((cost / invocations).toFixed(4)) : 0,
+    pricing: PRICING,
   }
 })

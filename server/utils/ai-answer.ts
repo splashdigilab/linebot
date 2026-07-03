@@ -23,7 +23,7 @@ import { searchChunksByIdentifierTag, searchSimilarChunks, type SimilarChunk } f
 import { getCatalogSourceIds } from './ai-knowledge-sources'
 import { embedQuery, estimateTokens, generateJson, generateText } from './gemini'
 import { getAiSettings, getGroundingThreshold } from './ai-settings'
-import { getCurrentMonthTokens, recordAiUsage } from './ai-usage'
+import { getCurrentMonthTokens, recordAiUsage, type UsageDelta } from './ai-usage'
 import { getDb } from './firebase'
 import {
   DEFAULT_TOP_K_CHUNKS,
@@ -64,10 +64,11 @@ export interface AnswerInput {
   /** Followup 模式：客人點按鈕後重跑，不要再計 invocation */
   isFollowup?: boolean
   /**
-   * 已預先算好的 query 向量（須對應 query 本身）。腳本語意觸發階段已 embed 過時帶進來，
-   * 避免同一句話重複 embed。未帶則內部自行 embedQuery。
+   * handler 已用 routeMessage（同一 prompt 家族）分類過時帶入：不再呼叫 classifyIntent，
+   * 每則訊息省一次 flash-lite（延遲 ~0.5–1s + token）。
+   * 注意：這份分類的 token 已由 handler 記帳，answerWithAi 內不重複計。
    */
-  queryVector?: number[]
+  precomputedIntent?: IntentResult
 }
 
 /**
@@ -718,7 +719,7 @@ async function generateDisambiguation(
   candidates: SimilarChunk[],
   query: string,
   settings: AiSettingsDoc,
-): Promise<{ payload: DisambiguationPayload; inputTokens: number; outputTokens: number } | null> {
+): Promise<{ payload: DisambiguationPayload | null; inputTokens: number; outputTokens: number }> {
   const titlesList = candidates.map((c, i) => `${i + 1}. ${c.title}`).join('\n')
 
   const prompt = [
@@ -785,7 +786,10 @@ async function generateDisambiguation(
       if (matched.length >= settings.disambiguation.maxOptions) break
     }
 
-    if (!clarification || matched.length < 2) return null
+    // 反問不成立也要把 token 帶回去：LLM 已經呼叫過了，呼叫端才能入帳
+    if (!clarification || matched.length < 2) {
+      return { payload: null, inputTokens: res.inputTokens, outputTokens: res.outputTokens }
+    }
 
     const options = matched.map(m => ({
       chunkId: m.chunk.id,
@@ -802,7 +806,7 @@ async function generateDisambiguation(
   }
   catch (err) {
     console.error('[ai-answer] generateDisambiguation failed:', err)
-    return null
+    return { payload: null, inputTokens: 0, outputTokens: 0 }
   }
 }
 
@@ -817,12 +821,25 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   const db = getDb()
   const settings = await getAiSettings(workspaceId, db)
 
+  // 記帳統一出口：token 一律入帳（followup 重跑也真實花了錢，不記會讓月用量低估、quota 可被繞過），
+  // 計數欄位（invocations/answered/handoffs/disambiguations）只在非 followup 記——
+  // 客人點反問按鈕的重跑不該讓次數灌水。
+  const record = (delta: UsageDelta): Promise<void> => {
+    if (!input.isFollowup) return recordAiUsage(workspaceId, delta, db)
+    const tokensOnly: UsageDelta = {}
+    if (delta.inputTokens) tokensOnly.inputTokens = delta.inputTokens
+    if (delta.outputTokens) tokensOnly.outputTokens = delta.outputTokens
+    if (delta.embeddingTokens) tokensOnly.embeddingTokens = delta.embeddingTokens
+    if (delta.importInputTokens) tokensOnly.importInputTokens = delta.importInputTokens
+    if (delta.importOutputTokens) tokensOnly.importOutputTokens = delta.importOutputTokens
+    if (!Object.keys(tokensOnly).length) return Promise.resolve()
+    return recordAiUsage(workspaceId, tokensOnly, db)
+  }
+
   // ── 1. 敏感詞護欄 ──────────────────────────────────────
   const hit = detectSensitiveTopic(text, settings.sensitiveTopics)
   if (hit) {
-    if (!input.isFollowup) {
-      await recordAiUsage(workspaceId, { invocations: 1, handoffs: 1 }, db)
-    }
+    await record({ invocations: 1, handoffs: 1 })
     return handoff('sensitive_topic')
   }
 
@@ -835,9 +852,7 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
     const used = await getCurrentMonthTokens(workspaceId, db)
     if (used >= settings.quota.monthlyTokenCap) {
       if (settings.quota.onExceed === 'handoff_all') {
-        if (!input.isFollowup) {
-          await recordAiUsage(workspaceId, { invocations: 1, handoffs: 1 }, db)
-        }
+        await record({ invocations: 1, handoffs: 1 })
         return handoff('quota_exceeded')
       }
       // downgrade_model：改用更便宜的 flash-lite，繼續答
@@ -852,51 +867,44 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   let queryVector: number[]
   try {
     const [ir, qv] = await Promise.all([
-      classifyIntent(text, input.history),
-      input.queryVector ? Promise.resolve(input.queryVector) : embedQuery(text),
+      input.precomputedIntent
+        ? Promise.resolve(input.precomputedIntent)
+        : classifyIntent(text, input.history),
+      embedQuery(text),
     ])
     intentRes = ir
     queryVector = qv
   }
   catch (err) {
     console.error('[ai-answer] embedQuery failed:', err)
-    if (!input.isFollowup) {
-      await recordAiUsage(workspaceId, { invocations: 1, handoffs: 1 }, db)
-    }
+    await record({ invocations: 1, handoffs: 1 })
     return handoff('llm_error')
   }
-  const routerIn = intentRes?.inputTokens ?? 0
-  const routerOut = intentRes?.outputTokens ?? 0
+  // precomputed 的 router token 已由 handler 記帳，這裡歸零避免重複計
+  const routerIn = input.precomputedIntent ? 0 : (intentRes?.inputTokens ?? 0)
+  const routerOut = input.precomputedIntent ? 0 : (intentRes?.outputTokens ?? 0)
 
   // ── 3.5 意圖分流（router 失敗則用 regex/heuristic fallback）──
   // 語意敏感（關鍵字漏抓的換句話說）→ 轉真人。關鍵字硬擋已在步驟 1 做過，這裡是補抓。
   if (intentRes?.intent === 'sensitive') {
-    if (!input.isFollowup) {
-      await recordAiUsage(workspaceId, { invocations: 1, handoffs: 1, inputTokens: routerIn, outputTokens: routerOut }, db)
-    }
+    await record({ invocations: 1, handoffs: 1, inputTokens: routerIn, outputTokens: routerOut })
     return handoff('sensitive_topic')
   }
   // 明確要求真人
   if (intentRes?.intent === 'find_human') {
-    if (!input.isFollowup) {
-      await recordAiUsage(workspaceId, { invocations: 1, handoffs: 1, inputTokens: routerIn, outputTokens: routerOut }, db)
-    }
+    await record({ invocations: 1, handoffs: 1, inputTokens: routerIn, outputTokens: routerOut })
     return handoff('user_request')
   }
   // 業務洽詢（議價 / 團購 / 客製包裝）：需業務人員談，知識庫答不了。直接轉真人，
   // 不走 RAG / 反問（否則只會亂反問選產品，且選了也沒對應卡）。
   if (intentRes?.intent === 'commercial') {
-    if (!input.isFollowup) {
-      await recordAiUsage(workspaceId, { invocations: 1, handoffs: 1, inputTokens: routerIn, outputTokens: routerOut }, db)
-    }
+    await record({ invocations: 1, handoffs: 1, inputTokens: routerIn, outputTokens: routerOut })
     return handoff('commercial_inquiry')
   }
   // 社交（招呼 / 道謝 / 道別）→ 罐頭，不走 RAG
   const social = intentRes ? socialReplyForIntent(intentRes.intent) : socialCannedReply(text)
   if (social) {
-    if (!input.isFollowup) {
-      await recordAiUsage(workspaceId, { invocations: 1, answered: 1, inputTokens: routerIn, outputTokens: routerOut }, db)
-    }
+    await record({ invocations: 1, answered: 1, inputTokens: routerIn, outputTokens: routerOut })
     return { decision: 'answered', answer: social, confidence: 1, sources: [], handoffReason: null }
   }
 
@@ -1009,16 +1017,14 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
     // 反問選項優先產品卡，把「說明/政策/出貨」等通用主題卡排後面（同產品已由 groupSameProduct 併掉）
     const candidates = preferProductCards(productGroups).slice(0, settings.disambiguation.maxOptions)
     const dis = await generateDisambiguation(candidates, text, settings)
-    if (dis) {
-      if (!input.isFollowup) {
-        await recordAiUsage(workspaceId, {
-          invocations: 1,
-          disambiguations: 1,
-          embeddingTokens: embedTokenEstimate,
-          inputTokens: dis.inputTokens + routerIn,
-          outputTokens: dis.outputTokens + routerOut,
-        }, db)
-      }
+    if (dis.payload) {
+      await record({
+        invocations: 1,
+        disambiguations: 1,
+        embeddingTokens: embedTokenEstimate,
+        inputTokens: dis.inputTokens + routerIn,
+        outputTokens: dis.outputTokens + routerOut,
+      })
       return {
         decision: 'disambiguate',
         answer: '',
@@ -1028,20 +1034,22 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
         disambiguation: dis.payload,
       }
     }
-    // generateDisambiguation 失敗（JSON 壞掉、白名單過濾後 < 2 個）→ 退回正常 grounding/answer
+    // generateDisambiguation 未成立（JSON 壞掉、白名單過濾後 < 2 個）→ 退回正常 grounding/answer。
+    // LLM token 已花，先入帳（router/embed token 由後續最終分支入帳，不重複）。
+    if (dis.inputTokens || dis.outputTokens) {
+      await record({ inputTokens: dis.inputTokens, outputTokens: dis.outputTokens })
+    }
   }
 
   // ── 5. grounding 檢查 ────────────────────────────────────
   if (!chunks.length || topSimilarity < getGroundingThreshold(settings)) {
-    if (!input.isFollowup) {
-      await recordAiUsage(workspaceId, {
-        invocations: 1,
-        handoffs: 1,
-        embeddingTokens: embedTokenEstimate,
-        inputTokens: routerIn,
-        outputTokens: routerOut,
-      }, db)
-    }
+    await record({
+      invocations: 1,
+      handoffs: 1,
+      embeddingTokens: embedTokenEstimate,
+      inputTokens: routerIn,
+      outputTokens: routerOut,
+    })
     return handoff('no_grounding', chunks)
   }
 
@@ -1141,15 +1149,13 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   }
   catch (err) {
     console.error('[ai-answer] generateText failed:', err)
-    if (!input.isFollowup) {
-      await recordAiUsage(workspaceId, {
-        invocations: 1,
-        handoffs: 1,
-        embeddingTokens: embedTokenEstimate,
-        inputTokens: routerIn,
-        outputTokens: routerOut,
-      }, db)
-    }
+    await record({
+      invocations: 1,
+      handoffs: 1,
+      embeddingTokens: embedTokenEstimate,
+      inputTokens: routerIn,
+      outputTokens: routerOut,
+    })
     return handoff('llm_error', chunks)
   }
 
@@ -1168,15 +1174,13 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   }))
 
   if (!passesConfidence || !passesContent) {
-    await recordAiUsage(workspaceId, input.isFollowup
-      ? { embeddingTokens: embedTokenEstimate, inputTokens, outputTokens }
-      : {
-          invocations: 1,
-          handoffs: 1,
-          embeddingTokens: embedTokenEstimate,
-          inputTokens,
-          outputTokens,
-        }, db)
+    await record({
+      invocations: 1,
+      handoffs: 1,
+      embeddingTokens: embedTokenEstimate,
+      inputTokens,
+      outputTokens,
+    })
     return {
       decision: 'handoff',
       answer: '',
@@ -1187,15 +1191,13 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
     }
   }
 
-  await recordAiUsage(workspaceId, input.isFollowup
-    ? { embeddingTokens: embedTokenEstimate, inputTokens, outputTokens }
-    : {
-        invocations: 1,
-        answered: 1,
-        embeddingTokens: embedTokenEstimate,
-        inputTokens,
-        outputTokens,
-      }, db)
+  await record({
+    invocations: 1,
+    answered: 1,
+    embeddingTokens: embedTokenEstimate,
+    inputTokens,
+    outputTokens,
+  })
 
   return {
     decision: 'answered',

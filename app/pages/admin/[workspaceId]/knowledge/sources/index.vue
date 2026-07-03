@@ -10,6 +10,9 @@
         <el-tooltip v-if="canEditKb" content="匯入檔案 / 網址 / 大段文字" placement="bottom" :show-after="300">
           <el-button size="small" type="primary" plain data-tour="kb-import" @click="goImport">📥 匯入</el-button>
         </el-tooltip>
+        <el-tooltip v-if="canReindexAll" content="全部重新索引(系統升級檢索方式後使用)" placement="bottom" :show-after="300">
+          <el-button size="small" plain :loading="reindexingAll" @click="reindexAll">🔁</el-button>
+        </el-tooltip>
       </div>
     </template>
 
@@ -333,18 +336,27 @@
             </div>
           </div>
           <div class="card-section-stack">
-            <p v-if="!chunks.length" class="text-muted">這個來源底下沒有卡片。</p>
+            <div v-if="detailLoading" class="src-chunk-loading"><div class="spinner" /></div>
+            <p v-else-if="!chunks.length" class="text-muted">這個來源底下沒有卡片。</p>
             <div v-else class="src-chunk-list">
               <div
                 v-for="c in chunks"
                 :key="c.id"
                 class="src-chunk-row"
               >
-                <div class="src-chunk-main">
-                  <span class="src-chunk-title">{{ c.title }}</span>
-                  <span v-if="c.manuallyEditedAtMs > 0" class="src-chunk-lock" :title="`手動編輯過：${relativeTime(c.manuallyEditedAtMs)}`">🔒</span>
+                <div class="src-chunk-body">
+                  <div class="src-chunk-main">
+                    <span class="src-chunk-title">{{ c.title }}</span>
+                    <span v-if="c.manuallyEditedAtMs > 0" class="src-chunk-lock" :title="`手動編輯過：${relativeTime(c.manuallyEditedAtMs)}`">🔒</span>
+                    <span
+                      v-if="isShortChunk(c)"
+                      class="src-chunk-warn"
+                      title="標題＋內容太短,AI 檢索時幾乎派不上用場,還可能干擾其他卡;建議補充內容或刪除"
+                    >⚠️ 內容過短</span>
+                  </div>
+                  <p class="src-chunk-preview">{{ chunkPreview(c) }}</p>
+                  <span class="src-chunk-meta">{{ c.content.length }} 字 · {{ chunkStatusLabel(c.status) }} · {{ relativeTime(c.updatedAtMs) }}</span>
                 </div>
-                <span class="src-chunk-meta">{{ chunkStatusLabel(c.status) }} · {{ relativeTime(c.updatedAtMs) }}</span>
                 <el-button v-if="canEditKb" size="small" plain @click="openEditChunk(c)">✏️ 編輯</el-button>
               </div>
             </div>
@@ -374,9 +386,16 @@
         <span class="diff-summary-chip diff-summary-chip--same">⚪ 未變 {{ diffData.diff.summary.unchanged }}</span>
       </div>
 
+      <p v-if="hiddenUnchangedCount > 0" class="diff-unchanged-note text-muted text-xs">
+        ⚪ {{ hiddenUnchangedCount }} 張未變的卡已收合(不需要做決定)
+        <el-button text size="small" @click="showUnchangedDiff = !showUnchangedDiff">
+          {{ showUnchangedDiff ? '收合' : '顯示' }}
+        </el-button>
+      </p>
+
       <div class="diff-entries">
         <div
-          v-for="entry in diffData.diff.entries"
+          v-for="entry in visibleDiffEntries"
           :key="entry.id"
           class="diff-entry"
           :class="`diff-entry--${entry.kind}`"
@@ -550,7 +569,7 @@
   </el-dialog>
 
   <!-- ── 匯入彈窗 ───────────────────────────────────── -->
-  <KnowledgeImportDialog v-model="importOpen" @imported="onImported" />
+  <KnowledgeImportDialog v-model="importOpen" :existing-sources="sources" @imported="onImported" />
 
   <!-- ── Folder Edit Modal ──────────────────────────── -->
   <el-dialog
@@ -655,6 +674,8 @@ interface DiffData {
   sourceId: string
   sourceName: string
   sourceUrl: string
+  /** preview 當時內容的指紋;apply 時帶回,讓後端回寫「對應這份 diff」的 hash */
+  contentHash?: string
   diff: {
     entries: DiffEntry[]
     summary: { added: number; modified: number; removed: number; unchanged: number }
@@ -666,6 +687,7 @@ const { apiFetch, workspaceId, can } = useWorkspace()
 const canEditKb = computed(() => can('knowledge.write'))
 const canEditSources = computed(() => can('sources.write'))
 const canEditFolders = computed(() => can('folders.write'))
+const canReindexAll = computed(() => can('knowledge.reindexAll'))
 const { showToast } = useAdminToast()
 
 const sources = ref<SourceSummary[]>([])
@@ -840,6 +862,18 @@ async function onFolderDrop(folderId: string | null) {
 }
 
 const chunks = ref<ChunkRow[]>([])
+const detailLoading = ref(false)
+
+// ── 卡片品質「被動提示」:只標示、絕不自動攔截/刪除(判斷權在人) ──
+/** 標題＋內容去空白合計 <10 字:placeholder/測試列等級,embedding 是雜訊會污染檢索 */
+function isShortChunk(c: Pick<ChunkRow, 'title' | 'content'>): boolean {
+  return (c.title + c.content).replace(/\s+/g, '').length < 10
+}
+
+function chunkPreview(c: Pick<ChunkRow, 'content'>): string {
+  const firstLine = c.content.split('\n').map(s => s.trim()).find(Boolean) ?? ''
+  return firstLine.length > 60 ? `${firstLine.slice(0, 60)}…` : firstLine
+}
 
 const settingsForm = ref({ refreshIntervalMinutes: 0, onChangeBehavior: 'notify' as 'notify' | 'log_only' })
 const settingsBaseline = ref({ refreshIntervalMinutes: 0, onChangeBehavior: 'notify' as 'notify' | 'log_only' })
@@ -856,6 +890,17 @@ const applying = ref(false)
 const diffOpen = ref(false)
 const diffData = ref<DiffData | null>(null)
 const decisions = ref<Record<string, string>>({})
+
+// diff modal:「未變」的卡不需要人做決定,預設收合成一行摘要——大來源改一小處時,
+// 使用者才不用在幾十條未變裡找那一條有變的
+const showUnchangedDiff = ref(false)
+const visibleDiffEntries = computed(() => {
+  const entries = diffData.value?.diff.entries ?? []
+  return showUnchangedDiff.value ? entries : entries.filter(e => e.kind !== 'unchanged')
+})
+const hiddenUnchangedCount = computed(() =>
+  (diffData.value?.diff.entries ?? []).filter(e => e.kind === 'unchanged').length,
+)
 
 // ── Chunk edit / create modal ───────────────────────
 const chunkEditOpen = ref(false)
@@ -995,12 +1040,25 @@ async function deleteFolderFromModal() {
 async function selectSource(src: SourceSummary) {
   selectedId.value = src.id
   indexPollStartedAt = 0 // 換來源重新起算輪詢時限
-  await loadSourceDetail(src.id)
+  // 先清空再載入:否則標頭已換、卡片列表還是上一個來源的(快速切換會張冠李戴)
+  chunks.value = []
+  detailLoading.value = true
+  try {
+    await loadSourceDetail(src.id)
+  }
+  finally {
+    // 只有「仍然選著這個來源」才收 spinner:A 的 finally 不該關掉 B 正在跑的 loading
+    if (selectedId.value === src.id) detailLoading.value = false
+  }
 }
 
 async function loadSourceDetail(sourceId: string) {
   try {
     const res = await apiFetch<{ source: SourceSummary; chunks: ChunkRow[] }>(`/api/ai/sources/${sourceId}`)
+    // 過期回應防護:等待期間使用者已切到別的來源 → 這份回應作廢。
+    // 沒有這行的話,慢的舊請求晚到會把 A 的卡片/同步設定蓋進 B 的畫面(張冠李戴),
+    // 此時按「儲存設定」還會把 A 的同步間隔寫進 B。
+    if (selectedId.value !== sourceId) return
     // 用最新的 source 覆寫 list 裡的同一筆，保證 detail 不過時
     const idx = sources.value.findIndex(s => s.id === sourceId)
     if (idx >= 0) sources.value[idx] = res.source
@@ -1085,22 +1143,37 @@ async function deleteSource() {
   if (!selectedSource.value) return
   const src = selectedSource.value
 
-  // 二次確認：使用者必須在輸入框打「刪除」兩個字才能繼續，避免誤刪
+  // 二次確認強度依風險分級:只有 1 張卡(多為手寫條目)用一般確認即可,
+  // 多張卡的來源才要求打「刪除」二字——避免對小物件過度確認、對大物件確認不足
   try {
-    await ElMessageBox.prompt(
-      `要刪除「${src.name}」這個來源，會連同底下 ${src.chunkCount} 張卡片全部刪除，無法復原。\n\n請在下方輸入「刪除」確認：`,
-      '⚠️ 刪除確認',
-      {
-        confirmButtonText: '永久刪除',
-        cancelButtonText: '取消',
-        confirmButtonClass: 'el-button--danger',
-        inputPattern: /^刪除$/,
-        inputErrorMessage: '請輸入「刪除」兩個字',
-        inputPlaceholder: '刪除',
-        type: 'warning',
-        roundButton: true,
-      },
-    )
+    if (src.chunkCount <= 1) {
+      await ElMessageBox.confirm(
+        `要刪除「${src.name}」嗎?底下 ${src.chunkCount} 張卡片會一併刪除,無法復原。`,
+        '⚠️ 刪除確認',
+        {
+          confirmButtonText: '刪除',
+          cancelButtonText: '取消',
+          confirmButtonClass: 'el-button--danger',
+          type: 'warning',
+        },
+      )
+    }
+    else {
+      await ElMessageBox.prompt(
+        `要刪除「${src.name}」這個來源，會連同底下 ${src.chunkCount} 張卡片全部刪除，無法復原。\n\n請在下方輸入「刪除」確認：`,
+        '⚠️ 刪除確認',
+        {
+          confirmButtonText: '永久刪除',
+          cancelButtonText: '取消',
+          confirmButtonClass: 'el-button--danger',
+          inputPattern: /^刪除$/,
+          inputErrorMessage: '請輸入「刪除」兩個字',
+          inputPlaceholder: '刪除',
+          type: 'warning',
+          roundButton: true,
+        },
+      )
+    }
   }
   catch {
     return // 使用者取消或關閉
@@ -1180,12 +1253,26 @@ async function applyDiff() {
         body: {
           entries: diffData.value.diff.entries,
           decisions: decisions.value,
+          contentHash: diffData.value.contentHash ?? '',
         },
       },
     )
-    const errTail = res.errors?.length ? `；失敗 ${res.errors.length} 張（看 console）` : ''
-    showToast(`已套用：新增 ${res.added}、更新 ${res.updated}、刪除 ${res.deleted}、保留 ${res.kept}${errTail}`, res.errors?.length ? 'warning' : 'success')
-    if (res.errors?.length) console.warn('[resync-apply] errors:', res.errors)
+    // 失敗清單要讓非技術使用者「看得到是哪幾張」,不能只說去看 console
+    if (res.errors?.length) {
+      const titleOf = (entryId: string) => {
+        const e = diffData.value?.diff.entries.find(x => x.id === entryId)
+        return e?.newChunk?.title || e?.oldChunk?.title || entryId
+      }
+      const names = res.errors.slice(0, 3).map((er: any) => `「${titleOf(String(er.entryId))}」`).join('、')
+      showToast(
+        `已套用:新增 ${res.added}、更新 ${res.updated}、刪除 ${res.deleted};但 ${res.errors.length} 張失敗:${names}${res.errors.length > 3 ? ' 等' : ''},請對這幾張重新同步或手動編輯`,
+        'warning',
+      )
+      console.warn('[resync-apply] errors:', res.errors)
+    }
+    else {
+      showToast(`已套用：新增 ${res.added}、更新 ${res.updated}、刪除 ${res.deleted}、保留 ${res.kept}`, 'success')
+    }
     diffOpen.value = false
     diffData.value = null
     await loadSources()
@@ -1196,6 +1283,44 @@ async function applyDiff() {
   }
   finally {
     applying.value = false
+  }
+}
+
+// ── 全部重新索引(admin;後端分批,帶 nextCursor 跑到底) ──────
+const reindexingAll = ref(false)
+
+async function reindexAll() {
+  try {
+    await ElMessageBox.confirm(
+      '將這個工作區的所有知識卡重新建立索引(卡片內容不變)。通常只在系統升級檢索方式後需要;卡片多時要花幾分鐘,期間 AI 照常運作。',
+      '🔁 全部重新索引',
+      { confirmButtonText: '開始', cancelButtonText: '取消', type: 'warning' },
+    )
+  }
+  catch { return }
+  reindexingAll.value = true
+  try {
+    let cursor: string | null = null
+    let indexed = 0
+    let failed = 0
+    do {
+      // res 顯式標型:cursor ↔ res.nextCursor 互相參照會讓 TS 推導成循環(TS7022)
+      const res: { batch: number; indexed: number; failed: number; nextCursor: string | null } = await apiFetch(
+        '/api/ai/knowledge/reindex-all',
+        { method: 'POST', body: cursor ? { cursor } : {} },
+      )
+      indexed += res.indexed
+      failed += res.failed
+      cursor = res.nextCursor
+    } while (cursor)
+    showToast(`重新索引完成:${indexed} 張成功${failed ? `、${failed} 張失敗(可在卡片上個別重試)` : ''}`, failed ? 'warning' : 'success')
+    if (selectedId.value) await loadSourceDetail(selectedId.value)
+  }
+  catch (err: any) {
+    showToast(err?.statusMessage || '重新索引失敗,請再試一次', 'error')
+  }
+  finally {
+    reindexingAll.value = false
   }
 }
 
@@ -1478,13 +1603,17 @@ function relativeTime(ms: number) {
 onMounted(async () => {
   loadExpandedState()
   const route = useRoute()
+  const router = useRouter()
+  // deep-link query 是一次性的指令:處理完就從網址清掉,否則 F5 會再彈一次視窗
+  const clearQuery = () => { router.replace({ query: {} }).catch(() => {}) }
   await loadSources()
 
   // 監控頁「📥 補知識」帶 ?q=(客人沒被答到的問題):直接開新增手寫視窗、預填標題
   const q = String(route.query.q ?? '').trim()
   if (q) {
     openCreateManual()
-    chunkForm.value.title = q.slice(0, 200)
+    chunkForm.value.title = q.slice(0, 100) // 對齊標題欄位 maxlength=100
+    clearQuery()
     return
   }
 
@@ -1492,6 +1621,7 @@ onMounted(async () => {
   const chunkId = String(route.query.chunkId ?? '').trim()
   if (chunkId) {
     await openChunkById(chunkId)
+    clearQuery()
     return
   }
 
@@ -1500,11 +1630,15 @@ onMounted(async () => {
   if (sourceId) {
     const src = sources.value.find(s => s.id === sourceId)
     if (src) await selectSource(src)
+    clearQuery()
     return
   }
 
   // 舊的 /knowledge/import 網址轉進來時帶 ?import=1:直接打開匯入彈窗
-  if (String(route.query.import ?? '') === '1') importOpen.value = true
+  if (String(route.query.import ?? '') === '1') {
+    importOpen.value = true
+    clearQuery()
+  }
 })
 
 async function openChunkById(chunkId: string) {
@@ -1515,7 +1649,10 @@ async function openChunkById(chunkId: string) {
       return
     }
     const src = sources.value.find(s => s.id === info.sourceId)
-    if (!src) return
+    if (!src) {
+      showToast('找不到這張卡所屬的來源(可能已被刪除)', 'error')
+      return
+    }
     await selectSource(src)
     const chunk = chunks.value.find(c => c.id === chunkId)
     if (chunk) openEditChunk(chunk)
@@ -1720,10 +1857,30 @@ async function openChunkById(chunkId: string) {
   background: var(--el-fill-color-light);
   border-radius: 4px;
 }
-.src-chunk-main { flex: 1; display: flex; align-items: center; gap: 6px; min-width: 0; }
+.src-chunk-body { flex: 1; min-width: 0; }
+.src-chunk-main { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .src-chunk-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .src-chunk-lock { font-size: 12px; }
+.src-chunk-warn {
+  font-size: 11px;
+  color: var(--el-color-warning);
+  background: var(--el-color-warning-light-9);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.src-chunk-preview {
+  margin: 2px 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .src-chunk-meta { font-size: 12px; color: var(--el-text-color-secondary); }
+.src-chunk-loading { display: flex; justify-content: center; padding: 16px; }
+
+.diff-unchanged-note { display: flex; align-items: center; gap: 4px; margin: 0 0 8px; }
 
 .src-outdated-alert { margin-bottom: 12px; }
 

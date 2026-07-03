@@ -5,6 +5,7 @@ import {
   KNOWLEDGE_CHUNKS_COLLECTION,
   runIndexOnChunk,
 } from '~~/server/utils/ai-knowledge-chunks'
+import { recordAiUsage } from '~~/server/utils/ai-usage'
 
 /** 與 bulk-create 一致的保守併發 */
 const EMBED_CONCURRENCY = 5
@@ -43,6 +44,7 @@ export default defineEventHandler(async (event) => {
 
   type ResultRow = { id: string; status: string; failureReason?: string }
   const results: ResultRow[] = new Array(docs.length)
+  let batchEmbeddingTokens = 0
 
   let cursorIdx = 0
   async function worker() {
@@ -50,6 +52,8 @@ export default defineEventHandler(async (event) => {
       const idx = cursorIdx++
       const doc = docs[idx]!
       const data = doc.data()
+      // 不帶 workspaceId:300 張/批 × 併發 5 對同一份月用量文件連打會被 Firestore 節流、
+      // 靜默漏記;改累計 token、迴圈結束後每批記一次
       const r = await runIndexOnChunk(
         db,
         doc.id,
@@ -59,10 +63,16 @@ export default defineEventHandler(async (event) => {
           Array.isArray(data?.questions) ? data.questions.map(String) : [],
         ),
       )
+      if (r.status === 'indexed') batchEmbeddingTokens += r.embeddingTokens
       results[idx] = { id: r.id, status: r.status, failureReason: r.failureReason }
     }
   }
   await Promise.all(Array.from({ length: Math.min(EMBED_CONCURRENCY, docs.length) }, worker))
+
+  // 整批一次記帳(見 worker 內註解)
+  if (batchEmbeddingTokens > 0) {
+    await recordAiUsage(workspaceId, { embeddingTokens: batchEmbeddingTokens }, db)
+  }
 
   const indexed = results.filter(r => r.status === 'indexed').length
   const failed = results.filter(r => r.status === 'failed').length

@@ -120,6 +120,17 @@
         <span v-else>勾選要匯入的、可直接編輯內容；確認後一鍵建立。</span>
       </p>
 
+      <div class="kb-source-name-row">
+        <span class="kb-source-name-label">來源名稱</span>
+        <el-input
+          v-model="sourceMeta.name"
+          :maxlength="200"
+          size="small"
+          placeholder="顯示在知識庫來源列表的名稱"
+          class="kb-source-name-input"
+        />
+      </div>
+
       <el-alert
         v-if="ocrUsed"
         type="warning"
@@ -134,25 +145,22 @@
       </el-alert>
 
       <el-alert
-        v-if="existingMatches.length"
+        v-if="dupMatches.length"
         type="warning"
         show-icon
         :closable="false"
         class="kb-dedup-warning"
       >
         <template #title>
-          ⚠️ 已存在 {{ existingMatches.length }} 個同名來源
+          ⚠️ 已存在 {{ dupMatches.length }} 個同名來源
         </template>
         <div class="kb-dedup-body">
-          <p class="text-xs">繼續建立會在來源列表出現多筆同名項目，可能不是你想要的。</p>
+          <p class="text-xs">繼續建立會在來源列表出現多筆同名項目，可能不是你想要的。在上方「來源名稱」改個名字，這個提醒就會消失。</p>
           <ul class="kb-dedup-list">
-            <li v-for="m in existingMatches" :key="m.id">
+            <li v-for="m in dupMatches" :key="m.id">
               「{{ m.name }}」（{{ m.chunkCount }} 張卡，{{ relativeTime(m.updatedAtMs) || '未更新' }}）
             </li>
           </ul>
-          <div class="kb-dedup-actions">
-            <el-button size="small" plain @click="step = 'input'">取消、改其它名稱</el-button>
-          </div>
         </div>
       </el-alert>
 
@@ -290,14 +298,20 @@
 </template>
 
 <script setup lang="ts">
-const props = defineProps<{ modelValue: boolean }>()
+const props = defineProps<{
+  modelValue: boolean
+  /**
+   * 父層的完整來源清單:同名警告要比對「全部」既有名稱——
+   * 只比對 preview 回傳的(原始名稱的)同名清單,會漏掉「改名撞進另一個既有來源」的情況。
+   */
+  existingSources?: Array<{ id: string; name: string; chunkCount: number; updatedAtMs: number }>
+}>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
   /** 有實際建立資料時觸發(全成功或部分成功),父層應刷新來源列表 */
   'imported': [sourceId: string | null]
 }>()
 
-void props // 只在 template 用到 modelValue
 
 const { apiFetch } = useWorkspace()
 const { showToast } = useAdminToast()
@@ -386,6 +400,18 @@ const canPreview = computed(() => {
 
 const includedCount = computed(() => chunks.value.filter(c => c.included).length)
 
+// 同名警告要「活的」:使用者在預覽步驟改名,警告即時跟著變。
+// 比對對象 = 父層完整來源清單 ∪ preview 回傳的同名清單(父層沒傳 prop 時的 fallback),
+// 否則改名撞進「另一個」既有來源不會有任何警告——正是這個警示要防的事。
+const dupMatches = computed(() => {
+  const name = sourceMeta.value.name.trim()
+  if (!name) return []
+  const pool = new Map<string, { id: string; name: string; chunkCount: number; updatedAtMs: number }>()
+  for (const s of props.existingSources ?? []) pool.set(s.id, s)
+  for (const m of existingMatches.value) if (!pool.has(m.id)) pool.set(m.id, m)
+  return [...pool.values()].filter(m => m.name.trim() === name)
+})
+
 async function runPreview() {
   previewing.value = true
   try {
@@ -403,7 +429,9 @@ async function runPreview() {
     }
     else {
       body.text = textInput.value.trim()
-      body.name = '手打輸入'
+      // 帶日期避免每次都叫「手打輸入」→ 第二次必撞同名警告(且名稱可在預覽步驟再改)
+      const now = new Date()
+      body.name = `貼上文字 ${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()}`
     }
 
     const res = await apiFetch<{
@@ -522,7 +550,7 @@ async function runImport() {
       body: {
         source: {
           type: sourceMeta.value.type,
-          name: sourceMeta.value.name,
+          name: sourceMeta.value.name.trim() || '未命名來源',
           url: sourceMeta.value.url,
         },
         chunks: selected,

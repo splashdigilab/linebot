@@ -1,5 +1,6 @@
 import { requireCapability } from '~~/server/utils/workspace-auth'
-import { answerWithAi, routeMessage, type AiChatTurn } from '~~/server/utils/ai-answer'
+import { answerWithAi, routeMessage, type AiChatTurn, type RouteResult } from '~~/server/utils/ai-answer'
+import { recordAiUsage } from '~~/server/utils/ai-usage'
 import { loadActiveScripts } from '~~/server/utils/ai-scripts'
 import { matchesScriptKeywords, type ScriptDoc, type ScriptTriggerNode } from '~~/shared/types/ai-script'
 
@@ -35,10 +36,17 @@ export default defineEventHandler(async (event) => {
   // 只判「會不會觸發」，不真的啟動 / 持久化 activeScript。
   const scripts = await loadActiveScripts(workspaceId).catch(() => [])
   let triggered: (ScriptDoc & { id: string }) | null = scripts.find(s => matchesScriptKeywords(s, query)) ?? null
+  let route: RouteResult | null = null
   if (!triggered && scripts.length) {
     const hints = scripts.map(s => ({ id: s.id, name: s.name, hints: triggerHintsOf(s) }))
-    const route = await routeMessage(query, hints, history).catch(() => null)
-    if (route?.scriptId) triggered = scripts.find(s => s.id === route.scriptId) ?? null
+    route = await routeMessage(query, hints, history).catch(() => null)
+    if (route) {
+      // 路由也是一次 LLM 呼叫，跟正式流程一樣要記帳
+      recordAiUsage(workspaceId, { inputTokens: route.inputTokens, outputTokens: route.outputTokens })
+        .catch(() => {})
+    }
+    const routedScriptId = route?.scriptId ?? null
+    if (routedScriptId) triggered = scripts.find(s => s.id === routedScriptId) ?? null
   }
   if (triggered) {
     const root = triggered.nodes.find(n => n.id === triggered!.rootNodeId) as ScriptTriggerNode | undefined
@@ -62,6 +70,8 @@ export default defineEventHandler(async (event) => {
     debug: true,
     skipDisambiguation: body?.skipDisambiguation === true,
     isFollowup: body?.isFollowup === true,
+    // 意圖路由已分類過就重用（與正式流程一致，省一次 flash-lite）；token 上面已記，內部會歸零
+    precomputedIntent: route ?? undefined,
   })
 })
 

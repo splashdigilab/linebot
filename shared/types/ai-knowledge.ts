@@ -119,6 +119,10 @@ export interface KnowledgeSourceDoc {
   outdatedAt: Timestamp | null
   status: KnowledgeSourceStatus
   failureReason?: string
+  /** 排程變動偵測連續失敗次數；成功即清除。≥3 次會把 status 標成 failed */
+  checkFailCount?: number
+  /** 排程變動偵測最後一次「嘗試」時間（成功或失敗），退避基準；lastFetchedAt 保留「最後成功」語意 */
+  lastCheckedAt?: Timestamp | null
   /** 切出來的 chunk 數量（給 UI 顯示用） */
   chunkCount: number
   createdAt: Timestamp | FieldValue
@@ -363,6 +367,9 @@ export const DEFAULT_MONTHLY_TOKEN_CAP = 1_000_000
 /** 真人閒置自動交還機器人（分鐘）；0 = 關閉。保守預設關閉，由各工作區自行啟用 */
 export const DEFAULT_HANDBACK_IDLE_MINUTES = 0
 
+/** 轉真人後超時再提醒（分鐘）；0 = 關閉。單一事實來源：normalize / buildDefault / 前端表單都引用這裡 */
+export const DEFAULT_SLA_REMIND_MINUTES = 15
+
 /** aiSettings 單例 doc ID */
 export const AI_SETTINGS_DOC_ID = 'default'
 
@@ -448,7 +455,7 @@ export function buildDefaultAiSettings(): Omit<AiSettingsDoc, 'updatedAt'> {
       enabled: false,
       lineUserIds: [],
       displayNames: {},
-      slaRemindMinutes: 15,
+      slaRemindMinutes: DEFAULT_SLA_REMIND_MINUTES,
     },
     handbackIdleMinutes: DEFAULT_HANDBACK_IDLE_MINUTES,
     disambiguation: {

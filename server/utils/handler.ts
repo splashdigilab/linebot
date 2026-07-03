@@ -36,7 +36,7 @@ import {
 } from './conversation-session'
 import type { ModuleType } from '~~/shared/types/conversation-stats'
 import { SYSTEM_MODULE_IDS } from '~~/shared/types/conversation-stats'
-import { answerWithAi, routeMessage, summarizeHandoffContext, type AiChatTurn } from './ai-answer'
+import { answerWithAi, routeMessage, summarizeHandoffContext, type AiChatTurn, type RouteResult } from './ai-answer'
 import { getAiSettings } from './ai-settings'
 import { recordAiUsage } from './ai-usage'
 import { notifyHandoffToStaff } from './ai-handoff-notify'
@@ -1953,8 +1953,13 @@ async function handleIncomingText(
       ruleCooldowns: userState.ruleCooldowns,
     })
     if (!rule) {
+      // 對話脈絡 lazy 共用：意圖路由與 AI 答題吃同一次 Firestore 讀取;
+      // 關鍵字就命中腳本（或沒有腳本）的訊息完全不會觸發載入
+      let convoCtxPromise: Promise<AiConvoContext> | null = null
+      const getConvoCtx = () => (convoCtxPromise ??= loadAiConvoContext(fsUserDocId, textContent))
+
       // 1. 規則沒命中 → 嘗試啟動腳本（關鍵字快速通道 + 統一意圖路由）
-      const scriptHandled = await runScriptStart(
+      const scriptRes = await runScriptStart(
         textContent,
         userAttributes,
         fsUserDocId,
@@ -1964,10 +1969,11 @@ async function handleIncomingText(
         sessionId ?? null,
         options.requestOrigin || '',
         channelSecret,
+        () => getConvoCtx().then(c => c.history),
       )
-      if (scriptHandled) return
+      if (scriptRes.handled) return
 
-      // 2. 還是沒命中 → AI 保底
+      // 2. 還是沒命中 → AI 保底（重用路由的意圖分類與已載入的對話脈絡）
       await tryAiFallback({
         workspaceId: wid,
         lineUserId,
@@ -1977,6 +1983,8 @@ async function handleIncomingText(
         channelSecret,
         sessionId: sessionId ?? null,
         requestOrigin: options.requestOrigin || '',
+        precomputedIntent: scriptRes.route,
+        getConvoCtx,
       })
       return
     }
@@ -2054,19 +2062,24 @@ async function runScriptStart(
   sessionId: string | null,
   requestOrigin: string,
   channelSecret: string,
-): Promise<boolean> {
+  /** 對話脈絡 lazy loader：只有走到意圖路由才會真的讀 Firestore（與 tryAiFallback 共用同一次讀取） */
+  getHistory?: () => Promise<AiChatTurn[]>,
+): Promise<{ handled: boolean; route: RouteResult | null }> {
   const scripts = await loadActiveScripts(workspaceId).catch(() => [])
-  if (!scripts.length) return false
+  if (!scripts.length) return { handled: false, route: null }
   // 註：敏感情境已在編排最上層（呼叫此函式之前）攔截，這裡不需再檢查。
 
   // 1) 關鍵字快速通道：明確、零成本、確定性（不分模式；keywords 一律當明確觸發詞）
   let matched = scripts.find(s => matchesScriptKeywords(s, textContent)) ?? null
+  let route: RouteResult | null = null
 
   // 2) 沒命中 → 統一意圖路由（一次 LLM 呼叫，由 LLM 理解意圖+優先序決定走哪條腳本或交給 AI）。
   //    取代舊的「每條腳本各自比語意向量」：敏感情境(退款/法律…)不會被腳本攔截、相近意圖不會誤觸。
+  //    route 會回傳給 caller：沒命中腳本時 tryAiFallback 重用這份分類，不再重複呼叫 LLM。
   if (!matched) {
     const hints = scripts.map(s => ({ id: s.id, name: s.name, hints: triggerHints(s) }))
-    const route = await routeMessage(textContent, hints).catch((e) => {
+    const history = getHistory ? await getHistory().catch(() => [] as AiChatTurn[]) : []
+    route = await routeMessage(textContent, hints, history).catch((e) => {
       console.error('[script] routeMessage error:', e)
       return null
     })
@@ -2075,9 +2088,10 @@ async function runScriptStart(
       recordAiUsage(workspaceId, { inputTokens: route.inputTokens, outputTokens: route.outputTokens })
         .catch(e => console.error('[script] recordAiUsage(route) error:', e))
     }
-    if (route?.scriptId) matched = scripts.find(s => s.id === route.scriptId) ?? null
+    const routedScriptId = route?.scriptId ?? null
+    if (routedScriptId) matched = scripts.find(s => s.id === routedScriptId) ?? null
   }
-  if (!matched) return false
+  if (!matched) return { handled: false, route }
 
   const result = await startScript(matched, fsUserDocId, userAttributes)
   invalidateUserDocCache(fsUserDocId)
@@ -2085,7 +2099,7 @@ async function runScriptStart(
   if (result.finished && result.thenHandoff) {
     await triggerHandoff(userAttributes, lineUserId, workspaceId, sessionId, requestOrigin, channelSecret, /*alreadyReplied*/ true)
   }
-  return true
+  return { handled: true, route }
 }
 
 async function runScriptAdvance(
@@ -2324,6 +2338,40 @@ async function deliverHandoffReply(params: {
   }).catch(e => console.error('[ai-fallback] notifyHandoffToStaff error:', e))
 }
 
+/** tryAiFallback / routeMessage 共用的對話脈絡（一次 Firestore 讀取供兩處使用） */
+interface AiConvoContext {
+  prevAiMeta: AiConversationMeta | undefined
+  /** 最近對話（最舊在前、已排除本次剛存進去的訊息、最多 6 則） */
+  history: AiChatTurn[]
+}
+
+async function loadAiConvoContext(fsUserDocId: string, textContent: string): Promise<AiConvoContext> {
+  // 並行讀：上一輪 aiMeta（followup / disambiguation cooldown 判斷）+ 最近對話（多輪上下文）
+  const [convoSnap, historySnap] = await Promise.all([
+    getDb().collection('conversations').doc(fsUserDocId).get().catch(() => null),
+    getDb().collection('conversations').doc(fsUserDocId)
+      .collection('messages').orderBy('timestamp', 'desc').limit(8).get().catch(() => null),
+  ])
+  const prevAiMeta = (convoSnap?.data() as any)?.aiMeta as AiConversationMeta | undefined
+
+  // 組裝最近對話（最舊在前）；排除剛存進去的本次訊息，最多帶 6 則
+  let history: AiChatTurn[] = (historySnap?.docs ?? [])
+    .map(d => d.data() as { direction?: string; text?: string })
+    .reverse()
+    .map(m => ({
+      role: m.direction === 'incoming' ? 'user' as const : 'bot' as const,
+      text: String(m.text || '').trim(),
+    }))
+    .filter(t => t.text)
+  const lastTurn = history[history.length - 1]
+  if (lastTurn && lastTurn.role === 'user' && lastTurn.text === textContent.trim()) {
+    history = history.slice(0, -1)
+  }
+  history = history.slice(-6)
+
+  return { prevAiMeta, history }
+}
+
 /**
  * 規則／腳本都沒命中時，呼叫 AI 接手。
  *
@@ -2344,6 +2392,10 @@ async function tryAiFallback(params: {
   channelSecret: string
   sessionId: string | null
   requestOrigin: string
+  /** runScriptStart 的意圖路由結果（沒命中腳本時重用，answerWithAi 不再重複分類；token 已記帳） */
+  precomputedIntent?: RouteResult | null
+  /** 對話脈絡 lazy loader（與意圖路由共用同一次 Firestore 讀取）；未帶則自行載入 */
+  getConvoCtx?: () => Promise<AiConvoContext>
 }): Promise<void> {
   const { workspaceId, lineUserId, textContent, replyToken, userAttributes, channelSecret, sessionId, requestOrigin } = params
 
@@ -2409,13 +2461,8 @@ async function tryAiFallback(params: {
     showLoadingAnimation(lineUserId, workspaceId, 20).catch(() => {})
   }
 
-  // 並行讀：上一輪 aiMeta（followup / disambiguation cooldown 判斷）+ 最近對話（多輪上下文）
-  const [convoSnap, historySnap] = await Promise.all([
-    getDb().collection('conversations').doc(fsUserDocId).get().catch(() => null),
-    getDb().collection('conversations').doc(fsUserDocId)
-      .collection('messages').orderBy('timestamp', 'desc').limit(8).get().catch(() => null),
-  ])
-  const prevAiMeta = (convoSnap?.data() as any)?.aiMeta as AiConversationMeta | undefined
+  // 對話脈絡：runScriptStart 的意圖路由已載入過就重用（同一次 Firestore 讀取），否則自行載入
+  const { prevAiMeta, history } = await (params.getConvoCtx?.() ?? loadAiConvoContext(fsUserDocId, textContent))
 
   // ── 客人對「需要幫您轉接專員嗎?」的回應 ───────────────────────────
   // 上一輪是二次確認；這輪若是肯定 → 執行真正轉接（handoffs 已在 ask 時計過，不重複計）；
@@ -2460,20 +2507,6 @@ async function tryAiFallback(params: {
     // 既非肯定也非否定 → 客人改問新問題，往下走正常 AI 流程
   }
 
-  // 組裝最近對話（最舊在前）；排除剛存進去的本次訊息，最多帶 6 則
-  let history: AiChatTurn[] = (historySnap?.docs ?? [])
-    .map(d => d.data() as { direction?: string; text?: string })
-    .reverse()
-    .map(m => ({
-      role: m.direction === 'incoming' ? 'user' as const : 'bot' as const,
-      text: String(m.text || '').trim(),
-    }))
-    .filter(t => t.text)
-  const lastTurn = history[history.length - 1]
-  if (lastTurn && lastTurn.role === 'user' && lastTurn.text === textContent.trim()) {
-    history = history.slice(0, -1)
-  }
-  history = history.slice(-6)
   const lastDis = prevAiMeta?.lastDisambiguation ?? null
 
   // Followup：客人剛被反問過，這次訊息正好等於某個 option → 把該 option 當新 query 跑
@@ -2516,8 +2549,15 @@ async function tryAiFallback(params: {
 
   let result
   try {
-    // 預算向量只在 query 仍等於原訊息（非 followup 改寫）時可重用，否則向量與 query 不一致
-    result = await answerWithAi({ workspaceId, query, isFollowup, skipDisambiguation, history })
+    result = await answerWithAi({
+      workspaceId,
+      query,
+      isFollowup,
+      skipDisambiguation,
+      history,
+      // 意圖路由已分類過就重用（省一次 flash-lite）;routeMessage 失敗回 null 時仍由內部 classifyIntent 補
+      precomputedIntent: params.precomputedIntent ?? undefined,
+    })
   }
   catch (e) {
     console.error('[ai-fallback] answerWithAi failed:', e)

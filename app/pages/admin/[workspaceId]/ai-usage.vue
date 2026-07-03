@@ -96,7 +96,7 @@
               </div>
             </div>
             <p class="usage-hint">
-              這裡的金額是依 Gemini Flash 公開價格估算的參考值（每 100 萬用量：送入 ${{ pricing.inputPerM }} / 產生 ${{ pricing.outputPerM }} / 搜尋 ${{ pricing.embedPerM }}）。
+              這裡的金額是依 Gemini Flash 公開價格估算的<strong>偏高參考值</strong>（部分呼叫實際走更便宜的 Flash-Lite）<template v-if="pricing">，每 100 萬用量：送入 ${{ pricing.inputPerM }} / 產生 ${{ pricing.outputPerM }} / 搜尋 ${{ pricing.embedPerM }}</template>。
               實際費用還是以 Google 帳單為準。
             </p>
           </div>
@@ -110,10 +110,15 @@
               <span class="text-xs text-muted">最近待處理・不分月份</span>
               <el-select v-model="reasonFilter" size="small" style="width: 150px" @change="loadHandoffs">
                 <el-option label="全部原因" value="" />
-                <el-option label="信心不足" value="low_confidence" />
-                <el-option label="知識庫無依據" value="no_grounding" />
-                <el-option label="客人要求真人" value="user_request" />
+                <!-- 由共用標籤表導出:手打第二份會漂移(曾發生下拉與列表徽章同一原因兩種名字) -->
+                <el-option
+                  v-for="opt in reasonOptions"
+                  :key="opt.value"
+                  :label="opt.label"
+                  :value="opt.value"
+                />
               </el-select>
+              <el-checkbox v-model="showResolved" size="small" @change="loadHandoffs">顯示已處理</el-checkbox>
             </div>
           </div>
           <div class="card-section-stack">
@@ -123,9 +128,10 @@
             <div v-if="loadingHandoffs && !handoffs.length" class="usage-loading"><div class="spinner" /></div>
             <div v-else-if="!handoffs.length" class="usage-empty">目前沒有待處理的轉真人案例 🎉</div>
             <div v-else class="usage-handoff-list">
-              <div v-for="row in handoffs" :key="`${row.userId}-${row.updatedAtMs}`" class="usage-handoff-row">
+              <div v-for="row in handoffs" :key="`${row.userId}-${row.updatedAtMs}`" class="usage-handoff-row" :class="{ 'usage-handoff-row--resolved': row.resolved }">
                 <div class="usage-handoff-meta">
                   <span :class="reasonBadgeClass(row.handoffReason)">{{ reasonLabel(row.handoffReason) }}</span>
+                  <span v-if="row.resolved" class="badge badge-gray">✓ 已處理</span>
                   <span class="text-xs text-muted">信心 {{ row.lastConfidence.toFixed(2) }} · {{ formatTime(row.updatedAtMs) }}</span>
                 </div>
                 <div class="usage-handoff-query">
@@ -139,7 +145,7 @@
                   <el-button size="small" plain @click="goConversation(row.userId)">💬 開對話</el-button>
                   <el-button size="small" type="primary" plain @click="goAddKnowledge(row.lastQuery)">📥 補知識</el-button>
                   <el-button size="small" plain @click="goPlayground(row.lastQuery)">▶ 重演</el-button>
-                  <el-button size="small" type="success" plain :loading="resolvingUserId === row.userId" @click="resolveHandoff(row.userId)">✓ 已處理</el-button>
+                  <el-button v-if="!row.resolved" size="small" type="success" plain :loading="resolvingUserId === row.userId" @click="resolveHandoff(row.userId)">✓ 已處理</el-button>
                 </div>
               </div>
             </div>
@@ -178,6 +184,7 @@ interface Summary {
   handoffRate: number
   estimatedCostUsd: number
   perConversationUsd: number
+  pricing: { inputPerM: number; outputPerM: number; embedPerM: number }
 }
 
 interface HandoffRow {
@@ -195,9 +202,16 @@ const summary = ref<Summary | null>(null)
 const handoffs = ref<HandoffRow[]>([])
 const loading = ref(false)
 const loadingHandoffs = ref(false)
-const reasonFilter = ref<'' | 'low_confidence' | 'no_grounding'>('')
+const reasonFilter = ref<'' | HandoffReason>('')
+const showResolved = ref(false)
 
-const pricing = { inputPerM: 0.075, outputPerM: 0.30, embedPerM: 0.025 }
+// 'manual' 是內部人工指定,不提供篩選(後端白名單同樣排除)
+const reasonOptions = (Object.entries(HANDOFF_REASON_LABELS) as Array<[HandoffReason, string]>)
+  .filter(([value]) => value !== 'manual')
+  .map(([value, label]) => ({ value, label }))
+
+// 單價由 summary API 回傳（後端單一事實來源），還沒載到前先不顯示數字
+const pricing = computed(() => summary.value?.pricing ?? null)
 
 // ── Period selector（過去 3 個月） ─────────────────────────
 function makePeriodOptions() {
@@ -235,6 +249,7 @@ async function loadHandoffs() {
   try {
     const params = new URLSearchParams({ limit: '20' })
     if (reasonFilter.value) params.set('reason', reasonFilter.value)
+    if (showResolved.value) params.set('includeResolved', '1')
     handoffs.value = await apiFetch<HandoffRow[]>(`/api/ai/usage/handoffs?${params.toString()}`)
   }
   catch {
@@ -292,7 +307,14 @@ async function resolveHandoff(userId: string) {
   resolvingUserId.value = userId
   try {
     await apiFetch('/api/ai/usage/handoffs/resolve', { method: 'POST', body: { userId } })
-    handoffs.value = handoffs.value.filter(r => r.userId !== userId)
+    // 「顯示已處理」開著時原地標記(可回顧);關著時直接從列表移除
+    if (showResolved.value) {
+      const row = handoffs.value.find(r => r.userId === userId)
+      if (row) row.resolved = true
+    }
+    else {
+      handoffs.value = handoffs.value.filter(r => r.userId !== userId)
+    }
   }
   catch {
     // 保留在列表上讓使用者重試；沒有回饋會讓人以為按了沒反應而連點
@@ -404,6 +426,11 @@ onMounted(() => loadAll())
   background: var(--el-fill-color-light);
   border-radius: 6px;
   border-left: 3px solid var(--el-color-warning);
+
+  &--resolved {
+    opacity: 0.65;
+    border-left-color: var(--el-border-color);
+  }
 }
 
 .usage-handoff-meta {

@@ -7,14 +7,19 @@
         caption="開關、回覆模式、語氣與轉真人規則;細部參數收在最下方「進階調校」"
       />
       <div v-if="canEditSettings" class="flex gap-1 admin-header-actions">
-        <el-button :disabled="!dirty" @click="loadSettings(true)">取消</el-button>
+        <el-button :disabled="!dirty" @click="cancelEdits">取消</el-button>
         <el-button type="primary" :loading="saving" :disabled="!dirty" data-tour="ais-save" @click="save">儲存設定</el-button>
       </div>
       <div v-else class="text-xs text-muted">僅檢視;修改 AI 設定需要管理員權限</div>
     </template>
 
     <template #editor-body>
-      <div class="solo-editor-body admin-panel-stack">
+      <!-- 載入失敗:不給人編輯一份存不了的空表單,顯示錯誤 + 重試 -->
+      <div v-if="loadError" class="solo-editor-body ai-load-error">
+        <p>⚠️ 設定載入失敗,目前顯示的不是這個工作區的實際設定。</p>
+        <el-button type="primary" plain @click="loadSettings">重試</el-button>
+      </div>
+      <el-form v-else :disabled="!canEditSettings" class="solo-editor-body admin-panel-stack" @submit.prevent>
         <!-- ── 目前狀態 ───────────────────────── -->
         <div class="message-card ai-section-card">
           <div class="message-card-header">
@@ -126,9 +131,9 @@
           <div class="card-section-stack">
             <p class="ai-section-hint">給 AI 的指示:講話口吻、不能說什麼、要怎麼處理特殊狀況。不知道怎麼寫?先套一個範本再改:</p>
             <div class="flex gap-1 ai-tone-row">
-              <el-button size="small" plain @click="applyToneTemplate('friendly')">😊 親切活潑</el-button>
-              <el-button size="small" plain @click="applyToneTemplate('professional')">💼 專業簡潔</el-button>
-              <el-button size="small" plain @click="applyToneTemplate('warm')">🤝 溫暖體貼</el-button>
+              <el-button size="small" plain :disabled="!canEditSettings" @click="applyToneTemplate('friendly')">😊 親切活潑</el-button>
+              <el-button size="small" plain :disabled="!canEditSettings" @click="applyToneTemplate('professional')">💼 專業簡潔</el-button>
+              <el-button size="small" plain :disabled="!canEditSettings" @click="applyToneTemplate('warm')">🤝 溫暖體貼</el-button>
             </div>
             <el-input
               v-model="form.systemPrompt"
@@ -255,7 +260,7 @@
               <el-tag
                 v-for="topic in form.sensitiveTopics"
                 :key="topic"
-                closable
+                :closable="canEditSettings"
                 class="ai-tag"
                 @close="removeSensitive(topic)"
               >
@@ -270,7 +275,7 @@
                 @keydown.enter.prevent="commitSensitive"
                 @blur="commitSensitive"
               />
-              <el-button v-else size="small" plain @click="showSensitiveInput">＋ 新增</el-button>
+              <el-button v-else-if="canEditSettings" size="small" plain @click="showSensitiveInput">＋ 新增</el-button>
             </div>
           </div>
         </div>
@@ -465,13 +470,14 @@
             </div>
           </div>
         </template>
-      </div>
+      </el-form>
     </template>
   </AdminSplitLayout>
 </template>
 
 <script setup lang="ts">
 import { ElMessageBox } from 'element-plus'
+import { buildDefaultAiSettings } from '~~/shared/types/ai-knowledge'
 import type { AiSettingsDoc } from '~~/shared/types/ai-knowledge'
 
 definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
@@ -485,7 +491,6 @@ interface FormShape {
   enabled: boolean
   replyMode: AiSettingsDoc['replyMode']
   answerModel: AiSettingsDoc['answerModel']
-  embeddingModel: AiSettingsDoc['embeddingModel']
   confidenceThreshold: number
   groundingThreshold: number
   systemPrompt: string
@@ -498,39 +503,43 @@ interface FormShape {
   disambiguation: AiSettingsDoc['disambiguation']
 }
 
+/** 表單預設值直接取自後端同一份 buildDefaultAiSettings，避免兩份預設漂移（top1Min 0.65 事故的根因） */
 function defaultForm(): FormShape {
+  const d = buildDefaultAiSettings()
   return {
-    enabled: false,
-    replyMode: 'auto',
-    answerModel: 'gemini-2.5-flash',
-    embeddingModel: 'gemini-embedding-001',
-    confidenceThreshold: 0.75,
-    groundingThreshold: 0.7,
-    systemPrompt: '',
-    shopUrl: '',
-    replyMaxLen: 300,
-    sensitiveTopics: [],
-    quota: { monthlyTokenCap: 1_000_000, onExceed: 'handoff_all' },
-    handoffNotify: { enabled: false, lineUserIds: [], displayNames: {}, slaRemindMinutes: 15 },
-    handbackIdleMinutes: 0,
-    disambiguation: {
-      enabled: true,
-      // 與後端 DEFAULT_DISAMBIGUATION_TOP1_MIN 一致(0.70）：低於此的多卡群多半是
-      // 「沒有好答案被迫湊近似卡」,反問會塞不相關選項。改這裡記得同步後端常數。
-      top1Min: 0.7,
-      top1Max: 0.78,
-      maxSpread: 0.05,
-      maxOptions: 3,
-      cooldownMinutes: 5,
-    },
+    enabled: d.enabled,
+    replyMode: d.replyMode,
+    answerModel: d.answerModel,
+    confidenceThreshold: d.confidenceThreshold,
+    groundingThreshold: d.groundingThreshold,
+    systemPrompt: d.systemPrompt,
+    shopUrl: d.shopUrl,
+    replyMaxLen: d.replyMaxLen,
+    sensitiveTopics: [...d.sensitiveTopics],
+    quota: { ...d.quota },
+    handoffNotify: { ...d.handoffNotify, lineUserIds: [...d.handoffNotify.lineUserIds], displayNames: { ...d.handoffNotify.displayNames } },
+    handbackIdleMinutes: d.handbackIdleMinutes,
+    disambiguation: { ...d.disambiguation },
   }
 }
 
 const form = ref<FormShape>(defaultForm())
 const saving = ref(false)
 const showAdvanced = ref(false)
+const loadError = ref(false)
 const { markClean, hasUnsavedChanges: dirty } = useUnsavedChanges({
   getSnapshot: () => form.value,
+  // 站內換頁預設有攔；F5 / 關分頁也要攔（prompt 可能寫了幾百字）
+  enableBeforeUnload: true,
+})
+
+// 反問上下限交叉防呆:拉高下限就推高上限、壓低上限就壓低下限,
+// 讓「min ≤ max」恆成立——否則後端會靜默交換存檔,畫面顯示的和存進去的不一樣
+watch(() => form.value.disambiguation.top1Min, (v) => {
+  if (v > form.value.disambiguation.top1Max) form.value.disambiguation.top1Max = v
+})
+watch(() => form.value.disambiguation.top1Max, (v) => {
+  if (v < form.value.disambiguation.top1Min) form.value.disambiguation.top1Min = v
 })
 
 /**
@@ -720,47 +729,81 @@ function syncNotifyDisplayNames() {
   form.value.handoffNotify.displayNames = names
 }
 
-async function loadSettings(_resetOnly = false) {
+/** 把後端回傳的設定套進表單並標記乾淨。load 與 save 共用——save 後回填 normalize 結果，
+ * 後端有任何修正（min/max 交換、clamp、剪 displayNames）畫面都會跟上,不會「設定自己跳掉」。 */
+function applySettings(data: AiSettingsDoc) {
+  form.value = {
+    enabled: data.enabled,
+    replyMode: data.replyMode === 'draft' ? 'draft' : 'auto',
+    answerModel: data.answerModel,
+    confidenceThreshold: data.confidenceThreshold,
+    groundingThreshold: data.groundingThreshold,
+    systemPrompt: data.systemPrompt,
+    shopUrl: data.shopUrl ?? '',
+    replyMaxLen: data.replyMaxLen,
+    sensitiveTopics: [...data.sensitiveTopics],
+    quota: { ...data.quota },
+    handoffNotify: {
+      enabled: data.handoffNotify?.enabled === true,
+      lineUserIds: [...(data.handoffNotify?.lineUserIds ?? [])],
+      displayNames: { ...(data.handoffNotify?.displayNames ?? {}) },
+      slaRemindMinutes: Number(data.handoffNotify?.slaRemindMinutes ?? 15),
+    },
+    handbackIdleMinutes: Number(data.handbackIdleMinutes ?? 0),
+    disambiguation: { ...data.disambiguation },
+  }
+  // 回填名稱快取,讓已選通知對象的 tag 顯示暱稱
+  for (const [uid, name] of Object.entries(data.handoffNotify?.displayNames ?? {})) {
+    if (name) knownUserNames.value[uid] = name
+  }
+  lastLoadedDoc = data
+  nextTick(() => markClean())
+}
+
+/** 最後一次成功載入 / 儲存的伺服器版本；取消編輯時用它原地還原,不必重打 API */
+let lastLoadedDoc: AiSettingsDoc | null = null
+
+async function loadSettings() {
   try {
     const data = await apiFetch<AiSettingsDoc>('/api/ai/settings')
-    form.value = {
-      enabled: data.enabled,
-      replyMode: data.replyMode === 'draft' ? 'draft' : 'auto',
-      answerModel: data.answerModel,
-      embeddingModel: data.embeddingModel,
-      confidenceThreshold: data.confidenceThreshold,
-      groundingThreshold: data.groundingThreshold,
-      systemPrompt: data.systemPrompt,
-      shopUrl: data.shopUrl ?? '',
-      replyMaxLen: data.replyMaxLen,
-      sensitiveTopics: [...data.sensitiveTopics],
-      quota: { ...data.quota },
-      handoffNotify: {
-        enabled: data.handoffNotify?.enabled === true,
-        lineUserIds: [...(data.handoffNotify?.lineUserIds ?? [])],
-        displayNames: { ...(data.handoffNotify?.displayNames ?? {}) },
-        slaRemindMinutes: Number(data.handoffNotify?.slaRemindMinutes ?? 15),
-      },
-      handbackIdleMinutes: Number(data.handbackIdleMinutes ?? 0),
-      disambiguation: { ...data.disambiguation },
-    }
-    // 回填名稱快取,讓已選通知對象的 tag 顯示暱稱
-    for (const [uid, name] of Object.entries(data.handoffNotify?.displayNames ?? {})) {
-      if (name) knownUserNames.value[uid] = name
-    }
-    markClean()
+    applySettings(data)
+    loadError.value = false
   }
   catch (err: any) {
+    // 載入失敗時不能讓人編輯一份存不了的空表單:顯示錯誤狀態 + 重試(見模板)
+    loadError.value = true
     showToast(err?.statusMessage || '載入設定失敗', 'error')
   }
 }
 
+async function cancelEdits() {
+  if (dirty.value) {
+    try {
+      await ElMessageBox.confirm('放棄未儲存的變更?', '取消編輯', {
+        confirmButtonText: '放棄變更',
+        cancelButtonText: '繼續編輯',
+        type: 'warning',
+      })
+    }
+    catch { return }
+  }
+  if (lastLoadedDoc) applySettings(lastLoadedDoc)
+  else await loadSettings()
+}
+
 async function save() {
+  // 像網域但缺協定的放行——後端 normalize 會補 https:// 並經 applySettings 回填顯示;
+  // 完全不像網址的才擋（AI 會把它原樣發給客人）
+  const url = form.value.shopUrl.trim()
+  if (url && !/^https?:\/\//i.test(url) && !/^[\w-]+(\.[\w-]+)+([/?#]|$)/.test(url)) {
+    showToast('商店網址格式不正確（需為網址,AI 會把它原樣發給客人）', 'error')
+    return
+  }
   saving.value = true
   try {
-    await apiFetch('/api/ai/settings', { method: 'PUT', body: form.value })
+    const updated = await apiFetch<AiSettingsDoc>('/api/ai/settings', { method: 'PUT', body: form.value })
+    applySettings(updated)
     showToast('已儲存 ✅', 'success')
-    markClean()
   }
   catch (err: any) {
     showToast(err?.statusMessage || '儲存失敗', 'error')
@@ -880,6 +923,15 @@ onMounted(() => {
 
 .ai-checklist-title {
   font-weight: 600;
+}
+
+.ai-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 16px;
+  color: var(--el-text-color-secondary);
 }
 
 .ai-check-item {

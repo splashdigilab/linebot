@@ -22,6 +22,7 @@ import {
   DEFAULT_MONTHLY_TOKEN_CAP,
   DEFAULT_REPLY_MAX_LEN,
   DEFAULT_SENSITIVE_TOPICS,
+  DEFAULT_SLA_REMIND_MINUTES,
   DEFAULT_SYSTEM_PROMPT,
 } from '~~/shared/types/ai-knowledge'
 import type {
@@ -90,7 +91,16 @@ export function normalizeAiSettings(raw: any): AiSettingsDoc {
     confidenceThreshold: clampNumber(raw?.confidenceThreshold, 0, 1, DEFAULT_CONFIDENCE_THRESHOLD),
     groundingThreshold: clampNumber(raw?.groundingThreshold, 0, 1, DEFAULT_GROUNDING_SIMILARITY_THRESHOLD),
     systemPrompt: String(raw?.systemPrompt ?? DEFAULT_SYSTEM_PROMPT).slice(0, 4000),
-    shopUrl: String(raw?.shopUrl ?? '').trim().slice(0, 500),
+    // 這個值會被 AI 原樣發給客人（「最新價格請見 …」），沒協定的字串在 LINE 上點不開。
+    // 長得像網域的自動補 https://（**不能直接清空**——normalize 在讀取時也會跑,
+    // 舊租戶存過的無協定網址會被靜默歸零,下次存檔還永久落地）;完全不像網址的才存空。
+    shopUrl: (() => {
+      const u = String(raw?.shopUrl ?? '').trim().slice(0, 500)
+      if (!u) return ''
+      if (/^https?:\/\//i.test(u)) return u
+      if (/^[\w-]+(\.[\w-]+)+([/?#]|$)/.test(u)) return `https://${u}`
+      return ''
+    })(),
     replyMaxLen: clampNumber(raw?.replyMaxLen, 50, 1000, DEFAULT_REPLY_MAX_LEN),
     sensitiveTopics,
     quota: {
@@ -114,7 +124,7 @@ export function normalizeAiSettings(raw: any): AiSettingsDoc {
         enabled: raw?.handoffNotify?.enabled === true,
         lineUserIds,
         displayNames,
-        slaRemindMinutes: Math.round(clampNumber(raw?.handoffNotify?.slaRemindMinutes, 0, 1440, 15)),
+        slaRemindMinutes: Math.round(clampNumber(raw?.handoffNotify?.slaRemindMinutes, 0, 1440, DEFAULT_SLA_REMIND_MINUTES)),
       }
     })(),
     handbackIdleMinutes: Math.round(clampNumber(raw?.handbackIdleMinutes, 0, 1440, DEFAULT_HANDBACK_IDLE_MINUTES)),
@@ -127,7 +137,8 @@ export function normalizeAiSettings(raw: any): AiSettingsDoc {
         enabled: typeof raw?.disambiguation?.enabled === 'boolean' ? raw.disambiguation.enabled : DEFAULT_DISAMBIGUATION_ENABLED,
         top1Min,
         top1Max,
-        maxSpread: clampNumber(raw?.disambiguation?.maxSpread, 0, 1, DEFAULT_DISAMBIGUATION_MAX_SPREAD),
+        // 上限 0.3 與前端 slider 一致：spread 是「前兩張卡分數差」，>0.3 沒有實務意義
+        maxSpread: clampNumber(raw?.disambiguation?.maxSpread, 0, 0.3, DEFAULT_DISAMBIGUATION_MAX_SPREAD),
         maxOptions: Math.round(clampNumber(raw?.disambiguation?.maxOptions, 2, 5, DEFAULT_DISAMBIGUATION_MAX_OPTIONS)),
         cooldownMinutes: Math.round(clampNumber(raw?.disambiguation?.cooldownMinutes, 0, 1440, DEFAULT_DISAMBIGUATION_COOLDOWN_MINUTES)),
       }

@@ -230,12 +230,17 @@ export default defineEventHandler(async (event) => {
       .catch(e => console.warn('[resync-apply] overview regen failed:', e))
   }
 
-  // 更新 source 狀態
+  // 更新 source 狀態。contentHash 用 client 帶回的「preview 當時的指紋」（preview 回應
+  // 原樣轉傳）——不能讀當下的 cache:排程任務可能在 preview 與 apply 之間覆寫 cache,
+  // 那會把新版指紋配上舊版內容,新變動從此不再被偵測。沒帶就不動 contentHash
+  //（最壞只是下次排程再報一次變動,方向安全）。
+  const bodyHash = String(body?.contentHash ?? '').trim()
   const newChunkCount = await countSourceChunks(db, workspaceId, sourceId)
   await db.collection(KNOWLEDGE_SOURCES_COLLECTION).doc(sourceId).update({
     chunkCount: newChunkCount,
     lastFetchedAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
+    ...(bodyHash ? { contentHash: bodyHash } : {}),
   })
   await clearSourceOutdated(db, sourceId)
 
