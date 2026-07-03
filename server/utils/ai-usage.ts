@@ -88,3 +88,29 @@ export async function getCurrentMonthTokens(
   const data = snap.data() as Partial<AiUsageDoc>
   return Number(data?.inputTokens ?? 0) + Number(data?.outputTokens ?? 0) + Number(data?.embeddingTokens ?? 0)
 }
+
+export interface CurrentMonthUsage {
+  /** input + output + embedding tokens（給 token 內部護欄用） */
+  tokens: number
+  /** answered 則數（給方案「則數額度」用） */
+  answered: number
+}
+
+/**
+ * 一次讀當月 usage doc，同時回傳 token 總量與 answered 則數。
+ * 讓 quota 護欄的「則數額度」與「token 護欄」共用同一次 Firestore 讀取。
+ */
+export async function getCurrentMonthUsage(
+  workspaceId: string,
+  db: Firestore = getDb(),
+): Promise<CurrentMonthUsage> {
+  const yyyyMm = currentYyyyMm()
+  const ref = db.collection(AI_USAGE_COLLECTION).doc(usageDocId(workspaceId, yyyyMm))
+  const snap = await ref.get()
+  if (!snap.exists) return { tokens: 0, answered: 0 }
+  const data = snap.data() as Partial<AiUsageDoc>
+  return {
+    tokens: Number(data?.inputTokens ?? 0) + Number(data?.outputTokens ?? 0) + Number(data?.embeddingTokens ?? 0),
+    answered: Number(data?.answered ?? 0),
+  }
+}

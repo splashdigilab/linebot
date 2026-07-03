@@ -1,6 +1,8 @@
 import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import { AI_USAGE_COLLECTION, currentYyyyMm } from '~~/server/utils/ai-usage'
+import { getWorkspaceSubscription } from '~~/server/utils/billing'
+import { effectiveAnsweredQuota, getBillingPlan } from '~~/shared/billing/plans'
 import type { AiUsageDoc } from '~~/shared/types/ai-knowledge'
 
 /**
@@ -37,10 +39,26 @@ export default defineEventHandler(async (event) => {
   const period = String(query.period ?? currentYyyyMm()).replace(/[^\d]/g, '').slice(0, 6) || currentYyyyMm()
 
   const db = getDb()
+
+  // 目前方案（給前端顯示額度進度條 / 超量提示）。未開通訂閱回 null → 前端不顯示額度區塊。
+  const sub = await getWorkspaceSubscription(workspaceId, db)
+  const plan = sub
+    ? (() => {
+        const p = getBillingPlan(sub.planId)
+        return {
+          name: p.name,
+          answeredQuota: effectiveAnsweredQuota(p, sub.quotaOverride),
+          overagePerReply: p.overagePerReply,
+          currentPeriodEnd: sub.currentPeriodEnd,
+        }
+      })()
+    : null
+
   const snap = await db.collection(AI_USAGE_COLLECTION).doc(`${workspaceId}_${period}`).get()
 
   const empty = {
     period,
+    plan,
     invocations: 0,
     answered: 0,
     handoffs: 0,
@@ -80,6 +98,7 @@ export default defineEventHandler(async (event) => {
 
   return {
     period,
+    plan,
     invocations,
     answered,
     handoffs,

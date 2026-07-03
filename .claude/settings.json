@@ -239,7 +239,12 @@
       "Bash(git -C /Users/kevin/Documents/Github/linebot status --short scripts/scan-short-chunks.ts)",
       "Bash(git -C /Users/kevin/Documents/Github/linebot log --oneline -1 -- scripts/scan-short-chunks.ts)",
       "Bash(node --env-file=.env_myfeel --experimental-strip-types scripts/backfill-retrycount.ts)",
-      "Bash(node --env-file=.env_splash --experimental-strip-types scripts/backfill-retrycount.ts)"
+      "Bash(node --env-file=.env_splash --experimental-strip-types scripts/backfill-retrycount.ts)",
+      "Bash(grep -rniE \"NT\\\\\\\\\\\\$|TWD|月費|訂閱|subscription|priceMonthly|planPrice|方案.*價|每月.*元|billingCycle\" /Users/kevin/Documents/Github/linebot/shared /Users/kevin/Documents/Github/linebot/server /Users/kevin/Documents/Github/linebot/app --include=\"*.ts\" --include=\"*.vue\")",
+      "Skill(artifact-design)",
+      "Skill(artifact-design:*)",
+      "Bash(echo \"typecheck exit code = $?\")",
+      "Bash(echo \"typecheck exit = $?\")"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",

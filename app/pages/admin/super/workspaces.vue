@@ -36,6 +36,17 @@
                   <span class="text-xs text-muted sa-uid-mono">{{ row.id }}</span>
                 </template>
               </el-table-column>
+              <el-table-column label="計費方案" min-width="150">
+                <template #default="{ row }">
+                  <template v-if="row.subscription">
+                    <span class="text-sm">{{ planName(row.subscription.planId) }}</span>
+                    <el-tag :type="statusTagType(row.subscription.status)" size="small" style="margin-left: 6px">
+                      {{ statusLabel(row.subscription.status) }}
+                    </el-tag>
+                  </template>
+                  <span v-else class="text-xs text-muted">未開通</span>
+                </template>
+              </el-table-column>
               <el-table-column label="LINE 設定" width="100" align="center">
                 <template #default="{ row }">
                   <el-tag v-if="row.channelAccessTokenConfigured && row.channelSecretConfigured" type="success" size="small">已設定</el-tag>
@@ -101,6 +112,49 @@
           <el-option v-for="org in orgs" :key="org.id" :label="org.name" :value="org.id" />
         </el-select>
       </div>
+
+      <el-divider content-position="left">計費方案</el-divider>
+
+      <div class="admin-field-group">
+        <AdminFieldLabel text="方案" tight />
+        <el-select v-model="editForm.planId" placeholder="未開通（不攔截則數）" clearable style="width: 100%">
+          <el-option v-for="id in planOrder" :key="id" :label="planOptionLabel(id)" :value="id" />
+        </el-select>
+        <p class="text-xs text-muted" style="margin-top: 4px">未開通的帳號不會被則數上限攔截（沿用內部 token 護欄）。</p>
+      </div>
+
+      <template v-if="editForm.planId">
+        <div class="admin-field-group">
+          <AdminFieldLabel text="訂閱狀態" tight />
+          <el-select v-model="editForm.status" style="width: 100%">
+            <el-option v-for="s in statusOptions" :key="s.value" :label="s.label" :value="s.value" />
+          </el-select>
+        </div>
+        <div class="admin-field-group">
+          <AdminFieldLabel text="到期日（選填）" tight />
+          <el-date-picker
+            v-model="editForm.currentPeriodEnd"
+            type="date"
+            value-format="YYYY-MM-DD"
+            placeholder="不設定"
+            style="width: 100%"
+          />
+        </div>
+        <div class="admin-field-group">
+          <AdminFieldLabel text="額度覆蓋（選填，留空用方案預設）" tight />
+          <el-input-number
+            v-model="editForm.quotaOverride"
+            :min="0"
+            :controls="false"
+            :placeholder="quotaPlaceholder"
+            style="width: 100%"
+          />
+        </div>
+        <div class="admin-field-group">
+          <AdminFieldLabel text="備註（選填，僅內部）" tight />
+          <el-input v-model="editForm.note" placeholder="開通原因 / 合約號…" />
+        </div>
+      </template>
     </div>
     <template #footer>
       <el-button @click="showEdit = false">取消</el-button>
@@ -110,6 +164,9 @@
 </template>
 
 <script setup lang="ts">
+import { BILLING_PLANS, BILLING_PLAN_ORDER } from '~~/shared/billing/plans'
+import type { BillingPlanId, SubscriptionStatus } from '~~/shared/billing/plans'
+
 definePageMeta({ middleware: ['auth', 'super-admin'], layout: 'super-admin' })
 useHead({ title: '官方帳號管理 — Super Admin' })
 
@@ -139,7 +196,54 @@ const form = reactive({
   organizationId: '',
 })
 
-const editForm = reactive({ name: '', organizationId: '' })
+const editForm = reactive<{
+  name: string
+  organizationId: string
+  planId: BillingPlanId | ''
+  status: SubscriptionStatus
+  currentPeriodEnd: string | null
+  quotaOverride: number | undefined
+  note: string
+}>({
+  name: '',
+  organizationId: '',
+  planId: '',
+  status: 'active',
+  currentPeriodEnd: null,
+  quotaOverride: undefined,
+  note: '',
+})
+
+const planOrder = BILLING_PLAN_ORDER
+const statusOptions: { value: SubscriptionStatus; label: string }[] = [
+  { value: 'active', label: '啟用中' },
+  { value: 'trialing', label: '試用中' },
+  { value: 'past_due', label: '逾期未付' },
+  { value: 'canceled', label: '已取消' },
+]
+
+function planName(id: string): string {
+  return BILLING_PLANS[id as BillingPlanId]?.name ?? id
+}
+function planOptionLabel(id: BillingPlanId): string {
+  const p = BILLING_PLANS[id]
+  const quota = p.answeredQuota == null ? '客製' : `${p.answeredQuota.toLocaleString()} 則`
+  return `${p.name}（${quota}／月）`
+}
+function statusLabel(s: string): string {
+  return statusOptions.find(o => o.value === s)?.label ?? s
+}
+function statusTagType(s: string): 'success' | 'primary' | 'warning' | 'info' {
+  if (s === 'active') return 'success'
+  if (s === 'trialing') return 'primary'
+  if (s === 'past_due') return 'warning'
+  return 'info'
+}
+const quotaPlaceholder = computed(() => {
+  if (!editForm.planId) return '方案預設'
+  const q = BILLING_PLANS[editForm.planId].answeredQuota
+  return q == null ? '客製（不設上限）' : `方案預設 ${q.toLocaleString()} 則`
+})
 
 async function load() {
   loading.value = true
@@ -167,6 +271,12 @@ function openEdit(row: any) {
   editTarget.value = row
   editForm.name = row.name
   editForm.organizationId = row.organizationId ?? ''
+  const sub = row.subscription
+  editForm.planId = sub?.planId ?? ''
+  editForm.status = sub?.status ?? 'active'
+  editForm.currentPeriodEnd = sub?.currentPeriodEnd ?? null
+  editForm.quotaOverride = sub?.quotaOverride ?? undefined
+  editForm.note = sub?.note ?? ''
   showEdit.value = true
 }
 
@@ -199,11 +309,22 @@ async function saveEdit() {
   if (!editForm.name.trim()) return showToast('名稱不能為空', 'error')
   saving.value = true
   try {
+    const subscription = editForm.planId
+      ? {
+          planId: editForm.planId,
+          status: editForm.status,
+          currentPeriodStart: editTarget.value?.subscription?.currentPeriodStart ?? null,
+          currentPeriodEnd: editForm.currentPeriodEnd || null,
+          quotaOverride: editForm.quotaOverride ?? null,
+          note: editForm.note.trim() || null,
+        }
+      : null
     await apiFetch(`/api/admin/super/workspaces/${editTarget.value.id}`, {
       method: 'PATCH',
       body: {
         name: editForm.name,
         organizationId: editForm.organizationId || null,
+        subscription,
       },
     })
     showToast('已更新', 'success')

@@ -1,4 +1,5 @@
 import type { Timestamp, FieldValue } from 'firebase-admin/firestore'
+import type { WorkspaceSubscription } from '../billing/plans'
 
 // ═══════════════════════════════════════════════════════════════════
 //  Collection: organizations
@@ -38,6 +39,12 @@ export interface WorkspaceDoc {
   channelSecret?: string
   defaultLiffId?: string
   organizationId?: string | null
+  /**
+   * 計費訂閱（掛在帳號 / OA 層，每個帳號各自一份、額度不共用）。
+   * 未設 = 免費層（DEFAULT_BILLING_PLAN_ID）。方案內容見 shared/billing/plans.ts。
+   * Phase 1 由 super admin 手動開通寫入；Phase 2 起接金流 webhook 維護。
+   */
+  subscription?: WorkspaceSubscription
   updatedAt: Timestamp | FieldValue
 }
 

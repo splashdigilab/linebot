@@ -21,6 +21,57 @@
 
     <template #editor-body>
       <div class="usage-body admin-panel-stack">
+        <!-- ── 方案額度（D1 進度條 / D2 超量提示） ── -->
+        <template v-if="planQuota">
+          <el-alert
+            v-if="isCurrentPeriod && quotaState === 'over'"
+            type="error"
+            :closable="false"
+            show-icon
+            title="本月則數已用完"
+            style="margin-bottom: 16px"
+          >
+            AI 自動回覆已暫停、改由真人接手。請升級方案或加購額度以恢復自動回覆。
+          </el-alert>
+          <el-alert
+            v-else-if="isCurrentPeriod && quotaState === 'near'"
+            type="warning"
+            :closable="false"
+            show-icon
+            title="本月則數即將用完"
+            style="margin-bottom: 16px"
+          >
+            已使用 {{ quotaPercentRaw }}%，用完後 AI 會暫停自動回覆並轉真人，建議提前升級方案。
+          </el-alert>
+
+          <div class="message-card usage-card">
+            <div class="message-card-header">
+              <div class="card-header-main">
+                <span class="badge badge-green">🎟️ 方案額度</span>
+                <span class="text-xs text-muted">{{ planQuota.name }} · {{ periodLabel }}</span>
+              </div>
+              <span v-if="planQuota.currentPeriodEnd" class="text-xs text-muted">到期 {{ planQuota.currentPeriodEnd }}</span>
+            </div>
+            <div class="card-section-stack">
+              <template v-if="quotaLimit != null">
+                <el-progress
+                  :percentage="quotaPercent"
+                  :color="quotaColor"
+                  :stroke-width="18"
+                  :text-inside="true"
+                  :format="() => `${quotaPercentRaw}%`"
+                />
+                <p class="usage-hint">
+                  {{ periodLabel }} 已用 <strong>{{ formatNumber(quotaUsed) }}</strong> / {{ formatNumber(quotaLimit) }} 則
+                  <template v-if="quotaRemaining !== null">（剩 {{ formatNumber(quotaRemaining) }} 則）</template>
+                  <template v-if="planQuota.overagePerReply">・超量加購 NT${{ planQuota.overagePerReply }}/則</template>
+                </p>
+              </template>
+              <p v-else class="usage-hint">此方案為客製額度，無固定則數上限。</p>
+            </div>
+          </div>
+        </template>
+
         <!-- ── KPI cards ─────────────────────── -->
         <div class="message-card usage-card" data-tour="usg-kpi">
           <div class="message-card-header">
@@ -185,6 +236,12 @@ interface Summary {
   estimatedCostUsd: number
   perConversationUsd: number
   pricing: { inputPerM: number; outputPerM: number; embedPerM: number }
+  plan: {
+    name: string
+    answeredQuota: number | null
+    overagePerReply: number | null
+    currentPeriodEnd: string | null
+  } | null
 }
 
 interface HandoffRow {
@@ -229,6 +286,35 @@ function makePeriodOptions() {
 const periodOptions = makePeriodOptions()
 const period = ref(periodOptions[0]!.value)
 const periodLabel = computed(() => periodOptions.find(o => o.value === period.value)?.label ?? period.value)
+const isCurrentPeriod = computed(() => period.value === periodOptions[0]!.value)
+
+// ── 方案額度（D1/D2） ─────────────────────────────────────
+const planQuota = computed(() => summary.value?.plan ?? null)
+const quotaUsed = computed(() => summary.value?.answered ?? 0)
+const quotaLimit = computed(() => planQuota.value?.answeredQuota ?? null)
+const quotaPercentRaw = computed(() => {
+  const limit = quotaLimit.value
+  if (!limit) return 0
+  return Math.round((quotaUsed.value / limit) * 100)
+})
+const quotaPercent = computed(() => Math.min(100, quotaPercentRaw.value))
+const quotaRemaining = computed(() => {
+  const limit = quotaLimit.value
+  if (limit == null) return null
+  return Math.max(0, limit - quotaUsed.value)
+})
+const quotaState = computed<'ok' | 'near' | 'over'>(() => {
+  const limit = quotaLimit.value
+  if (limit == null) return 'ok'
+  if (quotaUsed.value >= limit) return 'over'
+  if (quotaPercentRaw.value >= 80) return 'near'
+  return 'ok'
+})
+const quotaColor = computed(() => {
+  if (quotaState.value === 'over') return '#f56c6c'
+  if (quotaState.value === 'near') return '#e6a23c'
+  return '#0f7b54'
+})
 
 // ── Loaders ───────────────────────────────────────────────
 async function loadSummary() {

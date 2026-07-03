@@ -16,5 +16,6 @@ export default defineEventHandler(async (event) => {
     organizationId: d.data().organizationId ?? null,
     channelAccessTokenConfigured: !!d.data().channelAccessToken,
     channelSecretConfigured: !!d.data().channelSecret,
+    subscription: d.data().subscription ?? null,
   }))
 })

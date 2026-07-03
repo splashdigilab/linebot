@@ -1,0 +1,196 @@
+// ═══════════════════════════════════════════════════════════════════
+//  計費方案目錄（Single Source of Truth）
+//
+//  對外賣「每月 AI 回覆則數」，訂閱掛在「LINE 官方帳號（workspace）」層——
+//  每個帳號各自選一個方案、額度各自獨立、不跨帳號共用。前端（方案頁 / 升級
+//  提示）與後端（額度攔截 / 功能開關）都讀這一份，改價或改額度只動這裡、
+//  重新部署即生效，不綁資料庫。
+//
+//  ⚠️ 此檔會 bundle 到前端，只放「對外可見」的定價與權益。
+//     每則成本、毛利等內部數字一律不進此檔。
+//  ⚠️ 數字暫定、可調。
+//
+//  注意：這裡的方案（OA 訂閱層）與 shared/types/organization.ts 的
+//  OrganizationPlan（組織可開幾個 workspace）是兩個不同概念，別混用。
+// ═══════════════════════════════════════════════════════════════════
+
+/** 計費方案 ID（掛在 workspace/OA 訂閱層）。 */
+export type BillingPlanId = 'free' | 'lite' | 'starter' | 'growth' | 'pro' | 'enterprise'
+
+/** 數據報表等級：基本 → 進階 → 進階＋匯出。 */
+export type ReportTier = 'basic' | 'advanced' | 'export'
+
+/** 群發 / 分眾行銷等級：無 → 基本 → 進階分眾。 */
+export type BroadcastTier = 'none' | 'basic' | 'advanced'
+
+export interface BillingPlan {
+  id: BillingPlanId
+  /** 顯示名稱（繁中） */
+  name: string
+  /**
+   * 每月 AI 回覆則數額度（對應 aiUsage 的 answered 計數）。
+   * null = 客製 / 面談（enterprise）；實際額度由訂閱層的 quotaOverride 指定。
+   */
+  answeredQuota: number | null
+  /** 月費（TWD，未稅）。null = 客製報價。 */
+  priceMonthly: number | null
+  /** 超量加購單價（TWD/則）。null = 不提供超量（免費層須升級；enterprise 走合約）。 */
+  overagePerReply: number | null
+  /** 團隊成員席次上限。null = 不限。 */
+  seats: number | null
+  /** 知識庫來源數上限。null = 不限。 */
+  knowledgeSources: number | null
+  /** 數據報表等級。 */
+  reports: ReportTier
+  /** 群發 / 分眾行銷等級。 */
+  broadcast: BroadcastTier
+  /** 腳本 / 流程自動化。 */
+  scripting: boolean
+  /** API 串接。 */
+  api: boolean
+  /** 客製方案（需業務報價 + 手動開通）；前端顯示「聯繫我們」而非「立即訂閱」。 */
+  custom: boolean
+}
+
+/** 統一超量加購單價（TWD/則）；付費非客製方案共用，改這裡即全站生效。 */
+export const OVERAGE_PER_REPLY_TWD = 0.8
+
+/**
+ * 方案由低到高的排序，供顯示與升降級比較用。
+ * 這份陣列與 BILLING_PLANS 的 key 必須一致（見檔尾的 dev 自我檢查）。
+ */
+export const BILLING_PLAN_ORDER: BillingPlanId[] = ['free', 'lite', 'starter', 'growth', 'pro', 'enterprise']
+
+/** 未訂閱 / 找不到方案時的預設：每個帳號自動享有的免費額度。 */
+export const DEFAULT_BILLING_PLAN_ID: BillingPlanId = 'free'
+
+/**
+ * 方案目錄。改價 / 改額度 / 調功能界線只改這裡。
+ */
+export const BILLING_PLANS: Record<BillingPlanId, BillingPlan> = {
+  free: {
+    id: 'free',
+    name: '免費',
+    answeredQuota: 200,
+    priceMonthly: 0,
+    overagePerReply: null, // 撞頂 → 引導升級，不開放加購
+    seats: 1,
+    knowledgeSources: 1,
+    reports: 'basic',
+    broadcast: 'none',
+    scripting: false,
+    api: false,
+    custom: false,
+  },
+  lite: {
+    id: 'lite',
+    name: '輕量',
+    answeredQuota: 700,
+    priceMonthly: 499,
+    overagePerReply: OVERAGE_PER_REPLY_TWD,
+    seats: 2,
+    knowledgeSources: 2,
+    reports: 'basic',
+    broadcast: 'basic',
+    scripting: false,
+    api: false,
+    custom: false,
+  },
+  starter: {
+    id: 'starter',
+    name: '入門',
+    answeredQuota: 1_300,
+    priceMonthly: 799,
+    overagePerReply: OVERAGE_PER_REPLY_TWD,
+    seats: 3,
+    knowledgeSources: 5,
+    reports: 'basic',
+    broadcast: 'basic',
+    scripting: true,
+    api: false,
+    custom: false,
+  },
+  growth: {
+    id: 'growth',
+    name: '成長',
+    answeredQuota: 3_500,
+    priceMonthly: 1_990,
+    overagePerReply: OVERAGE_PER_REPLY_TWD,
+    seats: 5,
+    knowledgeSources: 10,
+    reports: 'advanced',
+    broadcast: 'advanced',
+    scripting: true,
+    api: false,
+    custom: false,
+  },
+  pro: {
+    id: 'pro',
+    name: '專業',
+    answeredQuota: 10_000,
+    priceMonthly: 4_990,
+    overagePerReply: OVERAGE_PER_REPLY_TWD,
+    seats: 10,
+    knowledgeSources: null,
+    reports: 'advanced',
+    broadcast: 'advanced',
+    scripting: true,
+    api: true,
+    custom: false,
+  },
+  enterprise: {
+    id: 'enterprise',
+    name: '企業',
+    answeredQuota: null, // 30,000+ 客製，實際額度走訂閱層 quotaOverride
+    priceMonthly: null, // 面談
+    overagePerReply: null, // 走合約
+    seats: null,
+    knowledgeSources: null,
+    reports: 'export',
+    broadcast: 'advanced',
+    scripting: true,
+    api: true,
+    custom: true,
+  },
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  訂閱（掛在 WorkspaceDoc.subscription，見開發清單 A2）
+//  Phase 1 由 super admin 手動開通；Phase 2 起接金流 webhook 自動維護。
+// ═══════════════════════════════════════════════════════════════════
+
+/** 訂閱狀態。 */
+export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled'
+
+export interface WorkspaceSubscription {
+  planId: BillingPlanId
+  status: SubscriptionStatus
+  /** 本期起訖（ISO 字串）；額度以「本期」為單位重置。 */
+  currentPeriodStart: string | null
+  currentPeriodEnd: string | null
+  /** 例外額度：覆蓋方案預設則數（企業客製 / 業務談定的特例）。 */
+  quotaOverride?: number | null
+  /** 內部備註（開通原因、合約號等），不對客戶顯示。 */
+  note?: string
+}
+
+// ── helpers ────────────────────────────────────────────────────────
+
+/** 取方案；未知 / 缺省 ID 一律退回免費層（永遠不會回 undefined）。 */
+export function getBillingPlan(id: string | null | undefined): BillingPlan {
+  return BILLING_PLANS[(id ?? '') as BillingPlanId] ?? BILLING_PLANS[DEFAULT_BILLING_PLAN_ID]
+}
+
+/**
+ * 本方案實際生效的月額度：優先用訂閱層 quotaOverride（例外 / 企業客製），
+ * 否則用方案預設；兩者皆無（客製未設）回 null = 不設額度上限。
+ */
+export function effectiveAnsweredQuota(plan: BillingPlan, quotaOverride?: number | null): number | null {
+  if (quotaOverride != null) return quotaOverride
+  return plan.answeredQuota
+}
+
+// dev 自我檢查：BILLING_PLAN_ORDER 必須剛好涵蓋 BILLING_PLANS 的所有 key。
+if (import.meta.dev && BILLING_PLAN_ORDER.length !== Object.keys(BILLING_PLANS).length) {
+  console.warn('[billing] BILLING_PLAN_ORDER 與 BILLING_PLANS 的方案數不一致，請同步更新。')
+}
