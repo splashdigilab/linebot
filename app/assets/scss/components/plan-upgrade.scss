@@ -1,0 +1,62 @@
+// 升級方案對話框 + 用量頁方案卡的操作列
+.plan-card-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.quota-alert-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.plan-upgrade-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.plan-upgrade-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+
+  &.is-current {
+    border-color: #0f7b54;
+    background: rgba(15, 123, 84, 0.06);
+  }
+
+  .pu-name {
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pu-specs {
+    margin-top: 2px;
+    font-size: 12px;
+    color: #6b7280;
+  }
+
+  .pu-price {
+    font-weight: 600;
+    white-space: nowrap;
+  }
+}
+
+.plan-upgrade-foot {
+  margin-top: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}

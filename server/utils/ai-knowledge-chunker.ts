@@ -21,6 +21,13 @@ export const SEGMENT_CHAR_LEN = 20_000
 /** 分段合併後的總卡數上限（大型商品目錄一份可能超過單段的 50 張） */
 export const MAX_TOTAL_CHUNKS = 150
 
+/**
+ * 分段切卡的並行上限。多數文件截到 MAX_RAW_TEXT_LEN(100k)後 ≤ 5 段，
+ * 設 5 讓典型情況「一波」做完；設了上限（而非無腦 Promise.all）是保底：
+ * 萬一未來 segment 數變多，也不會一次併發爆掉 Gemini 的速率限制。
+ */
+export const CHUNK_CONCURRENCY = 5
+
 const SYSTEM_INSTRUCTION = `你是專業的客服知識整理助手。任務：把使用者提供的原始文件切成獨立的「知識卡」，並讓每張卡對 AI 檢索 / 回答都最友善。
 
 規則：
@@ -125,16 +132,32 @@ export async function chunkTextWithLlm(rawText: string, opts?: { hint?: string }
   if (!text) return { chunks: [], inputTokens: 0, outputTokens: 0 }
 
   const segments = segmentText(text)
+
+  // 逐段切卡改「有上限的並行」：原本是循序 await，N 段 = N×單段耗時，
+  // 長文(最多 5 段)累積到 2–3 分鐘就撞 Amplify/CloudFront 的閘道逾時 → 前端看到 504。
+  // 並行後 wall-clock ≈ 單段耗時。結果仍照「段序」合併/去重，輸出與原循序版一致。
+  // 代價：原本一撞 MAX_TOTAL_CHUNKS 就不再呼叫後續段（省 token），並行版會先把所有段
+  // 都跑完才合併，極端情況多花 1–2 段 token；用量照實入帳，換到的是不再逾時，划算。
+  const results: ChunkerResult[] = new Array(segments.length)
+  let nextIndex = 0
+  async function worker() {
+    for (let i = nextIndex++; i < segments.length; i = nextIndex++) {
+      const hint = segments.length > 1
+        ? `${opts?.hint ?? ''}（第 ${i + 1}/${segments.length} 段）`.trim()
+        : opts?.hint
+      results[i] = await chunkSegment(segments[i]!, hint)
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(CHUNK_CONCURRENCY, segments.length) }, () => worker()),
+  )
+
+  // 照段序合併 + 去重（同 title 留先出現的那張），維持與原循序版相同的取捨順序。
   const seenTitles = new Set<string>()
   const merged: ChunkInput[] = []
   let inputTokens = 0
   let outputTokens = 0
-
-  for (let i = 0; i < segments.length; i++) {
-    const hint = segments.length > 1
-      ? `${opts?.hint ?? ''}（第 ${i + 1}/${segments.length} 段）`.trim()
-      : opts?.hint
-    const res = await chunkSegment(segments[i]!, hint)
+  for (const res of results) {
     inputTokens += res.inputTokens
     outputTokens += res.outputTokens
     for (const c of res.chunks) {

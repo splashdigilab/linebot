@@ -1,6 +1,21 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { buildEmbeddingText, extractIdentifierRuns } from './ai-knowledge-chunks'
-import { segmentText } from './ai-knowledge-chunker'
+import { chunkTextWithLlm, segmentText } from './ai-knowledge-chunker'
+
+// 切卡的 LLM 呼叫改成「看 prompt 內容決定輸出」——純函式、與並行排程無關，
+// 這樣就能穩定驗證「照段序合併 + 去重」而不會因為哪一段先回來而 flaky。
+vi.mock('./gemini', () => ({
+  generateJson: vi.fn(async (prompt: string) => {
+    // 每段開頭埋 @@M0@@、@@M1@@…；mock 為該段每個標記各回一張卡，
+    // 再固定附一張同名 'DUP' 卡（用來驗證跨段去重只留第一張）。
+    const marks = [...prompt.matchAll(/@@(M\d+)@@/g)].map(m => m[1])
+    const chunks = [
+      { title: 'DUP', content: '共用卡', tags: [], questions: [] },
+      ...marks.map(t => ({ title: t, content: `內容 ${t}`, tags: [], questions: [] })),
+    ]
+    return { data: { chunks }, inputTokens: 1, outputTokens: 1 }
+  }),
+}))
 
 describe('buildEmbeddingText', () => {
   it('title + content 換行串接', () => {
@@ -56,5 +71,40 @@ describe('segmentText', () => {
     const text = 'y'.repeat(450)
     const segments = segmentText(text, 200)
     expect(segments).toEqual(['y'.repeat(200), 'y'.repeat(200), 'y'.repeat(50)])
+  })
+})
+
+describe('chunkTextWithLlm（分段並行 + 合併去重）', () => {
+  // 8 行、每行一個標記 + 6000 字填充 → segmentText(預設 20k)會切成多段，
+  // 標記 M0..M7 分散在各段但保持順序、每個各出現一次。
+  const lines = Array.from({ length: 8 }, (_, i) => `@@M${i}@@ ${'a'.repeat(6000)}`)
+  const text = lines.join('\n')
+
+  it('多段時每段各呼叫一次 LLM，token 照段數累加', async () => {
+    const { generateJson } = await import('./gemini') as unknown as { generateJson: ReturnType<typeof vi.fn> }
+    generateJson.mockClear()
+    const segCount = segmentText(text).length
+    expect(segCount).toBeGreaterThan(1)
+
+    const res = await chunkTextWithLlm(text)
+    expect(generateJson).toHaveBeenCalledTimes(segCount)
+    expect(res.inputTokens).toBe(segCount)
+    expect(res.outputTokens).toBe(segCount)
+  })
+
+  it('輸出照「段序」合併，且同名卡跨段只留第一張', async () => {
+    const res = await chunkTextWithLlm(text)
+    // 每段都回一張 'DUP'，去重後只剩第一段那張，位置在最前；其餘為 M0..M7 依序。
+    expect(res.chunks.map(c => c.title)).toEqual([
+      'DUP', 'M0', 'M1', 'M2', 'M3', 'M4', 'M5', 'M6', 'M7',
+    ])
+  })
+
+  it('空字串直接回空結果、不呼叫 LLM', async () => {
+    const { generateJson } = await import('./gemini') as unknown as { generateJson: ReturnType<typeof vi.fn> }
+    generateJson.mockClear()
+    const res = await chunkTextWithLlm('   ')
+    expect(res.chunks).toEqual([])
+    expect(generateJson).not.toHaveBeenCalled()
   })
 })

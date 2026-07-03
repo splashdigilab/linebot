@@ -52,7 +52,17 @@
                 <div class="ws-item-icon">💬</div>
                 <div class="ws-item-info">
                   <div class="ws-item-name">{{ ws.name }}</div>
-                  <div class="ws-item-role">{{ roleLabel(ws.role) }}</div>
+                  <div class="ws-item-role">
+                    <span>{{ roleLabel(ws.role) }}</span>
+                    <el-tag
+                      v-if="ws.plan"
+                      size="small"
+                      effect="plain"
+                      :type="ws.plan.id === 'free' ? 'info' : 'success'"
+                    >
+                      {{ ws.plan.name }}
+                    </el-tag>
+                  </div>
                 </div>
                 <span class="ws-item-arrow">→</span>
               </button>

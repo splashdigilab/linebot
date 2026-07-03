@@ -1,5 +1,17 @@
 import { getFirebaseAuth } from '~~/server/utils/firebase'
 import { isSuperAdmin } from '~~/server/utils/workspace-auth'
+import { getBillingPlan } from '~~/shared/billing/plans'
+
+/**
+ * 帳號選單用的精簡方案標籤。只給 owner/admin 看（計費屬管理層資訊）；
+ * 其他角色或未訂閱回 null。
+ */
+function planTag(role: string, planId: unknown): { id: string; name: string } | null {
+  if (role !== 'owner' && role !== 'admin') return null
+  if (!planId || typeof planId !== 'string') return null
+  const p = getBillingPlan(planId)
+  return { id: p.id, name: p.name }
+}
 
 /**
  * GET /api/admin/workspaces/my
@@ -42,6 +54,7 @@ export default defineEventHandler(async (event) => {
         organizationName: orgId ? (orgMap[orgId]?.name ?? null) : null,
         organizationDisabled: orgId ? (orgMap[orgId]?.disabled ?? false) : false,
         viaOrgAdmin: false,
+        plan: planTag('owner', d.data().subscription?.planId),
       }
     })
     const orgAdminOf = orgSnap.docs
@@ -84,9 +97,15 @@ export default defineEventHandler(async (event) => {
     ? await db.getAll(...directWorkspaceIds.map(id => db.collection('workspaces').doc(id)))
     : []
 
-  const wsDataMap: Record<string, { name: string; organizationId: string | null }> = {}
+  const wsDataMap: Record<string, { name: string; organizationId: string | null; planId: string | null }> = {}
   directWsDocs.forEach((d: any) => {
-    if (d.exists) wsDataMap[d.id] = { name: d.data()?.name ?? d.id, organizationId: d.data()?.organizationId ?? null }
+    if (d.exists) {
+      wsDataMap[d.id] = {
+        name: d.data()?.name ?? d.id,
+        organizationId: d.data()?.organizationId ?? null,
+        planId: d.data()?.subscription?.planId ?? null,
+      }
+    }
   })
 
   const result: any[] = []
@@ -107,6 +126,7 @@ export default defineEventHandler(async (event) => {
       organizationName: orgId ? (orgMap[orgId]?.name ?? null) : null,
       organizationDisabled: false,
       viaOrgAdmin: false,
+      plan: planTag(data.role as string, wsDataMap[workspaceId]?.planId),
     })
     includedWorkspaceIds.add(workspaceId)
   }
@@ -132,6 +152,7 @@ export default defineEventHandler(async (event) => {
           organizationName: orgMap[orgId]?.name ?? null,
           organizationDisabled: false,
           viaOrgAdmin: true,
+          plan: planTag('admin', d.data().subscription?.planId),
         })
         includedWorkspaceIds.add(d.id)
       })
@@ -159,6 +180,7 @@ export default defineEventHandler(async (event) => {
           organizationDisabled: false,
           viaOrgAdmin: false,
           viaWorkspaceInvite: true,
+          plan: planTag(doc.data().role as string, wSnap.data()?.subscription?.planId),
         })
       }
       else {
@@ -171,6 +193,7 @@ export default defineEventHandler(async (event) => {
           organizationDisabled: false,
           viaOrgAdmin: false,
           viaWorkspaceInvite: true,
+          plan: planTag(doc.data().role as string, wSnap.data()?.subscription?.planId),
         })
       }
       includedWorkspaceIds.add(wid)

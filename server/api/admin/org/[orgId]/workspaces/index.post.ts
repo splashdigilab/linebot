@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
 import { requireOrgAdmin } from '~~/server/utils/workspace-auth'
 import { addSystemModulesToBatch } from '~~/server/utils/workspace-system-modules'
+import { defaultFreeSubscription } from '~~/server/utils/billing'
 
 /**
  * POST /api/admin/org/:orgId/workspaces
@@ -37,6 +38,8 @@ export default defineEventHandler(async (event) => {
   batch.set(db.collection('workspaces').doc(workspaceId), {
     name,
     organizationId: orgId,
+    // 新帳號預設掛免費訂閱 → 立即可見額度、可被計量（見 defaultFreeSubscription 註解）。
+    subscription: defaultFreeSubscription(),
     updatedAt: FieldValue.serverTimestamp(),
   })
 

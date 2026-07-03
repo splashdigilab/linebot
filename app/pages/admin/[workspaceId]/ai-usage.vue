@@ -31,7 +31,10 @@
             title="本月則數已用完"
             style="margin-bottom: 16px"
           >
-            AI 自動回覆已暫停、改由真人接手。請升級方案或加購額度以恢復自動回覆。
+            <div class="quota-alert-body">
+              <span>AI 自動回覆已暫停、改由真人接手。升級方案或加購額度即可恢復自動回覆。</span>
+              <el-button size="small" type="primary" @click="upgradeDialogOpen = true">升級方案</el-button>
+            </div>
           </el-alert>
           <el-alert
             v-else-if="isCurrentPeriod && quotaState === 'near'"
@@ -41,7 +44,10 @@
             title="本月則數即將用完"
             style="margin-bottom: 16px"
           >
-            已使用 {{ quotaPercentRaw }}%，用完後 AI 會暫停自動回覆並轉真人，建議提前升級方案。
+            <div class="quota-alert-body">
+              <span>已使用 {{ quotaPercentRaw }}%，用完後 AI 會暫停自動回覆並轉真人，建議提前升級方案。</span>
+              <el-button size="small" type="primary" @click="upgradeDialogOpen = true">升級方案</el-button>
+            </div>
           </el-alert>
 
           <div class="message-card usage-card">
@@ -50,7 +56,10 @@
                 <span class="badge badge-green">🎟️ 方案額度</span>
                 <span class="text-xs text-muted">{{ planQuota.name }} · {{ periodLabel }}</span>
               </div>
-              <span v-if="planQuota.currentPeriodEnd" class="text-xs text-muted">到期 {{ planQuota.currentPeriodEnd }}</span>
+              <div class="plan-card-head-actions">
+                <span v-if="planQuota.currentPeriodEnd" class="text-xs text-muted">到期 {{ planQuota.currentPeriodEnd }}</span>
+                <el-button size="small" @click="upgradeDialogOpen = true">升級方案</el-button>
+              </div>
             </div>
             <div class="card-section-stack">
               <template v-if="quotaLimit != null">
@@ -70,6 +79,8 @@
               <p v-else class="usage-hint">此方案為客製額度，無固定則數上限。</p>
             </div>
           </div>
+
+          <AdminPlanUpgradeDialog v-model="upgradeDialogOpen" :current-plan-id="planQuota.id" />
         </template>
 
         <!-- ── KPI cards ─────────────────────── -->
@@ -210,6 +221,7 @@
 <script setup lang="ts">
 import { HANDOFF_REASON_LABELS, type HandoffReason } from '~~/shared/types/ai-knowledge'
 import { useAdminToast } from '~~/app/composables/useAdminToast'
+import { derivePlanState } from '~~/shared/billing/plan-state'
 
 definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
 
@@ -237,6 +249,7 @@ interface Summary {
   perConversationUsd: number
   pricing: { inputPerM: number; outputPerM: number; embedPerM: number }
   plan: {
+    id: string
     name: string
     answeredQuota: number | null
     overagePerReply: number | null
@@ -289,32 +302,17 @@ const periodLabel = computed(() => periodOptions.find(o => o.value === period.va
 const isCurrentPeriod = computed(() => period.value === periodOptions[0]!.value)
 
 // ── 方案額度（D1/D2） ─────────────────────────────────────
+// 額度狀態（門檻/顏色）由共用的 derivePlanState 導出，與設定頁方案卡同一份邏輯。
 const planQuota = computed(() => summary.value?.plan ?? null)
-const quotaUsed = computed(() => summary.value?.answered ?? 0)
-const quotaLimit = computed(() => planQuota.value?.answeredQuota ?? null)
-const quotaPercentRaw = computed(() => {
-  const limit = quotaLimit.value
-  if (!limit) return 0
-  return Math.round((quotaUsed.value / limit) * 100)
-})
-const quotaPercent = computed(() => Math.min(100, quotaPercentRaw.value))
-const quotaRemaining = computed(() => {
-  const limit = quotaLimit.value
-  if (limit == null) return null
-  return Math.max(0, limit - quotaUsed.value)
-})
-const quotaState = computed<'ok' | 'near' | 'over'>(() => {
-  const limit = quotaLimit.value
-  if (limit == null) return 'ok'
-  if (quotaUsed.value >= limit) return 'over'
-  if (quotaPercentRaw.value >= 80) return 'near'
-  return 'ok'
-})
-const quotaColor = computed(() => {
-  if (quotaState.value === 'over') return '#f56c6c'
-  if (quotaState.value === 'near') return '#e6a23c'
-  return '#0f7b54'
-})
+const upgradeDialogOpen = ref(false)
+const planState = computed(() => derivePlanState(planQuota.value, summary.value?.answered ?? 0))
+const quotaUsed = computed(() => planState.value.used)
+const quotaLimit = computed(() => planState.value.limit)
+const quotaPercentRaw = computed(() => planState.value.percentRaw)
+const quotaPercent = computed(() => planState.value.percent)
+const quotaRemaining = computed(() => planState.value.remaining)
+const quotaState = computed(() => planState.value.state)
+const quotaColor = computed(() => planState.value.color)
 
 // ── Loaders ───────────────────────────────────────────────
 async function loadSummary() {

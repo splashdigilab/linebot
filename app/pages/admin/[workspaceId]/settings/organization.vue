@@ -36,6 +36,36 @@
           </div>
         </div>
 
+        <div v-if="planView" class="message-card ar-section-card">
+          <div class="message-card-header">
+            <div class="card-header-main">
+              <span class="badge badge-green">🎟️ 目前方案</span>
+              <span class="text-xs text-muted">{{ planView.name }}</span>
+            </div>
+            <el-button size="small" @click="upgradeOpen = true">升級方案</el-button>
+          </div>
+          <div class="card-section-stack">
+            <template v-if="planState.limit != null">
+              <el-progress
+                :percentage="planState.percent"
+                :color="planState.color"
+                :stroke-width="16"
+                :text-inside="true"
+                :format="() => `${planState.percentRaw}%`"
+              />
+              <p class="text-xs text-muted">
+                本月已用 <strong>{{ planState.used.toLocaleString() }}</strong> / {{ planState.limit.toLocaleString() }} 則
+                <template v-if="planState.remaining !== null">（剩 {{ planState.remaining.toLocaleString() }} 則）</template>
+                · <NuxtLink :to="usageLink" class="ar-link">查看用量</NuxtLink>
+              </p>
+            </template>
+            <p v-else class="text-xs text-muted">
+              客製額度，無固定則數上限。 · <NuxtLink :to="usageLink" class="ar-link">查看用量</NuxtLink>
+            </p>
+          </div>
+          <AdminPlanUpgradeDialog v-model="upgradeOpen" :current-plan-id="planView.id" />
+        </div>
+
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
@@ -254,6 +284,11 @@ const organizationNameDisplay = computed(() => {
 })
 
 const officialAccountDisplayName = computed(() => currentWorkspaceName.value || '—')
+
+// ── 目前方案（設定頁的方案卡；資料走 usePlanSummary，與用量監控頁共用邏輯） ──
+const { plan: planView, state: planState, load: loadPlanSummary } = usePlanSummary()
+const upgradeOpen = ref(false)
+const usageLink = computed(() => `/admin/${workspaceId.value}/ai-usage`)
 
 const ROLE_LABELS: Record<string, string> = {
   owner: '擁有者',
@@ -569,6 +604,7 @@ onMounted(async () => {
   refreshSuggestedWebhookUrl()
   refreshSuggestedLiffEndpointUrl()
   // workspaceList 由 layout (default.vue) 的 onMounted 負責載入；此頁只需載入 LINE 憑證 meta
+  loadPlanSummary().catch(() => {})
   await load()
 })
 </script>

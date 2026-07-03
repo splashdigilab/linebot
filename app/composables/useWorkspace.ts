@@ -9,6 +9,8 @@ export interface WorkspaceItem {
   role: WorkspaceMemberRole
   organizationId: string | null
   organizationName: string | null
+  /** 精簡方案標籤（僅 owner/admin 角色、且已訂閱時由後端帶出，供帳號選單顯示）。 */
+  plan?: { id: string; name: string } | null
 }
 
 interface OrgAdminEntry { id: string; name: string }

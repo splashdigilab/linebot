@@ -88,6 +88,8 @@ export default defineNuxtConfig({
       firebaseStorageBucket: process.env.FIREBASE_STORAGE_BUCKET ?? '',
       firebaseMessagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID ?? '',
       firebaseAppId: process.env.FIREBASE_APP_ID ?? '',
+      /** 升級／加購的聯繫方式（email 或 https 連結）；顯示於「升級方案」對話框。未設則顯示通用引導文字。 */
+      supportContact: process.env.PUBLIC_SUPPORT_CONTACT ?? '',
     },
   },
 })

@@ -3,6 +3,7 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { requireSuperAdmin } from '~~/server/utils/workspace-auth'
 import { getFirebaseAuth } from '~~/server/utils/firebase'
 import { addSystemModulesToBatch } from '~~/server/utils/workspace-system-modules'
+import { defaultFreeSubscription } from '~~/server/utils/billing'
 
 /**
  * POST /api/admin/super/workspaces
@@ -35,6 +36,8 @@ export default defineEventHandler(async (event) => {
   const wsData: Record<string, unknown> = {
     name: String(name).trim(),
     organizationId: organizationId ?? null,
+    // 新帳號預設掛免費訂閱 → 立即可見額度、可被計量；super admin 之後可改指派付費方案。
+    subscription: defaultFreeSubscription(),
     updatedAt: FieldValue.serverTimestamp(),
   }
   if (channelAccessToken) wsData.channelAccessToken = channelAccessToken

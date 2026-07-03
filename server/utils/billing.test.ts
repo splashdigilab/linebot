@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Firestore } from 'firebase-admin/firestore'
 import type { SubscriptionStatus, WorkspaceSubscription } from '~~/shared/billing/plans'
-import { getWorkspaceSubscription, invalidateWorkspaceSubscriptionCache, resolveAnsweredQuota } from './billing'
+import { buildPlanView, defaultFreeSubscription, getWorkspaceSubscription, invalidateWorkspaceSubscriptionCache, resolveAnsweredQuota } from './billing'
 
 /** 最小假 Firestore：只支援 collection('workspaces').doc(id).get()。 */
 function fakeDb(subsByWid: Record<string, WorkspaceSubscription | undefined>): Firestore {
@@ -73,6 +73,43 @@ describe('resolveAnsweredQuota — 攔截策略', () => {
     const r = await resolveAnsweredQuota('ws_ent', db)
     expect(r.enforce).toBe(true)
     expect(r.quota).toBeNull()
+  })
+})
+
+describe('defaultFreeSubscription — 新建帳號預設訂閱', () => {
+  it('回免費層、active（會被計量）、無到期日', () => {
+    const s = defaultFreeSubscription('2026-07-03T00:00:00.000Z')
+    expect(s.planId).toBe('free')
+    expect(s.status).toBe('active')
+    expect(s.currentPeriodStart).toBe('2026-07-03T00:00:00.000Z')
+    expect(s.currentPeriodEnd).toBeNull()
+  })
+
+  it('掛上後 → resolveAnsweredQuota 會攔截於 200 則', async () => {
+    const db = fakeDb({ ws_new: defaultFreeSubscription() })
+    const r = await resolveAnsweredQuota('ws_new', db)
+    expect(r.enforce).toBe(true)
+    expect(r.quota).toBe(200)
+    expect(r.planId).toBe('free')
+  })
+})
+
+describe('buildPlanView — 前端顯示視圖', () => {
+  it('未訂閱 → null（grandfather，前端不顯示額度）', () => {
+    expect(buildPlanView(null)).toBeNull()
+  })
+
+  it('免費訂閱 → 免費視圖（200 則、無超量加購）', () => {
+    const v = buildPlanView(sub('free', 'active'))
+    expect(v?.id).toBe('free')
+    expect(v?.name).toBe('免費')
+    expect(v?.answeredQuota).toBe(200)
+    expect(v?.overagePerReply).toBeNull()
+  })
+
+  it('quotaOverride 反映在視圖額度', () => {
+    const v = buildPlanView(sub('starter', 'active', 5_000))
+    expect(v?.answeredQuota).toBe(5_000)
   })
 })
 

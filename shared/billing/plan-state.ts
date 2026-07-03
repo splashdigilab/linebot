@@ -1,0 +1,64 @@
+// ═══════════════════════════════════════════════════════════════════
+//  方案顯示視圖 + 額度使用狀態（純函式，前後端共用）
+//
+//  「方案卡」在多處出現（用量監控、設定頁、帳號選單…）。門檻（近上限 80%、
+//  超量 100%）與顏色寫在這裡當單一事實來源，各處只呼叫 derivePlanState，
+//  不各自重算，避免規則飄移。
+// ═══════════════════════════════════════════════════════════════════
+
+import type { BillingPlanId } from './plans'
+
+/** 對前端顯示用的方案視圖（由訂閱組出，見 server/utils/billing.ts buildPlanView）。 */
+export interface PlanView {
+  id: BillingPlanId
+  name: string
+  /** 本期生效則數額度（含 quotaOverride）；null = 客製無固定上限。 */
+  answeredQuota: number | null
+  /** 超量加購單價（TWD/則）；null = 不提供超量。 */
+  overagePerReply: number | null
+  currentPeriodEnd: string | null
+}
+
+export type QuotaState = 'ok' | 'near' | 'over'
+
+export interface PlanUsageState {
+  used: number
+  limit: number | null
+  remaining: number | null
+  /** 夾在 0–100 供進度條用。 */
+  percent: number
+  /** 真實百分比，可 >100（超量時顯示實際值）。 */
+  percentRaw: number
+  state: QuotaState
+  /** 進度條顏色（綠/橙/紅）。 */
+  color: string
+}
+
+/** 近上限門檻（百分比）。 */
+export const QUOTA_NEAR_THRESHOLD = 80
+
+const QUOTA_COLORS: Record<QuotaState, string> = {
+  over: '#f56c6c',
+  near: '#e6a23c',
+  ok: '#0f7b54',
+}
+
+/** 由「方案 + 本期已用則數」導出額度使用狀態。plan 為 null（未訂閱）時回 ok/無上限。 */
+export function derivePlanState(
+  plan: Pick<PlanView, 'answeredQuota'> | null | undefined,
+  answered: number,
+): PlanUsageState {
+  const used = answered || 0
+  const limit = plan?.answeredQuota ?? null
+  const percentRaw = limit ? Math.round((used / limit) * 100) : 0
+  const percent = Math.min(100, percentRaw)
+  const remaining = limit == null ? null : Math.max(0, limit - used)
+
+  let state: QuotaState = 'ok'
+  if (limit != null) {
+    if (used >= limit) state = 'over'
+    else if (percentRaw >= QUOTA_NEAR_THRESHOLD) state = 'near'
+  }
+
+  return { used, limit, remaining, percent, percentRaw, state, color: QUOTA_COLORS[state] }
+}

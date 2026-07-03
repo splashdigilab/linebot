@@ -11,7 +11,8 @@ import type { Firestore } from 'firebase-admin/firestore'
 import { getDb } from './firebase'
 import type { WorkspaceDoc } from '~~/shared/types/organization'
 import type { BillingPlanId, SubscriptionStatus, WorkspaceSubscription } from '~~/shared/billing/plans'
-import { effectiveAnsweredQuota, getBillingPlan } from '~~/shared/billing/plans'
+import { DEFAULT_BILLING_PLAN_ID, effectiveAnsweredQuota, getBillingPlan } from '~~/shared/billing/plans'
+import type { PlanView } from '~~/shared/billing/plan-state'
 
 const TTL_MS = 60 * 1000
 
@@ -21,6 +22,39 @@ const subCache = new Map<string, { sub: WorkspaceSubscription | null; expiresAt:
 export function invalidateWorkspaceSubscriptionCache(workspaceId?: string) {
   if (workspaceId) subCache.delete(String(workspaceId).trim())
   else subCache.clear()
+}
+
+/**
+ * 新建帳號（OA）的預設訂閱：免費層、立即生效。
+ * 讓新戶一開就看得到自己的免費額度並形成升級漏斗；免費層每月額度靠
+ * `aiUsage/{workspaceId}_{yyyyMM}` 依日曆月自動重置，故無固定到期日。
+ *
+ * ⚠️ 僅用於「新建帳號」。既有未開通租戶維持「無訂閱」（grandfather：不攔截、
+ *    不顯示額度）；**不要回填**，以免把老戶誤鎖到 200 則免費額度。
+ */
+export function defaultFreeSubscription(nowIso: string = new Date().toISOString()): WorkspaceSubscription {
+  return {
+    planId: DEFAULT_BILLING_PLAN_ID,
+    status: 'active',
+    currentPeriodStart: nowIso,
+    currentPeriodEnd: null,
+  }
+}
+
+/**
+ * 由訂閱組出「對前端顯示用」的方案視圖；未訂閱回 null（grandfather → 前端不顯示額度區塊）。
+ * summary / plan-summary 端點共用同一份組法，避免各自拼裝。
+ */
+export function buildPlanView(sub: WorkspaceSubscription | null): PlanView | null {
+  if (!sub) return null
+  const p = getBillingPlan(sub.planId)
+  return {
+    id: p.id,
+    name: p.name,
+    answeredQuota: effectiveAnsweredQuota(p, sub.quotaOverride),
+    overagePerReply: p.overagePerReply,
+    currentPeriodEnd: sub.currentPeriodEnd,
+  }
 }
 
 /** 讀取帳號訂閱（短暫快取）。未設訂閱 / 讀取失敗一律回 null。 */
