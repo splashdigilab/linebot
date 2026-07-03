@@ -6,19 +6,8 @@ import type { WorkspaceSubscription } from '../billing/plans'
 //  Doc ID: uuid
 // ═══════════════════════════════════════════════════════════════════
 
-export type OrganizationPlan = 'free' | 'starter' | 'pro' | 'enterprise'
-
-/** 每個方案允許的最大 workspace 數量；enterprise 為無限制 */
-export const PLAN_WORKSPACE_QUOTA: Record<OrganizationPlan, number> = {
-  free: 1,
-  starter: 3,
-  pro: 10,
-  enterprise: Infinity,
-}
-
 export interface OrganizationDoc {
   name: string
-  plan: OrganizationPlan
   /** 登記擁有者 Email（小寫）；與 ownerId 擇一或並存 */
   ownerEmail?: string
   /** Firebase uid；若擁有者尚未註冊則可能缺省 */

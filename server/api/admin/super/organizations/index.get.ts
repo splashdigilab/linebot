@@ -32,7 +32,6 @@ export default defineEventHandler(async (event) => {
     return {
       id: o.id,
       name: o.name,
-      plan: o.plan,
       ownerId: o.ownerId ?? null,
       ownerEmail: (fromField && String(fromField).trim()) || fromUid || '',
       disabled: o.disabled ?? false,

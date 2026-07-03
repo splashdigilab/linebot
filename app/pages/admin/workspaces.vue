@@ -81,23 +81,11 @@
   <!-- 新增官方帳號 dialog -->
   <el-dialog v-model="showCreate" title="新增官方帳號" width="420px" @closed="resetCreate">
     <div class="ws-create-dialog-body">
-      <div v-if="quotaLoading" class="ws-select-loading">
-        <div class="spinner" />
-        <span>查詢額度中…</span>
-      </div>
-      <div v-else-if="quotaInfo" class="ws-quota-row">
-        <span class="ws-quota-label">已使用額度</span>
-        <span class="ws-quota-value" :class="{ 'ws-quota-full': quotaInfo.remaining === 0 }">
-          {{ quotaInfo.used }} / {{ quotaInfo.limit === Infinity ? '無限制' : quotaInfo.limit }}
-        </span>
-        <el-tag v-if="quotaInfo.remaining === 0" type="warning" size="small">已達上限</el-tag>
-      </div>
       <div class="admin-field-group">
         <AdminFieldLabel text="官方帳號名稱" tight />
         <el-input
           v-model="createForm.name"
           placeholder="例：MyFeel 官方帳號"
-          :disabled="quotaInfo?.remaining === 0"
           @keyup.enter="submitCreate"
         />
       </div>
@@ -107,7 +95,7 @@
       <el-button
         type="primary"
         :loading="createSaving"
-        :disabled="!createForm.name.trim() || quotaInfo?.remaining === 0"
+        :disabled="!createForm.name.trim()"
         @click="submitCreate"
       >
         建立
@@ -213,37 +201,17 @@ async function enter(workspaceId: string) {
 
 const showCreate = ref(false)
 const createSaving = ref(false)
-const quotaLoading = ref(false)
 const createTargetOrgId = ref<string | null>(null)
 const createForm = reactive({ name: '' })
 
-interface QuotaInfo { plan: string; limit: number; used: number; remaining: number }
-const quotaInfo = ref<QuotaInfo | null>(null)
-
-async function openCreate(group: OrgGroup) {
+function openCreate(group: OrgGroup) {
   createTargetOrgId.value = group.orgId
   createForm.name = ''
-  quotaInfo.value = null
   showCreate.value = true
-
-  if (group.orgId) {
-    quotaLoading.value = true
-    try {
-      const token = await $auth.currentUser?.getIdToken()
-      quotaInfo.value = await $fetch<QuotaInfo>(`/api/admin/org/${group.orgId}/quota`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-    }
-    catch { /* quota 顯示失敗不阻擋建立 */ }
-    finally {
-      quotaLoading.value = false
-    }
-  }
 }
 
 function resetCreate() {
   createForm.name = ''
-  quotaInfo.value = null
   createTargetOrgId.value = null
 }
 

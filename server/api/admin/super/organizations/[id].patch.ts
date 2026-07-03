@@ -1,7 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { requireSuperAdmin, invalidateOrgMemberCache } from '~~/server/utils/workspace-auth'
 import { getFirebaseAuth } from '~~/server/utils/firebase'
-import type { OrganizationPlan } from '~~/shared/types/organization'
 
 function normEmail(e: string | undefined | null): string {
   return String(e ?? '').trim().toLowerCase()
@@ -9,7 +8,7 @@ function normEmail(e: string | undefined | null): string {
 
 /**
  * PATCH /api/admin/super/organizations/:id
- * 更新組織名稱、方案或登記擁有者 Email。Body: { name?, plan?, ownerEmail? }
+ * 更新組織名稱或登記擁有者 Email。Body: { name?, ownerEmail? }
  *
  * ownerEmail：小寫正規化後寫入；若該 Email 已有 Firebase 帳號則一併寫入 ownerId，否則清除 ownerId。
  * 若新 Email 尚不在 orgMembers，會新增為組織管理員（與建立組織時相同）；既有 org 管理員列不會自動移除。
@@ -27,12 +26,6 @@ export default defineEventHandler(async (event) => {
     if (!String(body.name).trim()) throw createError({ statusCode: 400, statusMessage: 'name cannot be empty' })
     updates.name = String(body.name).trim()
   }
-  if (body.plan !== undefined) {
-    const validPlans: OrganizationPlan[] = ['free', 'starter', 'pro', 'enterprise']
-    if (!validPlans.includes(body.plan)) throw createError({ statusCode: 400, statusMessage: 'invalid plan' })
-    updates.plan = body.plan
-  }
-
   const db = getDb()
   const auth = getFirebaseAuth()
   const ref = db.collection('organizations').doc(id)

@@ -16,11 +16,13 @@ export default defineEventHandler(async (event) => {
   try {
     const user = await auth.getUserByEmail(email)
     const claims = user.customClaims ?? {}
+    const indexed = await getDb().collection('superAdmins').doc(user.uid).get()
     return {
       uid: user.uid,
       email: user.email,
       displayName: user.displayName ?? null,
       isSuperAdmin: claims.superAdmin === true,
+      inIndex: indexed.exists,
       disabled: user.disabled,
     }
   } catch {

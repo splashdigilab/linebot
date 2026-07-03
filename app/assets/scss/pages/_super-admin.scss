@@ -57,6 +57,14 @@
   gap: 0.2rem;
 }
 
+/* 清單名稱列:名稱 + 標記（你自己 / 漂移警示） */
+.sa-name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
 .sa-user-name {
   font-weight: 600;
   font-size: 0.95rem;
@@ -73,12 +81,6 @@
   color: var(--text-muted);
   font-family: monospace;
 }
-
-/* plan badge 顏色 */
-.sa-plan-free    { color: var(--text-muted); }
-.sa-plan-starter { color: #2563eb; }
-.sa-plan-pro     { color: #7c3aed; }
-.sa-plan-enterprise { color: var(--text-primary); font-weight: 700; }
 
 /* 停用行 */
 .sa-row-disabled td {

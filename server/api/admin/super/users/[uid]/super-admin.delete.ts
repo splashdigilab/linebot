@@ -20,9 +20,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, statusMessage: '找不到此使用者' })
   }
 
+  // 不可撤銷最後一位 Super Admin:至少保留一個可登入的帳號。
+  const total = (await getDb().collection('superAdmins').get()).size
+  if (total <= 1) {
+    throw createError({ statusCode: 400, statusMessage: '至少需保留一位 Super Admin,無法撤銷最後一位' })
+  }
+
   const existing = user.customClaims ?? {}
   const { superAdmin: _, ...rest } = existing as any
   await auth.setCustomUserClaims(uid, rest)
+
+  // 同步移除可列舉索引(不存在則為 no-op)。
+  await getDb().collection('superAdmins').doc(uid).delete()
 
   return { uid, superAdmin: false }
 })

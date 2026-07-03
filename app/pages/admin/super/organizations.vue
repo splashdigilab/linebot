@@ -4,7 +4,7 @@
       <AdminSoloPageHeading
         field-label="Super Admin"
         title="🏢 組織管理"
-        caption="管理系統中的所有組織，包含方案、管理員與停用狀態。"
+        caption="管理系統中的所有組織、管理員與停用狀態。"
       />
       <div class="flex gap-2 admin-header-actions">
         <el-button type="primary" @click="openCreate">+ 建立組織</el-button>
@@ -25,11 +25,6 @@
               <el-table-column label="組織名稱" min-width="160">
                 <template #default="{ row }">
                   <span :class="{ 'text-muted': row.disabled }">{{ row.name }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column label="方案" width="100">
-                <template #default="{ row }">
-                  <span :class="`sa-plan-${row.plan}`">{{ PLAN_LABELS[row.plan] ?? row.plan }}</span>
                 </template>
               </el-table-column>
               <el-table-column label="Owner Email" min-width="180">
@@ -73,12 +68,6 @@
         <el-input v-model="form.name" placeholder="例：MyFeel 股份有限公司" />
       </div>
       <div class="admin-field-group">
-        <AdminFieldLabel text="方案" tight />
-        <el-select v-model="form.plan" style="width: 100%">
-          <el-option v-for="p in PLAN_OPTIONS" :key="p.value" :label="p.label" :value="p.value" />
-        </el-select>
-      </div>
-      <div class="admin-field-group">
         <AdminFieldLabel text="Owner Email" tight />
         <el-input v-model="form.ownerEmail" placeholder="owner@example.com" />
       </div>
@@ -95,12 +84,6 @@
       <div class="admin-field-group">
         <AdminFieldLabel text="組織名稱" tight />
         <el-input v-model="editForm.name" />
-      </div>
-      <div class="admin-field-group">
-        <AdminFieldLabel text="方案" tight />
-        <el-select v-model="editForm.plan" style="width: 100%">
-          <el-option v-for="p in PLAN_OPTIONS" :key="p.value" :label="p.label" :value="p.value" />
-        </el-select>
       </div>
       <div class="admin-field-group">
         <AdminFieldLabel text="擁有者 Email" tight />
@@ -190,18 +173,8 @@ const membersLoading = ref(false)
 const memberSaving = ref(false)
 const newMemberEmail = ref('')
 
-const PLAN_LABELS: Record<string, string> = {
-  free: 'Free', starter: 'Starter', pro: 'Pro', enterprise: 'Enterprise',
-}
-const PLAN_OPTIONS = [
-  { value: 'free', label: 'Free' },
-  { value: 'starter', label: 'Starter' },
-  { value: 'pro', label: 'Pro' },
-  { value: 'enterprise', label: 'Enterprise' },
-]
-
-const form = reactive({ name: '', plan: 'free', ownerEmail: '' })
-const editForm = reactive({ name: '', plan: 'free', ownerEmail: '' })
+const form = reactive({ name: '', ownerEmail: '' })
+const editForm = reactive({ name: '', ownerEmail: '' })
 
 async function load() {
   loading.value = true
@@ -216,7 +189,6 @@ async function load() {
 
 function openCreate() {
   form.name = ''
-  form.plan = 'free'
   form.ownerEmail = ''
   showCreate.value = true
 }
@@ -224,7 +196,6 @@ function openCreate() {
 function openEdit(row: any) {
   editTarget.value = row
   editForm.name = row.name
-  editForm.plan = row.plan
   editForm.ownerEmail = row.ownerEmail || ''
   showEdit.value = true
 }
@@ -254,7 +225,7 @@ async function createOrg() {
   try {
     await apiFetch('/api/admin/super/organizations', {
       method: 'POST',
-      body: { name: form.name, plan: form.plan, ownerEmail: form.ownerEmail },
+      body: { name: form.name, ownerEmail: form.ownerEmail },
     })
     showToast('組織已建立', 'success')
     showCreate.value = false
@@ -275,7 +246,6 @@ async function saveEdit() {
       method: 'PATCH',
       body: {
         name: editForm.name,
-        plan: editForm.plan,
         ownerEmail: editForm.ownerEmail.trim(),
       },
     })

@@ -2,7 +2,6 @@ import { v4 as uuidv4 } from 'uuid'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
 import { requireOrgAdmin } from '~~/server/utils/workspace-auth'
-import { requireWorkspaceQuota } from '~~/server/utils/workspace-quota'
 import { addSystemModulesToBatch } from '~~/server/utils/workspace-system-modules'
 
 /**
@@ -27,9 +26,6 @@ export default defineEventHandler(async (event) => {
   if (orgSnap.data()?.disabled === true) {
     throw createError({ statusCode: 403, statusMessage: '此組織已停用' })
   }
-
-  // Quota 檢查
-  await requireWorkspaceQuota(orgId)
 
   const body = await readBody(event)
   const name = body?.name?.trim()
