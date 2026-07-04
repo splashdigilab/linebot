@@ -22,6 +22,8 @@ export default defineNuxtConfig({
       '* * * * *': ['broadcast:trigger-scheduled'],
       // 每 5 分鐘撿 failed / 卡住的知識卡重新索引
       '*/5 * * * *': ['ai:retry-stuck-chunks'],
+      // 每 15 分鐘清掉過期的知識庫預覽 job（Firestore 文件 + Storage temp）
+      '*/15 * * * *': ['ai:cleanup-preview-jobs'],
       // 每 30 分鐘掃 URL 來源是否內容變動（每個 source 的實際偵測頻率由 refreshIntervalMinutes 決定）
       '*/30 * * * *': ['ai:detect-source-updates'],
       // 每 10 分鐘掃「真人處理中但閒置過久」的會話自動交還機器人（handbackIdleMinutes=0 不動作）

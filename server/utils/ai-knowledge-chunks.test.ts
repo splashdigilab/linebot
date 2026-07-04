@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 import { buildEmbeddingText, extractIdentifierRuns } from './ai-knowledge-chunks'
-import { chunkTextWithLlm, segmentText } from './ai-knowledge-chunker'
+import {
+  chunkTextWithLlm,
+  isChunkTruncationError,
+  segmentText,
+  splitSegmentInHalf,
+} from './ai-knowledge-chunker'
 
 // 切卡的 LLM 呼叫改成「看 prompt 內容決定輸出」——純函式、與並行排程無關，
 // 這樣就能穩定驗證「照段序合併 + 去重」而不會因為哪一段先回來而 flaky。
@@ -71,6 +76,27 @@ describe('segmentText', () => {
     const text = 'y'.repeat(450)
     const segments = segmentText(text, 200)
     expect(segments).toEqual(['y'.repeat(200), 'y'.repeat(200), 'y'.repeat(50)])
+  })
+})
+
+describe('splitSegmentInHalf / isChunkTruncationError', () => {
+  it('對半切回 ≥2 段、內容不遺失', () => {
+    const text = Array.from({ length: 20 }, (_, i) => `line${i}`).join('\n')
+    const parts = splitSegmentInHalf(text)
+    expect(parts.length).toBeGreaterThanOrEqual(2)
+    expect(parts.join('').replace(/\s/g, '')).toBe(text.replace(/\s/g, ''))
+  })
+
+  it('極短字串不炸', () => {
+    expect(splitSegmentInHalf('')).toEqual([''])
+    expect(splitSegmentInHalf('a').length).toBeLessThanOrEqual(2)
+  })
+
+  it('只有截斷型錯誤才回 true', () => {
+    expect(isChunkTruncationError({ statusMessage: 'Gemini JSON parse failed: Unterminated string' })).toBe(true)
+    expect(isChunkTruncationError(new Error('finishReason MAX_TOKENS'))).toBe(true)
+    expect(isChunkTruncationError({ statusMessage: 'Gemini error: network error' })).toBe(false)
+    expect(isChunkTruncationError(null)).toBe(false)
   })
 })
 

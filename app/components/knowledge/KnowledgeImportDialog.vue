@@ -106,7 +106,7 @@
           {{ previewing ? (mode === 'gsheet' ? '讀取中⋯' : 'AI 切卡中⋯') : (mode === 'gsheet' ? '📊 讀取 Sheet' : '🪄 預覽切卡') }}
         </el-button>
         <span v-if="previewing && mode !== 'gsheet'" class="text-muted text-xs">
-          Gemini 正在分析內容、預估 5–15 秒
+          {{ previewProgressText }}
         </span>
       </div>
     </div>
@@ -381,6 +381,13 @@ const overviewCard = ref<OverviewCard | null>(null)
 
 // ── Preview ───────────────────────────────────────────────
 const previewing = ref(false)
+// 非同步 job 的即時進度（切卡 3/5、辨識掃描檔 2/6…）；null = 尚無進度資訊
+const previewProgress = ref<{ done: number; total: number; label: string } | null>(null)
+const previewProgressText = computed(() => {
+  const p = previewProgress.value
+  if (!p) return 'Gemini 正在分析內容⋯'
+  return p.total > 1 ? `${p.label} ${p.done}/${p.total}⋯` : `${p.label}⋯`
+})
 const truncated = ref(false)
 const ocrUsed = ref(false) // 掃描檔 PDF 由 AI 辨識文字 → 預覽時提醒逐張確認
 const chunks = ref<Array<{ included: boolean; title: string; content: string; tags: string[]; questions: string[] }>>([])
@@ -412,8 +419,54 @@ const dupMatches = computed(() => {
   return [...pool.values()].filter(m => m.name.trim() === name)
 })
 
+/** 預覽 job 完成時的回應形狀（與舊 preview-chunks 相同） */
+interface PreviewResult {
+  chunks: Array<{ title: string; content: string; tags: string[]; questions?: string[] }>
+  overviewCard?: { title: string; content: string; tags: string[]; questions: string[] } | null
+  sourceName: string
+  sourceUrl: string
+  truncated: boolean
+  ocrUsed?: boolean
+  existingMatches?: Array<{ id: string; name: string; chunkCount: number; updatedAtMs: number }>
+}
+
+type PollResponse =
+  | ({ status: 'done' } & PreviewResult)
+  | { status: 'processing'; phase: string; progress: { done: number; total: number; label: string } }
+  | { status: 'error'; error: string }
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+/**
+ * 輪詢預覽 job 直到 done / error。伺服器端每次輪詢推進一步(壓在閘道逾時內),
+ * 所以這裡永遠拿短回應——閘道偶發 504/502/408 是「某一步剛好較久」,吞掉繼續輪詢
+ * (伺服器端 lease 會由下一輪重接),不可一次抖動就整個失敗。上限 5 分鐘。
+ */
+async function pollPreviewJob(jobId: string): Promise<PreviewResult> {
+  // 大型密文件最壞情況:OCR 逐批 + 逐段切卡跨多輪輪詢,每輪 ~20s,總量可到數分鐘。
+  // 上限放寬到 8 分鐘;伺服器端 job 存活 1 小時,真超時使用者可重新上傳。
+  const deadline = Date.now() + 8 * 60 * 1000
+  while (Date.now() < deadline) {
+    await sleep(1200)
+    let res: PollResponse
+    try {
+      res = await apiFetch<PollResponse>(`/api/ai/knowledge/preview-jobs/${encodeURIComponent(jobId)}`)
+    }
+    catch (e: any) {
+      const code = Number(e?.statusCode ?? e?.status ?? e?.response?.status ?? 0)
+      if (code === 504 || code === 502 || code === 408 || code === 0) continue
+      throw e
+    }
+    if (res.status === 'done') return res
+    if (res.status === 'error') throw new Error(res.error || '處理失敗')
+    previewProgress.value = res.progress
+  }
+  throw new Error('處理逾時，請稍後再試或改貼文字')
+}
+
 async function runPreview() {
   previewing.value = true
+  previewProgress.value = null
   try {
     const body: Record<string, unknown> = { type: mode.value, generateOverview: generateOverview.value }
     if (mode.value === 'file') {
@@ -434,15 +487,12 @@ async function runPreview() {
       body.name = `貼上文字 ${now.getFullYear()}/${now.getMonth() + 1}/${now.getDate()}`
     }
 
-    const res = await apiFetch<{
-      chunks: Array<{ title: string; content: string; tags: string[]; questions?: string[] }>
-      overviewCard?: { title: string; content: string; tags: string[]; questions: string[] } | null
-      sourceName: string
-      sourceUrl: string
-      truncated: boolean
-      ocrUsed?: boolean
-      existingMatches?: Array<{ id: string; name: string; chunkCount: number; updatedAtMs: number }>
-    }>('/api/ai/knowledge/preview-chunks', { method: 'POST', body })
+    // 建 job(秒回)→ 輪詢推進(永不 504)。回應形狀與舊 preview-chunks 相同。
+    const created = await apiFetch<{ jobId: string }>(
+      '/api/ai/knowledge/preview-jobs',
+      { method: 'POST', body },
+    )
+    const res = await pollPreviewJob(created.jobId)
 
     if (!res.chunks.length) {
       showToast('AI 沒有切出任何有意義的卡片；請改貼文字或檢查來源內容', 'error')
@@ -476,10 +526,11 @@ async function runPreview() {
     step.value = 'preview'
   }
   catch (err: any) {
-    showToast(err?.statusMessage || err?.message || '切片失敗', 'error')
+    showToast(err?.data?.statusMessage || err?.statusMessage || err?.message || '切片失敗', 'error')
   }
   finally {
     previewing.value = false
+    previewProgress.value = null
   }
 }
 

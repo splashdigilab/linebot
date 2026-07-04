@@ -1,0 +1,408 @@
+/**
+ * 知識庫「上傳預覽」的非同步 job + 輪詢狀態機。
+ *
+ * 為什麼要這個：preview-chunks 是同步 API，一個請求裡把「抽文字 → LLM 切卡（+OCR
+ * +總覽卡）」整包做完；長 PDF 會超過 Amplify/CloudFront 的閘道逾時（~30s）→ 504。
+ *
+ * 設計（順這個 codebase 的既有紋理：每個請求壓在時限內、溢出排 Firestore）：
+ * - 建 job 時把「快且會報錯」的抽取先做掉（讓壞檔/加密當場報錯），重活留給輪詢。
+ * - 前端每 ~2s 輪詢一次，每次 advanceWork **只推進一個有界單位**（一批 OCR 頁 / 一段切卡 /
+ *   一次總覽卡），每步都壓在逾時內 → 永不 504。
+ * - 大文字放 Storage 的 work.json（無 1 MiB 限制）；Firestore job 文件只留狀態/進度/lease。
+ * - lease + cursor 讓中途被閘道掐斷的一步能在 lease 過期後被下一輪重跑，不重跑已完成的步。
+ */
+import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore'
+import { getDb, getStorage } from './firebase'
+import {
+  chunkSegment,
+  isChunkTruncationError,
+  MAX_TOTAL_CHUNKS,
+  segmentText,
+  splitSegmentInHalf,
+  summarizeAsOverviewCard,
+} from './ai-knowledge-chunker'
+import { ocrPdfWithGemini, MAX_RAW_TEXT_LEN } from './ai-source-extractors'
+import { splitPdfPageRange } from './pdf-split'
+import { KNOWLEDGE_SOURCES_COLLECTION } from './ai-knowledge-sources'
+import type { ChunkInput } from './ai-knowledge-chunks'
+
+export const KNOWLEDGE_PREVIEW_JOBS_COLLECTION = 'knowledgePreviewJobs'
+
+/** 單批 OCR 的頁數：壓在閘道逾時內，同時控制 job 步數。5 頁 ≈ 15–25s。 */
+export const OCR_PAGE_BATCH = 5
+
+/** 切卡撞輸出上限時「對半再切」的下限；小於此就不再切（真的還失敗代表非截斷問題）。 */
+export const MIN_SEGMENT_SPLIT_LEN = 1500
+
+/** claim 一步的租約時間；poll 中途被閘道 504，過了這段時間下一輪可重接。 */
+export const JOB_LEASE_MS = 45_000
+
+/** job 存活時間；超過由 cleanup task 連同 Storage temp 一起刪。 */
+export const JOB_TTL_MS = 60 * 60 * 1000
+
+export type PreviewJobStatus = 'processing' | 'done' | 'error'
+export type PreviewJobPhase = 'ocr' | 'chunk' | 'overview' | 'finalize' | 'done'
+
+/** 建 job 時鎖定的來源輸入（抽取用的原始參數） */
+export interface PreviewJobInput {
+  type: 'file' | 'url' | 'text' | 'gsheet'
+  fileName?: string
+  contentType?: string
+  url?: string
+  text?: string
+  name?: string
+  generateOverview: boolean
+}
+
+export interface ExistingMatch {
+  id: string
+  name: string
+  chunkCount: number
+  updatedAtMs: number
+}
+
+/** 放在 Storage work.json 的完整工作狀態（含大文字與累積結果）。 */
+export interface WorkState {
+  input: PreviewJobInput
+  phase: PreviewJobPhase
+  // 抽取結果
+  sourceName: string
+  sourceUrl: string
+  sourceType: string
+  rawLength: number
+  truncated: boolean
+  meta: Record<string, string | number>
+  ocrUsed: boolean
+  // OCR 進度（掃描檔）
+  ocrPageTotal: number
+  ocrPageCursor: number
+  ocrText: string
+  // 切卡進度
+  segments: string[]
+  segmentCursor: number
+  // 累積產出
+  chunks: ChunkInput[]
+  overviewCard: ChunkInput | null
+  existingMatches: ExistingMatch[]
+  usage: { inputTokens: number; outputTokens: number }
+}
+
+/** Firestore job 文件（保持極小） */
+export interface PreviewJobDoc {
+  workspaceId: string
+  createdBy: string
+  status: PreviewJobStatus
+  phase: PreviewJobPhase
+  progress: { done: number; total: number; label: string }
+  error: string | null
+  /** 上傳到 Storage 的原檔檔名（掃描檔 OCR 才有），null = 無 */
+  sourceFile: string | null
+  /** 租約到期 ms epoch；0 = 未被 claim */
+  leaseUntil: number
+}
+
+// ── WorkState 初始化 ────────────────────────────────────────────────
+
+/** 建一個帶預設值的 WorkState；呼叫端（建 job 端點）依抽取結果覆寫欄位並設 phase。 */
+export function makeWork(input: PreviewJobInput): WorkState {
+  return {
+    input,
+    phase: 'finalize',
+    sourceName: '',
+    sourceUrl: '',
+    sourceType: input.type,
+    rawLength: 0,
+    truncated: false,
+    meta: {},
+    ocrUsed: false,
+    ocrPageTotal: 0,
+    ocrPageCursor: 0,
+    ocrText: '',
+    segments: [],
+    segmentCursor: 0,
+    chunks: [],
+    overviewCard: null,
+    existingMatches: [],
+    usage: { inputTokens: 0, outputTokens: 0 },
+  }
+}
+
+/**
+ * 有了純文字（文字層 PDF / url / xlsx 散文 / text）後，準備切卡階段。
+ * text 已由抽取器截到 MAX_RAW_TEXT_LEN；空字串則直接 finalize（端點回「沒切出卡」）。
+ */
+export function primeChunking(work: WorkState, text: string): void {
+  work.segments = segmentText(text)
+  work.segmentCursor = 0
+  work.phase = text.trim() && work.segments.length ? 'chunk' : 'finalize'
+}
+
+// ── 狀態機：一次推進一個有界單位 ──────────────────────────────────────
+
+/**
+ * 推進 job 一步（原地修改並回傳同一個 work）。只處理 ocr / chunk / overview；
+ * finalize / done 由端點處理（要碰 db：記帳 + 同名偵測）。
+ * deps.getSourceBuffer 只在 ocr 階段會被呼叫（回原始 PDF buffer）。
+ */
+export async function advanceWork(
+  work: WorkState,
+  deps: { getSourceBuffer?: () => Promise<Buffer> } = {},
+): Promise<WorkState> {
+  switch (work.phase) {
+    case 'ocr':
+      return advanceOcr(work, deps)
+    case 'chunk':
+      return advanceChunk(work)
+    case 'overview':
+      return advanceOverview(work)
+    default:
+      return work
+  }
+}
+
+async function advanceOcr(
+  work: WorkState,
+  deps: { getSourceBuffer?: () => Promise<Buffer> },
+): Promise<WorkState> {
+  if (!deps.getSourceBuffer) {
+    throw createError({ statusCode: 500, statusMessage: 'ocr 階段缺少原始檔' })
+  }
+  const buffer = await deps.getSourceBuffer()
+  const start = work.ocrPageCursor
+  const count = Math.min(OCR_PAGE_BATCH, Math.max(0, work.ocrPageTotal - start))
+  if (count > 0) {
+    const sub = await splitPdfPageRange(buffer, start, count)
+    const ocr = await ocrPdfWithGemini(sub)
+    if (ocr.text.trim()) work.ocrText += (work.ocrText ? '\n' : '') + ocr.text
+    work.usage.inputTokens += ocr.inputTokens
+    work.usage.outputTokens += ocr.outputTokens
+  }
+  work.ocrPageCursor = start + Math.max(1, count) // 保底前進，避免 count=0 時卡死
+
+  if (work.ocrPageCursor >= work.ocrPageTotal) {
+    const capped = work.ocrText.slice(0, MAX_RAW_TEXT_LEN)
+    work.rawLength = work.ocrText.length
+    work.truncated = work.ocrText.length > capped.length
+    work.ocrUsed = true
+    primeChunking(work, capped)
+  }
+  return work
+}
+
+async function advanceChunk(work: WorkState): Promise<WorkState> {
+  const i = work.segmentCursor
+  const seg = work.segments[i]
+  if (seg === undefined) {
+    work.phase = 'finalize'
+    return work
+  }
+  const hint = work.segments.length > 1
+    ? `${work.sourceName}（第 ${i + 1}/${work.segments.length} 段）`.trim()
+    : work.sourceName
+
+  let res: Awaited<ReturnType<typeof chunkSegment>>
+  try {
+    res = await chunkSegment(seg, hint)
+  }
+  catch (err) {
+    // 內容太密、一段切出的卡撞 maxOutputTokens → 輸出 JSON 被截斷。把這段對半切、原地換入、
+    // **不進 cursor**，下一輪用更小的段重試（天然可續跑，一個 poll 仍只打一次 LLM）。
+    // 只對「截斷型」錯誤這樣做；其它錯誤（網路 502 等）照丟，避免無限切。
+    if (isChunkTruncationError(err) && seg.length > MIN_SEGMENT_SPLIT_LEN) {
+      const parts = splitSegmentInHalf(seg)
+      if (parts.length >= 2) {
+        work.segments.splice(i, 1, ...parts)
+        return work
+      }
+    }
+    throw err
+  }
+  work.usage.inputTokens += res.inputTokens
+  work.usage.outputTokens += res.outputTokens
+
+  const seen = new Set(work.chunks.map(c => c.title.replace(/\s+/g, '')))
+  for (const c of res.chunks) {
+    const key = c.title.replace(/\s+/g, '')
+    if (seen.has(key)) continue
+    seen.add(key)
+    work.chunks.push(c)
+    if (work.chunks.length >= MAX_TOTAL_CHUNKS) break
+  }
+
+  work.segmentCursor = i + 1
+  if (work.segmentCursor >= work.segments.length || work.chunks.length >= MAX_TOTAL_CHUNKS) {
+    work.phase = (work.input.generateOverview && work.chunks.length >= 2) ? 'overview' : 'finalize'
+  }
+  return work
+}
+
+async function advanceOverview(work: WorkState): Promise<WorkState> {
+  // 總覽卡失敗不擋切卡結果（同 preview-chunks 的原行為）
+  try {
+    const ov = await summarizeAsOverviewCard(work.chunks, { hint: work.sourceName })
+    if (ov) {
+      work.overviewCard = ov.card
+      work.usage.inputTokens += ov.inputTokens
+      work.usage.outputTokens += ov.outputTokens
+    }
+  }
+  catch (e) {
+    console.warn('[preview-jobs] overview synthesis failed:', e)
+  }
+  work.phase = 'finalize'
+  return work
+}
+
+// ── 進度 / 結果對外形狀 ─────────────────────────────────────────────
+
+export function progressFor(work: WorkState): { done: number; total: number; label: string } {
+  switch (work.phase) {
+    case 'ocr':
+      return { done: work.ocrPageCursor, total: Math.max(1, work.ocrPageTotal), label: '辨識掃描檔' }
+    case 'chunk':
+      return { done: work.segmentCursor, total: Math.max(1, work.segments.length), label: '切卡' }
+    case 'overview':
+      return { done: 0, total: 1, label: '產生總覽卡' }
+    case 'finalize':
+      return { done: 1, total: 1, label: '整理中' }
+    case 'done':
+      return { done: 1, total: 1, label: '完成' }
+    default:
+      return { done: 0, total: 1, label: '處理中' }
+  }
+}
+
+/** done 時回給前端的形狀，與舊 preview-chunks 一致，讓前端映射程式碼原封不動。 */
+export function workToPreviewResult(work: WorkState) {
+  return {
+    sourceName: work.sourceName,
+    sourceUrl: work.sourceUrl,
+    sourceType: work.sourceType,
+    rawLength: work.rawLength,
+    truncated: work.truncated,
+    meta: work.meta,
+    ocrUsed: work.ocrUsed,
+    chunks: work.chunks.map(c => ({
+      title: c.title,
+      content: c.content,
+      tags: c.tags,
+      questions: c.questions ?? [],
+    })),
+    overviewCard: work.overviewCard
+      ? {
+          title: work.overviewCard.title,
+          content: work.overviewCard.content,
+          tags: work.overviewCard.tags,
+          questions: work.overviewCard.questions ?? [],
+        }
+      : null,
+    existingMatches: work.existingMatches,
+    usage: work.usage,
+  }
+}
+
+// ── 同名來源偵測（給前端 dedup 警告；查詢失敗回空陣列）────────────────
+
+export async function findExistingSources(
+  workspaceId: string,
+  sourceName: string,
+  db: Firestore = getDb(),
+): Promise<ExistingMatch[]> {
+  if (!sourceName) return []
+  try {
+    const snap = await db.collection(KNOWLEDGE_SOURCES_COLLECTION)
+      .where('workspaceId', '==', workspaceId)
+      .where('name', '==', sourceName)
+      .limit(5)
+      .get()
+    return snap.docs.map((d) => {
+      const data = d.data() as any
+      const ts = data?.updatedAt
+      const sec = ts?._seconds ?? ts?.seconds
+      return {
+        id: d.id,
+        name: String(data?.name ?? ''),
+        chunkCount: Number(data?.chunkCount ?? 0),
+        updatedAtMs: typeof sec === 'number' ? sec * 1000 : 0,
+      }
+    })
+  }
+  catch (e) {
+    console.warn('[preview-jobs] dedup check failed:', e)
+    return []
+  }
+}
+
+// ── Storage IO（work.json + 原始檔）─────────────────────────────────
+
+function jobPrefix(workspaceId: string, jobId: string): string {
+  return `preview-jobs/${workspaceId}/${jobId}`
+}
+
+export async function saveWork(workspaceId: string, jobId: string, work: WorkState): Promise<void> {
+  await getStorage().bucket()
+    .file(`${jobPrefix(workspaceId, jobId)}/work.json`)
+    .save(JSON.stringify(work), { contentType: 'application/json' })
+}
+
+export async function loadWork(workspaceId: string, jobId: string): Promise<WorkState> {
+  const [buf] = await getStorage().bucket()
+    .file(`${jobPrefix(workspaceId, jobId)}/work.json`)
+    .download()
+  return JSON.parse(buf.toString('utf8')) as WorkState
+}
+
+/** 上傳原始 PDF（掃描檔 OCR 用）。回傳存於 prefix 下的檔名，寫進 job.sourceFile。 */
+export async function saveSourceFile(
+  workspaceId: string,
+  jobId: string,
+  buffer: Buffer,
+  ext: string,
+  contentType: string,
+): Promise<string> {
+  const name = `source.${ext || 'bin'}`
+  await getStorage().bucket()
+    .file(`${jobPrefix(workspaceId, jobId)}/${name}`)
+    .save(buffer, { contentType: contentType || 'application/octet-stream' })
+  return name
+}
+
+export async function loadSourceFile(workspaceId: string, jobId: string, name: string): Promise<Buffer> {
+  const [buf] = await getStorage().bucket()
+    .file(`${jobPrefix(workspaceId, jobId)}/${name}`)
+    .download()
+  return buf
+}
+
+/** 刪掉某 job 的所有 Storage temp（work.json + 原檔）。失敗不擋。 */
+export async function deleteJobStorage(workspaceId: string, jobId: string): Promise<void> {
+  await getStorage().bucket()
+    .deleteFiles({ prefix: `${jobPrefix(workspaceId, jobId)}/` })
+    .catch(() => {})
+}
+
+/**
+ * 清掉過期 job（Firestore 文件 + Storage temp）。
+ *
+ * 兩個觸發點：
+ * 1) scheduled task（每 15 分；同 retry-stuck-chunks 模式）——本機 dev / 長駐 compute 有效。
+ * 2) 建 job 端點的「機會性清掃」（小 limit）——Amplify 上 Nitro scheduledTasks 不會跑，
+ *    改綁在功能自身的流量上：只要有人用匯入，就順手掃掉先前過期的 job，無需 cron。
+ *
+ * 逐 job 的 Storage 刪除並行進行，控制延遲。
+ */
+export async function cleanupExpiredPreviewJobs(
+  db: Firestore = getDb(),
+  limit = 200,
+): Promise<{ scanned: number; deleted: number }> {
+  const snap = await db.collection(KNOWLEDGE_PREVIEW_JOBS_COLLECTION)
+    .where('expiresAt', '<=', Timestamp.now())
+    .limit(limit)
+    .get()
+  await Promise.all(snap.docs.map(async (doc) => {
+    const data = doc.data() as PreviewJobDoc
+    await deleteJobStorage(data.workspaceId, doc.id)
+    await doc.ref.delete().catch(() => {})
+  }))
+  return { scanned: snap.size, deleted: snap.size }
+}

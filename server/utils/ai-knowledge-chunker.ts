@@ -15,8 +15,18 @@ import type { ChunkInput } from './ai-knowledge-chunks'
 
 export const MAX_CHUNKS_PER_DOC = 50
 
-/** 單段送進 LLM 的字數上限；超過就分段切卡 */
-export const SEGMENT_CHAR_LEN = 20_000
+/**
+ * 單段送進 LLM 的字數上限；超過就分段切卡。
+ *
+ * 兩個約束一起決定這個值：
+ * 1) 內容很密（近乎逐字的手冊/說明書）時一段切出的卡總量會撞 maxOutputTokens 讓輸出 JSON
+ *    被截斷（Unterminated string）→ 段要夠小。
+ * 2) 非同步 job 一輪只切一段；那次 LLM 呼叫必須在閘道逾時內回（否則 poll 被 504、換手重跑
+ *    同一段又同樣慢 → 卡死不前進）→ 段要夠小讓輸出快。
+ * 8000 字對應的輸出約 ≤12k token（配 maxOutputTokens=12288），單次呼叫約 15–25s，兩個約束都滿足。
+ * 真的還是撞到截斷，由呼叫端的「對半再切」保底。
+ */
+export const SEGMENT_CHAR_LEN = 8_000
 
 /** 分段合併後的總卡數上限（大型商品目錄一份可能超過單段的 50 張） */
 export const MAX_TOTAL_CHUNKS = 150
@@ -85,7 +95,35 @@ export function segmentText(text: string, segmentLen = SEGMENT_CHAR_LEN): string
   return segments.filter(Boolean)
 }
 
-async function chunkSegment(text: string, hint: string | undefined): Promise<ChunkerResult> {
+/**
+ * 對半切一段（在最近的換行邊界），保證回 ≥2 段。
+ * 用於「切卡撞輸出上限（JSON 被截斷）」時把段縮小重試。
+ */
+export function splitSegmentInHalf(text: string): string[] {
+  const t = String(text || '')
+  if (t.length < 2) return [t]
+  const half = Math.ceil(t.length / 2)
+  const parts = segmentText(t, half)
+  if (parts.length >= 2) return parts
+  // 保底：segmentText 沒切開就硬切（理論上不會發生）
+  return [t.slice(0, half), t.slice(half)].filter(Boolean)
+}
+
+/**
+ * 是否為「輸出 JSON 被截斷」的錯誤（撞 maxOutputTokens）。
+ * generateJson 對截斷的 JSON 會丟 `Gemini JSON parse failed: Unterminated ...`。
+ * 這類錯誤靠「把段切小再試」可救；其它錯誤（網路 502 等）不該無限切。
+ */
+export function isChunkTruncationError(err: unknown): boolean {
+  const msg = String((err as any)?.statusMessage || (err as any)?.message || '')
+  return /JSON parse failed|Unterminated|Unexpected end|MAX_TOKENS/i.test(msg)
+}
+
+/**
+ * 對「單一段」原始文字切卡。長文分段（chunkTextWithLlm）與非同步 job 狀態機
+ * （ai-preview-jobs 逐段推進）共用；export 讓後者能一輪呼叫一段。
+ */
+export async function chunkSegment(text: string, hint: string | undefined): Promise<ChunkerResult> {
   const prompt = [
     hint ? `來源提示：${hint}` : '',
     '請依照規則把以下原始文件切成知識卡：',
@@ -97,7 +135,9 @@ async function chunkSegment(text: string, hint: string | undefined): Promise<Chu
   const { data, inputTokens, outputTokens } = await generateJson<ChunkerJsonResponse>(prompt, {
     systemInstruction: SYSTEM_INSTRUCTION,
     temperature: 0.2,
-    maxOutputTokens: 8192,
+    // 內容密的手冊一段可切出很多卡；8192 太緊會讓輸出 JSON 截斷。給到 12288 有餘裕，
+    // 但也不設更高——單次呼叫要在閘道逾時內回（見 SEGMENT_CHAR_LEN 註解）。撞到就靠對半再切。
+    maxOutputTokens: 12288,
     // thinking 會吃掉 maxOutputTokens 配額，讓 JSON 寫到一半被截斷（Unterminated string）。
     // 切卡不需要深度思考，關掉把整個配額留給輸出。
     thinkingBudget: 0,

@@ -244,7 +244,13 @@
       "Skill(artifact-design)",
       "Skill(artifact-design:*)",
       "Bash(echo \"typecheck exit code = $?\")",
-      "Bash(echo \"typecheck exit = $?\")"
+      "Bash(echo \"typecheck exit = $?\")",
+      "Bash(node -e \"console.log\\('pdf-lib', require\\('./package.json'\\).dependencies['pdf-lib']\\)\")",
+      "Bash(node -e \"const {PDFDocument}=require\\('pdf-lib'\\); console.log\\('pdf-lib loadable:', typeof PDFDocument.load\\)\")",
+      "Bash(grep -vE \"DeprecationWarning|trace-deprecation|^> |^$\" /tmp/tc2.log)",
+      "Bash(echo \"build exit=$?\")",
+      "Bash(grep -vE \"DeprecationWarning|trace-deprecation|^> |^$\" /tmp/tc3.log)",
+      "Bash(grep -vE \"DeprecationWarning|trace-deprecation|^> |^$\" /tmp/tc4.log)"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",
