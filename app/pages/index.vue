@@ -163,30 +163,41 @@
       <div class="lp-wrap">
         <div class="lp-reveal">
           <span class="lp-eyebrow lp-eyebrow--plain">為什麼不是「又一套 LINE 工具」</span>
-          <h2 class="lp-h2">別家要你從零設規則,<br>MYFEEL 用範本 ＋ 知識庫,快速上線</h2>
+          <h2 class="lp-h2">同樣要做的事,MYFEEL 幫你把「設定的工」也做掉</h2>
+          <p class="lp-lede">一般工具給你功能、叫你自己拉;MYFEEL 用範本 ＋ 知識庫,連設定都幫你省下。</p>
         </div>
 
-        <div class="lp-vs lp-reveal">
-          <div class="lp-vs__card lp-vs__card--old">
-            <span class="lp-vs__k">一般行銷工具</span>
-            <p class="lp-vs__cap">功能都給你,但每一步的工,還是你自己做。</p>
-            <ul class="lp-vs__list">
-              <li><span class="m m--x">✕</span>策略自己想</li>
-              <li><span class="m m--x">✕</span>腳本自己拉</li>
-              <li><span class="m m--x">✕</span>旅程自己設</li>
-              <li><span class="m m--x">✕</span>你以為導入,要先接一堆設定</li>
-            </ul>
+        <div class="lp-cmp lp-reveal">
+          <div class="lp-cmp__winner" aria-hidden="true" />
+          <div class="lp-cmp__row lp-cmp__row--head">
+            <div class="lp-cmp__dim">比較項目</div>
+            <div class="lp-cmp__old">一般行銷工具</div>
+            <div class="lp-cmp__new"><span class="lp-cmp__mark">M</span>MYFEEL<span class="lp-cmp__tag">最省事</span></div>
           </div>
-          <div class="lp-vs__badge">VS</div>
-          <div class="lp-vs__card lp-vs__card--new">
-            <span class="lp-vs__brand"><span class="lp-vs__mark">M</span>MYFEEL</span>
-            <p class="lp-vs__cap">範本 ＋ 知識庫,把設定的工也一起做掉。</p>
-            <ul class="lp-vs__list">
-              <li><span class="m m--v">✓</span>套用現成腳本範本,不用從零寫規則</li>
-              <li><span class="m m--v">✓</span>客服 × CRM × 再行銷,一個後台全包</li>
-              <li><span class="m m--v">✓</span>AI 依你的知識庫回答,不亂編</li>
-              <li><span class="m m--v">✓</span>15 分鐘就能讓 AI 上線接客</li>
-            </ul>
+          <div class="lp-cmp__row">
+            <div class="lp-cmp__dim"><span class="lp-cmp__ic">⚙️</span>開始設定</div>
+            <div class="lp-cmp__old"><span class="lp-cmp__x">✕</span>從零寫規則、自己拉腳本</div>
+            <div class="lp-cmp__new"><span class="lp-cmp__v">✓</span>套用現成範本,逐句改就好</div>
+          </div>
+          <div class="lp-cmp__row">
+            <div class="lp-cmp__dim"><span class="lp-cmp__ic">💬</span>客服回覆</div>
+            <div class="lp-cmp__old"><span class="lp-cmp__x">✕</span>你自己回,或再接一套客服工具</div>
+            <div class="lp-cmp__new"><span class="lp-cmp__v">✓</span>AI 依知識庫即時回,需要時轉真人</div>
+          </div>
+          <div class="lp-cmp__row">
+            <div class="lp-cmp__dim"><span class="lp-cmp__ic">🔗</span>系統整合</div>
+            <div class="lp-cmp__old"><span class="lp-cmp__x">✕</span>客服、CRM、行銷各買各的</div>
+            <div class="lp-cmp__new"><span class="lp-cmp__v">✓</span>客服 × CRM × 再行銷,一個後台全包</div>
+          </div>
+          <div class="lp-cmp__row">
+            <div class="lp-cmp__dim"><span class="lp-cmp__ic">🎯</span>回答準確度</div>
+            <div class="lp-cmp__old"><span class="lp-cmp__x">✕</span>罐頭關鍵字,常答非所問</div>
+            <div class="lp-cmp__new"><span class="lp-cmp__v">✓</span>依你上傳的內容回答,不亂編</div>
+          </div>
+          <div class="lp-cmp__row">
+            <div class="lp-cmp__dim"><span class="lp-cmp__ic">⏱️</span>多久能上線</div>
+            <div class="lp-cmp__old"><span class="lp-cmp__x">✕</span>曠日費時,要先接一堆設定</div>
+            <div class="lp-cmp__new"><span class="lp-cmp__v">✓</span>15 分鐘接上你的 LINE 官方帳號</div>
           </div>
         </div>
 
@@ -209,7 +220,6 @@
                 <h4>被動式 AI｜<span>你出題,AI 策劃</span></h4>
                 <p>一句話丟給 AI,它幫你補完受眾、文案、排程,一次到位。</p>
               </div>
-              <p class="lp-roadmap__cta">現在 <a href="#demo">加入試銷名單</a>,第一批搶先體驗。</p>
             </div>
 
             <div class="lp-assist">
@@ -224,6 +234,7 @@
               </div>
             </div>
           </div>
+          <p class="lp-roadmap__cta">現在 <a href="#demo">加入試銷名單</a>,第一批搶先體驗。</p>
         </div>
       </div>
     </section>

@@ -7,7 +7,7 @@ vi.mock('./gemini', () => ({
 }))
 
 import { generateJson } from './gemini'
-import { ENRICH_BATCH_SIZE, enrichCardBatch, enrichCardsWithLlm, needsQuestionEnrichment } from './ai-knowledge-chunker'
+import { ENRICH_BATCH_SIZE, enrichCardBatch, enrichCardsWithLlm, needsQuestionEnrichment, stripBoilerplate } from './ai-knowledge-chunker'
 
 const mockGen = vi.mocked(generateJson)
 
@@ -123,6 +123,50 @@ describe('enrichCardsWithLlm', () => {
     expect(res.items[ENRICH_BATCH_SIZE]).toEqual({ questions: ['ok'], tags: [] })
     expect(res.inputTokens).toBe(3)
     expect(res.outputTokens).toBe(4)
+  })
+})
+
+describe('stripBoilerplate', () => {
+  it('定義卡保留定義句、剝除黏在後面的免責樣板（本案 Poketomo）', () => {
+    const input = [
+      '重點：Poketomo｜SRC01TWW 主機簡稱',
+      '',
+      'Poketomo 是 SRC01TWW 主機的簡稱。本產品功能將持續升級，故本指南中之畫面、功能及操作步驟可能有所變更，畫面及插圖僅供示意，可能與實際產品有所差異。本指南內容及官方網站網址如有變更，恕不另行通知。',
+    ].join('\n')
+    const out = stripBoilerplate(input)
+    expect(out).toContain('Poketomo 是 SRC01TWW 主機的簡稱。')
+    expect(out).toContain('重點：Poketomo｜SRC01TWW 主機簡稱') // 結構行原樣保留
+    expect(out).not.toMatch(/恕不另行通知|僅供示意|與實際產品|操作步驟可能有所變更/)
+  })
+
+  it('也剝除口語改寫版的免責句', () => {
+    const input = 'Poketomo是SRC01TWW主機的簡稱喔！它的功能會持續升級，所以指南中的畫面、功能和操作步驟可能會有所變更，畫面和插圖也都是示意圖。指南內容和官方網站網址如有變更，恕不另行通知喔。'
+    const out = stripBoilerplate(input)
+    expect(out).toBe('Poketomo是SRC01TWW主機的簡稱喔！')
+  })
+
+  it('純免責卡剝完變空字串（呼叫端會丟棄）', () => {
+    const input = '本手冊畫面僅供示意，可能與實際產品有所差異。內容如有變更，恕不另行通知。版權所有 翻印必究。'
+    expect(stripBoilerplate(input)).toBe('')
+  })
+
+  it('剝除版權／商標宣告', () => {
+    expect(stripBoilerplate('售後服務請洽客服。© 2026 品牌保留所有權利。')).toBe('售後服務請洽客服。')
+    expect(stripBoilerplate('Poketomo 為 XYZ 公司之註冊商標。')).toBe('')
+  })
+
+  it('不誤刪正常內容（高辨識標記才刪）', () => {
+    const keep = [
+      '退貨後款項會在 7 個工作天內退回原付款方式。',
+      '這台主機的功能會持續升級，未來會新增更多玩法。', // 「持續升級」是賣點、無免責標記 → 保留
+      '示意圖如下，實際顏色以現貨為準。', // 未帶「與實際／僅供示意」硬標記 → 保留
+    ].join('\n')
+    expect(stripBoilerplate(keep)).toBe(keep)
+  })
+
+  it('空輸入回空字串', () => {
+    expect(stripBoilerplate('')).toBe('')
+    expect(stripBoilerplate('   ')).toBe('')
   })
 })
 
