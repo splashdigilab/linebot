@@ -114,7 +114,7 @@ export default defineEventHandler(async (event) => {
     if (isPdf) {
       extracted = await extractPdfText(buffer)
       // 掃描檔 / 圖片檔 PDF 沒有文字層 → 改用 Gemini 多模態辨識,而不是丟「切不出卡」的誤導錯誤
-      if (isProbablyScannedPdf(extracted)) {
+      if (isProbablyScannedPdf(extracted, buffer.length)) {
         const pages = Number(extracted.meta.pages ?? 0)
         if (pages > MAX_OCR_PAGES) {
           throw createError({

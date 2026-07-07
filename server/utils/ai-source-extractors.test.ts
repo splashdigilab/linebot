@@ -54,6 +54,21 @@ describe('isProbablyScannedPdf', () => {
     expect(isProbablyScannedPdf(extracted(10, 0))).toBe(true)
     expect(isProbablyScannedPdf(extracted(500, 0))).toBe(false)
   })
+
+  it('大檔卻只抽出很少字(薄文字層騙過每頁門檻)→ 掃描檔', () => {
+    // 5MB 型錄只抽出 3000 字(平均 150 字/頁,越過每頁門檻)→ 但 ~1667 bytes/字 → 影像檔
+    expect(isProbablyScannedPdf(extracted(3000, 20), 5_000_000)).toBe(true)
+  })
+
+  it('大檔但文字也多(真文字 PDF 夾大圖)→ 不是掃描檔', () => {
+    // 5MB 但抽出 8 萬字 → ~62 bytes/字 → 有實質文字層
+    expect(isProbablyScannedPdf(extracted(80_000, 40), 5_000_000)).toBe(false)
+  })
+
+  it('沒給 byteLength(舊呼叫端)→ 只看字數門檻,行為不變', () => {
+    // 同樣 3000 字 / 20 頁,不帶 byteLength 就不會被新規則判成掃描檔
+    expect(isProbablyScannedPdf(extracted(3000, 20))).toBe(false)
+  })
 })
 
 // ── xlsx：說明分頁跳過 + 合併儲存格展開 ─────────────────────────────

@@ -400,10 +400,12 @@ const mode = ref<ImportMode>('file')
 const fileInputEl = ref<HTMLInputElement | null>(null)
 const fileName = ref('')
 const fileSizeKb = ref(0)
-const fileBase64 = ref('')
+// 留住 File 物件本身：預覽時才用 signed URL 直傳 Storage（不再前置轉 base64 塞 JSON，
+// 否則 ~5MB 檔 base64 膨脹到 ~6.7MB 會超過 Lambda 6MB payload 上限 → 413）。
+const selectedFile = ref<File | null>(null)
 const fileContentType = ref('')
 
-async function onFileChosen(e: Event) {
+function onFileChosen(e: Event) {
   const target = e.target as HTMLInputElement
   const file = target.files?.[0]
   if (!file) return
@@ -412,24 +414,10 @@ async function onFileChosen(e: Event) {
     target.value = ''
     return
   }
+  selectedFile.value = file
   fileName.value = file.name
   fileSizeKb.value = Math.round(file.size / 1024)
   fileContentType.value = file.type
-  fileBase64.value = await fileToBase64(file)
-}
-
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = String(reader.result || '')
-      // data:application/pdf;base64,xxxx — 我們只要 xxxx
-      const comma = result.indexOf(',')
-      resolve(comma >= 0 ? result.slice(comma + 1) : result)
-    }
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
 }
 
 // ── URL / text ────────────────────────────────────────────
@@ -496,7 +484,7 @@ const sourceMeta = ref({
 })
 
 const canPreview = computed(() => {
-  if (mode.value === 'file') return Boolean(fileBase64.value)
+  if (mode.value === 'file') return Boolean(selectedFile.value)
   if (mode.value === 'url') return /^https?:\/\//i.test(urlInput.value.trim())
   if (mode.value === 'gsheet') return /docs\.google\.com\/spreadsheets|^[a-zA-Z0-9-_]{20,}$/.test(gsheetInput.value.trim())
   return textInput.value.trim().length > 0
@@ -569,9 +557,25 @@ async function runPreview() {
   try {
     const body: Record<string, unknown> = { type: mode.value, generateOverview: generateOverview.value }
     if (mode.value === 'file') {
-      body.fileName = fileName.value
-      body.contentType = fileContentType.value
-      body.fileBase64 = fileBase64.value
+      const file = selectedFile.value
+      if (!file) return
+      // 原檔直傳 Storage（signed PUT URL）：繞過 Lambda 6MB payload 上限、免 base64 33% 膨脹。
+      // 檔案 bytes 不經過我們的 API/Lambda，只把 storagePath 送去建 job。
+      previewProgress.value = { done: 0, total: 1, label: '上傳檔案' }
+      const up = await apiFetch<{ storagePath: string; uploadUrl: string }>(
+        '/api/ai/knowledge/upload-url',
+        { method: 'POST', body: { fileName: file.name, contentType: file.type } },
+      )
+      // 直打 GCS signed URL（絕對網址）→ 用 $fetch，不要用會加 workspace/auth 標頭的 apiFetch。
+      await $fetch(up.uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      })
+      previewProgress.value = null
+      body.fileName = file.name
+      body.contentType = file.type
+      body.storagePath = up.storagePath
     }
     else if (mode.value === 'url') {
       body.url = urlInput.value.trim()
@@ -756,7 +760,7 @@ function resetAll() {
   mode.value = 'file'
   fileName.value = ''
   fileSizeKb.value = 0
-  fileBase64.value = ''
+  selectedFile.value = null
   fileContentType.value = ''
   urlInput.value = ''
   textInput.value = ''

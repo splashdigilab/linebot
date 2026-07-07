@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
-import { getDb } from '~~/server/utils/firebase'
+import { getDb, getStorage } from '~~/server/utils/firebase'
 import {
   extractPdfText,
   extractUrlText,
@@ -78,9 +78,10 @@ export default defineEventHandler(async (event) => {
   else if (type === 'file') {
     const fileName = String(body?.fileName ?? '').trim()
     const contentType = String(body?.contentType ?? '').trim().toLowerCase()
-    const base64 = String(body?.fileBase64 ?? '').trim()
-    if (!fileName || !base64) throw createError({ statusCode: 400, statusMessage: '請提供 fileName 與 fileBase64' })
-    const buffer = Buffer.from(base64, 'base64')
+    if (!fileName) throw createError({ statusCode: 400, statusMessage: '請提供 fileName' })
+    // 新路徑：瀏覽器已把原檔直傳 Storage（繞過 Lambda 6MB payload 上限），這裡只收 storagePath 下載 buffer。
+    // 舊路徑：相容小檔的 fileBase64 直傳。
+    const buffer = await readUploadedFileBuffer(body, workspaceId)
     if (buffer.length === 0) throw createError({ statusCode: 400, statusMessage: '檔案內容為空' })
     if (buffer.length > 10 * 1024 * 1024) throw createError({ statusCode: 400, statusMessage: '檔案超過 10MB 上限' })
 
@@ -92,7 +93,7 @@ export default defineEventHandler(async (event) => {
 
     if (isPdf) {
       const extracted = await extractPdfText(buffer)
-      if (isProbablyScannedPdf(extracted)) {
+      if (isProbablyScannedPdf(extracted, buffer.length)) {
         // 掃描檔：沒有文字層 → 走 OCR 切頁批處理（逐輪推進）。原檔存 Storage 供各批切頁。
         const pages = Number(extracted.meta.pages ?? 0)
         if (pages > MAX_OCR_PAGES) {
@@ -173,6 +174,33 @@ export default defineEventHandler(async (event) => {
   await sweep // 讓機會性清掃在回應前完成（已與抽取重疊，額外延遲極小）
   return { jobId, status: 'processing' as const, phase: work.phase }
 })
+
+/**
+ * 取得上傳檔的 bytes：優先用 storagePath（瀏覽器直傳 Storage，繞過 Lambda 6MB payload 上限），
+ * 沒有才退回 fileBase64（相容小檔）。storagePath 一律限定在本 workspace 的 preview-uploads/ 底下
+ * （防跨租戶 / 讀任意物件），讀完即刪避免累積 temp。
+ */
+async function readUploadedFileBuffer(
+  body: Record<string, unknown>,
+  workspaceId: string,
+): Promise<Buffer> {
+  const storagePath = String(body?.storagePath ?? '').trim()
+  if (storagePath) {
+    const prefix = `preview-uploads/${workspaceId}/`
+    if (!storagePath.startsWith(prefix) || storagePath.includes('..')) {
+      throw createError({ statusCode: 400, statusMessage: '無效的 storagePath' })
+    }
+    const file = getStorage().bucket().file(storagePath)
+    const [exists] = await file.exists()
+    if (!exists) throw createError({ statusCode: 400, statusMessage: '找不到已上傳的檔案，請重新上傳' })
+    const [buf] = await file.download()
+    await file.delete().catch(() => {}) // 讀完即刪；失敗不擋建立
+    return buf
+  }
+  const base64 = String(body?.fileBase64 ?? '').trim()
+  if (!base64) throw createError({ statusCode: 400, statusMessage: '請提供 storagePath 或 fileBase64' })
+  return Buffer.from(base64, 'base64')
+}
 
 /** SheetCard / xlsx card → ChunkInput（一列一卡沒有 questions） */
 function cardToChunk(c: { title: string; content: string; tags: string[] }): ChunkInput {

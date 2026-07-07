@@ -190,10 +190,18 @@ async function advanceOcr(
   work.ocrPageCursor = start + Math.max(1, count) // 保底前進，避免 count=0 時卡死
 
   if (work.ocrPageCursor >= work.ocrPageTotal) {
+    work.ocrUsed = true
+    // OCR 跑完卻一個字都沒讀到 → 純圖片且畫質不足 / 非文字內容。給明確可行動的錯誤,
+    // 不要默默 finalize 成「0 張卡」讓使用者一頭霧水。
+    if (!work.ocrText.trim()) {
+      throw createError({
+        statusCode: 422,
+        statusMessage: '這份 PDF 讀不到任何文字（可能是純圖片且畫質不足，或內容不是文字）；請改貼文字或換一份更清晰的檔案',
+      })
+    }
     const capped = work.ocrText.slice(0, MAX_RAW_TEXT_LEN)
     work.rawLength = work.ocrText.length
     work.truncated = work.ocrText.length > capped.length
-    work.ocrUsed = true
     primeChunking(work, capped)
   }
   return work
