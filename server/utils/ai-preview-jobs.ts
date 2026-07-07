@@ -15,6 +15,8 @@ import { FieldValue, Timestamp, type Firestore } from 'firebase-admin/firestore'
 import { getDb, getStorage } from './firebase'
 import {
   chunkSegment,
+  ENRICH_BATCH_SIZE,
+  enrichCardBatch,
   isChunkTruncationError,
   MAX_TOTAL_CHUNKS,
   segmentText,
@@ -41,7 +43,7 @@ export const JOB_LEASE_MS = 45_000
 export const JOB_TTL_MS = 60 * 60 * 1000
 
 export type PreviewJobStatus = 'processing' | 'done' | 'error'
-export type PreviewJobPhase = 'ocr' | 'chunk' | 'overview' | 'finalize' | 'done'
+export type PreviewJobPhase = 'ocr' | 'chunk' | 'enrich' | 'overview' | 'finalize' | 'done'
 
 /** 建 job 時鎖定的來源輸入（抽取用的原始參數） */
 export interface PreviewJobInput {
@@ -80,11 +82,15 @@ export interface WorkState {
   // 切卡進度
   segments: string[]
   segmentCursor: number
+  // 補問法進度（gsheet / 乾淨 xlsx 的一列一卡：卡片沒有 questions，逐批補）
+  enrichCursor: number
   // 累積產出
   chunks: ChunkInput[]
   overviewCard: ChunkInput | null
   existingMatches: ExistingMatch[]
   usage: { inputTokens: number; outputTokens: number }
+  /** 匯入前健檢警告（表格來源：示範列沒換、重複問題、合併儲存格等）；提醒不擋匯入 */
+  warnings: string[]
 }
 
 /** Firestore job 文件（保持極小） */
@@ -120,10 +126,12 @@ export function makeWork(input: PreviewJobInput): WorkState {
     ocrText: '',
     segments: [],
     segmentCursor: 0,
+    enrichCursor: 0,
     chunks: [],
     overviewCard: null,
     existingMatches: [],
     usage: { inputTokens: 0, outputTokens: 0 },
+    warnings: [],
   }
 }
 
@@ -153,6 +161,8 @@ export async function advanceWork(
       return advanceOcr(work, deps)
     case 'chunk':
       return advanceChunk(work)
+    case 'enrich':
+      return advanceEnrich(work)
     case 'overview':
       return advanceOverview(work)
     default:
@@ -236,6 +246,42 @@ async function advanceChunk(work: WorkState): Promise<WorkState> {
   return work
 }
 
+/**
+ * 補問法（一列一卡的 gsheet / 乾淨 xlsx）：一輪補一批（≤ ENRICH_BATCH_SIZE 張、一次 LLM 呼叫），
+ * 壓在閘道逾時內。只「補」不「改」：不動 title / content（它們是 gsheet 同步的比對基準）。
+ * 失敗不擋匯入——卡片沒問法仍可用（只是檢索較弱），跳過該批繼續。
+ */
+async function advanceEnrich(work: WorkState): Promise<WorkState> {
+  const cursor = work.enrichCursor ?? 0
+  const batch = work.chunks.slice(cursor, cursor + ENRICH_BATCH_SIZE)
+  if (batch.length) {
+    try {
+      const res = await enrichCardBatch(batch.map(c => ({ title: c.title, content: c.content })))
+      work.usage.inputTokens += res.inputTokens
+      work.usage.outputTokens += res.outputTokens
+      batch.forEach((chunk, i) => {
+        const it = res.items[i]
+        if (!it) return
+        // 商家（或前一階段）已有的問法 / 標籤優先，只補空缺
+        if (!chunk.questions?.length) chunk.questions = it.questions
+        if (!chunk.tags?.length) chunk.tags = it.tags
+      })
+    }
+    catch (e) {
+      console.warn('[preview-jobs] enrich batch failed（該批不補問法，照常繼續）:', e)
+    }
+  }
+  work.enrichCursor = cursor + Math.max(1, batch.length) // 保底前進，避免卡死
+
+  if (work.enrichCursor >= work.chunks.length) {
+    // xlsx（type=file）要總覽卡就接 overview；gsheet 維持不做總覽卡的舊行為
+    work.phase = (work.input.generateOverview && work.input.type === 'file' && work.chunks.length >= 2)
+      ? 'overview'
+      : 'finalize'
+  }
+  return work
+}
+
 async function advanceOverview(work: WorkState): Promise<WorkState> {
   // 總覽卡失敗不擋切卡結果（同 preview-chunks 的原行為）
   try {
@@ -261,6 +307,12 @@ export function progressFor(work: WorkState): { done: number; total: number; lab
       return { done: work.ocrPageCursor, total: Math.max(1, work.ocrPageTotal), label: '辨識掃描檔' }
     case 'chunk':
       return { done: work.segmentCursor, total: Math.max(1, work.segments.length), label: '切卡' }
+    case 'enrich':
+      return {
+        done: Math.min(work.enrichCursor ?? 0, work.chunks.length),
+        total: Math.max(1, work.chunks.length),
+        label: '補客人問法',
+      }
     case 'overview':
       return { done: 0, total: 1, label: '產生總覽卡' }
     case 'finalize':
@@ -298,6 +350,7 @@ export function workToPreviewResult(work: WorkState) {
       : null,
     existingMatches: work.existingMatches,
     usage: work.usage,
+    warnings: work.warnings ?? [], // 舊 job 的 work.json 沒這欄位，保底空陣列
   }
 }
 

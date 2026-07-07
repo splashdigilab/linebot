@@ -250,7 +250,25 @@
       "Bash(grep -vE \"DeprecationWarning|trace-deprecation|^> |^$\" /tmp/tc2.log)",
       "Bash(echo \"build exit=$?\")",
       "Bash(grep -vE \"DeprecationWarning|trace-deprecation|^> |^$\" /tmp/tc3.log)",
-      "Bash(grep -vE \"DeprecationWarning|trace-deprecation|^> |^$\" /tmp/tc4.log)"
+      "Bash(grep -vE \"DeprecationWarning|trace-deprecation|^> |^$\" /tmp/tc4.log)",
+      "Bash(sed -n 1,80p /Users/kevin/Documents/Github/linebot/server/api/ai/sources/*/gsheet-sync.post.ts)",
+      "WebFetch(domain:www.llamaindex.ai)",
+      "WebFetch(domain:docs.dify.ai)",
+      "Bash(node scripts/generate-faq-template.mjs)",
+      "Bash(grep -n 'questions\\\\|preview-jobs\\\\|preview-chunks\\\\|runPreview\\\\|$fetch' /Users/kevin/Documents/Github/linebot/app/components/knowledge/KnowledgeImportDialog.vue)",
+      "Bash(git -C /Users/kevin/Documents/Github/linebot show HEAD:server/utils/gsheet-sync.ts)",
+      "Bash(node /private/tmp/claude-501/-Users-kevin-Documents-Github-linebot/47d176d9-5489-44eb-bfd4-4abedf0a45fd/scratchpad/xlsx-ref-test.mjs)",
+      "Bash(node /private/tmp/claude-501/-Users-kevin-Documents-Github-linebot/47d176d9-5489-44eb-bfd4-4abedf0a45fd/scratchpad/xlsx-ref-test2.mjs)",
+      "Bash(node -e \"const re=/說明|教學|readme|instruction/i; for \\(const n of ['產品說明','退貨說明','使用說明','FAQ','商品規格說明','工作表1']\\) console.log\\(n, re.test\\(n\\)\\)\")",
+      "Bash(find /Users/kevin/Documents/Github/linebot -iname 'CLAUDE*.md' -not -path '*/node_modules/*' 2>/dev/null; echo \"---user dir---\"; ls -la /Users/kevin/.claude/ 2>/dev/null | grep -i claude; echo \"---ancestors---\"; ls /Users/kevin/CLAUDE.md /Users/CLAUDE.md 2>/dev/null; echo \"done\")",
+      "Read(//Users/kevin/**)",
+      "Bash(cp /private/tmp/claude-501/-Users-kevin-Documents-Github-linebot/502ed3f8-b7f4-4e12-86ea-7d13f75c08c9/scratchpad/xtest.mjs /Users/kevin/Documents/Github/linebot/__xtest.mjs)",
+      "Bash(node __xtest.mjs)",
+      "Bash(rm -f /Users/kevin/Documents/Github/linebot/__xtest.mjs)",
+      "Bash(grep -n \"faqTemplateCopyUrl\\\\|d/\\\\${m\\\\[1\\\\]}/copy\\\\|/copy\\(\" app/components/knowledge/KnowledgeImportDialog.vue)",
+      "Bash(grep -an \"function xlsxMergeRanges\\\\|const merges = xlsxMergeRanges\\\\|expandVerticalMerges\\(\\\\|usableSheetNames\\\\|mergeCount += merges.length\\\\|return { cards, rowCount\" server/utils/ai-source-extractors.ts)",
+      "Bash(grep -vE \"DeprecationWarning|trace-deprecation|^> |^$\")",
+      "Bash(grep -vE \"DeprecationWarning|trace-deprecation|^> |^$|node --\")"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",
@@ -262,7 +280,8 @@
       "/Users/kevin/Documents/Github/linebot/server/api/admin/org/[orgId]",
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/knowledge/sources",
       "/Users/kevin/Documents/Github/linebot/server/utils",
-      "/Users/kevin/Documents/Github/linebot/server/api/webhook/line"
+      "/Users/kevin/Documents/Github/linebot/server/api/webhook/line",
+      "/Users/kevin/Documents/Github/linebot/server/api/ai/sources/*"
     ]
   }
 }

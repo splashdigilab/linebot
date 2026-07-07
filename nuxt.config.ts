@@ -92,6 +92,12 @@ export default defineNuxtConfig({
       firebaseAppId: process.env.FIREBASE_APP_ID ?? '',
       /** 升級／加購的聯繫方式（email 或 https 連結）；顯示於「升級方案」對話框。未設則顯示通用引導文字。 */
       supportContact: process.env.PUBLIC_SUPPORT_CONTACT ?? '',
+      /**
+       * 官方 FAQ 範本的 Google Sheet 母本網址（開「知道連結者可檢視」）。
+       * 設定後匯入對話框顯示「使用 FAQ 範本」按鈕（自動轉 /copy 一鍵建立副本）；
+       * 未設則退回下載 public/templates/faq-sheet-template.xlsx。
+       */
+      faqTemplateSheetUrl: process.env.PUBLIC_FAQ_TEMPLATE_SHEET_URL ?? '',
     },
   },
 })

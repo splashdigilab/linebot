@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 // LLM 切卡 / 總覽卡改成可控 mock（保留真的 segmentText / MAX_TOTAL_CHUNKS）
 vi.mock('./ai-knowledge-chunker', async (importActual) => {
   const actual = await importActual<typeof import('./ai-knowledge-chunker')>()
-  return { ...actual, chunkSegment: vi.fn(), summarizeAsOverviewCard: vi.fn() }
+  return { ...actual, chunkSegment: vi.fn(), summarizeAsOverviewCard: vi.fn(), enrichCardBatch: vi.fn() }
 })
 // 切頁與 OCR 改 mock，不碰真的 pdf-lib / Gemini
 vi.mock('./pdf-split', () => ({
@@ -16,12 +16,13 @@ vi.mock('./ai-source-extractors', async (importActual) => {
 })
 
 import { advanceWork, makeWork, progressFor, workToPreviewResult } from './ai-preview-jobs'
-import { chunkSegment, summarizeAsOverviewCard } from './ai-knowledge-chunker'
+import { chunkSegment, ENRICH_BATCH_SIZE, enrichCardBatch, summarizeAsOverviewCard } from './ai-knowledge-chunker'
 import { ocrPdfWithGemini } from './ai-source-extractors'
 
 const mockChunk = vi.mocked(chunkSegment)
 const mockOverview = vi.mocked(summarizeAsOverviewCard)
 const mockOcr = vi.mocked(ocrPdfWithGemini)
+const mockEnrich = vi.mocked(enrichCardBatch)
 
 const card = (title: string) => ({ title, content: 'c', tags: [], questions: [], sourceId: null })
 
@@ -29,6 +30,7 @@ beforeEach(() => {
   mockChunk.mockReset()
   mockOverview.mockReset()
   mockOcr.mockReset()
+  mockEnrich.mockReset()
 })
 
 describe('advanceWork — chunk 階段', () => {
@@ -125,6 +127,67 @@ describe('advanceWork — chunk 階段', () => {
     await advanceWork(work)
     expect(work.phase).toBe('finalize')
     expect(work.overviewCard).toBeNull()
+  })
+})
+
+describe('advanceWork — enrich 階段（一列一卡補問法）', () => {
+  it('逐批補 questions/tags、只補空缺，做完 gsheet 轉 finalize', async () => {
+    mockEnrich.mockImplementation(async cards => ({
+      items: cards.map((_, i) => ({ questions: [`q-${i}`], tags: [`t-${i}`] })),
+      inputTokens: 2,
+      outputTokens: 3,
+    }))
+    const work = makeWork({ type: 'gsheet', generateOverview: false })
+    work.chunks = Array.from({ length: ENRICH_BATCH_SIZE + 2 }, (_, i) => card(`C${i}`))
+    // 商家已有問法的卡不該被覆蓋
+    work.chunks[0]!.questions = ['既有問法']
+    work.phase = 'enrich'
+
+    await advanceWork(work)
+    expect(work.phase).toBe('enrich')
+    expect(work.enrichCursor).toBe(ENRICH_BATCH_SIZE)
+
+    await advanceWork(work)
+    expect(work.phase).toBe('finalize')
+    expect(work.chunks[0]!.questions).toEqual(['既有問法']) // 已有的優先
+    expect(work.chunks[1]!.questions).toEqual(['q-1'])
+    expect(work.chunks[ENRICH_BATCH_SIZE]!.questions).toEqual(['q-0']) // 第二批第一張
+    expect(work.usage).toEqual({ inputTokens: 4, outputTokens: 6 })
+    expect(mockEnrich).toHaveBeenCalledTimes(2)
+  })
+
+  it('補問法失敗不擋匯入：跳過該批、cursor 照進，卡片保持沒問法', async () => {
+    mockEnrich.mockRejectedValue(new Error('boom'))
+    const work = makeWork({ type: 'gsheet', generateOverview: false })
+    work.chunks = [card('A'), card('B')]
+    work.phase = 'enrich'
+
+    await advanceWork(work)
+    expect(work.phase).toBe('finalize')
+    expect(work.chunks.map(c => c.questions)).toEqual([[], []])
+    expect(work.usage).toEqual({ inputTokens: 0, outputTokens: 0 })
+  })
+
+  it('xlsx（file）要總覽卡：enrich 完轉 overview', async () => {
+    mockEnrich.mockResolvedValue({
+      items: [{ questions: ['q'], tags: [] }, { questions: ['q'], tags: [] }],
+      inputTokens: 1,
+      outputTokens: 1,
+    })
+    const work = makeWork({ type: 'file', generateOverview: true })
+    work.chunks = [card('A'), card('B')]
+    work.phase = 'enrich'
+
+    await advanceWork(work)
+    expect(work.phase).toBe('overview')
+  })
+
+  it('progressFor 在 enrich 階段回「補客人問法」進度', () => {
+    const work = makeWork({ type: 'gsheet', generateOverview: false })
+    work.chunks = [card('A'), card('B'), card('C')]
+    work.phase = 'enrich'
+    work.enrichCursor = 2
+    expect(progressFor(work)).toEqual({ done: 2, total: 3, label: '補客人問法' })
   })
 })
 

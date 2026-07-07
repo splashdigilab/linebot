@@ -303,6 +303,153 @@ export async function summarizeAsOverviewCard(
 }
 
 // ═══════════════════════════════════════════════════════════════════
+//  Enrich（補問法）
+//  Google Sheet / 乾淨 Excel 的「一列一卡」不經 LLM，卡片天生沒有 questions
+//  （客人問法）——而 questions 進 embedding 對 query-card 相似度的拉抬，
+//  是切卡路徑已驗證的（見檔頭設計重點）。
+//
+//  鐵則：只「補」不「改」。不動 title / content —— 它們是 gsheet 同步的
+//  比對基準（title 是 key、content 是變更偵測），改寫會讓每次同步都誤判
+//  「內容有變」而無限重跑。所以這裡只生成 questions + tags。
+// ═══════════════════════════════════════════════════════════════════
+
+/** 一次 LLM 呼叫最多補幾張卡。輸出量小（每卡 ~80 token），15 張一批單次呼叫仍快。 */
+export const ENRICH_BATCH_SIZE = 15
+
+/** 補問法時每張卡餵給 LLM 的內容字數上限：生成問法只需要卡片大意，全文是浪費。 */
+const ENRICH_CARD_CONTENT_LEN = 600
+
+const ENRICH_SYSTEM_INSTRUCTION = `你是專業的客服知識整理助手。使用者會給你一批「客服問答卡」（每張有編號、標題、內容）。任務：為每一張卡生成「客人可能的問法」與分類標籤。
+
+規則：
+1. questions：每張卡寫 2–3 句「客人實際會怎麼問」的口語問句。用客人的字眼（例：「錢什麼時候會退？」「多久會到貨？」），不要照抄卡片標題，句子之間要有變化。
+2. tags：從內容歸納 1–2 個分類關鍵字（例：退款、運費、會員）。
+3. 不要改寫、不要評論卡片內容；只輸出 questions 與 tags。
+4. 每張輸入的卡都要有對應輸出，index 用輸入時的編號。
+
+輸出格式（嚴格 JSON）：
+{ "cards": [ { "index": 0, "questions": ["string", "string"], "tags": ["string"] } ] }`
+
+export interface EnrichedCard {
+  questions: string[]
+  tags: string[]
+}
+
+export interface EnrichResult {
+  /** 與輸入同長度、同順序；LLM 漏答（或該批失敗）的位置為空陣列 */
+  items: EnrichedCard[]
+  inputTokens: number
+  outputTokens: number
+}
+
+/**
+ * 對「一批」卡片（≤ ENRICH_BATCH_SIZE）跑一次 LLM 補問法。
+ * 失敗會 throw，由呼叫端決定降級（卡片沒有問法仍可用，不該擋匯入/同步）。
+ */
+export async function enrichCardBatch(
+  cards: Array<{ title: string; content: string }>,
+): Promise<EnrichResult> {
+  if (!cards.length) return { items: [], inputTokens: 0, outputTokens: 0 }
+
+  const prompt = [
+    '請為以下每一張問答卡生成 questions 與 tags：',
+    '------',
+    ...cards.map((c, i) =>
+      `[${i}] 標題：${c.title}\n內容：${String(c.content ?? '').slice(0, ENRICH_CARD_CONTENT_LEN)}`),
+    '------',
+  ].join('\n\n')
+
+  const { data, inputTokens, outputTokens } = await generateJson<{
+    cards?: Array<{ index?: unknown; questions?: unknown; tags?: unknown }>
+  }>(prompt, {
+    systemInstruction: ENRICH_SYSTEM_INSTRUCTION,
+    temperature: 0.2,
+    // 15 卡 × ~80 token ≈ 1200；給 4096 餘裕
+    maxOutputTokens: 4096,
+    // 同其它結構化 JSON 任務：關掉 thinking，避免吃掉配額把 JSON 截斷
+    thinkingBudget: 0,
+  })
+
+  const items: EnrichedCard[] = cards.map(() => ({ questions: [], tags: [] }))
+  const assigned = new Set<number>()
+  for (const raw of Array.isArray(data?.cards) ? data.cards : []) {
+    // 嚴格解析 index：只收「數字」或「純數字字串」。Number(null)/Number('')/Number([]) 都會變 0，
+    // 若照收會讓漏帶 index 的壞資料洗掉 items[0]；重複 index 也只認第一筆（assigned 擋掉）。
+    const rawIdx: unknown = raw?.index
+    const idx = typeof rawIdx === 'number'
+      ? rawIdx
+      : (typeof rawIdx === 'string' && /^\d+$/.test(rawIdx.trim()) ? Number(rawIdx) : Number.NaN)
+    if (!Number.isInteger(idx) || idx < 0 || idx >= items.length || assigned.has(idx)) continue
+    assigned.add(idx)
+    items[idx] = {
+      questions: Array.isArray(raw?.questions)
+        ? raw.questions.map(q => String(q).trim()).filter(Boolean).slice(0, 3)
+        : [],
+      tags: Array.isArray(raw?.tags)
+        ? raw.tags.map(t => String(t).trim()).filter(Boolean).slice(0, 2)
+        : [],
+    }
+  }
+  return { items, inputTokens, outputTokens }
+}
+
+/**
+ * 對任意數量的卡片補問法：切成 ≤ ENRICH_BATCH_SIZE 的批次並行呼叫。
+ * 單批失敗不擋整體——該批的位置維持空陣列（卡片沒問法仍可用），只記 warning。
+ * 給同步路徑用；匯入預覽走 job 狀態機、一輪一批，直接呼叫 enrichCardBatch。
+ */
+export async function enrichCardsWithLlm(
+  cards: Array<{ title: string; content: string }>,
+): Promise<EnrichResult> {
+  const batches: Array<Array<{ title: string; content: string }>> = []
+  for (let i = 0; i < cards.length; i += ENRICH_BATCH_SIZE) {
+    batches.push(cards.slice(i, i + ENRICH_BATCH_SIZE))
+  }
+
+  const results = await Promise.all(batches.map(async (batch) => {
+    try {
+      return await enrichCardBatch(batch)
+    }
+    catch (e) {
+      console.warn('[enrichCardsWithLlm] batch failed（該批卡片不補問法，照常繼續）:', e)
+      return {
+        items: batch.map(() => ({ questions: [], tags: [] })),
+        inputTokens: 0,
+        outputTokens: 0,
+      } satisfies EnrichResult
+    }
+  }))
+
+  return {
+    items: results.flatMap(r => r.items),
+    inputTokens: results.reduce((s, r) => s + r.inputTokens, 0),
+    outputTokens: results.reduce((s, r) => s + r.outputTokens, 0),
+  }
+}
+
+/**
+ * 這張卡是否該補問法（給「reenrich 回填程序」判斷）：
+ * - 總覽卡（isOverview）另有合成流程，不動。
+ * - 人工編輯過（manuallyEditedAt）的卡尊重使用者版本，不動。
+ * - 已有有效問法的不重補。
+ * - title / content 任一為空的沒東西可餵 LLM，跳過。
+ * 純函數，方便測試；欄位型別放寬（直接吃 Firestore doc data）。
+ */
+export function needsQuestionEnrichment(card: {
+  title?: unknown
+  content?: unknown
+  questions?: unknown
+  isOverview?: unknown
+  manuallyEditedAt?: unknown
+}): boolean {
+  if (card.isOverview === true) return false
+  if (card.manuallyEditedAt) return false // null / undefined = 沒被人工編輯過
+  const hasQuestions = Array.isArray(card.questions) && card.questions.some(q => String(q ?? '').trim())
+  if (hasQuestions) return false
+  return !!String(card.title ?? '').trim() && !!String(card.content ?? '').trim()
+}
+
+// ═══════════════════════════════════════════════════════════════════
 //  Normalize（單卡整理）
 //  既有卡 / 手打卡用同樣的 system instruction 跑一次，把它變成標準格式：
 //    - 第一行「重點：」keyword 摘要

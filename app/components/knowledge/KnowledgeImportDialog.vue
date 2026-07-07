@@ -46,6 +46,29 @@
 
         <el-tab-pane name="gsheet">
           <template #label><span data-tour="kb-tab-gsheet">📊 Google Sheet</span></template>
+          <!-- 官方範本入口:兩欄(問題/答案)就好,其他問法由 AI 匯入時自動補 -->
+          <div class="kb-gsheet-template">
+            <div class="kb-gsheet-template-text">
+              <strong>第一次匯入?建議從官方 FAQ 範本開始:</strong>
+              <ol class="kb-gsheet-steps">
+                <li>{{ faqTemplateCopyUrl ? '點右側按鈕建立範本副本' : '下載範本檔,上傳到 Google 雲端硬碟並以「Google 試算表」開啟' }}</li>
+                <li>在「FAQ」分頁填「客人會問的問題」和「答案」(客人的其他問法之後由 AI 自動補)</li>
+                <li>把試算表「共用」給下方服務帳號(檢視權限即可)</li>
+                <li>回到這裡貼上試算表連結</li>
+              </ol>
+            </div>
+            <el-button
+              tag="a"
+              :href="faqTemplateCopyUrl || '/templates/faq-sheet-template.xlsx'"
+              target="_blank"
+              rel="noopener"
+              size="small"
+              type="primary"
+              plain
+            >
+              {{ faqTemplateCopyUrl ? '📄 使用 FAQ 範本' : '📄 下載 FAQ 範本' }}
+            </el-button>
+          </div>
           <p class="kb-section-hint">
             貼上 Google Sheet 連結，<strong>每一列自動變成一張知識卡</strong>：
             <strong>第一欄當卡片標題</strong>，其餘欄位當內容——
@@ -63,6 +86,9 @@
               請先把這份 Sheet「分享」給下列帳號（檢視權限即可），否則讀不到：
             </template>
             <code class="kb-gsheet-email">{{ serviceAccountEmail }}</code>
+            <el-button size="small" text type="primary" class="kb-gsheet-copy-btn" @click="copyServiceEmail">
+              📋 複製
+            </el-button>
           </el-alert>
           <el-input
             v-model="gsheetInput"
@@ -144,6 +170,22 @@
         <div class="text-xs">辨識可能有錯漏（尤其數字、價格、電話），請逐張確認內容正確再匯入。</div>
       </el-alert>
 
+      <!-- 表格健檢:示範列沒換、重複問題、空答案、合併儲存格等;提醒不擋匯入 -->
+      <el-alert
+        v-if="healthWarnings.length"
+        type="warning"
+        show-icon
+        :closable="false"
+        class="kb-health-warnings"
+      >
+        <template #title>
+          建議先確認以下 {{ healthWarnings.length }} 點（不影響匯入）
+        </template>
+        <ul class="kb-health-list">
+          <li v-for="(w, i) in healthWarnings" :key="i">{{ w }}</li>
+        </ul>
+      </el-alert>
+
       <el-alert
         v-if="dupMatches.length"
         type="warning"
@@ -223,6 +265,38 @@
               placeholder="內容"
               class="kb-chunk-textarea"
             />
+            <!-- 客人問法:AI 自動補的檢索關鍵(參與比對),匯入前可逐題檢查/修改 -->
+            <div class="kb-chunk-questions">
+              <span class="kb-questions-label">💬 客人問法</span>
+              <el-tag
+                v-for="(q, qi) in chunk.questions"
+                :key="`${qi}-${q}`"
+                size="small"
+                type="info"
+                closable
+                @close="chunk.questions.splice(qi, 1)"
+              >
+                {{ q }}
+              </el-tag>
+              <el-input
+                v-if="editingQuestionIdx === idx"
+                ref="questionInputRef"
+                v-model="questionInput"
+                size="small"
+                class="kb-question-input"
+                placeholder="客人會怎麼問?"
+                @keydown.enter.prevent="commitQuestion(chunk)"
+                @blur="commitQuestion(chunk)"
+              />
+              <el-button
+                v-else-if="chunk.questions.length < 3"
+                size="small"
+                plain
+                @click="startAddQuestion(idx)"
+              >
+                ＋
+              </el-button>
+            </div>
             <div class="kb-chunk-tags">
               <el-tag
                 v-for="tag in chunk.tags"
@@ -365,6 +439,28 @@ const textInput = ref('')
 // ── Google Sheet ──────────────────────────────────────────
 const gsheetInput = ref('')
 const serviceAccountEmail = ref('')
+
+async function copyServiceEmail() {
+  try {
+    await navigator.clipboard.writeText(serviceAccountEmail.value)
+    showToast('已複製服務帳號 email', 'success')
+  }
+  catch {
+    showToast('複製失敗，請手動選取複製', 'error')
+  }
+}
+
+// 官方 FAQ 範本:有設定母本網址就轉成 /copy 連結(一鍵建立副本);沒設定或網址無法轉則退回下載 xlsx
+const faqTemplateCopyUrl = computed(() => {
+  const u = String(useRuntimeConfig().public.faqTemplateSheetUrl || '').trim()
+  if (!u) return ''
+  if (/\/copy([?#]|$)/.test(u)) return u
+  // 「發布到網路」的網址是 /spreadsheets/d/e/{發布ID}/...，那個 e 不是檔案 ID、也不支援 /copy；
+  // 硬湊會變成 /d/e/copy（404）。這種情況不硬轉,回空字串 → 退回下載 xlsx。
+  if (/\/spreadsheets\/d\/e\//.test(u)) return ''
+  const m = u.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/)
+  return m ? `https://docs.google.com/spreadsheets/d/${m[1]}/copy` : ''
+})
 // 載入要分享給哪個服務帳號 email（提示用；失敗不擋）
 onMounted(async () => {
   try {
@@ -390,6 +486,7 @@ const previewProgressText = computed(() => {
 })
 const truncated = ref(false)
 const ocrUsed = ref(false) // 掃描檔 PDF 由 AI 辨識文字 → 預覽時提醒逐張確認
+const healthWarnings = ref<string[]>([]) // 表格來源的匯入前健檢警告（提醒不擋匯入）
 const chunks = ref<Array<{ included: boolean; title: string; content: string; tags: string[]; questions: string[] }>>([])
 const existingMatches = ref<Array<{ id: string; name: string; chunkCount: number; updatedAtMs: number }>>([])
 const sourceMeta = ref({
@@ -428,6 +525,8 @@ interface PreviewResult {
   truncated: boolean
   ocrUsed?: boolean
   existingMatches?: Array<{ id: string; name: string; chunkCount: number; updatedAtMs: number }>
+  /** 表格來源的匯入前健檢警告（示範列沒換、重複問題等） */
+  warnings?: string[]
 }
 
 type PollResponse =
@@ -501,6 +600,7 @@ async function runPreview() {
 
     truncated.value = res.truncated
     ocrUsed.value = res.ocrUsed === true
+    healthWarnings.value = res.warnings ?? []
     chunks.value = res.chunks.map(c => ({
       included: true,
       title: c.title,
@@ -557,6 +657,29 @@ function commitTag(chunk: { tags: string[] }) {
 
 function removeTag(chunk: { tags: string[] }, tag: string) {
   chunk.tags = chunk.tags.filter(x => x !== tag)
+}
+
+// ── Question editor (per chunk) ───────────────────────────
+// 「客人問法」跟標題/內容一起進向量,是檢索命中的關鍵;AI 補的在這裡逐題把關。
+// 上限 3 句與後端 bulk-create 的截斷一致。
+const editingQuestionIdx = ref<number | null>(null)
+const questionInput = ref('')
+const questionInputRef = ref<Array<{ focus: () => void }> | { focus: () => void } | null>(null)
+
+function startAddQuestion(idx: number) {
+  editingQuestionIdx.value = idx
+  questionInput.value = ''
+  nextTick(() => {
+    const el = Array.isArray(questionInputRef.value) ? questionInputRef.value[0] : questionInputRef.value
+    el?.focus?.()
+  })
+}
+
+function commitQuestion(chunk: { questions: string[] }) {
+  const q = questionInput.value.trim()
+  if (q && !chunk.questions.includes(q) && chunk.questions.length < 3) chunk.questions.push(q)
+  questionInput.value = ''
+  editingQuestionIdx.value = null
 }
 
 // ── Bulk selection ────────────────────────────────────────
@@ -644,6 +767,7 @@ function resetAll() {
   existingMatches.value = []
   truncated.value = false
   ocrUsed.value = false
+  healthWarnings.value = []
   result.value = null
   sourceMeta.value = { type: '', name: '', url: '' }
   if (fileInputEl.value) fileInputEl.value.value = ''

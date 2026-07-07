@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { isProbablyScannedPdf, resolveInternalUrl } from './ai-source-extractors'
+import * as XLSX from 'xlsx'
+import { extractXlsxCards, extractXlsxText, isProbablyScannedPdf, resolveInternalUrl } from './ai-source-extractors'
 
 function extracted(rawLength: number, pages: number) {
   return { text: 'x'.repeat(Math.min(rawLength, 100)), rawLength, meta: { pages } }
@@ -52,5 +53,119 @@ describe('isProbablyScannedPdf', () => {
   it('拿不到頁數時退回總字數判斷', () => {
     expect(isProbablyScannedPdf(extracted(10, 0))).toBe(true)
     expect(isProbablyScannedPdf(extracted(500, 0))).toBe(false)
+  })
+})
+
+// ── xlsx：說明分頁跳過 + 合併儲存格展開 ─────────────────────────────
+
+/** 在記憶體組一本 xlsx。sheets: [{ name, rows, merges?, origin?, ref? }]；merges 用 xlsx 的 s/e（含）格式 */
+function makeXlsx(
+  sheets: Array<{ name: string; rows: string[][]; merges?: XLSX.Range[]; origin?: string; ref?: string }>,
+): Buffer {
+  const wb = XLSX.utils.book_new()
+  for (const s of sheets) {
+    const ws = s.origin
+      ? XLSX.utils.sheet_add_aoa(XLSX.utils.aoa_to_sheet([['']]), s.rows, { origin: s.origin })
+      : XLSX.utils.aoa_to_sheet(s.rows)
+    // 手動覆寫 !ref 以模擬「資料不從 A1 起算」的真實檔（aoa_to_sheet 會把 !ref 正規化回 A1）
+    if (s.ref) ws['!ref'] = s.ref
+    if (s.merges) ws['!merges'] = s.merges
+    XLSX.utils.book_append_sheet(wb, ws, s.name)
+  }
+  return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
+}
+
+const faqRows = [
+  ['客人會問的問題', '答案'],
+  ['退款多久?', '3-5 個工作天'],
+  ['運費多少?', '滿千免運'],
+]
+const guideRows = [
+  ['📖 FAQ 範本使用說明', ''],
+  ['1', '在 FAQ 分頁填寫,一列一題'],
+]
+
+describe('extractXlsxCards — 說明分頁 / 合併儲存格', () => {
+  it('跳過「使用說明」類分頁,只匯資料分頁(官方範本上傳不會混進說明卡)', () => {
+    const buf = makeXlsx([
+      { name: 'FAQ', rows: faqRows },
+      { name: '使用說明', rows: guideRows },
+    ])
+    const res = extractXlsxCards(buf)
+    expect(res).not.toBeNull()
+    expect(res!.sheetCount).toBe(1)
+    expect(res!.cards.map(c => c.title)).toEqual(['退款多久?', '運費多少?'])
+  })
+
+  it('整本只有說明類名稱的分頁 → 照讀(不讓使用者面對空結果)', () => {
+    const buf = makeXlsx([{ name: '使用說明', rows: faqRows }])
+    const res = extractXlsxCards(buf)
+    expect(res).not.toBeNull()
+    expect(res!.cards.length).toBe(2)
+  })
+
+  it('直向合併儲存格自動展開救回被合併列,同標題併成一張卡、內容相接,回報 mergeCount', () => {
+    const rows = [
+      ['問題', '答案'],
+      ['退款流程', '第一步'],
+      ['', '第二步'], // 標題欄與上一列合併
+    ]
+    const buf = makeXlsx([{
+      name: 'FAQ',
+      rows,
+      merges: [{ s: { r: 1, c: 0 }, e: { r: 2, c: 0 } }],
+    }])
+    const res = extractXlsxCards(buf)
+    expect(res).not.toBeNull()
+    expect(res!.mergeCount).toBe(1)
+    // 兩列同標題「退款流程」→ 併成一張卡（不再是會被同步吃掉的重複卡）
+    expect(res!.cards.map(c => c.title)).toEqual(['退款流程'])
+    expect(res!.cards[0]!.content).toContain('第一步')
+    expect(res!.cards[0]!.content).toContain('第二步')
+  })
+
+  it('純橫向合併（標題橫幅）不計入 mergeCount（沒展開就不該報「已自動展開」）', () => {
+    const buf = makeXlsx([{
+      name: 'FAQ',
+      rows: [['問題', '答案'], ['退款', '3 天'], ['運費', '滿千免運']],
+      merges: [{ s: { r: 0, c: 0 }, e: { r: 0, c: 1 } }], // A1:B1 純橫向
+    }])
+    const res = extractXlsxCards(buf)
+    expect(res).not.toBeNull()
+    expect(res!.mergeCount).toBe(0)
+  })
+
+  it('資料不從 A1 起算（!ref=A3:B5）時,合併座標仍對齊 !ref 原點,救回被合併列', () => {
+    // !merges 是絕對格線座標（A4:A5 = r3-r4）,但 sheet_to_json 回傳的列相對於 !ref（A3）原點。
+    // 未校正原點時 rows[3] 會是 undefined → 合併被跳過 → '第二步' 那列因沒標題被整列丟掉。
+    const buf = makeXlsx([{
+      name: 'FAQ',
+      rows: [
+        ['問題', '答案'],
+        ['退款流程', '第一步'],
+        ['', '第二步'], // 標題欄與上一列合併
+      ],
+      origin: 'A3',
+      ref: 'A3:B5',
+      merges: [{ s: { r: 3, c: 0 }, e: { r: 4, c: 0 } }],
+    }])
+    const res = extractXlsxCards(buf)
+    expect(res).not.toBeNull()
+    expect(res!.mergeCount).toBe(1)
+    // 救回被合併列後同標題併成一張卡（若沒對齊原點,'第二步' 那列會整列漏掉 → cards 只有 1 張但缺內容）
+    expect(res!.cards.map(c => c.title)).toEqual(['退款流程'])
+    expect(res!.cards[0]!.content).toContain('第二步')
+  })
+})
+
+describe('extractXlsxText — 說明分頁', () => {
+  it('LLM 切卡的散文路徑同樣跳過說明分頁', () => {
+    const buf = makeXlsx([
+      { name: '產品介紹', rows: [['我們的產品線涵蓋家電與咖啡設備'], ['歡迎詢問']] },
+      { name: 'README', rows: guideRows },
+    ])
+    const res = extractXlsxText(buf)
+    expect(res.text).toContain('產品介紹')
+    expect(res.text).not.toContain('範本使用說明')
   })
 })

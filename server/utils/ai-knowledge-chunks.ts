@@ -117,8 +117,13 @@ export async function createKnowledgeChunk(
   )
 }
 
-interface UpdateChunkParams extends ChunkInput {
+interface UpdateChunkParams extends Omit<ChunkInput, 'tags'> {
   chunkId: string
+  /**
+   * 標籤；undefined = 呼叫端沒提供 → 保留既有標籤（同 questions）。
+   * re-sync 補問法時某卡沒補到 tags 就傳 undefined，避免把先前補好的標籤洗成空陣列。
+   */
+  tags?: string[]
   /** title 或 content 有變就要重新索引（兩者都會進 embedding）；只改標籤可跳過 */
   contentChanged: boolean
   /**
@@ -153,8 +158,12 @@ export async function updateKnowledgeChunk(
   const baseUpdate: Record<string, unknown> = {
     title: params.title,
     content: params.content,
-    tags: params.tags,
     updatedAt: now,
+  }
+  // tags / questions 都採「undefined = 保留既有值」：re-sync 補問法時某卡沒補到，
+  // 就不要帶欄位，才不會把先前補好的洗成空陣列。
+  if (params.tags !== undefined) {
+    baseUpdate.tags = params.tags
   }
   if (params.questions !== undefined) {
     baseUpdate.questions = params.questions

@@ -11,7 +11,7 @@ import {
   MAX_OCR_PAGES,
   MAX_RAW_TEXT_LEN,
 } from '~~/server/utils/ai-source-extractors'
-import { parseGoogleSheetUrl, readGoogleSheetAsCards } from '~~/server/utils/google-sheets'
+import { parseGoogleSheetUrl, readGoogleSheetAsCards, sheetHealthWarnings } from '~~/server/utils/google-sheets'
 import {
   cleanupExpiredPreviewJobs,
   JOB_TTL_MS,
@@ -67,10 +67,13 @@ export default defineEventHandler(async (event) => {
     work.sourceName = `Google Sheet（${sheet.sheetTitle}）`
     work.sourceUrl = url
     work.sourceType = 'gsheet'
-    work.truncated = sheet.truncated
-    work.meta = { rows: sheet.rowCount, sheet: sheet.sheetTitle }
+    work.truncated = sheet.stats.truncatedByCap
+    work.meta = { rows: sheet.stats.rowCount, sheet: sheet.sheetTitle }
     work.chunks = sheet.cards.map(c => cardToChunk(c))
-    work.phase = 'finalize' // 一列一卡，不走 LLM（gsheet 不做總覽卡，同舊行為）
+    work.warnings = sheetHealthWarnings(sheet.cards, sheet.stats, sheet.mergeCount)
+    // 一列一卡不走 LLM 切卡，但卡片沒有 questions（客人問法）→ 進 enrich 逐批補
+    // （只補不改；gsheet 不做總覽卡，enrich 完直接 finalize）
+    work.phase = work.chunks.length ? 'enrich' : 'finalize'
   }
   else if (type === 'file') {
     const fileName = String(body?.fileName ?? '').trim()
@@ -111,11 +114,13 @@ export default defineEventHandler(async (event) => {
     else if (isXlsx) {
       const xlsx = extractXlsxCards(buffer)
       if (xlsx) {
-        // 乾淨表格 → 一列一卡，不走 LLM；有需要總覽卡則交給輪詢的 overview 階段合成。
-        work.truncated = xlsx.truncated
-        work.meta = { rows: xlsx.rowCount, sheets: xlsx.sheetCount }
+        // 乾淨表格 → 一列一卡，不走 LLM 切卡；先進 enrich 逐批補 questions（只補不改），
+        // 補完由狀態機決定要不要接 overview（wantOverview 且 ≥2 張）。
+        work.truncated = xlsx.stats.truncatedByCap
+        work.meta = { rows: xlsx.stats.rowCount, sheets: xlsx.sheetCount }
         work.chunks = xlsx.cards.map(c => cardToChunk(c))
-        work.phase = (wantOverview && xlsx.cards.length >= 2) ? 'overview' : 'finalize'
+        work.warnings = sheetHealthWarnings(xlsx.cards, xlsx.stats, xlsx.mergeCount)
+        work.phase = 'enrich'
       }
       else {
         setChunkingFromExtracted(work, extractXlsxText(buffer))
