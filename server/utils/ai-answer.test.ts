@@ -14,6 +14,7 @@ import {
   dedupeByTitleContainment,
   collapseSameProduct,
   productNamedInQuery,
+  buildNamedGuessConfirm,
 } from './ai-answer'
 import type { SimilarChunk } from './ai-knowledge-chunks'
 import { detectSensitiveTopic } from '~~/shared/types/ai-knowledge'
@@ -412,7 +413,7 @@ describe('productNamedInQuery', () => {
       g(c('bal', 'Balzano百佳諾義式咖啡機')),
       g(c('ib', 'iBarista 咖啡機保固與客服')),
     ]
-    expect(productNamedInQuery('ibarista保固多久', groups)?.id).toBe('ib')
+    expect(productNamedInQuery('ibarista保固多久', groups)?.card.id).toBe('ib')
   })
 
   it('精確型號落在「非代表卡」的成員上也能指名 → 回該組代表卡（P1-2/P1-3 交互）', () => {
@@ -421,7 +422,7 @@ describe('productNamedInQuery', () => {
       g(c('nwt-rep', 'NWT威技16L高效抽取型除濕機'), c('nwt-wdh', 'NWT威技一級能效16L除濕機WDH-16EF')),
       g(c('up', '上好ㄟ抽取式除濕機')),
     ]
-    expect(productNamedInQuery('WDH-16EF這台保固多久', groups)?.id).toBe('nwt-rep')
+    expect(productNamedInQuery('WDH-16EF這台保固多久', groups)?.card.id).toBe('nwt-rep')
   })
 
   it('純中文 query（無英數品牌詞）→ 不算指名 → null（避免中文 bigram 跨界假命中）', () => {
@@ -447,5 +448,70 @@ describe('productNamedInQuery', () => {
       g(c('ib', 'iBarista coffee machine')),
     ]
     expect(productNamedInQuery('coffee good?', groups)).toBeNull()
+  })
+
+  it('中文品名 whole-segment 指名（粒粒安 到貨）→ 回該組代表卡，tier=exact', () => {
+    const groups = [
+      g(c('rice', '粒粒安 飛利浦 無塗層 IH 智慧電子鍋 (HD5225/HD7000)')),
+      g(c('dry', '上好ㄟ抽取式除濕機 出貨進度')),
+      g(c('pkt', 'Poketomo 小獴友 出貨時間')),
+    ]
+    const m = productNamedInQuery('我有買粒粒安的早鳥，想問大概何時可收到貨', groups)
+    expect(m?.card.id).toBe('rice')
+    expect(m?.tier).toBe('exact')
+  })
+
+  it('中文品名打錯字（粒立安）→ 編輯距離容錯仍指名，tier=fuzzy', () => {
+    const groups = [
+      g(c('rice', '粒粒安 飛利浦 IH 電子鍋')),
+      g(c('dry', '上好ㄟ抽取式除濕機')),
+    ]
+    const m = productNamedInQuery('粒立安什麼時候到貨', groups)
+    expect(m?.card.id).toBe('rice')
+    expect(m?.tier).toBe('fuzzy')
+  })
+
+  it('中文品名諧音（利利安 / 麗麗安）→ 拼音整段吻合仍指名，tier=fuzzy', () => {
+    const groups = [
+      g(c('rice', '粒粒安 飛利浦 IH 電子鍋')),
+      g(c('dry', '上好ㄟ抽取式除濕機')),
+    ]
+    const li = productNamedInQuery('利利安到貨了嗎', groups)
+    expect(li?.card.id).toBe('rice')
+    expect(li?.tier).toBe('fuzzy')
+    expect(productNamedInQuery('麗麗安到貨了嗎', groups)?.card.id).toBe('rice')
+  })
+
+  it('中文品名 whole-segment 被多組共用（都叫 除濕機）→ 不算指名 → null', () => {
+    const groups = [
+      g(c('a', '除濕機 A 型')),
+      g(c('b', '除濕機 B 型')),
+    ]
+    expect(productNamedInQuery('除濕機保固多久', groups)).toBeNull()
+  })
+
+  it('擦邊球不因「品類+屬性」長字串重疊而誤命中（除濕機保固多久 vs 除濕機保固優惠）→ null', () => {
+    const groups = [
+      g(c('a', 'GPLUS除濕機保固優惠')),
+      g(c('b', '上好ㄟ抽取式除濕機')),
+    ]
+    expect(productNamedInQuery('除濕機保固多久', groups)).toBeNull()
+  })
+})
+
+describe('buildNamedGuessConfirm', () => {
+  const c = (id: string, title: string): SimilarChunk => chunk({ id, title })
+
+  it('造出單一猜測選項 + 帶產品名的反問語（去掉品號括號）', () => {
+    const payload = buildNamedGuessConfirm(c('rice', '粒粒安 飛利浦 無塗層 IH 智慧電子鍋 (HD5225/HD7000)'))
+    expect(payload.options).toHaveLength(1)
+    expect(payload.options[0]!.chunkId).toBe('rice')
+    // 送出的 text 用完整原標題（供下一輪精確命中）
+    expect(payload.options[0]!.title).toBe('粒粒安 飛利浦 無塗層 IH 智慧電子鍋 (HD5225/HD7000)')
+    // 反問語含產品名、且不含品號括號
+    expect(payload.clarification).toContain('粒粒安')
+    expect(payload.clarification).not.toContain('HD5225')
+    // 按鈕 label ≤ 20（LINE 規格）
+    expect(payload.options[0]!.label!.length).toBeLessThanOrEqual(20)
   })
 })

@@ -21,6 +21,7 @@
     "google-auth-library": "^10.6.1",
     "nuxt": "^4.4.2",
     "pdf-lib": "^1.17.1",
+    "pinyin-pro": "^3.28.1",
     "unpdf": "^1.6.2",
     "uuid": "^13.0.0",
     "vue": "^3.5.32",

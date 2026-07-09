@@ -19,6 +19,7 @@
  *      （例外：top-1 命中總覽卡 isOverview 時改用 grounding 門檻，因其 embedding 被品項清單稀釋分數偏低）
  *   8. 否則 → answered，回傳 answer + sources
  */
+import { pinyin } from 'pinyin-pro'
 import { searchChunksByIdentifierTag, searchSimilarChunks, type SimilarChunk } from './ai-knowledge-chunks'
 import { getCatalogSourceIds } from './ai-knowledge-sources'
 import { embedQuery, estimateTokens, generateJson, generateText } from './gemini'
@@ -611,36 +612,143 @@ export function collapseSameProduct(chunks: SimilarChunk[]): SimilarChunk[] {
   return groupSameProduct(chunks).map(g => g[0]!)
 }
 
+const LATIN_RUN_RE = /[a-z0-9]{3,}/g
+const CJK_RUN_RE = /[一-鿿]{2,}/g
+
+/** Levenshtein 編輯距離（短字串用，O(n·m)）。 */
+function editDistance(a: string, b: string): number {
+  const m = a.length
+  const n = b.length
+  if (!m) return n
+  if (!n) return m
+  let prev = Array.from({ length: n + 1 }, (_, j) => j)
+  let cur = new Array<number>(n + 1).fill(0)
+  for (let i = 1; i <= m; i++) {
+    cur[0] = i
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      cur[j] = Math.min(prev[j]! + 1, cur[j - 1]! + 1, prev[j - 1]! + cost)
+    }
+    ;[prev, cur] = [cur, prev]
+  }
+  return prev[n]!
+}
+
+/** query 是否有「與 id 等長 ±1 的視窗」編輯距離 ≤ maxDist（容錯打錯字、多/漏一字）。 */
+function hasTypoWindow(query: string, id: string, maxDist: number): boolean {
+  const w = id.length
+  for (const width of [w - 1, w, w + 1]) {
+    if (width < 2 || width > query.length) continue
+    for (let i = 0; i + width <= query.length; i++) {
+      if (editDistance(query.slice(i, i + width), id) <= maxDist) return true
+    }
+  }
+  return false
+}
+
+/** toneless 拼音音節序列（每字一節；查詢失敗回 []）。 */
+function pinyinSyllables(s: string): string[] {
+  if (!s) return []
+  try {
+    return pinyin(s, { toneType: 'none', type: 'array' }) as string[]
+  }
+  catch {
+    return []
+  }
+}
+
+/** needle 的音節序列是否為 hay 的「連續子序列」（諧音整段命中）。 */
+function hasSyllableRun(hay: string[], needle: string[]): boolean {
+  if (!needle.length || needle.length > hay.length) return false
+  for (let i = 0; i + needle.length <= hay.length; i++) {
+    let ok = true
+    for (let j = 0; j < needle.length; j++) {
+      if (hay[i + j] !== needle[j]) { ok = false; break }
+    }
+    if (ok) return true
+  }
+  return false
+}
+
 /**
- * P1-3：客人這句是否已用「英數品牌 / 型號詞」明確指名其中一個產品群組
- * （例 query 含 "ibarista" / "gplus" / "nwt" / "balzano" / 型號 "wdh-16ef" / "b001"）。
+ * P1-3（擴充版）：客人這句是否已明確指名其中一個產品群組 → 指名了就別反問，直接作答。
  *
- * 只認英數 run（≥3 碼、whole-run 比對）：這類是無歧義的產品識別碼，且不像中文 bigram
- * 會在詞界產生假命中（「除濕機保固」會切出跨界 bigram「機保」誤命中）。純中文品名
- * （奇美燈、威技）不在此處理——那屬知識庫資料層（補卡 / 標題補品牌字）。
+ * 兩層比對，兩層都套「跨群組唯一」護欄（某識別碼同時出現在 2+ 群組＝品類共用詞，不算指名，
+ * 交給反問），且僅「唯一一組」命中才回傳，命中多組一律 null：
  *
- * 識別碼取「整個群組所有成員卡」標題的英數 run 聯集（不只代表卡）——否則客人給的精確型號
- * （WDH-16EF）若落在非代表卡，會因為代表卡標題沒這串而判不出指名。
- * 條件：某英數詞同時出現在 query 與「唯一一個」群組（被多群組共用的品類英文詞不算指名）。
- * 唯一命中 → 回該群組代表卡（指名了就別反問，直接作答）；否則 null。
+ *  Tier A 精確指名：
+ *    - 英數 run（≥3、whole-run）：品牌 / 型號識別碼（ibarista / gplus / wdh-16ef…）。
+ *    - 中文 whole-segment 子字串：標題以空白/英數切出的整段中文詞（「粒粒安」「奇美」「威技」），
+ *      整段出現在 query 即命中。用「整段」而非 bigram，避免「除濕機保固」切出跨界「機保」的假命中。
+ *
+ *  Tier B 擦邊球（只在 Tier A 全空時啟用，且只吃 ≥3 字中文識別碼，壓低誤命中）：
+ *    - 打錯字：query 的等長 ±1 視窗與識別碼編輯距離 ≤ 1（「粒立安」→「粒粒安」）。
+ *    - 諧音：toneless 拼音音節序列整段吻合（「利利安 / 麗麗安」→「粒粒安」皆 li-li-an）。
+ *      拼音要求「整段音節相等」，故「除濕機保固多久」不會諧音誤命中「除濕機保固優惠」。
+ *
+ * 識別碼取「整組所有成員卡」標題的聯集（不只代表卡）——精確型號（WDH-16EF）落在非代表卡也算指名。
+ * 命中群組回其代表卡（分數最高那張）+ 命中層級（tier）；否則 null。
+ * tier 讓呼叫端分流：exact（打對品名/型號）可視為高信心直接作答；fuzzy（諧音/錯字）在
+ * grounding 不足時改反問一張「單一猜測」確認卡，而不是硬答（可能是同音人名）。
  */
-export function productNamedInQuery(query: string, groups: SimilarChunk[][]): SimilarChunk | null {
-  const latin = (s: string): Set<string> => new Set(String(s || '').toLowerCase().match(/[a-z0-9]{3,}/g) ?? [])
-  const q = latin(query)
-  if (!q.size) return null
-  const groupTokens = groups.map((members) => {
-    const s = new Set<string>()
-    for (const m of members) for (const t of latin(m.title)) s.add(t)
-    return s
+export interface NamedProductMatch {
+  card: SimilarChunk
+  tier: 'exact' | 'fuzzy'
+}
+
+export function productNamedInQuery(query: string, groups: SimilarChunk[][]): NamedProductMatch | null {
+  const rawQuery = String(query || '')
+  if (!rawQuery || !groups.length) return null
+  const qLatin = new Set(rawQuery.toLowerCase().match(LATIN_RUN_RE) ?? [])
+
+  // 每組識別碼集合：英數 run(≥3) + 中文 whole-segment(≥2)，取自組內所有成員卡標題。
+  const idents = groups.map((members) => {
+    const lat = new Set<string>()
+    const cjk = new Set<string>()
+    for (const m of members) {
+      const t = String(m.title || '')
+      for (const tok of t.toLowerCase().match(LATIN_RUN_RE) ?? []) lat.add(tok)
+      for (const seg of t.match(CJK_RUN_RE) ?? []) cjk.add(seg)
+    }
+    return { lat, cjk }
   })
-  const hits: number[] = []
-  groupTokens.forEach((tt, idx) => {
-    const discriminating = [...tt].some(tok =>
-      q.has(tok) && groupTokens.every((other, j) => j === idx || !other.has(tok)),
-    )
-    if (discriminating) hits.push(idx)
+  // 「只屬於這一組」才有鑑別力：被 2+ 組共用的品類詞（coffee / 除濕機）不算指名。
+  const uniqLat = (idx: number, tok: string) => idents.every((o, j) => j === idx || !o.lat.has(tok))
+  const uniqCjk = (idx: number, seg: string) => idents.every((o, j) => j === idx || !o.cjk.has(seg))
+
+  // ── Tier A：精確指名 ──
+  const exact: number[] = []
+  idents.forEach((id, idx) => {
+    const latHit = [...id.lat].some(tok => qLatin.has(tok) && uniqLat(idx, tok))
+    const cjkHit = [...id.cjk].some(seg => uniqCjk(idx, seg) && rawQuery.includes(seg))
+    if (latHit || cjkHit) exact.push(idx)
   })
-  return hits.length === 1 ? groups[hits[0]!]![0]! : null
+  if (exact.length) return exact.length === 1 ? { card: groups[exact[0]!]![0]!, tier: 'exact' } : null
+
+  // ── Tier B：擦邊球（打錯字 / 諧音），只吃 ≥3 字中文識別碼 ──
+  const qSyll = pinyinSyllables(rawQuery)
+  const fuzzy: number[] = []
+  idents.forEach((id, idx) => {
+    const hit = [...id.cjk].some((seg) => {
+      if (seg.length < 3 || !uniqCjk(idx, seg)) return false
+      return hasTypoWindow(rawQuery, seg, 1) || hasSyllableRun(qSyll, pinyinSyllables(seg))
+    })
+    if (hit) fuzzy.push(idx)
+  })
+  return fuzzy.length === 1 ? { card: groups[fuzzy[0]!]![0]!, tier: 'fuzzy' } : null
+}
+
+/**
+ * 為「諧音 / 打錯字指名」造一張單一猜測的確認卡：客人打「莉莉安」實指「粒粒安」，但向量相似度
+ * 沒過 grounding 門檻時，不硬答（可能是同音人名）也不默默轉真人，改問一次「您是不是想找 X」。
+ * 只放一個猜測選項；handler 會自動補「找真人」按鈕。客人點產品 → 下一輪以完整標題精確命中直接作答。
+ */
+export function buildNamedGuessConfirm(card: SimilarChunk): DisambiguationPayload {
+  const short = card.title.replace(/\s*[（(].*$/, '').replace(/\s+/g, ' ').trim().slice(0, 30) || card.title.slice(0, 30)
+  return {
+    clarification: `您是想了解「${short}」嗎？可以點下方按鈕，或改由真人為您服務 😊`,
+    options: [{ chunkId: card.id, title: card.title, label: short.slice(0, 20) }],
+  }
 }
 
 /**
@@ -1058,14 +1166,47 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
 
   // ── 5. grounding 檢查 ────────────────────────────────────
   if (!chunks.length || topSimilarity < getGroundingThreshold(settings)) {
-    await record({
-      invocations: 1,
-      handoffs: 1,
-      embeddingTokens: embedTokenEstimate,
-      inputTokens: routerIn,
-      outputTokens: routerOut,
-    })
-    return handoff('no_grounding', chunks)
+    // 指名豁免：客人已點名某產品，但 embedding 沒過門檻。
+    // - exact（打對品名 / 型號）→ 視為高信心來源（比照識別碼 tag 命中），把該卡拉過門檻續答；
+    //   若卡片內容其實答不了，下方 hasInfo 護欄仍會轉真人，不會硬掰。
+    // - fuzzy（諧音 / 打錯字）→ 不硬答（可能只是同音人名），改反問一張「單一猜測 + 找真人」確認卡。
+    if (chunks.length && namedProduct) {
+      if (namedProduct.tier === 'exact') {
+        const gate = Math.max(getGroundingThreshold(settings), effectiveConfidenceThreshold(namedProduct.card, settings))
+        namedProduct.card.similarity = Math.max(namedProduct.card.similarity, gate)
+        chunks.sort((a, b) => b.similarity - a.similarity)
+        dedupedChunks.sort((a, b) => b.similarity - a.similarity)
+        topSimilarity = chunks[0]!.similarity
+        // 續走下方正常 answer 流程（不 return）
+      }
+      else {
+        await record({
+          invocations: 1,
+          disambiguations: 1,
+          embeddingTokens: embedTokenEstimate,
+          inputTokens: routerIn,
+          outputTokens: routerOut,
+        })
+        return {
+          decision: 'disambiguate',
+          answer: '',
+          confidence: topSimilarity,
+          sources: chunks.map(c => ({ chunkId: c.id, title: c.title, similarity: c.similarity })),
+          handoffReason: null,
+          disambiguation: buildNamedGuessConfirm(namedProduct.card),
+        }
+      }
+    }
+    else {
+      await record({
+        invocations: 1,
+        handoffs: 1,
+        embeddingTokens: embedTokenEstimate,
+        inputTokens: routerIn,
+        outputTokens: routerOut,
+      })
+      return handoff('no_grounding', chunks)
+    }
   }
 
   // ── 6. 生成回答 ──────────────────────────────────────────

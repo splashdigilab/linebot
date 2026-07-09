@@ -296,7 +296,22 @@
       "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=560,780 --screenshot=/private/tmp/claude-501/-Users-kevin-Documents-Github-linebot/a0345e43-6347-4657-aa0a-1e0a09595e01/scratchpad/f-hero.png http://localhost:3000/)",
       "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless --disable-gpu --hide-scrollbars --window-size=1160,4450 --screenshot=/private/tmp/claude-501/-Users-kevin-Documents-Github-linebot/a0345e43-6347-4657-aa0a-1e0a09595e01/scratchpad/f-road.png http://localhost:3000/)",
       "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=1120,3520 --screenshot=/private/tmp/claude-501/-Users-kevin-Documents-Github-linebot/a0345e43-6347-4657-aa0a-1e0a09595e01/scratchpad/cmp-v2b.png http://localhost:3000/)",
-      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=430,6800 --screenshot=/private/tmp/claude-501/-Users-kevin-Documents-Github-linebot/a0345e43-6347-4657-aa0a-1e0a09595e01/scratchpad/cmp-m2.png http://localhost:3000/)"
+      "Bash('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' --headless --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --window-size=430,6800 --screenshot=/private/tmp/claude-501/-Users-kevin-Documents-Github-linebot/a0345e43-6347-4657-aa0a-1e0a09595e01/scratchpad/cmp-m2.png http://localhost:3000/)",
+      "Bash(node --env-file=.env_myfeel --experimental-strip-types /private/tmp/claude-501/-Users-kevin-Documents-Github-linebot/d364d1ae-de96-4a07-99d6-cbdca00963a7/scratchpad/inspect-poketomo.ts)",
+      "Bash(cp /private/tmp/claude-501/-Users-kevin-Documents-Github-linebot/d364d1ae-de96-4a07-99d6-cbdca00963a7/scratchpad/inspect-poketomo.ts /Users/kevin/Documents/Github/linebot/scripts/_tmp-inspect-poketomo.ts)",
+      "Bash(node --env-file=.env_myfeel --experimental-strip-types scripts/_tmp-inspect-poketomo.ts)",
+      "Bash(node --env-file=.env_myfeel --experimental-strip-types scripts/_tmp-repro-poketomo.ts \"poketomo是什麼\")",
+      "Bash(node --env-file=.env --experimental-strip-types scripts/_tmp-repro-poketomo.ts \"poketomo是什麼\")",
+      "Bash(node --env-file=.env --experimental-strip-types scripts/_tmp-card-detail.ts)",
+      "Bash(grep -viE \"ai-answer.ts$\")",
+      "Bash(timeout 6 npm view pinyin-pro version)",
+      "Bash(npm view *)",
+      "Bash(node ./node_modules/vitest/vitest.mjs run /private/tmp/claude-501/-Users-kevin-Documents-Github-linebot/39a5990d-aa85-400a-8b27-b9b78c0e674a/scratchpad/zzz-named-adv.test.ts)",
+      "Bash(sed -i '' \"s#/Users/kevin/Documents/Github/linebot/server/utils/ai-answer#./ai-answer#; s#/Users/kevin/Documents/Github/linebot/server/utils/ai-knowledge-chunks#./ai-knowledge-chunks#\" server/utils/zzz-named-adv.test.ts)",
+      "Bash(node ./node_modules/vitest/vitest.mjs run server/utils/zzz-named-adv.test.ts)",
+      "Bash(node --env-file=.env ./node_modules/vitest/vitest.mjs run server/utils/zzz-discover.test.ts)",
+      "Bash(node --env-file=.env ./node_modules/vitest/vitest.mjs run server/utils/zzz-audit.test.ts)",
+      "Bash(python3 -c 'import json;d=json.load\\(open\\('\\\\''__TRACKED_VAR__'\\\\''\\)\\);print\\(f'\\\\''已完成 {len\\(d\\)}/55'\\\\''\\)')"
     ],
     "additionalDirectories": [
       "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",
