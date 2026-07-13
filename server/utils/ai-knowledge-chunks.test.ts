@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildEmbeddingText, extractIdentifierRuns } from './ai-knowledge-chunks'
+import { buildEmbeddingText, extractIdentifierRuns, pickCardProduct } from './ai-knowledge-chunks'
 import {
   chunkTextWithLlm,
   isChunkTruncationError,
@@ -35,6 +35,36 @@ describe('buildEmbeddingText', () => {
   it('空 title / 空 questions 不留空行', () => {
     expect(buildEmbeddingText('', '內容', [])).toBe('內容')
     expect(buildEmbeddingText('標題', '內容', ['', '  '])).toBe('標題\n內容')
+  })
+
+  it('productName 前置在最前段（治本：讓指名檢索命中無品牌的屬性卡）', () => {
+    expect(buildEmbeddingText('保護代碼EH說明與排除', '代碼 EH 表示過電壓。', undefined, '粒粒安 飛利浦 IH 電子鍋'))
+      .toBe('粒粒安 飛利浦 IH 電子鍋\n保護代碼EH說明與排除\n代碼 EH 表示過電壓。')
+  })
+
+  it('沒給 productName 時行為不變（向後相容）', () => {
+    expect(buildEmbeddingText('標題', '內容', ['問法'])).toBe('標題\n問法\n內容')
+    expect(buildEmbeddingText('標題', '內容', ['問法'], '')).toBe('標題\n問法\n內容')
+  })
+})
+
+describe('pickCardProduct', () => {
+  const NAMES = ['兩全奇美燈', '上好ㄟ抽取式除濕機', 'SHARP iBarista 智慧咖啡機', 'GPLUS 除濕機']
+
+  it('卡標題含清單品名 → 認領該產品（優先於來源 fallback）', () => {
+    expect(pickCardProduct('兩全奇美燈產品特色', NAMES, '')).toBe('兩全奇美燈')
+    expect(pickCardProduct('上好ㄟ抽取式除濕機產品說明', NAMES, 'NWT 威技 除濕機')).toBe('上好ㄟ抽取式除濕機')
+    // 空白差異也要吃得到（正規化去空白）
+    expect(pickCardProduct('SHARP iBarista 智慧咖啡機水箱容量', NAMES, '')).toBe('SHARP iBarista 智慧咖啡機')
+  })
+
+  it('標題沒品名（維修卡）→ 退回來源繼承的 fallback', () => {
+    expect(pickCardProduct('保護代碼EH說明與排除', NAMES, '粒粒安 飛利浦 IH 電子鍋')).toBe('粒粒安 飛利浦 IH 電子鍋')
+    expect(pickCardProduct('保護代碼EH說明與排除', NAMES, '')).toBe('')
+  })
+
+  it('多個都命中 → 取最長（較精確）那個', () => {
+    expect(pickCardProduct('GPLUS 除濕機連續排水', ['除濕機', 'GPLUS 除濕機'], '')).toBe('GPLUS 除濕機')
   })
 })
 

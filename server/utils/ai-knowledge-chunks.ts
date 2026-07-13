@@ -61,8 +61,12 @@ export function validateChunkInput(input: ChunkInput): string | null {
  * - questions：客人是用問句提問、卡片是敘述句；把「常見問法」一起進向量
  *   能直接拉高 query-card 相似度（比調 grounding 門檻有效）。
  */
-export function buildEmbeddingText(title: string, content: string, questions?: string[]): string {
+export function buildEmbeddingText(title: string, content: string, questions?: string[], productName?: string): string {
   const parts = [
+    // 產品名放最前面：切卡常把「這是哪個產品」弄丟（維修卡標題只有「保護代碼EH」），
+    // 客人指名品牌問細節（「粒粒安 EH」「威技保固」）就撈不到。來源的正規產品名補在最前，
+    // 讓指名檢索命中，且避免同型號跨產品的屬性卡互相蓋掉。
+    String(productName || '').trim(),
     String(title || '').trim(),
     ...(questions ?? []).map(q => String(q).trim()).filter(Boolean),
     String(content || '').trim(),
@@ -208,6 +212,75 @@ export async function updateKnowledgeChunk(
  * 月用量文件連打（Firestore 單文件 ~1 write/s 建議值），被節流的寫入會靜默漏記——
  * 改用回傳的 embeddingTokens 自行加總、每批記一次。
  */
+/**
+ * 治本：把「所屬產品的正規名稱」補進每張卡（來源層設 productName，卡片自動繼承）。
+ * 這是單一注入點——所有建卡 / 更新 / reindex / retry 都經過 runIndexOnChunk，
+ * 故在這裡解析來源 productName、寫進卡片欄位、並前置到 embedding text，一處到位。
+ * 依 sourceId 快取，reindex-all 幾百張只讀 ~來源數 次。
+ */
+const SOURCE_PRODUCT_TTL_MS = 60_000
+const sourceProductCache = new Map<string, { expiresAt: number; productName: string }>()
+
+export function invalidateSourceProductCache(sourceId?: string) {
+  if (sourceId) sourceProductCache.delete(sourceId)
+  else sourceProductCache.clear()
+}
+
+async function resolveSourceProductName(db: Firestore, sourceId: string | null): Promise<string> {
+  if (!sourceId) return ''
+  const cached = sourceProductCache.get(sourceId)
+  if (cached && cached.expiresAt > Date.now()) return cached.productName
+  let productName = ''
+  try {
+    const snap = await db.collection('knowledgeSources').doc(sourceId).get()
+    productName = String((snap.data() as any)?.productName ?? '').trim()
+  }
+  catch { /* 讀不到來源就當沒有產品名，不影響索引 */ }
+  sourceProductCache.set(sourceId, { expiresAt: Date.now() + SOURCE_PRODUCT_TTL_MS, productName })
+  return productName
+}
+
+/**
+ * 逐卡認領產品：來源層 productName 只在「一來源=一產品」時夠用，但同一產品的卡常散在
+ * 「公告 / 商品資訊 / 總覽」等通用來源（productName 空），於是同一台卻併不起來、又反問。
+ * 這裡讓「卡片標題自己就寫了品名」的卡直接認領該產品（優先於來源繼承），沒寫的才跟來源走。
+ * productNames 是該 workspace 的正規產品名清單（backfill / 建索引時維護）。
+ */
+export const PRODUCT_NAMES_COLLECTION = 'knowledgeProductIndex'
+const wsProductNamesCache = new Map<string, { expiresAt: number; names: string[] }>()
+
+export function invalidateWorkspaceProductNames(workspaceId?: string) {
+  if (workspaceId) wsProductNamesCache.delete(workspaceId)
+  else wsProductNamesCache.clear()
+}
+
+export async function getWorkspaceProductNames(db: Firestore, workspaceId: string): Promise<string[]> {
+  const cached = wsProductNamesCache.get(workspaceId)
+  if (cached && cached.expiresAt > Date.now()) return cached.names
+  let names: string[] = []
+  try {
+    const snap = await db.collection(PRODUCT_NAMES_COLLECTION).doc(workspaceId).get()
+    const raw = (snap.data() as any)?.names
+    if (Array.isArray(raw)) names = raw.map((s: unknown) => String(s).trim()).filter(Boolean)
+  }
+  catch { /* 沒清單就退回純來源繼承，不影響索引 */ }
+  wsProductNamesCache.set(workspaceId, { expiresAt: Date.now() + SOURCE_PRODUCT_TTL_MS, names })
+  return names
+}
+
+const normForProductMatch = (s: string) => String(s || '').toLowerCase().replace(/\s+/g, '')
+
+/** 卡標題若含清單裡的某產品名（正規化後子字串、取最長者）→ 用它；否則退回來源繼承的 fallback。 */
+export function pickCardProduct(title: string, productNames: string[], fallback: string): string {
+  const t = normForProductMatch(title)
+  let best = ''
+  for (const n of productNames) {
+    const nn = normForProductMatch(n)
+    if (nn.length >= 3 && t.includes(nn) && n.length > best.length) best = n
+  }
+  return best || fallback
+}
+
 export async function runIndexOnChunk(
   db: Firestore,
   chunkId: string,
@@ -215,11 +288,22 @@ export async function runIndexOnChunk(
   workspaceId?: string,
 ): Promise<{ id: string; status: KnowledgeChunkStatus; failureReason?: string; embeddingTokens: number }> {
   const ref = db.collection(KNOWLEDGE_CHUNKS_COLLECTION).doc(chunkId)
-  const embeddingTokens = estimateTokens(embeddingText)
+  // 解析並前置產品名：卡標題自己有品名 → 逐卡認領（優先）；否則退回來源層 productName。沒有就維持原樣。
+  let productName = ''
   try {
-    const values = await embedDocument(embeddingText)
+    const cd = (await ref.get()).data() as any
+    const sourceProduct = await resolveSourceProductName(db, cd?.sourceId ?? null)
+    const names = cd?.workspaceId ? await getWorkspaceProductNames(db, cd.workspaceId) : []
+    productName = pickCardProduct(String(cd?.title ?? ''), names, sourceProduct)
+  }
+  catch { /* 讀卡失敗就照原 embeddingText 走 */ }
+  const finalText = productName ? `${productName}\n${embeddingText}` : embeddingText
+  const embeddingTokens = estimateTokens(finalText)
+  try {
+    const values = await embedDocument(finalText)
     await ref.update({
       embedding: FieldValue.vector(values),
+      productName: productName || FieldValue.delete(),
       status: 'indexed' satisfies KnowledgeChunkStatus,
       lastIndexedAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
@@ -259,6 +343,8 @@ export interface SimilarChunk {
   sourceId: string | null
   /** 是否為列表頁合成的「總覽卡」；答題端據此跳過反問澄清 */
   isOverview: boolean
+  /** 所屬產品的正規名稱（來源層設定、索引時寫入）；答題 context 用來標明卡片是哪個產品的 */
+  productName?: string
 }
 
 /**
@@ -299,6 +385,7 @@ export async function searchSimilarChunks(
       similarity,
       sourceId: data?.sourceId ?? null,
       isOverview: data?.isOverview === true,
+      productName: String(data?.productName ?? '').trim() || undefined,
     }
   })
 }
@@ -392,6 +479,7 @@ export async function searchChunksByIdentifierTag(
         similarity: TAG_MATCH_SIMILARITY,
         sourceId: data?.sourceId ?? null,
         isOverview: data?.isOverview === true,
+        productName: String(data?.productName ?? '').trim() || undefined,
       }
     })
 }

@@ -36,6 +36,12 @@ export interface KnowledgeChunkDoc {
   retryCount?: number
   /** 來源 doc ID；手打輸入則為 null */
   sourceId: string | null
+  /**
+   * 所屬產品的正規名稱，索引時從來源層 productName 繼承（治本：切卡常把「這是哪個產品」弄丟，
+   * 維修/屬性卡標題只有「保護代碼EH」，客人指名品牌問細節就撈不到、或撈到了 LLM 也不敢答）。
+   * 進 embedding 最前段 + 答題 context 標明；來源沒設 productName 時不寫此欄位。
+   */
+  productName?: string
   /** 最後一次完成索引的時間（indexed 後才寫） */
   lastIndexedAt: Timestamp | null
   /** 使用者手動編輯後的時間戳；resync 時用來預設「保留人工版本」 */

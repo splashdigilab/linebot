@@ -15,6 +15,7 @@ import {
   collapseSameProduct,
   productNamedInQuery,
   buildNamedGuessConfirm,
+  cleanProductLabel,
 } from './ai-answer'
 import type { SimilarChunk } from './ai-knowledge-chunks'
 import { detectSensitiveTopic } from '~~/shared/types/ai-knowledge'
@@ -402,6 +403,18 @@ describe('collapseSameProduct', () => {
     // 前兩張同 source → 併；第三張不同 source → 留
     expect(collapseSameProduct(input).map(x => x.id)).toEqual(['a', 'd'])
   })
+
+  it('中文屬性卡跨來源、標題無共用英數 → 靠 productName 併（治本）', () => {
+    const cp = (id: string, title: string, sim: number, sourceId: string, productName: string): SimilarChunk =>
+      chunk({ id, title, similarity: sim, sourceId, productName })
+    const input = [
+      cp('a', '上好ㄟ抽取式除濕機產品說明', 0.77, 's_faq', '上好ㄟ 除濕機'),
+      cp('b', '上好ㄟ抽取式除濕機產品介紹', 0.75, 's_news', '上好ㄟ 除濕機'),
+      cp('c', 'GPLUS除濕機保固政策', 0.74, 's_gplus', 'GPLUS 除濕機'),
+    ]
+    // a、b 同 productName（不同 source、標題無共用英數）→ 併；c 不同產品 → 留
+    expect(collapseSameProduct(input).map(x => x.id)).toEqual(['a', 'c'])
+  })
 })
 
 describe('productNamedInQuery', () => {
@@ -508,10 +521,21 @@ describe('buildNamedGuessConfirm', () => {
     expect(payload.options[0]!.chunkId).toBe('rice')
     // 送出的 text 用完整原標題（供下一輪精確命中）
     expect(payload.options[0]!.title).toBe('粒粒安 飛利浦 無塗層 IH 智慧電子鍋 (HD5225/HD7000)')
-    // 反問語含產品名、且不含品號括號
+    // 反問語含產品名、且不含品號括號與裝飾符號
     expect(payload.clarification).toContain('粒粒安')
     expect(payload.clarification).not.toContain('HD5225')
+    expect(payload.clarification).not.toMatch(/[⟣⟢◇◆｜]/)
+    expect(payload.options[0]!.label!).not.toMatch(/[⟣⟢◇◆｜]/)
     // 按鈕 label ≤ 20（LINE 規格）
     expect(payload.options[0]!.label!.length).toBeLessThanOrEqual(20)
+  })
+})
+
+describe('cleanProductLabel', () => {
+  it('去掉裝飾符號與括號品號、收斂空白', () => {
+    expect(cleanProductLabel('⟣ 粒粒安 ⟢ 飛利浦 無塗層 IH 智慧電子鍋 (HD5225/HD7000)'))
+      .toBe('粒粒安 飛利浦 無塗層 IH 智慧電子鍋')
+    expect(cleanProductLabel('SHARP 頂級A咖｜iBarista 智慧咖啡機')).toBe('SHARP 頂級A咖 iBarista 智慧咖啡機')
+    expect(cleanProductLabel('★MYFEEL全品項總覽')).toBe('MYFEEL全品項總覽')
   })
 })
