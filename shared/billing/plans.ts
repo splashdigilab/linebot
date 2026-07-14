@@ -14,8 +14,8 @@
 //  組織只做帳號分組與帳務歸屬，本身不再有方案／額度。
 // ═══════════════════════════════════════════════════════════════════
 
-/** 計費方案 ID（掛在 workspace/OA 訂閱層）。 */
-export type BillingPlanId = 'free' | 'lite' | 'starter' | 'growth' | 'pro' | 'enterprise'
+/** 計費方案 ID（掛在 workspace/OA 訂閱層）。test/internal 僅供 super admin 指派。 */
+export type BillingPlanId = 'free' | 'lite' | 'starter' | 'growth' | 'pro' | 'enterprise' | 'test' | 'internal'
 
 /** 數據報表等級：基本 → 進階 → 進階＋匯出。 */
 export type ReportTier = 'basic' | 'advanced' | 'export'
@@ -50,6 +50,8 @@ export interface BillingPlan {
   api: boolean
   /** 客製方案（需業務報價 + 手動開通）；前端顯示「聯繫我們」而非「立即訂閱」。 */
   custom: boolean
+  /** 僅供 super admin 直接指派（測試 / 內部帳號）；不對外顯示於方案頁 / 升級對話框、不可自助結帳。 */
+  internal?: boolean
 }
 
 /** 統一超量加購單價（TWD/則）；付費非客製方案共用，改這裡即全站生效。 */
@@ -59,7 +61,7 @@ export const OVERAGE_PER_REPLY_TWD = 0.8
  * 方案由低到高的排序，供顯示與升降級比較用。
  * 這份陣列與 BILLING_PLANS 的 key 必須一致（見檔尾的 dev 自我檢查）。
  */
-export const BILLING_PLAN_ORDER: BillingPlanId[] = ['free', 'lite', 'starter', 'growth', 'pro', 'enterprise']
+export const BILLING_PLAN_ORDER: BillingPlanId[] = ['free', 'lite', 'starter', 'growth', 'pro', 'enterprise', 'test', 'internal']
 
 /** 未訂閱 / 找不到方案時的預設：每個帳號自動享有的免費額度。 */
 export const DEFAULT_BILLING_PLAN_ID: BillingPlanId = 'free'
@@ -151,6 +153,37 @@ export const BILLING_PLANS: Record<BillingPlanId, BillingPlan> = {
     scripting: true,
     api: true,
     custom: true,
+  },
+  // ── 內部方案:僅 super admin 指派,不對外顯示、不可自助結帳。額度 null = 無上限。 ──
+  test: {
+    id: 'test',
+    name: '測試（無限）',
+    answeredQuota: null,
+    priceMonthly: 0,
+    overagePerReply: null,
+    seats: null,
+    knowledgeSources: null,
+    reports: 'export',
+    broadcast: 'advanced',
+    scripting: true,
+    api: true,
+    custom: false,
+    internal: true,
+  },
+  internal: {
+    id: 'internal',
+    name: '內部（無限）',
+    answeredQuota: null,
+    priceMonthly: 0,
+    overagePerReply: null,
+    seats: null,
+    knowledgeSources: null,
+    reports: 'export',
+    broadcast: 'advanced',
+    scripting: true,
+    api: true,
+    custom: false,
+    internal: true,
   },
 }
 

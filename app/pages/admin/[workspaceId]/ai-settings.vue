@@ -30,7 +30,10 @@
           <div class="card-section-stack">
             <div class="ai-status-row">
               <span :class="['badge', statusBadgeClass]">{{ statusLabel }}</span>
-              <span v-if="usageTokens !== null" class="ai-status-usage">
+              <span v-if="planView" class="ai-status-usage">
+                本月已用 {{ planState.used.toLocaleString() }}<template v-if="planState.limit != null"> / {{ planState.limit.toLocaleString() }}</template> 則
+              </span>
+              <span v-else-if="usageTokens !== null" class="ai-status-usage">
                 本月用量 {{ formatTokens(usageTokens) }}<template v-if="form.quota.monthlyTokenCap > 0"> / {{ formatTokens(form.quota.monthlyTokenCap) }}</template> tokens
               </span>
               <NuxtLink :to="`/admin/${workspaceId}/ai-usage`" class="ai-status-link">用量監控 →</NuxtLink>
@@ -423,6 +426,18 @@
               </div>
             </div>
             <div class="card-section-stack">
+              <el-alert
+                v-if="planView"
+                type="info"
+                :closable="false"
+                show-icon
+                title="此帳號已開通方案，用量以「則數」為上限"
+              >
+                <span class="text-xs">
+                  目前方案「{{ planView.name }}」<template v-if="planState.limit != null">，本月已用 {{ planState.used.toLocaleString() }} / {{ planState.limit.toLocaleString() }} 則</template><template v-else>，無則數上限</template>。
+                  下方的 token 上限<strong>目前不生效</strong>——它只在帳號「未開通方案」時，作為成本失控的保險。
+                </span>
+              </el-alert>
               <div class="admin-field-group">
                 <AdminFieldLabel text="每月用量上限（token）" tight />
                 <el-input-number
@@ -430,6 +445,7 @@
                   :min="0"
                   :max="100000000"
                   :step="100000"
+                  :disabled="!!planView"
                   controls-position="right"
                   class="control-full"
                 />
@@ -440,7 +456,7 @@
               </div>
               <div class="admin-field-group">
                 <AdminFieldLabel text="用量超過上限時" tight />
-                <el-radio-group v-model="form.quota.onExceed">
+                <el-radio-group v-model="form.quota.onExceed" :disabled="!!planView">
                   <el-radio value="handoff_all">全部轉真人(保守、推薦)</el-radio>
                   <el-radio value="downgrade_model">改用更省的模型(服務不中斷)</el-radio>
                 </el-radio-group>
@@ -479,6 +495,7 @@
 import { ElMessageBox } from 'element-plus'
 import { buildDefaultAiSettings } from '~~/shared/types/ai-knowledge'
 import type { AiSettingsDoc } from '~~/shared/types/ai-knowledge'
+import { taipeiYyyyMm } from '~~/shared/time'
 
 definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
 
@@ -643,12 +660,17 @@ const statusLabel = computed(() => {
   return form.value.replyMode === 'draft' ? '🟡 草稿模式運作中(不會自動回客人)' : '🟢 全自動運作中'
 })
 
+// 方案（則數）摘要：已開通方案的帳號以「則數」為上限，token 上限不生效
+const { plan: planView, state: planState, load: loadPlanSummary } = usePlanSummary()
+
 const statusBadgeClass = computed(() => {
   if (!form.value.enabled) return 'badge-gray'
   return form.value.replyMode === 'draft' ? 'badge-yellow' : 'badge-green'
 })
 
 const quotaPct = computed(() => {
+  // 已開通方案 → 進度以「則數」為準（token 上限不再生效）
+  if (planView.value) return planState.value.limit != null ? planState.value.percent : null
   const cap = form.value.quota.monthlyTokenCap
   if (usageTokens.value === null || cap <= 0) return null
   return Math.min(100, Math.round((usageTokens.value / cap) * 100))
@@ -665,8 +687,8 @@ function formatTokens(n: number) {
 }
 
 async function loadStatus() {
-  const now = new Date()
-  const period = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}`
+  const period = taipeiYyyyMm() // 與後端 aiUsage 月結桶同一把尺(台灣時區),避免月底 8 小時讀錯月
+  loadPlanSummary().catch(() => {}) // 方案摘要：決定用量以「則數」還是 token 呈現
   const [usage, sources] = await Promise.allSettled([
     apiFetch<{ inputTokens: number; outputTokens: number; embeddingTokens: number }>(`/api/ai/usage/summary?period=${period}`),
     apiFetch<{ items: Array<{ chunkCount: number }> }>('/api/ai/sources/list'),

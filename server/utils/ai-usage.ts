@@ -7,14 +7,15 @@
  */
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
 import { getDb } from './firebase'
+import { taipeiYyyyMm } from '~~/shared/time'
 import type { AiUsageDoc } from '~~/shared/types/ai-knowledge'
 
 export const AI_USAGE_COLLECTION = 'aiUsage'
 
+// 月結桶用台灣時區（與方案付款週期 taipeiMonthPeriod 同一把尺；台灣固定 UTC+8、無 DST）。
+// 月中切換與 UTC 同鍵,故當月用量 doc 不斷檔;僅月底 8 小時邊界改依台灣時間歸月。
 export function currentYyyyMm(date = new Date()): string {
-  const y = date.getUTCFullYear()
-  const m = String(date.getUTCMonth() + 1).padStart(2, '0')
-  return `${y}${m}`
+  return taipeiYyyyMm(date)
 }
 
 function usageDocId(workspaceId: string, yyyyMm: string): string {

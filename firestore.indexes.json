@@ -9,6 +9,14 @@
       ]
     },
     {
+      "collectionGroup": "paymentOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "workspaceId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "broadcasts",
       "queryScope": "COLLECTION",
       "fields": [

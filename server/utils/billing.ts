@@ -13,6 +13,7 @@ import type { WorkspaceDoc } from '~~/shared/types/organization'
 import type { BillingPlanId, SubscriptionStatus, WorkspaceSubscription } from '~~/shared/billing/plans'
 import { DEFAULT_BILLING_PLAN_ID, effectiveAnsweredQuota, getBillingPlan } from '~~/shared/billing/plans'
 import type { PlanView } from '~~/shared/billing/plan-state'
+import type { QuotaExceedStrategy } from '~~/shared/types/ai-knowledge'
 
 const TTL_MS = 60 * 1000
 
@@ -103,6 +104,8 @@ export interface AnsweredQuotaResolution {
   quota: number | null
   /** 目前方案 ID；未訂閱為 null。 */
   planId: BillingPlanId | null
+  /** 內部/測試方案（無限額度，連 token 成本護欄都跳過）。 */
+  internal: boolean
 }
 
 /** 解析某帳號本月「則數額度」的攔截規則。 */
@@ -112,12 +115,46 @@ export async function resolveAnsweredQuota(
 ): Promise<AnsweredQuotaResolution> {
   const sub = await getWorkspaceSubscription(workspaceId, db)
   if (!sub || !isEnforceableStatus(sub.status)) {
-    return { enforce: false, quota: null, planId: sub?.planId ?? null }
+    return { enforce: false, quota: null, planId: sub?.planId ?? null, internal: false }
   }
   const plan = getBillingPlan(sub.planId)
   return {
     enforce: true,
     quota: effectiveAnsweredQuota(plan, sub.quotaOverride),
     planId: plan.id,
+    internal: plan.internal === true,
   }
+}
+
+/** quota 護欄的處置：放行 / 轉真人 / 降級模型。 */
+export type QuotaAction = 'allow' | 'handoff' | 'downgrade'
+
+/**
+ * 決定本次呼叫的 quota 處置（純函式，便於測試）。
+ *
+ * 政策：
+ * - **內部/測試方案**：完全不擋（真無限）。
+ * - **已開通訂閱**：**只看則數**。則數本身即封住成本（專業 10,000 則 ≈ 50M tokens），
+ *   不再疊 token 護欄——否則付費帳號會在遠低於所購則數處被固定的 token cap 提早切斷
+ *   （1M token ≈ 200 則，是照免費層校準的舊機制）。
+ * - **未開通訂閱**（沒有則數可擋）：token 護欄是唯一煞車（成本失控保險）。
+ *   實務上新帳號一律掛訂閱，此分支僅為防呆。
+ */
+export function resolveQuotaAction(
+  billing: AnsweredQuotaResolution,
+  usage: { answered: number; tokens: number },
+  tokenCap: number,
+  onExceed: QuotaExceedStrategy,
+): QuotaAction {
+  if (billing.internal) return 'allow'
+
+  if (billing.enforce) {
+    if (billing.quota != null && usage.answered >= billing.quota) return 'handoff'
+    return 'allow'
+  }
+
+  if (tokenCap > 0 && usage.tokens >= tokenCap) {
+    return onExceed === 'handoff_all' ? 'handoff' : 'downgrade'
+  }
+  return 'allow'
 }

@@ -44,6 +44,18 @@ describe('BILLING_PLANS catalog', () => {
       expect(BILLING_PLANS[id].custom).toBe(id === 'enterprise')
     }
   })
+
+  it('測試 / 內部方案:無限額度、標記 internal(僅 super admin 指派)', () => {
+    for (const id of ['test', 'internal'] as BillingPlanId[]) {
+      expect(BILLING_PLANS[id].answeredQuota).toBeNull()
+      expect(BILLING_PLANS[id].internal).toBe(true)
+      expect(effectiveAnsweredQuota(BILLING_PLANS[id])).toBeNull() // 無上限
+    }
+    // 對外方案不得誤標 internal
+    for (const id of ['free', 'lite', 'starter', 'growth', 'pro', 'enterprise'] as BillingPlanId[]) {
+      expect(BILLING_PLANS[id].internal).toBeFalsy()
+    }
+  })
 })
 
 describe('getBillingPlan', () => {

@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { Firestore } from 'firebase-admin/firestore'
 import type { SubscriptionStatus, WorkspaceSubscription } from '~~/shared/billing/plans'
-import { buildPlanView, defaultFreeSubscription, getWorkspaceSubscription, invalidateWorkspaceSubscriptionCache, resolveAnsweredQuota } from './billing'
+import type { AnsweredQuotaResolution } from './billing'
+import { buildPlanView, defaultFreeSubscription, getWorkspaceSubscription, invalidateWorkspaceSubscriptionCache, resolveAnsweredQuota, resolveQuotaAction } from './billing'
 
 /** 最小假 Firestore：只支援 collection('workspaces').doc(id).get()。 */
 function fakeDb(subsByWid: Record<string, WorkspaceSubscription | undefined>): Firestore {
@@ -73,6 +74,17 @@ describe('resolveAnsweredQuota — 攔截策略', () => {
     const r = await resolveAnsweredQuota('ws_ent', db)
     expect(r.enforce).toBe(true)
     expect(r.quota).toBeNull()
+    expect(r.internal).toBe(false) // 企業仍保留 token 成本護欄
+  })
+
+  it('內部/測試方案 → 額度 null 且標記 internal（連 token 護欄都跳過）', async () => {
+    for (const id of ['test', 'internal'] as const) {
+      const db = fakeDb({ [`ws_${id}`]: sub(id, 'active') })
+      const r = await resolveAnsweredQuota(`ws_${id}`, db)
+      expect(r.enforce).toBe(true)
+      expect(r.quota).toBeNull()
+      expect(r.internal).toBe(true)
+    }
   })
 })
 
@@ -123,5 +135,41 @@ describe('getWorkspaceSubscription', () => {
     const db = fakeDb({ ws_a: sub('growth', 'active') })
     const s = await getWorkspaceSubscription('ws_a', db)
     expect(s?.planId).toBe('growth')
+  })
+})
+
+describe('resolveQuotaAction — 護欄處置（訂閱帳號只看則數）', () => {
+  const res = (over: Partial<AnsweredQuotaResolution> = {}): AnsweredQuotaResolution => ({
+    enforce: true, quota: 700, planId: 'lite', internal: false, ...over,
+  })
+
+  it('內部/測試方案 → 一律放行（則數、token 都不擋）', () => {
+    const r = res({ internal: true, quota: null, planId: 'internal' })
+    expect(resolveQuotaAction(r, { answered: 99_999, tokens: 99_999_999 }, 1_000_000, 'handoff_all')).toBe('allow')
+  })
+
+  it('已開通訂閱、則數未滿 → 放行（即使 token 已遠超 cap）', () => {
+    // 關鍵修正：付費方案不再被固定的 1M token cap 提早切斷
+    expect(resolveQuotaAction(res(), { answered: 300, tokens: 5_000_000 }, 1_000_000, 'handoff_all')).toBe('allow')
+  })
+
+  it('已開通訂閱、則數用滿 → 轉真人', () => {
+    expect(resolveQuotaAction(res(), { answered: 700, tokens: 0 }, 1_000_000, 'handoff_all')).toBe('handoff')
+  })
+
+  it('已開通訂閱、額度 null（企業/無上限）→ 放行', () => {
+    expect(resolveQuotaAction(res({ quota: null }), { answered: 999_999, tokens: 0 }, 1_000_000, 'handoff_all')).toBe('allow')
+  })
+
+  it('未開通訂閱、token 超過 cap → 依策略轉真人 / 降級（防呆分支）', () => {
+    const none = res({ enforce: false, quota: null, planId: null })
+    expect(resolveQuotaAction(none, { answered: 0, tokens: 1_000_000 }, 1_000_000, 'handoff_all')).toBe('handoff')
+    expect(resolveQuotaAction(none, { answered: 0, tokens: 1_000_000 }, 1_000_000, 'downgrade_model')).toBe('downgrade')
+  })
+
+  it('未開通訂閱、token 未超 → 放行；cap=0 視為不限', () => {
+    const none = res({ enforce: false, quota: null, planId: null })
+    expect(resolveQuotaAction(none, { answered: 0, tokens: 999 }, 1_000_000, 'handoff_all')).toBe('allow')
+    expect(resolveQuotaAction(none, { answered: 0, tokens: 99_999_999 }, 0, 'handoff_all')).toBe('allow')
   })
 })

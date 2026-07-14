@@ -81,6 +81,16 @@ export default defineNuxtConfig({
     firebaseStorageBucket: process.env.FIREBASE_STORAGE_BUCKET ?? '',
     /** Google AI Studio API key（Gemini answer + embedding 共用）。申請：https://aistudio.google.com/apikey */
     geminiApiKey: process.env.GEMINI_API_KEY ?? '',
+    /**
+     * 藍新金流 MPG 特店設定（每租戶各一組；private，勿放 public 以免金鑰外洩）。
+     * 測試特店 API 用 ccore.newebpay.com、正式用 core.newebpay.com。
+     */
+    newebpayMerchantId: process.env.NEWEBPAY_MERCHANT_ID ?? '',
+    newebpayHashKey: process.env.NEWEBPAY_HASH_KEY ?? '',
+    newebpayHashIV: process.env.NEWEBPAY_HASH_IV ?? '',
+    newebpayApiUrl: process.env.NEWEBPAY_API_URL ?? 'https://ccore.newebpay.com/MPG/mpg_gateway',
+    /** 對外 HTTPS 原點（金流 Notify/Return 導回用）；與 clickTrackingBaseUrl 同源 */
+    appBaseUrl: appPublicBaseUrl,
 
     // Public (exposed to client)
     public: {

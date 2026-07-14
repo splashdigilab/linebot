@@ -286,10 +286,10 @@ const pricing = computed(() => summary.value?.pricing ?? null)
 // ── Period selector（過去 3 個月） ─────────────────────────
 function makePeriodOptions() {
   const opts: Array<{ value: string; label: string }> = []
-  const now = new Date()
+  // 月結桶用台灣時區（與 server currentYyyyMm / taipeiYyyyMm 同一把尺;台灣固定 UTC+8）
+  const tw = new Date(Date.now() + 8 * 60 * 60 * 1000)
   for (let i = 0; i < 3; i++) {
-    // 一律走 UTC:server 以 UTC 年月記帳;用本地時間建構再讀 UTC 會在 UTC+8 差一個月
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 1))
+    const d = new Date(Date.UTC(tw.getUTCFullYear(), tw.getUTCMonth() - i, 1))
     const y = d.getUTCFullYear()
     const m = String(d.getUTCMonth() + 1).padStart(2, '0')
     opts.push({ value: `${y}${m}`, label: `${y}-${m}` })

@@ -25,7 +25,7 @@ import { getCatalogSourceIds } from './ai-knowledge-sources'
 import { embedQuery, estimateTokens, generateJson, generateText } from './gemini'
 import { getAiSettings, getGroundingThreshold } from './ai-settings'
 import { getCurrentMonthUsage, recordAiUsage, type UsageDelta } from './ai-usage'
-import { resolveAnsweredQuota } from './billing'
+import { resolveAnsweredQuota, resolveQuotaAction } from './billing'
 import { getDb } from './firebase'
 import {
   DEFAULT_TOP_K_CHUNKS,
@@ -992,32 +992,26 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   }
 
   // ── 2. quota 護欄 ────────────────────────────────────────
-  // 放在 router/embed 之前：超量時不要再花 LLM。兩層護欄共用同一次用量讀取：
-  //   2a. 方案「則數額度」（對外可賣的單位）：只對已開通訂閱的帳號硬性攔截，
-  //       未開通者不擋（grandfather，避免既有正式租戶被免費額度誤鎖）。
-  //   2b. token 內部護欄（成本失控保險，settings.quota.monthlyTokenCap）。
+  // 放在 router/embed 之前：超量時不要再花 LLM。處置由 resolveQuotaAction 決定：
+  //   · 內部/測試方案 → 完全不擋（真無限）。
+  //   · 已開通訂閱   → **只看則數**（則數即成本上限；不再疊 token 護欄，否則付費
+  //                    方案會在遠低於所購則數處被固定的 token cap 提早切斷）。
+  //   · 未開通訂閱   → token 護欄為唯一煞車（防呆；實務上新帳號一律掛訂閱）。
   // 注意：「先讀用量再答題、答完才記帳」並非嚴格原子——併發訊息可能讓當月用量
   // 略為超過額度（誤差約為同時在途的幾次呼叫）。屬軟性護欄，可接受此誤差。
   let answerModel = settings.answerModel
   const billing = await resolveAnsweredQuota(workspaceId, db)
   const tokenCap = settings.quota.monthlyTokenCap
-  if (billing.enforce || tokenCap > 0) {
+  if (!billing.internal && (billing.enforce || tokenCap > 0)) {
     const usage = await getCurrentMonthUsage(workspaceId, db)
+    const action = resolveQuotaAction(billing, usage, tokenCap, settings.quota.onExceed)
 
-    // 2a. 方案則數額度：超過 → 停止自動回覆、轉真人促升級。
-    //     不 downgrade——降級後回覆仍佔一則 answered 額度，起不到節流作用。
-    if (billing.enforce && billing.quota != null && usage.answered >= billing.quota) {
+    if (action === 'handoff') {
       await record({ invocations: 1, handoffs: 1 })
       return handoff('quota_exceeded')
     }
-
-    // 2b. token 內部護欄
-    if (tokenCap > 0 && usage.tokens >= tokenCap) {
-      if (settings.quota.onExceed === 'handoff_all') {
-        await record({ invocations: 1, handoffs: 1 })
-        return handoff('quota_exceeded')
-      }
-      // downgrade_model：改用更便宜的 flash-lite，繼續答
+    if (action === 'downgrade') {
+      // 改用更便宜的 flash-lite，繼續答
       answerModel = 'gemini-2.5-flash-lite'
     }
   }

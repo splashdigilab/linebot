@@ -75,6 +75,10 @@
               <span class="nav-icon">🏢</span>
               <span>組織與 LINE</span>
             </NuxtLink>
+            <NuxtLink :to="`/admin/${workspaceId}/settings/billing`" class="nav-item" :class="{ active: route.path.includes('/settings/billing') }">
+              <span class="nav-icon">💳</span>
+              <span>訂閱與付款</span>
+            </NuxtLink>
           </template>
         </nav>
       </div>

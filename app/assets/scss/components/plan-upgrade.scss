@@ -50,6 +50,17 @@
     font-weight: 600;
     white-space: nowrap;
   }
+
+  .pu-info {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .pu-action {
+    flex: 0 0 auto;
+    min-width: 72px;
+    text-align: right;
+  }
 }
 
 .plan-upgrade-foot {
