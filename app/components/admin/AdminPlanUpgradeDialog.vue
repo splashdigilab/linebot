@@ -1,8 +1,8 @@
 <template>
   <el-dialog
     :model-value="modelValue"
-    title="升級方案"
-    width="560px"
+    title="選擇方案"
+    width="min(560px, 92vw)"
     @update:model-value="$emit('update:modelValue', $event)"
   >
     <div class="plan-upgrade-list">
@@ -23,19 +23,32 @@
         </div>
         <div class="pu-price">{{ priceLabel(p) }}</div>
         <div class="pu-action">
-          <el-button
+          <el-tooltip
             v-if="canCheckout(p)"
-            type="primary"
-            size="small"
-            :loading="checkoutLoading === p.id"
-            @click="checkout(p)"
+            :disabled="paymentEnabled"
+            content="線上付款尚未開通，請聯繫我們"
+            placement="top"
           >
-            {{ p.id === currentPlanId ? '續訂' : '訂閱' }}
-          </el-button>
+            <!-- disabled 的按鈕不會觸發 tooltip，需外層 span 承接 hover -->
+            <span>
+              <el-button
+                :type="planAction(p) === '降級' ? 'info' : 'primary'"
+                :plain="planAction(p) === '降級'"
+                size="small"
+                :disabled="!paymentEnabled"
+                :loading="checkoutLoading === p.id"
+                @click="checkout(p)"
+              >
+                {{ planAction(p) }}
+              </el-button>
+            </span>
+          </el-tooltip>
           <template v-else-if="p.custom">
             <el-button v-if="contactHref" size="small" @click="contactUs">聯繫我們</el-button>
             <span v-else class="text-xs text-muted">請洽窗口</span>
           </template>
+          <!-- 免費層：不需結帳，但也不要留空白格（會像壞掉） -->
+          <span v-else class="text-xs text-muted">{{ p.id === currentPlanId ? '使用中' : '免費' }}</span>
         </div>
       </div>
     </div>
@@ -46,18 +59,28 @@
 </template>
 
 <script setup lang="ts">
-import { BILLING_PLANS, BILLING_PLAN_ORDER, type BillingPlan } from '~~/shared/billing/plans'
+import { ElLoading, ElMessageBox } from 'element-plus'
+import { BILLING_PLANS, BILLING_PLAN_ORDER, type BillingPlan, type BillingPlanId } from '~~/shared/billing/plans'
 
-defineProps<{ modelValue: boolean; currentPlanId?: string | null }>()
+const props = defineProps<{ modelValue: boolean; currentPlanId?: string | null }>()
 defineEmits<{ 'update:modelValue': [boolean] }>()
 
 // 內部/測試方案不對客戶顯示（僅 super admin 指派）
 const plans = BILLING_PLAN_ORDER.map(id => BILLING_PLANS[id]).filter(p => !p.internal)
 
+/** 相對目前方案的動作：續訂 / 升級 / 降級——避免客戶把降級誤看成升級而誤扣款。 */
+function planAction(p: BillingPlan): '續訂' | '升級' | '降級' {
+  if (p.id === props.currentPlanId) return '續訂'
+  const cur = BILLING_PLAN_ORDER.indexOf((props.currentPlanId ?? 'free') as BillingPlanId)
+  return BILLING_PLAN_ORDER.indexOf(p.id) > cur ? '升級' : '降級'
+}
+
 const { getBearer, workspaceId } = useWorkspace()
 const { showToast } = useAdminToast()
 
 const config = useRuntimeConfig()
+/** 藍新金鑰都設好才允許結帳；否則按下去只會拿到 500「金流尚未設定」。 */
+const paymentEnabled = Boolean(config.public.paymentEnabled)
 const contact = String(config.public.supportContact ?? '').trim()
 const contactHref = contact
   ? (contact.startsWith('http') ? contact : `mailto:${contact}`)
@@ -76,8 +99,30 @@ const checkoutLoading = ref('')
 interface CreateOrderResponse { action: string; method: string; fields: Record<string, string> }
 
 async function checkout(p: BillingPlan) {
-  if (!workspaceId.value) return
+  if (!workspaceId.value || !paymentEnabled) return
+
+  // 結帳前先確認：講清楚要付多少、買哪個方案。避免一個誤點（尤其降級）就被直接
+  // 帶去外部金流扣款。
+  const action = planAction(p)
+  const price = (p.priceMonthly ?? 0).toLocaleString()
+  try {
+    await ElMessageBox.confirm(
+      `將以 NT$${price} ${action}「${p.name}」方案（每月一期），接著前往藍新金流的安全付款頁面完成付款。`,
+      `確認${action}方案`,
+      {
+        confirmButtonText: '前往付款',
+        cancelButtonText: '取消',
+        type: action === '降級' ? 'warning' : 'info',
+      },
+    )
+  }
+  catch {
+    return // 使用者取消
+  }
+
   checkoutLoading.value = p.id
+  // 導向外部金流中間會有一段空白，給明確過場提示，不要讓畫面像當掉
+  const overlay = ElLoading.service({ lock: true, text: '正在前往藍新安全付款頁面…' })
   try {
     const token = await getBearer()
     const res = await $fetch<CreateOrderResponse>('/api/payment/create-order', {
@@ -87,9 +132,10 @@ async function checkout(p: BillingPlan) {
     })
     if (!res.action) throw new Error('金流尚未設定')
     submitToGateway(res.action, res.fields)
-    // 送出後瀏覽器即導向藍新付款頁,不需重置 loading
+    // 送出後瀏覽器即導向藍新付款頁；overlay 保持到頁面離開為止
   }
   catch (e: any) {
+    overlay.close()
     showToast(e?.data?.statusMessage || e?.data?.message || e?.message || '建立訂單失敗', 'error')
     checkoutLoading.value = ''
   }

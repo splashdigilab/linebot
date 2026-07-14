@@ -17,10 +17,17 @@
           v-if="returnedOrder"
           :title="returnedOrder.title"
           :type="returnedOrder.type"
-          :description="returnedOrder.desc"
           show-icon
           :closable="false"
-        />
+        >
+          <div class="billing-return-body">
+            <span>{{ returnedOrder.desc }}</span>
+            <span v-if="polling" class="text-xs text-muted">付款確認中，會自動更新…</span>
+            <el-button v-else-if="returnedOrder.pending" size="small" :loading="loading" @click="reloadAll">
+              重新整理
+            </el-button>
+          </div>
+        </el-alert>
 
         <div v-if="planView" class="message-card ar-section-card">
           <div class="message-card-header">
@@ -64,18 +71,26 @@
           </div>
           <div class="card-section-stack">
             <el-table :data="orders" size="small" empty-text="尚無付款紀錄">
-              <el-table-column label="日期" min-width="150">
+              <el-table-column label="日期" min-width="140">
                 <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>
               </el-table-column>
               <el-table-column label="方案" min-width="80">
                 <template #default="{ row }">{{ planName(row.planId) }}</template>
               </el-table-column>
-              <el-table-column label="金額" min-width="90">
+              <el-table-column label="金額" min-width="90" align="right">
                 <template #default="{ row }">NT${{ row.amount.toLocaleString() }}</template>
+              </el-table-column>
+              <el-table-column label="付款方式" min-width="90">
+                <template #default="{ row }">{{ payTypeLabel(row.paymentType) }}</template>
               </el-table-column>
               <el-table-column label="狀態" min-width="80">
                 <template #default="{ row }">
                   <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column label="訂單編號" min-width="170">
+                <template #default="{ row }">
+                  <span class="billing-order-no">{{ row.merchantOrderNo }}</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -120,6 +135,16 @@ function statusType(s: PaymentOrderStatus): 'success' | 'danger' | 'warning' | '
   return 'info'
 }
 function planName(id: string) { return BILLING_PLANS[id as keyof typeof BILLING_PLANS]?.name ?? id }
+
+// 藍新付款方式代碼 → 看得懂的中文（對帳/客服問起來時用得到）
+const PAY_TYPE_LABEL: Record<string, string> = {
+  CREDIT: '信用卡',
+  VACC: 'ATM 轉帳',
+  WEBATM: 'WebATM',
+  CVS: '超商代碼',
+  BARCODE: '超商條碼',
+}
+function payTypeLabel(t: string | null) { return t ? (PAY_TYPE_LABEL[t] ?? t) : '—' }
 function fmtTime(ms: number | null) {
   if (!ms) return '—'
   const d = new Date(ms)
@@ -127,16 +152,43 @@ function fmtTime(ms: number | null) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-// 藍新導回帶的 ?order=;顯示付款結果提示(真正開通以 notify 為準,可能稍慢於導回)
+// 藍新導回帶的 ?order=;顯示付款結果(真正開通以 server→server 的 notify 為準,可能稍慢於導回)
 const returnedOrder = computed(() => {
   const no = String(route.query.order || '').trim()
   if (!no) return null
   const o = orders.value.find(r => r.merchantOrderNo === no)
-  if (!o) return { title: '付款處理中', type: 'info' as const, desc: '若剛完成付款,方案將於款項確認後更新,可稍後重新載入查看。' }
-  if (o.status === 'paid') return { title: '付款完成,方案已開通 🎉', type: 'success' as const, desc: `訂單 ${no}` }
-  if (o.status === 'failed') return { title: '這筆付款未成功', type: 'error' as const, desc: '未扣款或已取消,可重新選擇方案結帳。' }
-  return { title: '付款處理中', type: 'warning' as const, desc: '款項確認後方案會自動更新,可稍後重新載入。' }
+  if (!o) return { title: '付款處理中', type: 'info' as const, desc: '若剛完成付款，款項確認後方案會自動更新。', pending: true }
+  if (o.status === 'paid') return { title: '付款完成，方案已開通 🎉', type: 'success' as const, desc: `訂單 ${no}`, pending: false }
+  if (o.status === 'failed') return { title: '這筆付款未成功', type: 'error' as const, desc: '未扣款或已取消，可重新選擇方案結帳。', pending: false }
+  if (o.status === 'expired') return { title: '這筆訂單已逾期', type: 'info' as const, desc: '可重新選擇方案結帳。', pending: false }
+  return { title: '付款處理中', type: 'warning' as const, desc: '款項確認後方案會自動更新。', pending: true }
 })
+
+// 導回時 Notify 常常還沒送達 → 短暫輪詢直到訂單結案（最多 ~32s），使用者不必自己按重新載入。
+const polling = ref(false)
+let pollTimer: ReturnType<typeof setTimeout> | null = null
+let pollTries = 0
+
+function stopPoll() {
+  if (pollTimer) {
+    clearTimeout(pollTimer)
+    pollTimer = null
+  }
+  polling.value = false
+}
+
+function pollReturnedOrder() {
+  if (!returnedOrder.value?.pending || pollTries >= 8) {
+    stopPoll()
+    return
+  }
+  polling.value = true
+  pollTries += 1
+  pollTimer = setTimeout(async () => {
+    await reloadAll()
+    pollReturnedOrder()
+  }, 4000)
+}
 
 async function loadOrders() {
   try { orders.value = await apiFetch<OrderRow[]>('/api/payment/orders') }
@@ -149,5 +201,9 @@ async function reloadAll() {
   finally { loading.value = false }
 }
 
-onMounted(reloadAll)
+onMounted(async () => {
+  await reloadAll()
+  pollReturnedOrder()
+})
+onUnmounted(stopPoll)
 </script>

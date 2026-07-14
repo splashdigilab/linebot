@@ -103,6 +103,16 @@ export default defineNuxtConfig({
       /** 升級／加購的聯繫方式（email 或 https 連結）；顯示於「升級方案」對話框。未設則顯示通用引導文字。 */
       supportContact: process.env.PUBLIC_SUPPORT_CONTACT ?? '',
       /**
+       * 線上付款是否已開通（藍新三把金鑰都設好才為 true）。
+       * 只是布林值、不含任何金鑰內容；前端據此決定結帳鈕能不能按，
+       * 避免金流未設定時按下去只拿到 500「金流尚未設定」。
+       */
+      paymentEnabled: Boolean(
+        process.env.NEWEBPAY_MERCHANT_ID
+        && process.env.NEWEBPAY_HASH_KEY
+        && process.env.NEWEBPAY_HASH_IV,
+      ),
+      /**
        * 官方 FAQ 範本的 Google Sheet 母本網址（開「知道連結者可檢視」）。
        * 設定後匯入對話框顯示「使用 FAQ 範本」按鈕（自動轉 /copy 一鍵建立副本）；
        * 未設則退回下載 public/templates/faq-sheet-template.xlsx。

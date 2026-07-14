@@ -156,10 +156,27 @@
   text-overflow: ellipsis;
 }
 
+/* 角色 + 方案標籤同一列：用 flex 對齊基線並留間距（原本 tag 直接黏在文字後、上下沒對齊） */
 .ws-item-role {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
   font-size: 0.72rem;
   color: var(--text-muted);
-  margin-top: 0.1rem;
+  margin-top: 0.15rem;
+  min-width: 0;
+}
+
+/* 方案標籤：壓到與角色文字相稱的視覺重量，不要喧賓奪主（el-tag 預設 small 仍偏大） */
+.ws-item-plan-tag.el-tag {
+  height: 17px;
+  padding: 0 5px;
+  font-size: 0.66rem;
+  line-height: 15px;
+  border-radius: 4px;
+  font-weight: 600;
+  flex-shrink: 0;
 }
 
 .ws-item-arrow {

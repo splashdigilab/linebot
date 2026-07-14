@@ -58,7 +58,8 @@
                       v-if="ws.plan"
                       size="small"
                       effect="plain"
-                      :type="ws.plan.id === 'free' ? 'info' : 'success'"
+                      class="ws-item-plan-tag"
+                      :type="planTagType(ws.plan.id)"
                     >
                       {{ ws.plan.name }}
                     </el-tag>
@@ -120,6 +121,7 @@
 const { showToast } = useAdminToast()
 import type { WorkspaceItem } from '~~/app/composables/useWorkspace'
 import { DEFAULT_LINE_WORKSPACE_ID } from '~~/shared/line-workspace'
+import { BILLING_PLANS, type BillingPlanId } from '~~/shared/billing/plans'
 
 definePageMeta({ middleware: 'auth', layout: false })
 useHead({ title: '選擇官方帳號 — LINE Bot 管理系統' })
@@ -150,6 +152,14 @@ const ROLE_LABELS: Record<string, string> = {
   admin: '管理員',
   agent: '客服',
   viewer: '觀察者',
+}
+
+/** 方案標籤配色：免費=灰、付費=綠、內部/測試=橘（讓內部帳號一眼可辨）。 */
+function planTagType(id: string): 'info' | 'success' | 'warning' {
+  const p = BILLING_PLANS[id as BillingPlanId]
+  if (!p) return 'info'
+  if (p.internal) return 'warning'
+  return p.id === 'free' ? 'info' : 'success'
 }
 
 function roleLabel(role: string) {
