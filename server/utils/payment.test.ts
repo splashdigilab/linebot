@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   buildPaidSubscription,
+  INVOICE_ORDER_NO_MAX,
   newMerchantOrderNo,
   settlePaidOrder,
 } from './payment'
@@ -68,12 +69,50 @@ describe('buildPaidSubscription', () => {
   })
 })
 
+describe('buildPaidSubscription — 定期定額（自動扣款委託）', () => {
+  const existing = (over: Partial<WorkspaceSubscription> & Pick<WorkspaceSubscription, 'planId'>): WorkspaceSubscription => ({
+    status: 'active', currentPeriodStart: '2026-07-28', currentPeriodEnd: '2026-08-27', anchorDay: 28, ...over,
+  })
+
+  it('帶 periodNo → 開啟自動續訂並記下委託單號（到期改走寬限期而非直接降級）', () => {
+    const sub = buildPaidSubscription('starter', JUL28, null, { periodNo: 'P123', periodOrderNo: 'NP1', anchorDay: 28 })
+    expect(sub.autoRenew).toBe(true)
+    expect(sub.periodNo).toBe('P123')
+    expect(sub.periodOrderNo).toBe('NP1') // 取消時 AlterStatus 要 MerOrderNo + PeriodNo 成對
+  })
+
+  it('定期定額**不堆疊** —— 錨定日必須跟藍新的 PeriodPoint 同一天', () => {
+    // 若沿用舊訂閱的錨定日（堆疊），我方續期日就會跟藍新扣款日錯開，
+    // 每個月都會出現「我方到期進寬限期 → 藍新還沒到扣款日 → 寬限期滿 → 把有在付錢的客戶降級」。
+    const old = existing({ planId: 'lite', currentPeriodStart: '2026-07-05', currentPeriodEnd: '2026-08-04', anchorDay: 5 })
+    const sub = buildPaidSubscription('lite', JUL28, old, { periodNo: 'P123', periodOrderNo: 'NP1', anchorDay: 28 })
+    expect(sub.currentPeriodStart).toBe('2026-07-28') // 立刻生效，不接在 8/5
+    expect(sub.anchorDay).toBe(28) // ← 跟 PeriodPoint 一致
+  })
+
+  it('錨定日沿用「建單時」存下的值，不在開通時重算（跨午夜會差一天）', () => {
+    // 23:59 建單（PeriodPoint=27）、00:00 開通：若在這裡用 now 重算就會拿到 28，
+    // 之後每個月藍新在 27 號扣款、我方在 28 號才續期 → 客戶每月被推進寬限期。
+    const sub = buildPaidSubscription('starter', JUL28, null, { periodNo: 'P123', anchorDay: 27 })
+    expect(sub.anchorDay).toBe(27)
+    expect(sub.currentPeriodEnd).toBe('2026-08-26') // 下一次錨定日 8/27 的前一天
+  })
+})
+
 describe('newMerchantOrderNo', () => {
-  it('NP + 14 碼時間 + 4 碼亂數，僅英數且 <=30', () => {
-    const no = newMerchantOrderNo(new Date(Date.UTC(2026, 6, 20, 8, 30, 15)), 'AB12')
-    expect(no).toBe('NP20260720083015AB12')
+  it('NP + 12 碼時間 + 3 碼亂數 = 17 碼，僅英數', () => {
+    const no = newMerchantOrderNo(new Date(Date.UTC(2026, 6, 20, 8, 30, 15)), 'AB1')
+    expect(no).toBe('NP260720083015AB1')
     expect(no).toMatch(/^[0-9A-Za-z]+$/)
-    expect(no.length).toBeLessThanOrEqual(30)
+    expect(no).toHaveLength(17)
+  })
+
+  it('加上定期定額的期數後綴仍 ≤ 20 碼（ezPay 發票的自訂編號上限）', () => {
+    // 藍新每期回拋的 OrderNo = `本單號_期數`。本單號一超過 17 碼，
+    // 第 2 期之後的續期發票就會被 ezPay 全部退件——recurring 客戶一輩子只拿得到一張發票。
+    const no = newMerchantOrderNo(new Date(Date.UTC(2026, 6, 20, 8, 30, 15)), 'AB1')
+    expect(`${no}_99`.length).toBeLessThanOrEqual(INVOICE_ORDER_NO_MAX)
+    expect(`${no}_99`).toMatch(/^[0-9A-Za-z_]+$/) // ezPay 限英數與底線
   })
 })
 

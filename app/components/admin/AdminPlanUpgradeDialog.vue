@@ -53,7 +53,10 @@
       </div>
     </div>
     <div class="plan-upgrade-foot">
-      <span class="text-xs text-muted">方案以「官方帳號」為單位各自計價，額度不跨帳號共用。付款由藍新金流處理。</span>
+      <span class="text-xs text-muted">
+        方案以「官方帳號」為單位各自計價，額度不跨帳號共用。付款由藍新金流處理。
+        <template v-if="recurringEnabled">每月自動續扣，可隨時取消，取消後用到本期結束。</template>
+      </span>
     </div>
   </el-dialog>
 </template>
@@ -81,6 +84,11 @@ const { showToast } = useAdminToast()
 const config = useRuntimeConfig()
 /** 藍新金鑰都設好才允許結帳；否則按下去只會拿到 500「金流尚未設定」。 */
 const paymentEnabled = Boolean(config.public.paymentEnabled)
+/**
+ * 定期定額（自動續訂）是否已在藍新特店開通。開通 → 走委託、每月自動扣款；
+ * 未開通 → 退回單次付款（客戶每個月要自己回來刷一次），兩條路的 UI 文案不同。
+ */
+const recurringEnabled = Boolean(config.public.recurringEnabled)
 const contact = String(config.public.supportContact ?? '').trim()
 const contactHref = contact
   ? (contact.startsWith('http') ? contact : `mailto:${contact}`)
@@ -105,12 +113,17 @@ async function checkout(p: BillingPlan) {
   // 帶去外部金流扣款。
   const action = planAction(p)
   const price = (p.priceMonthly ?? 0).toLocaleString()
+  // 自動續訂是「授權往後每個月都扣」，這件事必須在按下去之前講清楚——事後才發現
+  // 被持續扣款是最容易變成客訴與爭議款的。
+  const terms = recurringEnabled
+    ? `將以 NT$${price}/月 ${action}「${p.name}」方案，立即開通一個月，之後每月自動扣款。可隨時取消，取消後服務用到本期結束。`
+    : `將以 NT$${price} ${action}「${p.name}」方案（單次付款、一個月）。`
   try {
     await ElMessageBox.confirm(
-      `將以 NT$${price} ${action}「${p.name}」方案（每月一期），接著前往藍新金流的安全付款頁面完成付款。`,
+      `${terms}接著前往藍新金流的安全付款頁面完成付款。`,
       `確認${action}方案`,
       {
-        confirmButtonText: '前往付款',
+        confirmButtonText: recurringEnabled ? '前往付款並開始訂閱' : '前往付款',
         cancelButtonText: '取消',
         type: action === '降級' ? 'warning' : 'info',
       },
@@ -125,7 +138,8 @@ async function checkout(p: BillingPlan) {
   const overlay = ElLoading.service({ lock: true, text: '正在前往藍新安全付款頁面…' })
   try {
     const token = await getBearer()
-    const res = await $fetch<CreateOrderResponse>('/api/payment/create-order', {
+    const endpoint = recurringEnabled ? '/api/payment/create-subscription' : '/api/payment/create-order'
+    const res = await $fetch<CreateOrderResponse>(endpoint, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: { planId: p.id, workspaceId: workspaceId.value },

@@ -67,6 +67,11 @@ export function buildPlanView(sub: WorkspaceSubscription | null): PlanView | nul
     overagePerReply: plan.overagePerReply,
     currentPeriodStart: sub.currentPeriodStart,
     currentPeriodEnd: sub.currentPeriodEnd,
+    status: sub.status,
+    autoRenew: sub.autoRenew === true,
+    cancelAtPeriodEnd: sub.cancelAtPeriodEnd === true,
+    // 只回布林值,委託單號不外洩到前端
+    hasMandate: Boolean(sub.periodNo && sub.periodOrderNo),
   }
 }
 

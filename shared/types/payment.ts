@@ -12,14 +12,33 @@ import type { BillingPlanId } from '../billing/plans'
 
 export type PaymentOrderStatus = 'pending' | 'paid' | 'failed' | 'expired'
 
+/**
+ * 這筆帳是怎麼來的：
+ * - `one_time`         單次付款（MPG；藍新未開通定期定額時的退路）
+ * - `period_first`     定期定額委託的首期（客戶按下訂閱那一刻）
+ * - `period_recurring` 定期定額的第 2 期以後（藍新自動扣款後回拋，我方不主動建單）
+ */
+export type PaymentOrderKind = 'one_time' | 'period_first' | 'period_recurring'
+
 export interface PaymentOrderDoc {
   merchantOrderNo: string
   workspaceId: string
   organizationId?: string | null
   planId: BillingPlanId
-  /** 應付金額（TWD 整數）；以建單時後端寫入為準 */
+  /** 應付金額（TWD 整數，含稅）；以建單時後端寫入為準 */
   amount: number
   status: PaymentOrderStatus
+  kind?: PaymentOrderKind
+  /**
+   * 建單時決定的錨定日（= 送給藍新的 PeriodPoint）。
+   * **開通時必須沿用這個值,不能重算**——跨午夜建單（23:59 建、00:00 開通）會讓藍新的
+   * 扣款日與我方的續期日差一天,之後每個月都會在寬限期的縫隙裡把付費客戶降級。
+   */
+  anchorDay?: number | null
+  /** 藍新定期定額委託單號（PeriodNo）；取消／暫停要拿它去打 AlterStatus */
+  periodNo?: string | null
+  /** 這是委託的第幾期（定期定額續期帳才有） */
+  periodTimes?: number | null
   /** 藍新交易序號（Notify 回傳） */
   tradeNo?: string | null
   /** 付款方式（CREDIT / VACC / CVS…；Notify 回傳） */
@@ -34,4 +53,31 @@ export interface PaymentOrderDoc {
   updatedAt: Timestamp | FieldValue
   /** Notify 解密後的重點欄位（對帳／稽核用） */
   notifyRaw?: Record<string, unknown> | null
+  /** 電子發票開立結果（見 invoices collection；這裡只留摘要供帳單頁顯示） */
+  invoiceNumber?: string | null
+  invoiceStatus?: 'issued' | 'failed' | 'skipped' | null
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  Collection: invoices
+//  Doc ID: merchantOrderNo（與付款訂單一對一）
+// ═══════════════════════════════════════════════════════════════════
+
+export interface InvoiceDoc {
+  merchantOrderNo: string
+  workspaceId: string
+  /** 含稅總額（= 請款金額）、銷售額、稅額；三者相加必須相等 */
+  totalAmt: number
+  amt: number
+  taxAmt: number
+  ok: boolean
+  /** ezPay 回傳狀態（SUCCESS 或錯誤代碼） */
+  status: string
+  message?: string | null
+  invoiceNumber?: string | null
+  invoiceTransNo?: string | null
+  randomNum?: string | null
+  /** ezPay CheckCode 驗證是否通過；false = 回應可疑，需人工確認 */
+  checkCodeValid?: boolean | null
+  createdAt: Timestamp | FieldValue
 }

@@ -34,7 +34,23 @@ export interface WorkspaceDoc {
    * Phase 1 由 super admin 手動開通寫入；Phase 2 起接金流 webhook 維護。
    */
   subscription?: WorkspaceSubscription
+  /**
+   * 電子發票開立資訊（統編／抬頭／載具／捐贈碼）。客戶在帳單頁自己填,
+   * 每次付款成功後據此開立發票。未填 → B2C 紙本發票（見 server/utils/ezpay-invoice.ts）。
+   */
+  invoiceProfile?: InvoiceProfile
   updatedAt: Timestamp | FieldValue
+}
+
+/** 買受人的發票偏好。統編有值 = B2B（公司報帳）；載具與捐贈碼互斥。 */
+export interface InvoiceProfile {
+  buyerUBN?: string | null
+  buyerName?: string | null
+  buyerEmail?: string | null
+  /** 手機條碼載具（/ + 7 碼） */
+  carrierNum?: string | null
+  /** 捐贈碼（3–7 碼數字） */
+  loveCode?: string | null
 }
 
 // ═══════════════════════════════════════════════════════════════════

@@ -1,4 +1,6 @@
 import { runPaymentReconcile } from '~~/server/utils/payment'
+import { periodConfigFrom } from '~~/server/utils/newebpay-period'
+import { invoiceKeysFromConfig, reissueFailedInvoices } from '~~/server/utils/invoice'
 
 /**
  * POST /api/payment/reconcile — 每日續期對帳（由排程觸發）。
@@ -18,6 +20,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
 
-  const result = await runPaymentReconcile()
-  return { ok: true, ...result }
+  const cfg = config as unknown as Record<string, unknown>
+  // 降級時要能終止藍新委託（不然客戶服務被降級、卡卻繼續被扣）
+  const result = await runPaymentReconcile(new Date(), undefined, periodConfigFrom(cfg))
+  // 順便補開之前失敗的發票（ezPay 短暫故障不該讓那批發票永久遺失）
+  const invoices = await reissueFailedInvoices(invoiceKeysFromConfig(cfg))
+  return { ok: true, ...result, invoices }
 })

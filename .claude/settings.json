@@ -3,7 +3,10 @@
     "allow": [
       "Bash(xargs kill)",
       "Bash(firebase login:list)",
-      "Bash(npm root *)"
+      "Bash(npm root *)",
+      "WebFetch(domain:www.v5.com.tw)",
+      "Bash(pip3 install *)",
+      "Bash(curl -sL -o invoice.pdf \"https://cinv.ezpay.com.tw/dw_files/info_api/EZP_INVI_1_2_1.pdf\")"
     ],
     "additionalDirectories": [
       "/Users/kevin/.claude"

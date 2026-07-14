@@ -89,6 +89,27 @@ export default defineNuxtConfig({
     newebpayHashKey: process.env.NEWEBPAY_HASH_KEY ?? '',
     newebpayHashIV: process.env.NEWEBPAY_HASH_IV ?? '',
     newebpayApiUrl: process.env.NEWEBPAY_API_URL ?? 'https://ccore.newebpay.com/MPG/mpg_gateway',
+    /**
+     * 信用卡定期定額（自動續訂）。與 MPG 共用同一組特店金鑰,只是換一支端點。
+     * ⚠️ 定期定額是**申請制**——要先在藍新特店後台啟用「定期定額支付工具」才會通;
+     *    未啟用時把 NEWEBPAY_PERIOD_ENABLED 留白,結帳會退回一次性付款,不會壞掉。
+     */
+    newebpayPeriodEnabled: process.env.NEWEBPAY_PERIOD_ENABLED === 'true',
+    newebpayPeriodApiUrl: process.env.NEWEBPAY_PERIOD_API_URL ?? 'https://ccore.newebpay.com/MPG/period',
+    newebpayPeriodAlterUrl: process.env.NEWEBPAY_PERIOD_ALTER_URL ?? 'https://ccore.newebpay.com/MPG/period/AlterStatus',
+    /**
+     * ezPay 電子發票（**獨立的商店帳號**，與金流那組金鑰不同，需另外申請）。
+     * 未設定 → 收款照常，只是不開發票。
+     *
+     * ⚠️ apiUrl **刻意不給預設值**。若預設成測試站，正式環境只要忘了設這個環境變數，
+     *    就會把真實交易的發票開到測試平台——客戶會拿到一個不存在的發票號碼，
+     *    而且稅是真的沒報。四個值必須全設才會啟用開票（見 isInvoiceConfigured）。
+     *    測試 https://cinv.ezpay.com.tw／正式 https://inv.ezpay.com.tw
+     */
+    ezpayInvoiceMerchantId: process.env.EZPAY_INVOICE_MERCHANT_ID ?? '',
+    ezpayInvoiceHashKey: process.env.EZPAY_INVOICE_HASH_KEY ?? '',
+    ezpayInvoiceHashIV: process.env.EZPAY_INVOICE_HASH_IV ?? '',
+    ezpayInvoiceApiUrl: process.env.EZPAY_INVOICE_API_URL ?? '',
     /** 對外 HTTPS 原點（金流 Notify/Return 導回用）；與 clickTrackingBaseUrl 同源 */
     appBaseUrl: appPublicBaseUrl,
 
@@ -111,6 +132,23 @@ export default defineNuxtConfig({
         process.env.NEWEBPAY_MERCHANT_ID
         && process.env.NEWEBPAY_HASH_KEY
         && process.env.NEWEBPAY_HASH_IV,
+      ),
+      /**
+       * 結帳是否走「自動續訂」（定期定額委託）而非一次性付款。
+       * 前端據此決定確認文案（「每月自動扣款」vs「單次付款」）與是否顯示取消訂閱按鈕。
+       */
+      recurringEnabled: Boolean(
+        process.env.NEWEBPAY_MERCHANT_ID
+        && process.env.NEWEBPAY_HASH_KEY
+        && process.env.NEWEBPAY_HASH_IV
+        && process.env.NEWEBPAY_PERIOD_ENABLED === 'true',
+      ),
+      /** 電子發票是否已開通（前端據此顯示／隱藏「發票資訊」設定卡）。四個值缺一不可。 */
+      invoiceEnabled: Boolean(
+        process.env.EZPAY_INVOICE_MERCHANT_ID
+        && process.env.EZPAY_INVOICE_HASH_KEY
+        && process.env.EZPAY_INVOICE_HASH_IV
+        && process.env.EZPAY_INVOICE_API_URL,
       ),
       /**
        * 官方 FAQ 範本的 Google Sheet 母本網址（開「知道連結者可檢視」）。

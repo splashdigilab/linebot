@@ -6,7 +6,7 @@
 //  不各自重算，避免規則飄移。
 // ═══════════════════════════════════════════════════════════════════
 
-import type { BillingPlanId } from './plans'
+import type { BillingPlanId, SubscriptionStatus } from './plans'
 
 /** 對前端顯示用的方案視圖（由訂閱組出，見 server/utils/billing.ts buildPlanView）。 */
 export interface PlanView {
@@ -19,6 +19,21 @@ export interface PlanView {
   /** 本期起訖（YYYY-MM-DD）。週期由錨定日決定,不是日曆月（見 shared/time.ts）。 */
   currentPeriodStart: string | null
   currentPeriodEnd: string | null
+  /** 訂閱狀態。past_due = 自動扣款還沒成功，正在寬限期（服務照跑）。 */
+  status: SubscriptionStatus
+  /** 是否每月自動續訂（背後有生效中的定期定額委託）。 */
+  autoRenew: boolean
+  /** 已取消，但服務用到本期結束。 */
+  cancelAtPeriodEnd: boolean
+  /**
+   * 藍新那邊還有一張生效中的扣款委託。
+   *
+   * 這和 autoRenew **不是同一件事**：扣款失敗被降回免費層之後 autoRenew 是 false，
+   * 但委託還活著、還在刷客戶的卡。取消入口要看這個旗標，不能看 autoRenew，
+   * 否則客戶會落到「服務被降級、錢照扣、按鈕還不見了」。
+   * （只回布林值，委託單號不外洩到前端。）
+   */
+  hasMandate: boolean
 }
 
 export type QuotaState = 'ok' | 'near' | 'over'

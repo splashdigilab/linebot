@@ -1,5 +1,6 @@
 import { parseNotifyResult, verifyAndDecryptNotify } from '~~/server/utils/newebpay'
 import { settlePaidOrder } from '~~/server/utils/payment'
+import { invoiceKeysFromConfig, issueInvoiceForOrder } from '~~/server/utils/invoice'
 
 /**
  * POST /newebpay/notify — 藍新 MPG 幕後 Notify(server→server,開通的唯一真相來源)。
@@ -66,6 +67,17 @@ export default defineEventHandler(async (event) => {
   if (settled.outcome === 'unknown') console.warn('[newebpay:notify] 查無訂單', merchantOrderNo)
   else if (settled.amountMismatch) console.error('[newebpay:notify] 金額不符,已標記失敗', merchantOrderNo)
   else console.log('[newebpay:notify]', merchantOrderNo, paid ? 'paid' : 'failed', settled.outcome)
+
+  // 開立電子發票。**吞掉所有失敗**——錢已經收了，開票失敗不能讓這裡回非 200
+  // （藍新會重送 → 重複結算）。失敗會記在 invoices / 訂單上供補開。
+  if (paid && settled.outcome === 'settled' && !settled.amountMismatch && settled.workspaceId) {
+    await issueInvoiceForOrder({
+      merchantOrderNo,
+      workspaceId: settled.workspaceId,
+      planId: settled.planId!,
+      totalAmt: settled.amount!,
+    }, invoiceKeysFromConfig(config as unknown as Record<string, unknown>))
+  }
 
   return { status: 'ok' }
 })

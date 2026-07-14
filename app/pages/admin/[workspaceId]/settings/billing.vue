@@ -54,6 +54,35 @@
               </p>
             </template>
             <p v-else class="text-xs text-muted">客製額度,無固定則數上限。</p>
+
+            <!-- 續訂狀態：自動扣款這件事必須一眼看得到，而且**隨時退得掉**。
+                 取消按鈕的顯示條件是 canCancel（= 還有生效中的委託），不是 autoRenew——
+                 扣款失敗或已被降級時，委託在藍新那邊還活著、還在刷卡，那正是最需要停掉它的時刻，
+                 絕不能讓警告訊息把取消入口蓋掉。 -->
+            <el-alert
+              v-if="planView.status === 'past_due'"
+              type="warning"
+              :closable="false"
+              show-icon
+              title="這期的自動扣款尚未成功"
+            >
+              <span class="text-xs">服務仍在正常運作。請確認信用卡是否過期或額度不足；幾天內仍未扣款成功，方案會降回免費層。</span>
+            </el-alert>
+
+            <div v-if="planView.cancelAtPeriodEnd" class="billing-renew-row">
+              <span class="text-xs text-muted">
+                已取消自動續訂，服務可用到 <strong>{{ planView.currentPeriodEnd }}</strong>，之後降回免費層。
+              </span>
+            </div>
+            <div v-else-if="canCancel" class="billing-renew-row">
+              <span class="text-xs text-muted">
+                <template v-if="planView.autoRenew">
+                  每月自動續訂中 · 下次扣款 <strong>{{ nextChargeDate }}</strong>
+                </template>
+                <template v-else>自動扣款委託仍在生效中，若不想再被扣款請取消。</template>
+              </span>
+              <el-button size="small" text :loading="canceling" @click="cancelSubscription">取消訂閱</el-button>
+            </div>
           </div>
           <AdminPlanUpgradeDialog v-model="upgradeOpen" :current-plan-id="planView.id" />
         </div>
@@ -90,12 +119,53 @@
                   <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
                 </template>
               </el-table-column>
+              <el-table-column v-if="invoiceEnabled" label="發票號碼" min-width="110">
+                <template #default="{ row }">
+                  <span v-if="row.invoiceNumber" class="billing-order-no">{{ row.invoiceNumber }}</span>
+                  <span v-else class="text-xs text-muted">{{ invoiceStatusLabel(row.invoiceStatus) }}</span>
+                </template>
+              </el-table-column>
               <el-table-column label="訂單編號" min-width="170">
                 <template #default="{ row }">
                   <span class="billing-order-no">{{ row.merchantOrderNo }}</span>
                 </template>
               </el-table-column>
             </el-table>
+          </div>
+        </div>
+
+        <!-- 發票資訊：ezPay 電子發票未開通時整張卡不顯示（沒開通填了也沒用） -->
+        <div v-if="invoiceEnabled" class="message-card ar-section-card">
+          <div class="message-card-header">
+            <div class="card-header-main">
+              <span class="badge badge-green">📄 發票資訊</span>
+              <span class="text-xs text-muted">每次付款成功後自動開立</span>
+            </div>
+            <el-button size="small" :loading="savingInvoice" @click="saveInvoiceProfile">儲存</el-button>
+          </div>
+          <div class="card-section-stack">
+            <div class="admin-field-group">
+              <AdminFieldLabel text="統一編號" hint="公司報帳請填。填了就開立可列印的三聯式發票，載具與捐贈碼不適用。" tight />
+              <el-input v-model="invoiceForm.buyerUBN" placeholder="8 碼數字，個人請留空" maxlength="8" />
+            </div>
+            <div class="admin-field-group">
+              <AdminFieldLabel :text="invoiceForm.buyerUBN ? '公司抬頭（必填）' : '買受人名稱'" tight />
+              <el-input v-model="invoiceForm.buyerName" placeholder="留空則使用官方帳號名稱" maxlength="60" />
+            </div>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="發票寄送 Email" tight />
+              <el-input v-model="invoiceForm.buyerEmail" placeholder="開立後寄送發票通知" />
+            </div>
+            <template v-if="!invoiceForm.buyerUBN">
+              <div class="admin-field-group">
+                <AdminFieldLabel text="手機條碼載具" hint="與捐贈碼只能擇一。都不填則開立紙本發票。" tight />
+                <el-input v-model="invoiceForm.carrierNum" placeholder="/ABC1234" maxlength="8" />
+              </div>
+              <div class="admin-field-group">
+                <AdminFieldLabel text="捐贈碼" tight />
+                <el-input v-model="invoiceForm.loveCode" placeholder="3–7 碼數字" maxlength="7" />
+              </div>
+            </template>
           </div>
         </div>
       </div>
@@ -112,7 +182,11 @@ useHead({ title: '訂閱與付款 — LINE Bot 管理系統' })
 
 const route = useRoute()
 const { apiFetch } = useWorkspace()
+const { showToast } = useAdminToast()
 const { plan: planView, state: planState, load: loadPlanSummary } = usePlanSummary()
+
+const config = useRuntimeConfig()
+const invoiceEnabled = Boolean(config.public.invoiceEnabled)
 
 const upgradeOpen = ref(false)
 const loading = ref(false)
@@ -125,8 +199,73 @@ interface OrderRow {
   paymentType: string | null
   createdAt: number | null
   paidAt: number | null
+  invoiceNumber?: string | null
+  invoiceStatus?: 'issued' | 'failed' | 'skipped' | null
 }
 const orders = ref<OrderRow[]>([])
+
+// ── 自動續訂 ──────────────────────────────────────────────
+/** 下次扣款日 = 本期到期日的隔天（藍新在錨定日當天扣款）。 */
+const nextChargeDate = computed(() => {
+  const end = planView.value?.currentPeriodEnd
+  if (!end) return '—'
+  const [y, m, d] = end.split('-').map(Number) as [number, number, number]
+  const t = new Date(Date.UTC(y, m - 1, d + 1))
+  const p2 = (n: number) => String(n).padStart(2, '0')
+  return `${t.getUTCFullYear()}-${p2(t.getUTCMonth() + 1)}-${p2(t.getUTCDate())}`
+})
+
+/**
+ * 能不能取消 = 藍新那邊還有生效中的委託。**不是**看 autoRenew——
+ * 扣款失敗被降回免費層時 autoRenew 已經是 false，但卡還在被扣，那時最需要這個按鈕。
+ */
+const canCancel = computed(() => planView.value?.hasMandate === true)
+
+const canceling = ref(false)
+async function cancelSubscription() {
+  try {
+    await ElMessageBox.confirm(
+      `取消後不再自動扣款，「${planView.value?.name}」方案可以用到 ${planView.value?.currentPeriodEnd}，之後降回免費層（每月 200 則）。`,
+      '取消自動續訂',
+      { confirmButtonText: '確認取消訂閱', cancelButtonText: '再想想', type: 'warning' },
+    )
+  }
+  catch { return }
+
+  canceling.value = true
+  try {
+    const r = await apiFetch<{ activeUntil: string | null }>('/api/payment/cancel-subscription', { method: 'POST' })
+    showToast(`已取消自動續訂，服務可用到 ${r.activeUntil ?? '本期結束'}`, 'success')
+    await loadPlanSummary()
+  }
+  catch (e: any) {
+    showToast(e?.data?.statusMessage || '取消失敗，請聯繫客服', 'error')
+  }
+  finally {
+    canceling.value = false
+  }
+}
+
+// ── 發票資訊 ──────────────────────────────────────────────
+const invoiceForm = reactive({ buyerUBN: '', buyerName: '', buyerEmail: '', carrierNum: '', loveCode: '' })
+const savingInvoice = ref(false)
+
+const INVOICE_STATUS_LABEL: Record<string, string> = { failed: '開立失敗', skipped: '未開立', issued: '—' }
+function invoiceStatusLabel(s?: string | null) { return s ? (INVOICE_STATUS_LABEL[s] ?? '—') : '—' }
+
+async function saveInvoiceProfile() {
+  savingInvoice.value = true
+  try {
+    await apiFetch('/api/payment/invoice-profile', { method: 'POST', body: { ...invoiceForm } })
+    showToast('發票資訊已儲存', 'success')
+  }
+  catch (e: any) {
+    showToast(e?.data?.statusMessage || '儲存失敗', 'error')
+  }
+  finally {
+    savingInvoice.value = false
+  }
+}
 
 const STATUS_LABEL: Record<PaymentOrderStatus, string> = { pending: '待付款', paid: '已付款', failed: '失敗', expired: '已逾期' }
 function statusLabel(s: PaymentOrderStatus) { return STATUS_LABEL[s] ?? s }
@@ -197,9 +336,22 @@ async function loadOrders() {
   catch { orders.value = [] }
 }
 
+async function loadInvoiceProfile() {
+  if (!invoiceEnabled) return
+  try {
+    const { profile } = await apiFetch<{ profile: Record<string, string | null> }>('/api/payment/invoice-profile')
+    invoiceForm.buyerUBN = profile.buyerUBN ?? ''
+    invoiceForm.buyerName = profile.buyerName ?? ''
+    invoiceForm.buyerEmail = profile.buyerEmail ?? ''
+    invoiceForm.carrierNum = profile.carrierNum ?? ''
+    invoiceForm.loveCode = profile.loveCode ?? ''
+  }
+  catch { /* 讀不到就留空表單，不擋整頁 */ }
+}
+
 async function reloadAll() {
   loading.value = true
-  try { await Promise.all([loadPlanSummary(), loadOrders()]) }
+  try { await Promise.all([loadPlanSummary(), loadOrders(), loadInvoiceProfile()]) }
   finally { loading.value = false }
 }
 

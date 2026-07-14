@@ -32,7 +32,10 @@ export interface BillingPlan {
    * null = 客製 / 面談（enterprise）；實際額度由訂閱層的 quotaOverride 指定。
    */
   answeredQuota: number | null
-  /** 月費（TWD，未稅）。null = 客製報價。 */
+  /**
+   * 月費（TWD，**含稅**）——這就是實際向信用卡請款的金額,也是電子發票的 TotalAmt。
+   * 銷售額與稅額由此反推（見 shared/billing/tax.ts）。null = 客製報價。
+   */
   priceMonthly: number | null
   /** 超量加購單價（TWD/則）。null = 不提供超量（免費層須升級；enterprise 走合約）。 */
   overagePerReply: number | null
@@ -208,8 +211,35 @@ export interface WorkspaceSubscription {
    * 錨定日（1–31）：客戶開始訂閱的那一天,每期都在這天續期。
    * 單獨存起來而不從 currentPeriodStart 反推,是為了讓「錨定日 31」經過 2 月被夾成 28 之後
    * 還能回到 31,不會一路往前漂（見 shared/time.ts anchoredPeriod）。
+   *
+   * 也是藍新定期定額的 `PeriodPoint`（每月幾號扣款）——藍新對短月的夾法與我們相同,
+   * 兩邊的「續期日」因此永遠對得起來。
    */
   anchorDay?: number
+  /**
+   * 藍新定期定額的**委託單號**（PeriodNo）。有值 = 這個訂閱背後有一張自動扣款委託,
+   * 取消 / 暫停要拿它去打藍新的 AlterStatus。
+   */
+  periodNo?: string
+  /**
+   * 建立這張委託的商店訂單編號（MerOrderNo）。藍新的 AlterStatus 要 MerOrderNo + PeriodNo
+   * **成對**才認,所以直接存在訂閱上——不然取消時得反查訂單（要多一組 composite index,
+   * 還多一條「查不到就取消不了」的失敗路徑,而那條路徑上客戶的卡還在被扣款）。
+   */
+  periodOrderNo?: string
+  /**
+   * 是否自動續訂（背後有生效中的定期定額委託）。
+   *
+   * ⚠️ 這個旗標會改變「到期」的處理：**自動續訂的訂閱到期不會立刻降級**,而是進入
+   * past_due 寬限期等藍新的扣款通知（藍新是在錨定日當天才扣款,通知可能晚幾小時才到;
+   * 若一到期就降級,客戶每個月都會斷線幾小時）。見 period.ts 的 GRACE_DAYS。
+   */
+  autoRenew?: boolean
+  /**
+   * 客戶已按下取消,但保留到本期結束（訂閱制的標準做法:取消不是立刻斷）。
+   * 期末 roll 時直接降回免費層,不走寬限期。
+   */
+  cancelAtPeriodEnd?: boolean
   /** 例外額度：覆蓋方案預設則數（企業客製 / 業務談定的特例）。 */
   quotaOverride?: number | null
   /** 內部備註（開通原因、合約號等），不對客戶顯示。 */

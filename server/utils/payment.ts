@@ -16,9 +16,10 @@ import { getDb } from './firebase'
 import { invalidateWorkspaceSubscriptionCache } from './billing'
 import { addDays, dayOfDate, taipeiDate } from '~~/shared/time'
 import { isSelfServePaidPlan, type BillingPlanId, type WorkspaceSubscription } from '~~/shared/billing/plans'
-import { anchorDayOf, newSubscription, rollSubscriptionToCurrentPeriod } from '~~/shared/billing/period'
+import { anchorDayOf, confirmRenewal, newSubscription, rollSubscriptionToCurrentPeriod } from '~~/shared/billing/period'
+import { terminatePeriodMandate, type PeriodMandateConfig } from './newebpay-period'
 import type { WorkspaceDoc } from '~~/shared/types/organization'
-import type { PaymentOrderDoc, PaymentOrderStatus } from '~~/shared/types/payment'
+import type { PaymentOrderDoc, PaymentOrderKind, PaymentOrderStatus } from '~~/shared/types/payment'
 
 export const PAYMENT_ORDERS_COLLECTION = 'paymentOrders'
 
@@ -43,17 +44,36 @@ export function buildPaidSubscription(
   planId: BillingPlanId,
   now: Date,
   existingSub?: WorkspaceSubscription | null,
+  opts?: {
+    /** 藍新定期定額委託單號；有值即代表這是自動續訂的訂閱。 */
+    periodNo?: string | null
+    /** 建立該委託的商店訂單編號（取消時 AlterStatus 要成對帶）。 */
+    periodOrderNo?: string | null
+    /**
+     * 建單當下決定的錨定日（= 送給藍新的 PeriodPoint）。定期定額**必須**帶,
+     * 且必須是建單時存下來的那個值,不能在這裡用 now 重算——見 PaymentOrderDoc.anchorDay。
+     */
+    anchorDay?: number | null
+  },
 ): WorkspaceSubscription {
   const today = taipeiDate(now)
+  const isPeriod = Boolean(opts?.periodNo)
 
-  const stacking = existingSub != null
+  // 定期定額**不堆疊**：藍新那張委託的扣款日是 PeriodPoint（= 建單當天），我方的續期日
+  // 必須跟它同一天。若沿用舊訂閱的錨定日（堆疊），兩邊就會錯開，每個月都會出現
+  // 「我方到期進寬限期 → 藍新還沒到扣款日 → 寬限期滿 → 把有在付錢的客戶降級」。
+  // 換方案時舊委託已在 create-subscription 被終止，本來就該重新起算。
+  const stacking = !isPeriod
+    && existingSub != null
     && existingSub.planId === planId
     && isSelfServePaidPlan(planId)
     && existingSub.status !== 'canceled'
     && existingSub.currentPeriodEnd != null
     && existingSub.currentPeriodEnd >= today
 
-  const anchorDay = stacking ? anchorDayOf(existingSub!) : dayOfDate(today)
+  const anchorDay = stacking
+    ? anchorDayOf(existingSub!)
+    : (opts?.anchorDay ?? dayOfDate(today))
   const startDate = stacking ? addDays(existingSub!.currentPeriodEnd!, 1) : today
 
   const sub = newSubscription(planId, startDate, { anchorDay })
@@ -61,23 +81,38 @@ export function buildPaidSubscription(
   if (existingSub?.planId === planId && existingSub.quotaOverride != null) {
     sub.quotaOverride = existingSub.quotaOverride
   }
+  // 定期定額：記下委託單號並開啟自動續訂（到期不會直接降級,改走寬限期等扣款通知）
+  if (opts?.periodNo) {
+    sub.periodNo = opts.periodNo
+    sub.autoRenew = true
+    sub.cancelAtPeriodEnd = false
+    if (opts.periodOrderNo) sub.periodOrderNo = opts.periodOrderNo
+  }
   return sub
 }
 
-/** 4 碼英數亂數尾碼（訂單編號用）。 */
+/** 3 碼英數亂數尾碼（訂單編號用）。 */
 function randomSuffix(): string {
-  return Math.random().toString(36).slice(2, 6).toUpperCase().padEnd(4, '0')
+  return Math.random().toString(36).slice(2, 5).toUpperCase().padEnd(3, '0')
 }
 
 /**
- * 產生藍新 MerchantOrderNo：`NP` + UTC yyyymmddHHMMSS + 4 碼亂數 = 20 碼。
- * 僅英數,符合藍新「限英數、<=30 碼」限制,且足夠唯一。
+ * 產生商店訂單編號：`NP` + UTC yyMMddHHmmss + 3 碼亂數 = **17 碼**。
+ *
+ * 長度是被**電子發票**綁死的,不是藍新：
+ *   · 藍新 MerOrderNo 上限 30 碼（英數與底線）——很寬鬆。
+ *   · 定期定額每期的 OrderNo = `本單號_期數`,最多再加 3 碼（`_99`）→ 20 碼。
+ *   · ezPay 發票的 MerchantOrderNo 上限就是 **20 碼**。
+ * 所以本單號一超過 17 碼,第 2 期之後的續期發票就會全部被 ezPay 退件。
  */
 export function newMerchantOrderNo(now: Date, rand: string = randomSuffix()): string {
-  const ts = `${now.getUTCFullYear()}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}`
+  const ts = `${String(now.getUTCFullYear()).slice(2)}${pad(now.getUTCMonth() + 1)}${pad(now.getUTCDate())}`
     + `${pad(now.getUTCHours())}${pad(now.getUTCMinutes())}${pad(now.getUTCSeconds())}`
-  return `NP${ts}${rand}`.slice(0, 30)
+  return `NP${ts}${rand}`.slice(0, 17)
 }
+
+/** ezPay 發票的自訂編號上限（Varchar(20)）。 */
+export const INVOICE_ORDER_NO_MAX = 20
 
 // ── Firestore 存取 ─────────────────────────────────────────────────
 
@@ -90,6 +125,9 @@ export async function createPendingOrder(
     planId: BillingPlanId
     amount: number
     createdBy?: string | null
+    kind?: PaymentOrderKind
+    /** 定期定額：建單當下決定的錨定日（= PeriodPoint），開通時沿用不重算。 */
+    anchorDay?: number | null
   },
   db: Firestore = getDb(),
 ): Promise<void> {
@@ -100,6 +138,9 @@ export async function createPendingOrder(
     planId: order.planId,
     amount: order.amount,
     status: 'pending',
+    kind: order.kind ?? 'one_time',
+    anchorDay: order.anchorDay ?? null,
+    periodNo: null,
     tradeNo: null,
     paymentType: null,
     periodStart: null,
@@ -112,6 +153,15 @@ export async function createPendingOrder(
   }
   // create()：訂單編號碰撞時失敗（不覆蓋既有訂單）
   await db.collection(PAYMENT_ORDERS_COLLECTION).doc(order.merchantOrderNo).create(doc)
+}
+
+/** 讀一筆訂單（定期定額續期時要用原始委託單找回 workspace 與方案）。 */
+export async function getOrder(
+  merchantOrderNo: string,
+  db: Firestore = getDb(),
+): Promise<PaymentOrderDoc | null> {
+  const snap = await db.collection(PAYMENT_ORDERS_COLLECTION).doc(merchantOrderNo).get()
+  return snap.exists ? (snap.data() as PaymentOrderDoc) : null
 }
 
 /** 建單去重視窗:同帳號同方案在此時間內的 pending 訂單會被沿用,避免連點重複扣款。 */
@@ -154,6 +204,8 @@ export interface SettleOrderResult {
   outcome: 'settled' | 'already' | 'unknown'
   workspaceId?: string
   planId?: BillingPlanId
+  /** 實際入帳金額（開發票用） */
+  amount?: number
   /** 付款金額與建單金額不符（疑似竄改）；此時標記失敗、不開通 */
   amountMismatch?: boolean
 }
@@ -173,6 +225,8 @@ export async function settlePaidOrder(
     paymentType?: string | null
     /** Notify 回傳的付款金額；與訂單金額不符則標記失敗、不開通（防竄改） */
     amount?: number
+    /** 定期定額委託單號（首期 Notify 回傳）；有值 → 訂閱開啟自動續訂 */
+    periodNo?: string | null
     now: Date
     notifyRaw?: Record<string, unknown> | null
   },
@@ -215,11 +269,17 @@ export async function settlePaidOrder(
       return { outcome: 'settled', workspaceId: order.workspaceId, planId: order.planId, amountMismatch: true }
     }
 
-    const sub = buildPaidSubscription(order.planId, input.now, existingSub)
+    const sub = buildPaidSubscription(order.planId, input.now, existingSub, {
+      periodNo: input.periodNo,
+      periodOrderNo: input.periodNo ? order.merchantOrderNo : null,
+      // 沿用建單時的錨定日（= 送給藍新的 PeriodPoint），不要在這裡重算
+      anchorDay: order.anchorDay,
+    })
     tx.update(orderRef, {
       ...base,
       status: 'paid' as PaymentOrderStatus,
       paidAt: FieldValue.serverTimestamp(),
+      periodNo: input.periodNo ?? null,
       periodStart: sub.currentPeriodStart,
       periodEnd: sub.currentPeriodEnd,
     })
@@ -228,11 +288,151 @@ export async function settlePaidOrder(
       subscription: sub,
       updatedAt: FieldValue.serverTimestamp(),
     })
-    return { outcome: 'settled', workspaceId: order.workspaceId, planId: order.planId }
+    return { outcome: 'settled', workspaceId: order.workspaceId, planId: order.planId, amount: order.amount }
   })
 
   // 開通後清快取（transaction 外，確保已 commit）
   if (result.outcome === 'settled' && result.workspaceId) {
+    invalidateWorkspaceSubscriptionCache(result.workspaceId)
+  }
+  return result
+}
+
+// ── 定期定額：第 2 期以後的自動扣款 ────────────────────────────────
+
+export interface SettleRecurringResult {
+  outcome: 'renewed' | 'past_due' | 'already' | 'unknown'
+  workspaceId?: string
+  planId?: BillingPlanId
+  amount?: number
+  /** 本期的帳本單號（= 藍新的 OrderNo，`原單號_期數`）；開發票用 */
+  ledgerOrderNo?: string
+}
+
+/**
+ * 結算定期定額的「每期授權」通知（NPA-N050）。
+ *
+ * 與首期不同：**我方沒有預先建單**——藍新自動扣款後才回拋。所以這裡是
+ * 「拿原始委託單找回 workspace 與方案 → 補寫一筆本期帳 → 續期訂閱」。
+ *
+ * 冪等：本期帳的 doc id 用藍新的 `OrderNo`（`原單號_期數`，每期唯一），
+ * 用 create() 搶寫;已存在即代表這期處理過 → 直接跳過（藍新會重送直到收 200）。
+ *
+ * 扣款失敗（Status ≠ SUCCESS）→ 訂閱維持 past_due,不動方案。寬限期用完後
+ * rollSubscriptionToCurrentPeriod 會自然把它降回免費層（見 shared/billing/period.ts）。
+ */
+export async function settleRecurringAuth(
+  input: {
+    /** 原始委託的商店訂單編號（MerchantOrderNo） */
+    merchantOrderNo: string
+    /** 本期單號（OrderNo = `原單號_期數`）；藍新未回傳時退回自行組出 */
+    ledgerOrderNo: string
+    paid: boolean
+    periodNo?: string | null
+    tradeNo?: string | null
+    amount?: number
+    periodTimes?: number | null
+    now: Date
+    notifyRaw?: Record<string, unknown> | null
+  },
+  db: Firestore = getDb(),
+): Promise<SettleRecurringResult> {
+  const today = taipeiDate(input.now)
+  const originRef = db.collection(PAYMENT_ORDERS_COLLECTION).doc(input.merchantOrderNo)
+  const ledgerRef = db.collection(PAYMENT_ORDERS_COLLECTION).doc(input.ledgerOrderNo)
+
+  // ⚠️ 帳本與訂閱**必須在同一個 transaction 裡**。
+  // 之前是先 create() 帳本、再 update() 訂閱：只要中間掛掉（Lambda 逾時、Firestore 抖動）,
+  // 藍新重送時就會撞到「帳本已存在 → 冪等跳過」,訂閱永遠續不了期——客戶錢扣了、方案卻在
+  // 寬限期滿之後被降級,而且連發票都不會開。冪等鍵一旦先落地，就再也沒有第二次機會了。
+  const result = await db.runTransaction<SettleRecurringResult>(async (tx) => {
+    const originSnap = await tx.get(originRef)
+    if (!originSnap.exists) return { outcome: 'unknown' }
+    const origin = originSnap.data() as PaymentOrderDoc
+
+    // 原始委託單已被判定失敗（金額不符 / 逾期清理）→ 這張委託本來就不該生效。
+    // 不能因為藍新照樣扣了款就把方案開起來,那等於「失敗的訂單被續期通知復活」。
+    if (origin.status === 'failed') {
+      console.error('[payment] 續期通知對應到一張已失敗的委託單,拒絕開通', input.merchantOrderNo)
+      return { outcome: 'unknown', workspaceId: origin.workspaceId, planId: origin.planId }
+    }
+
+    const ledgerSnap = await tx.get(ledgerRef)
+    if (ledgerSnap.exists) {
+      // 這一期處理過了（藍新重送）→ 冪等跳過
+      return { outcome: 'already', workspaceId: origin.workspaceId, planId: origin.planId }
+    }
+
+    const wsRef = db.collection('workspaces').doc(origin.workspaceId)
+    const wsSnap = await tx.get(wsRef)
+    const existing = wsSnap.exists ? (wsSnap.data() as WorkspaceDoc).subscription : undefined
+
+    const ledger: PaymentOrderDoc = {
+      merchantOrderNo: input.ledgerOrderNo,
+      workspaceId: origin.workspaceId,
+      organizationId: origin.organizationId ?? null,
+      planId: origin.planId,
+      amount: input.amount ?? origin.amount,
+      status: (input.paid ? 'paid' : 'failed') as PaymentOrderStatus,
+      kind: 'period_recurring' as PaymentOrderKind,
+      anchorDay: origin.anchorDay ?? null,
+      periodNo: input.periodNo ?? origin.periodNo ?? null,
+      periodTimes: input.periodTimes ?? null,
+      tradeNo: input.tradeNo ?? null,
+      paymentType: 'CREDIT',
+      periodStart: null,
+      periodEnd: null,
+      createdBy: null,
+      createdAt: FieldValue.serverTimestamp(),
+      paidAt: input.paid ? FieldValue.serverTimestamp() : null,
+      updatedAt: FieldValue.serverTimestamp(),
+      notifyRaw: input.notifyRaw ?? null,
+    }
+
+    if (!input.paid) {
+      tx.create(ledgerRef, ledger)
+      // 扣款失敗 → past_due（服務照跑,等寬限期與後續重試）。降級一律交給 roll 統一處理,
+      // 免得「失敗通知」與「寬限期推算」對降級時機各說各話。
+      // 只有還在付費方案上才標 past_due——已經被降回免費層的帳號再標 past_due 會卡死
+      // （免費層不在寬限期邏輯的管轄內，狀態永遠清不掉）。
+      if (existing && isSelfServePaidPlan(existing.planId)) {
+        tx.update(wsRef, {
+          subscription: { ...existing, status: 'past_due' },
+          updatedAt: FieldValue.serverTimestamp(),
+        })
+      }
+      return { outcome: 'past_due', workspaceId: origin.workspaceId, planId: origin.planId }
+    }
+
+    // 扣款成功 → 續期：推到當期、方案由「原始訂單」決定（見 confirmRenewal 的警告）
+    const base = existing ?? buildPaidSubscription(origin.planId, input.now, null, {
+      periodNo: input.periodNo,
+      periodOrderNo: origin.merchantOrderNo,
+      anchorDay: origin.anchorDay,
+    })
+    const renewed = confirmRenewal(base, today, {
+      planId: origin.planId,
+      periodNo: input.periodNo ?? origin.periodNo,
+      periodOrderNo: origin.merchantOrderNo,
+    })
+
+    tx.create(ledgerRef, {
+      ...ledger,
+      periodStart: renewed.currentPeriodStart,
+      periodEnd: renewed.currentPeriodEnd,
+    })
+    tx.update(wsRef, { subscription: renewed, updatedAt: FieldValue.serverTimestamp() })
+
+    return {
+      outcome: 'renewed',
+      workspaceId: origin.workspaceId,
+      planId: origin.planId,
+      amount: input.amount ?? origin.amount,
+      ledgerOrderNo: input.ledgerOrderNo,
+    }
+  })
+
+  if (result.workspaceId && (result.outcome === 'renewed' || result.outcome === 'past_due')) {
     invalidateWorkspaceSubscriptionCache(result.workspaceId)
   }
   return result
@@ -257,17 +457,36 @@ const STALE_PENDING_MS = 4 * 24 * 60 * 60 * 1000
 export async function runPaymentReconcile(
   now: Date = new Date(),
   db: Firestore = getDb(),
-): Promise<{ renewed: number; downgraded: number; expiredOrders: number }> {
+  /** 降級時用來終止藍新委託；未提供則只寫資料庫（單元測試用）。 */
+  periodCfg?: PeriodMandateConfig | null,
+): Promise<{ renewed: number; downgraded: number; terminated: number; expiredOrders: number }> {
   const today = taipeiDate(now)
 
   let renewed = 0
   let downgraded = 0
+  let terminated = 0
   const stale = await db.collection('workspaces').where('subscription.currentPeriodEnd', '<', today).get()
   for (const doc of stale.docs) {
     const sub = (doc.data() as WorkspaceDoc).subscription
     if (!sub) continue
     const rolled = rollSubscriptionToCurrentPeriod(sub, today)
     if (!rolled.changed) continue
+
+    // 降級（沒續費 / 寬限期滿）→ 藍新那張委託還活著,還會扣客戶的卡。
+    // 我方都不給付費方案了,就必須主動把它停掉——否則客戶會「服務被降級、錢照扣」。
+    if (rolled.downgraded && rolled.sub.periodNo && rolled.sub.periodOrderNo && periodCfg) {
+      const t = await terminatePeriodMandate(rolled.sub.periodOrderNo, rolled.sub.periodNo, periodCfg)
+      if (t.ok) {
+        delete rolled.sub.periodNo
+        delete rolled.sub.periodOrderNo
+        terminated++
+      }
+      else {
+        // 停不掉 → 單號留著（下次對帳與客戶的取消按鈕都還能再試一次）
+        console.error('[payment] 降級時終止委託失敗,卡片可能仍在扣款', doc.id, t.code, t.message)
+      }
+    }
+
     await doc.ref.update({ subscription: rolled.sub, updatedAt: FieldValue.serverTimestamp() })
     invalidateWorkspaceSubscriptionCache(doc.id)
     renewed++
@@ -286,5 +505,5 @@ export async function runPaymentReconcile(
     }
   }
 
-  return { renewed, downgraded, expiredOrders }
+  return { renewed, downgraded, terminated, expiredOrders }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { anchorDayOf, newSubscription, rollSubscriptionToCurrentPeriod } from './period'
+import { anchorDayOf, confirmRenewal, GRACE_DAYS, newSubscription, rollSubscriptionToCurrentPeriod } from './period'
 import type { WorkspaceSubscription } from './plans'
 
 const sub = (over: Partial<WorkspaceSubscription> & Pick<WorkspaceSubscription, 'planId'>): WorkspaceSubscription => ({
@@ -103,5 +103,135 @@ describe('rollSubscriptionToCurrentPeriod — 讀取時就地推算當期', () =
     expect(r.sub.currentPeriodStart).toBe('2026-07-03')
     expect(r.sub.currentPeriodEnd).toBe('2026-08-02')
     expect(r.sub.anchorDay).toBe(3)
+  })
+})
+
+// ── 自動續訂（定期定額）的寬限期 ──────────────────────────────────
+//
+// 藍新是在「錨定日當天」才扣款,通知可能晚幾小時。若一到期就降級,客戶每個月都會
+// 斷線一段時間——這組測試就是在釘死這件事不會發生。
+describe('rollSubscriptionToCurrentPeriod — 自動續訂的寬限期', () => {
+  const autoRenewing = (over: Partial<WorkspaceSubscription> = {}): WorkspaceSubscription => ({
+    planId: 'starter',
+    status: 'active',
+    currentPeriodStart: '2026-07-28',
+    currentPeriodEnd: '2026-08-27',
+    anchorDay: 28,
+    autoRenew: true,
+    periodNo: 'P26072812345678',
+    periodOrderNo: 'NP260728120ABC',
+    ...over,
+  })
+
+  it('到期當天扣款通知還沒到 → 進 past_due,方案不變（服務照跑、額度照給）', () => {
+    const r = rollSubscriptionToCurrentPeriod(autoRenewing(), '2026-08-28')
+    expect(r.downgraded).toBe(false)
+    expect(r.sub.planId).toBe('starter') // ← 沒被降級,這是重點
+    expect(r.sub.status).toBe('past_due')
+    expect(r.sub.currentPeriodStart).toBe('2026-08-28') // 已滾到新一期 → 額度歸零
+  })
+
+  it(`寬限期內（${GRACE_DAYS} 天）維持 past_due，方案仍在`, () => {
+    const r = rollSubscriptionToCurrentPeriod(autoRenewing(), '2026-08-30')
+    expect(r.sub.planId).toBe('starter')
+    expect(r.sub.status).toBe('past_due')
+  })
+
+  it('寬限期滿仍未扣款成功 → 才真的降回免費層', () => {
+    const r = rollSubscriptionToCurrentPeriod(autoRenewing(), '2026-09-01') // 8/28 + 3 天 < 9/1
+    expect(r.downgraded).toBe(true)
+    expect(r.sub.planId).toBe('free')
+    expect(r.sub.status).toBe('active')
+    expect(r.sub.autoRenew).toBe(false)
+  })
+
+  it('降級**必須保留委託單號** —— 藍新那張委託還活著、還在扣客戶的卡', () => {
+    // 把單號刪掉 = 我方再也認不得那張委託 → 取消 API 找不到它 → 客戶落到
+    // 「服務被降級、錢繼續被扣、而且誰都停不掉」。這是最貴的一種 bug。
+    const r = rollSubscriptionToCurrentPeriod(autoRenewing(), '2026-09-01')
+    expect(r.sub.planId).toBe('free')
+    expect(r.sub.periodNo).toBe('P26072812345678') // ← 留著，取消入口才停得掉它
+    expect(r.sub.periodOrderNo).toBe('NP260728120ABC')
+  })
+
+  it('降級後不會卡在 past_due（免費層不在寬限期邏輯的管轄內，狀態會永遠清不掉）', () => {
+    // 扣款失敗 → past_due → 降級成 free，但若之後又有一則失敗通知把 free 標成 past_due，
+    // 沒有這條清理就會永遠卡住：帳單頁一直紅字、取消入口被蓋掉。
+    const stuck = rollSubscriptionToCurrentPeriod(
+      { planId: 'free', status: 'past_due', currentPeriodStart: '2026-08-28', currentPeriodEnd: '2026-09-27', anchorDay: 28 },
+      '2026-09-01',
+    )
+    expect(stuck.sub.status).toBe('active')
+    expect(stuck.changed).toBe(true)
+  })
+
+  it('已按下取消（期末生效）→ 不走寬限期，期末直接降回免費層', () => {
+    const r = rollSubscriptionToCurrentPeriod(
+      autoRenewing({ autoRenew: false, cancelAtPeriodEnd: true }),
+      '2026-08-28',
+    )
+    expect(r.downgraded).toBe(true)
+    expect(r.sub.planId).toBe('free')
+  })
+
+  it('沒有自動續訂（單次付款）→ 到期即降級，不給寬限期', () => {
+    const r = rollSubscriptionToCurrentPeriod(autoRenewing({ autoRenew: false }), '2026-08-28')
+    expect(r.downgraded).toBe(true)
+    expect(r.sub.planId).toBe('free')
+  })
+})
+
+describe('confirmRenewal — 收到扣款成功通知', () => {
+  const pastDue: WorkspaceSubscription = {
+    planId: 'starter',
+    status: 'past_due',
+    currentPeriodStart: '2026-08-28',
+    currentPeriodEnd: '2026-09-27',
+    anchorDay: 28,
+    autoRenew: true,
+  }
+
+  it('寬限中收到通知 → 回到 active，本期不變', () => {
+    const s = confirmRenewal(pastDue, '2026-08-28', { planId: 'starter', periodNo: 'P123' })
+    expect(s.status).toBe('active')
+    expect(s.planId).toBe('starter')
+    expect(s.currentPeriodStart).toBe('2026-08-28')
+    expect(s.periodNo).toBe('P123')
+  })
+
+  it('通知遲到、已被降成免費層 → 方案由訂單復原，客戶不會付了錢只拿到 200 則', () => {
+    // 這正是 confirmRenewal 必須收 planId 而不能沿用 roll 結果的原因
+    const downgraded: WorkspaceSubscription = {
+      planId: 'free',
+      status: 'active',
+      currentPeriodStart: '2026-08-28',
+      currentPeriodEnd: '2026-09-27',
+      anchorDay: 28,
+      autoRenew: false,
+    }
+    const s = confirmRenewal(downgraded, '2026-09-02', { planId: 'starter', periodNo: 'P123' })
+    expect(s.planId).toBe('starter')
+    expect(s.status).toBe('active')
+    expect(s.autoRenew).toBe(true)
+  })
+
+  it('已按下取消 → 續期通知**不得**把 autoRenew 打開（系統不能自己撤銷客戶的取消）', () => {
+    // 情境：客戶 27 號取消、終止成功；藍新 28 號那筆扣款已經在路上（競態），通知進來了。
+    // 該給的一期照給，但絕不能復活訂閱——否則帳單頁會顯示一個永遠不會發生的「下次扣款日」，
+    // 客戶的取消也從紀錄上消失了。
+    const canceled: WorkspaceSubscription = {
+      planId: 'starter',
+      status: 'active',
+      currentPeriodStart: '2026-07-28',
+      currentPeriodEnd: '2026-08-27',
+      anchorDay: 28,
+      autoRenew: false,
+      cancelAtPeriodEnd: true,
+    }
+    const s = confirmRenewal(canceled, '2026-08-28', { planId: 'starter', periodNo: 'P123', periodOrderNo: 'NP1' })
+    expect(s.planId).toBe('starter') // 錢收了，這一期照給
+    expect(s.autoRenew).toBe(false) // ← 但取消依然有效
+    expect(s.cancelAtPeriodEnd).toBe(true)
+    expect(s.periodNo).toBeUndefined() // 委託已終止，不要復活單號
   })
 })
