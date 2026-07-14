@@ -134,37 +134,46 @@
           </div>
         </div>
 
-        <!-- 發票資訊：ezPay 電子發票未開通時整張卡不顯示（沒開通填了也沒用） -->
+        <!--
+          發票資訊。統編／抬頭是**組織層級**的設定（一家公司開 3 個 OA 不該填 3 次），
+          所以這裡預設顯示「沿用組織設定」的唯讀摘要，只有真的需要不同抬頭時才展開覆寫。
+          直接給一張空表單，會讓人以為「沒填 = 不會開發票」而在每個 OA 各填一次。
+        -->
         <div v-if="invoiceEnabled" class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="badge badge-green">📄 發票資訊</span>
               <span class="text-xs text-muted">每次付款成功後自動開立</span>
             </div>
-            <el-button size="small" :loading="savingInvoice" @click="saveInvoiceProfile">儲存</el-button>
+            <el-button v-if="invoiceOverriding" size="small" :loading="savingInvoice" @click="saveInvoiceProfile">
+              儲存
+            </el-button>
           </div>
+
           <div class="card-section-stack">
-            <div class="admin-field-group">
-              <AdminFieldLabel text="統一編號" hint="公司報帳請填。填了就開立可列印的三聯式發票，載具與捐贈碼不適用。" tight />
-              <el-input v-model="invoiceForm.buyerUBN" placeholder="8 碼數字，個人請留空" maxlength="8" />
-            </div>
-            <div class="admin-field-group">
-              <AdminFieldLabel :text="invoiceForm.buyerUBN ? '公司抬頭（必填）' : '買受人名稱'" tight />
-              <el-input v-model="invoiceForm.buyerName" placeholder="留空則使用官方帳號名稱" maxlength="60" />
-            </div>
-            <div class="admin-field-group">
-              <AdminFieldLabel text="發票寄送 Email" tight />
-              <el-input v-model="invoiceForm.buyerEmail" placeholder="開立後寄送發票通知" />
-            </div>
-            <template v-if="!invoiceForm.buyerUBN">
-              <div class="admin-field-group">
-                <AdminFieldLabel text="手機條碼載具" hint="與捐贈碼只能擇一。都不填則開立紙本發票。" tight />
-                <el-input v-model="invoiceForm.carrierNum" placeholder="/ABC1234" maxlength="8" />
+            <template v-if="!invoiceOverriding">
+              <div class="billing-invoice-inherited">
+                <div>
+                  <p class="text-sm">{{ effectiveInvoiceLabel }}</p>
+                  <p class="text-xs text-muted">
+                    沿用組織的發票設定。
+                    <NuxtLink v-if="invoiceOrgId" :to="`/admin/org/${invoiceOrgId}`" class="billing-invoice-link">
+                      去組織設定修改 →
+                    </NuxtLink>
+                  </p>
+                </div>
+                <el-button size="small" text @click="startOverride">改用專屬設定</el-button>
               </div>
-              <div class="admin-field-group">
-                <AdminFieldLabel text="捐贈碼" tight />
-                <el-input v-model="invoiceForm.loveCode" placeholder="3–7 碼數字" maxlength="7" />
-              </div>
+            </template>
+
+            <template v-else>
+              <el-alert type="info" :closable="false" show-icon>
+                <span class="text-xs">
+                  這個官方帳號將使用**專屬的**發票資訊，不再沿用組織設定。
+                  全部欄位清空並儲存即可改回沿用。
+                </span>
+              </el-alert>
+              <AdminInvoiceProfileForm v-model="invoiceForm" :fallback-name-hint="workspaceName" />
             </template>
           </div>
         </div>
@@ -176,6 +185,7 @@
 <script setup lang="ts">
 import { BILLING_PLANS } from '~~/shared/billing/plans'
 import type { PaymentOrderStatus } from '~~/shared/types/payment'
+import type { InvoiceForm } from '~~/app/components/admin/AdminInvoiceProfileForm.vue'
 
 definePageMeta({ middleware: ['auth', 'workspace-settings'], layout: 'default' })
 useHead({ title: '訂閱與付款 — LINE Bot 管理系統' })
@@ -246,18 +256,50 @@ async function cancelSubscription() {
   }
 }
 
-// ── 發票資訊 ──────────────────────────────────────────────
-const invoiceForm = reactive({ buyerUBN: '', buyerName: '', buyerEmail: '', carrierNum: '', loveCode: '' })
+// ── 發票資訊（預設沿用組織設定，需要時才覆寫）──────────────────
+const invoiceForm = reactive<InvoiceForm>({
+  buyerUBN: '', buyerName: '', buyerEmail: '', carrierNum: '', loveCode: '',
+})
 const savingInvoice = ref(false)
+/** true = 這個 OA 有自己的專屬設定（不沿用組織）。 */
+const invoiceOverriding = ref(false)
+const invoiceOrgId = ref<string | null>(null)
+const effectiveInvoice = ref<Record<string, string | null>>({})
+
+const workspaceName = computed(() => planView.value?.name ?? '')
+
+/** 一句話說清楚「現在會開出什麼樣的發票」——比列出五個欄位好懂。 */
+const effectiveInvoiceLabel = computed(() => {
+  const p = effectiveInvoice.value
+  if (p.buyerUBN) return `公司發票（統編 ${p.buyerUBN}・${p.buyerName || '未填抬頭'}）`
+  if (p.carrierNum) return `個人發票・存入手機條碼載具 ${p.carrierNum}`
+  if (p.loveCode) return `個人發票・捐贈（愛心碼 ${p.loveCode}）`
+  return '個人發票・紙本'
+})
 
 const INVOICE_STATUS_LABEL: Record<string, string> = { failed: '開立失敗', skipped: '未開立', issued: '—' }
 function invoiceStatusLabel(s?: string | null) { return s ? (INVOICE_STATUS_LABEL[s] ?? '—') : '—' }
 
+/** 從「沿用組織」切到「專屬設定」：把組織的值當起點帶進表單，不要給他一張空的。 */
+function startOverride() {
+  const p = effectiveInvoice.value
+  invoiceForm.buyerUBN = p.buyerUBN ?? ''
+  invoiceForm.buyerName = p.buyerName ?? ''
+  invoiceForm.buyerEmail = p.buyerEmail ?? ''
+  invoiceForm.carrierNum = p.carrierNum ?? ''
+  invoiceForm.loveCode = p.loveCode ?? ''
+  invoiceOverriding.value = true
+}
+
 async function saveInvoiceProfile() {
   savingInvoice.value = true
   try {
-    await apiFetch('/api/payment/invoice-profile', { method: 'POST', body: { ...invoiceForm } })
-    showToast('發票資訊已儲存', 'success')
+    const r = await apiFetch<{ inherited: boolean }>('/api/payment/invoice-profile', {
+      method: 'POST',
+      body: { ...invoiceForm },
+    })
+    showToast(r.inherited ? '已改回沿用組織設定' : '發票資訊已儲存', 'success')
+    await loadInvoiceProfile()
   }
   catch (e: any) {
     showToast(e?.data?.statusMessage || '儲存失敗', 'error')
@@ -339,12 +381,23 @@ async function loadOrders() {
 async function loadInvoiceProfile() {
   if (!invoiceEnabled) return
   try {
-    const { profile } = await apiFetch<{ profile: Record<string, string | null> }>('/api/payment/invoice-profile')
-    invoiceForm.buyerUBN = profile.buyerUBN ?? ''
-    invoiceForm.buyerName = profile.buyerName ?? ''
-    invoiceForm.buyerEmail = profile.buyerEmail ?? ''
-    invoiceForm.carrierNum = profile.carrierNum ?? ''
-    invoiceForm.loveCode = profile.loveCode ?? ''
+    const res = await apiFetch<{
+      orgId: string | null
+      override: Record<string, string | null>
+      effective: Record<string, string | null>
+      inherited: boolean
+    }>('/api/payment/invoice-profile')
+
+    invoiceOrgId.value = res.orgId
+    effectiveInvoice.value = res.effective
+    invoiceOverriding.value = !res.inherited
+
+    const p = res.inherited ? res.effective : res.override
+    invoiceForm.buyerUBN = p.buyerUBN ?? ''
+    invoiceForm.buyerName = p.buyerName ?? ''
+    invoiceForm.buyerEmail = p.buyerEmail ?? ''
+    invoiceForm.carrierNum = p.carrierNum ?? ''
+    invoiceForm.loveCode = p.loveCode ?? ''
   }
   catch { /* 讀不到就留空表單，不擋整頁 */ }
 }

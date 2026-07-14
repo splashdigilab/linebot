@@ -29,7 +29,15 @@
         使用 Google 登入
       </button>
 
-      <p class="login-hint">僅限授權管理員帳號登入</p>
+      <!--
+        講清楚「這是邀請制」。原本只寫「僅限授權管理員帳號登入」，語意是「你沒被授權」，
+        但沒說「要怎樣才會被授權」——結果潛在客戶照樣點下去，然後撞上一堵牆。
+        先說明制度，再給他一個不用登入也能走的出口。
+      -->
+      <p class="login-hint">目前採邀請制。若你的團隊已在使用，請管理員先邀請你的 Google 信箱。</p>
+      <p v-if="contactHref" class="login-hint">
+        還不是客戶？<a :href="contactHref" target="_blank" rel="noopener" class="login-contact">聯繫我們 / 預約 Demo →</a>
+      </p>
     </div>
 
     <!-- Background decorations -->
@@ -43,6 +51,13 @@ definePageMeta({ layout: false })
 
 const route = useRoute()
 const { loginWithGoogle, isLoggedIn, waitForAuthReady } = useAuth()
+
+// 不是客戶的人也會走到登入頁 → 給他一個不用登入就能走的出口
+const config = useRuntimeConfig()
+const contact = String(config.public.supportContact ?? '').trim()
+const contactHref = contact
+  ? (contact.startsWith('http') ? contact : `mailto:${contact}`)
+  : ''
 const loading = ref(false)
 const errorMsg = ref('')
 

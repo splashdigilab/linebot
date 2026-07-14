@@ -26,6 +26,21 @@ export default defineEventHandler(async (event) => {
     if (!String(body.name).trim()) throw createError({ statusCode: 400, statusMessage: 'name cannot be empty' })
     updates.name = String(body.name).trim()
   }
+
+  // 官方帳號數量上限（濫用防護）。空字串 / null → 特批不限（代理商、多品牌客戶）。
+  if (body.maxWorkspaces !== undefined) {
+    if (body.maxWorkspaces === null || body.maxWorkspaces === '') {
+      updates.maxWorkspaces = null
+    }
+    else {
+      const n = Number(body.maxWorkspaces)
+      if (!Number.isFinite(n) || n < 1) {
+        throw createError({ statusCode: 400, statusMessage: '官方帳號上限需為 1 以上的整數，或留空表示不限' })
+      }
+      updates.maxWorkspaces = Math.floor(n)
+    }
+  }
+
   const db = getDb()
   const auth = getFirebaseAuth()
   const ref = db.collection('organizations').doc(id)

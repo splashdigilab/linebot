@@ -89,6 +89,30 @@
   letter-spacing: 0.01em;
 }
 
+/* 帳單頁：「沿用組織的發票設定」摘要列。
+   預設不給空表單——給空表單會讓人以為「沒填 = 不會開發票」，然後在每個 OA 各填一次統編。 */
+.billing-invoice-inherited {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  p {
+    margin: 0;
+  }
+}
+
+.billing-invoice-link {
+  color: var(--color-primary, #0f7b54);
+  text-decoration: none;
+  font-weight: 600;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
 /* 帳單頁：自動續訂狀態列（下次扣款日 + 取消訂閱）。
    取消入口刻意不做成顯眼的紅色按鈕，但也絕不藏起來——訂閱制的基本要求是隨時退得掉。 */
 .billing-renew-row {

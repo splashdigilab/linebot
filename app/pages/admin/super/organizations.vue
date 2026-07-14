@@ -92,6 +92,14 @@
           若對方尚無 Firebase，僅更新登記 Email；註冊後下次變更或系統寫入時可帶出 UID。新 Email 若尚非組織管理員，會自動加入 org 管理員。
         </p>
       </div>
+      <div class="admin-field-group">
+        <AdminFieldLabel text="官方帳號數量上限" tight />
+        <el-input v-model="editForm.maxWorkspaces" :placeholder="`留空 = 預設 ${DEFAULT_MAX_WORKSPACES_PER_ORG} 個・填 0 = 不限`" />
+        <p class="text-xs text-muted">
+          濫用防護：每個新官方帳號都自帶 200 則免費額度，沒有上限的話一個人就能無限建帳號換免費額度。
+          代理商 / 多品牌客戶在這裡調高，或填 0 表示不限。
+        </p>
+      </div>
     </div>
     <template #footer>
       <el-button @click="showEdit = false">取消</el-button>
@@ -152,6 +160,8 @@
 </template>
 
 <script setup lang="ts">
+import { DEFAULT_MAX_WORKSPACES_PER_ORG } from '~~/shared/types/organization'
+
 definePageMeta({ middleware: ['auth', 'super-admin'], layout: 'super-admin' })
 useHead({ title: '組織管理 — Super Admin' })
 
@@ -174,7 +184,8 @@ const memberSaving = ref(false)
 const newMemberEmail = ref('')
 
 const form = reactive({ name: '', ownerEmail: '' })
-const editForm = reactive({ name: '', ownerEmail: '' })
+// maxWorkspaces 用字串存：要能區分「留空 = 用預設」與「0 = 不限」，數字型別做不到
+const editForm = reactive({ name: '', ownerEmail: '', maxWorkspaces: '' })
 
 async function load() {
   loading.value = true
@@ -197,6 +208,8 @@ function openEdit(row: any) {
   editTarget.value = row
   editForm.name = row.name
   editForm.ownerEmail = row.ownerEmail || ''
+  // null = 特批不限 → 顯示 0；undefined = 沒設過 → 留空（用預設值）
+  editForm.maxWorkspaces = row.maxWorkspaces === null ? '0' : (row.maxWorkspaces?.toString() ?? '')
   showEdit.value = true
 }
 
@@ -242,11 +255,14 @@ async function saveEdit() {
   if (!editForm.ownerEmail.trim()) return showToast('請填寫擁有者 Email', 'error')
   saving.value = true
   try {
+    const max = editForm.maxWorkspaces.trim()
     await apiFetch(`/api/admin/super/organizations/${editTarget.value.id}`, {
       method: 'PATCH',
       body: {
         name: editForm.name,
         ownerEmail: editForm.ownerEmail.trim(),
+        // 留空 → 不動（沿用預設）；0 → null = 特批不限；其他 → 該數字
+        ...(max === '' ? {} : { maxWorkspaces: max === '0' ? null : Number(max) }),
       },
     })
     showToast('已更新', 'success')

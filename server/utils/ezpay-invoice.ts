@@ -207,6 +207,58 @@ export function isValidUBN(v: string): boolean {
 }
 
 /**
+ * 驗證並正規化使用者填的發票資訊。組織層與 OA 層共用同一份規則。
+ *
+ * 在**存檔時**就擋掉格式錯誤,而不是等 ezPay 退件——發票是在「付款成功之後」才開的,
+ * 那時客戶早就離開頁面了,退件他不會知道,只會過幾天發現沒收到發票。
+ *
+ * 格式不合直接丟 createError（呼叫端是 API handler）。
+ */
+export function normalizeInvoiceProfile(body: Record<string, unknown> | null | undefined): InvoiceProfile {
+  const ubn = String(body?.buyerUBN || '').trim()
+  const buyerName = String(body?.buyerName || '').trim()
+  const buyerEmail = String(body?.buyerEmail || '').trim()
+  const carrierNum = String(body?.carrierNum || '').trim().toUpperCase()
+  const loveCode = String(body?.loveCode || '').trim()
+
+  if (ubn && !isValidUBN(ubn)) {
+    throw createError({ statusCode: 400, statusMessage: '統一編號需為 8 碼數字' })
+  }
+  if (buyerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(buyerEmail)) {
+    throw createError({ statusCode: 400, statusMessage: 'Email 格式不正確' })
+  }
+
+  const profile: InvoiceProfile = {
+    buyerUBN: ubn || null,
+    buyerName: buyerName || null,
+    buyerEmail: buyerEmail || null,
+    carrierNum: null,
+    loveCode: null,
+  }
+
+  if (ubn) {
+    // B2B：公司報帳一律開可列印的發票，載具／捐贈碼不適用（帶了 ezPay 也會退）
+    if (!buyerName) {
+      throw createError({ statusCode: 400, statusMessage: '有統一編號時必須填公司抬頭' })
+    }
+    return profile
+  }
+
+  if (carrierNum && loveCode) {
+    throw createError({ statusCode: 400, statusMessage: '載具與捐贈碼只能擇一' })
+  }
+  if (carrierNum && !isValidCarrierNum(carrierNum)) {
+    throw createError({ statusCode: 400, statusMessage: '手機條碼載具格式錯誤（斜線 + 7 碼大寫英數）' })
+  }
+  if (loveCode && !isValidLoveCode(loveCode)) {
+    throw createError({ statusCode: 400, statusMessage: '捐贈碼需為 3–7 碼數字' })
+  }
+  profile.carrierNum = carrierNum || null
+  profile.loveCode = loveCode || null
+  return profile
+}
+
+/**
  * 呼叫 ezPay 開立發票（server→server）。
  * 網路錯誤 / 平台回錯一律回 ok:false,由呼叫端記錄——**開票失敗絕不能回頭影響收款**。
  */

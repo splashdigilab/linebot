@@ -1,0 +1,202 @@
+/* ── 組織總覽（給組織管理員：一次看完底下所有官方帳號的狀態）─────────── */
+
+.org-page {
+  min-height: 100vh;
+  background: var(--bg-base);
+  padding: 2rem 1.5rem 4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-width: 1080px;
+  margin: 0 auto;
+}
+
+.org-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.org-head-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+
+  h1 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--text-primary);
+  }
+}
+
+.org-back {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-decoration: none;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+}
+
+.org-sub {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.org-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 4rem 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+/* 摘要列：先回答「有沒有事要處理」，再讓他往下看細節 */
+.org-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+}
+
+.org-stat {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-lg, 10px);
+  padding: 1rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+
+  /* 「需要處理」不是 0 就變紅：這一格是整頁唯一該搶眼的東西 */
+  &.is-alert {
+    border-color: #f0a6a6;
+    background: #fef6f6;
+
+    .org-stat-num {
+      color: #c0392b;
+    }
+  }
+}
+
+.org-stat-num {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.org-stat-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.org-empty {
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-lg, 10px);
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.org-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.85rem;
+}
+
+.org-card {
+  text-align: left;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: var(--radius-lg, 10px);
+  padding: 1.1rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+
+  &:hover {
+    border-color: var(--color-primary, #0f7b54);
+    box-shadow: var(--shadow-md, 0 4px 12px rgb(0 0 0 / 6%));
+    transform: translateY(-1px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--color-primary, #0f7b54);
+    outline-offset: 2px;
+  }
+
+  /* 出事的卡片用左側色條標記，而不是整張變色——十張卡全是紅底就等於沒有重點 */
+  &.is-alert {
+    border-left: 3px solid #e6a23c;
+  }
+}
+
+.org-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.org-card-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.org-card-quota {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.org-card-quota-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.org-card-flags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.org-flag {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.45rem;
+  border-radius: 4px;
+  font-weight: 500;
+
+  &--ok {
+    color: #2a6650;
+    background: #e2efe9;
+  }
+
+  &--warn {
+    color: #83570f;
+    background: #f7eeda;
+  }
+
+  &--bad {
+    color: #a2333a;
+    background: #f6e6e7;
+  }
+}

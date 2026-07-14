@@ -14,7 +14,7 @@ import { PAYMENT_ORDERS_COLLECTION } from './payment'
 import { isInvoiceConfigured, issueInvoice, type EzpayInvoiceKeys } from './ezpay-invoice'
 import { splitTax } from '~~/shared/billing/tax'
 import { getBillingPlan, type BillingPlanId } from '~~/shared/billing/plans'
-import type { InvoiceProfile, WorkspaceDoc } from '~~/shared/types/organization'
+import { resolveInvoiceProfile, type InvoiceProfile, type OrganizationDoc, type WorkspaceDoc } from '~~/shared/types/organization'
 import type { InvoiceDoc } from '~~/shared/types/payment'
 
 export const INVOICES_COLLECTION = 'invoices'
@@ -63,7 +63,13 @@ export async function issueInvoiceForOrder(
 
     const wsSnap = await db.collection('workspaces').doc(input.workspaceId).get()
     const ws = wsSnap.exists ? (wsSnap.data() as WorkspaceDoc) : null
-    const profile: InvoiceProfile = ws?.invoiceProfile ?? {}
+
+    // 發票資訊：OA 沒填就沿用組織的（統編幾乎一定是組織層級的東西）
+    const orgId = ws?.organizationId ?? null
+    const orgSnap = orgId ? await db.collection('organizations').doc(orgId).get() : null
+    const orgProfile = orgSnap?.exists ? (orgSnap.data() as OrganizationDoc).invoiceProfile : null
+    const profile: InvoiceProfile = resolveInvoiceProfile(orgProfile, ws?.invoiceProfile)
+
     const plan = getBillingPlan(input.planId)
 
     const result = await issueInvoice({

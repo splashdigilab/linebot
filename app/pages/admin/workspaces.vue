@@ -12,11 +12,37 @@
         <span>載入中…</span>
       </div>
 
+      <!--
+        沒有任何存取權限時的畫面。
+
+        會走到這裡的人，多半不是「權限出錯」，而是**照著首頁的登入按鈕走進來的潛在客戶**——
+        目前系統是邀請制，他本來就不會有帳號。所以這裡不該是一句錯誤訊息，而該是一個出口：
+          ① 誠實說明目前是邀請制（降低他「是不是我做錯了什麼」的困惑）
+          ② 顯示他登入用的信箱並可一鍵複製 —— 同事要邀請他，需要的就是這個字串，
+             而他自己往往不知道剛剛是用哪個 Google 帳號登入的
+          ③ 給一個真的出口（預約 Demo / 聯繫我們），把流量變成 lead 而不是彈跳率
+
+        刻意**不放購買按鈕**：他還沒有官方帳號、沒接 LINE、沒看過機器人回過話，
+        而我們賣的是「每月 AI 回覆則數」——等於叫一個還沒有車的人先買油。
+      -->
       <template v-else-if="groupedWorkspaces.length === 0">
         <div class="ws-select-empty">
-          <p>你目前沒有任何官方帳號的存取權限。</p>
-          <p class="text-xs text-muted">請聯繫管理員邀請你加入。</p>
+          <p class="ws-empty-title">還沒有可管理的官方帳號</p>
+          <p class="text-xs text-muted">本系統目前採邀請制。請團隊的管理員用下面這個信箱邀請你加入。</p>
+
+          <div class="ws-empty-email">
+            <span class="ws-empty-email-value">{{ userEmail || '（讀取中…）' }}</span>
+            <el-button v-if="userEmail" size="small" text @click="copyEmail">
+              {{ emailCopied ? '已複製' : '複製' }}
+            </el-button>
+          </div>
+
+          <p v-if="contactHref" class="text-xs text-muted">
+            還不是客戶？
+            <a :href="contactHref" target="_blank" rel="noopener" class="ws-empty-contact">聯繫我們 / 預約 Demo →</a>
+          </p>
         </div>
+
         <NuxtLink v-if="isSuperAdmin" to="/admin/super" class="ws-super-admin-link">
           <span>⚙️</span>
           <span>Super Admin 後台</span>
@@ -33,6 +59,15 @@
             <div class="ws-group-header">
               <span>🏢</span>
               <span class="ws-group-name">{{ group.orgName }}</span>
+              <!-- 組織管理員才看得到組織後台入口（canCreate 就是 org admin 的判斷） -->
+              <NuxtLink
+                v-if="group.canCreate && group.orgId"
+                :to="`/admin/org/${group.orgId}`"
+                class="ws-group-link"
+                :title="`查看「${group.orgName}」底下所有官方帳號的狀態`"
+              >
+                組織管理
+              </NuxtLink>
               <button
                 v-if="group.canCreate"
                 class="ws-group-add-btn"
@@ -133,6 +168,29 @@ const { $auth } = useNuxtApp()
 const loading = ref(true)
 const workspaceList = ref<WorkspaceItem[]>([])
 const isSuperAdmin = ref(false)
+
+// ── 沒有任何權限時的出口 ─────────────────────────────────────
+// 顯示登入信箱：要邀請他的人需要的就是這個字串，而他自己往往不知道剛剛用了哪個 Google 帳號。
+const userEmail = ref('')
+const emailCopied = ref(false)
+
+const config = useRuntimeConfig()
+const contact = String(config.public.supportContact ?? '').trim()
+const contactHref = contact
+  ? (contact.startsWith('http') ? contact : `mailto:${contact}`)
+  : ''
+
+async function copyEmail() {
+  if (!userEmail.value) return
+  try {
+    await navigator.clipboard.writeText(userEmail.value)
+    emailCopied.value = true
+    setTimeout(() => { emailCopied.value = false }, 2000)
+  }
+  catch {
+    showToast('複製失敗，請手動選取', 'error')
+  }
+}
 
 /**
  * 預設只隱藏舊版單一 OA 的 `default` workspace；但若使用者完全沒有其他
@@ -272,6 +330,8 @@ onMounted(async () => {
     ])
     workspaceList.value = list
     isSuperAdmin.value = tokenResult?.claims.superAdmin === true
+    // 沒有任何權限時要顯示給他看（同事要邀請他就是需要這個信箱）
+    userEmail.value = $auth.currentUser?.email ?? ''
 
     const onlyWorkspace = visibleWorkspaceList.value.length === 1 ? visibleWorkspaceList.value[0] : undefined
     if (!isSuperAdmin.value && onlyWorkspace && orgAdminOf.value.length === 0) {

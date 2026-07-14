@@ -6,6 +6,17 @@ import type { WorkspaceSubscription } from '../billing/plans'
 //  Doc ID: uuid
 // ═══════════════════════════════════════════════════════════════════
 
+/**
+ * 一個組織預設能建立幾個官方帳號。
+ *
+ * ⚠️ **這是濫用防護，不是產品分級。** 每個新建的官方帳號都自帶免費層的 200 則額度，
+ *    沒有這個上限的話，一個人就能無限建 OA 換無限免費額度。
+ *    開放自助註冊之前，這個限制必須存在。
+ *
+ * 需要更多的客戶（代理商、多品牌）由 super admin 在組織上調高 `maxWorkspaces`。
+ */
+export const DEFAULT_MAX_WORKSPACES_PER_ORG = 3
+
 export interface OrganizationDoc {
   name: string
   /** 登記擁有者 Email（小寫）；與 ownerId 擇一或並存 */
@@ -13,6 +24,19 @@ export interface OrganizationDoc {
   /** Firebase uid；若擁有者尚未註冊則可能缺省 */
   ownerId?: string
   disabled?: boolean
+  /**
+   * 這個組織能建立幾個官方帳號。未設 → `DEFAULT_MAX_WORKSPACES_PER_ORG`。
+   * `null` = 不限（super admin 為代理商 / 大客戶特批）。
+   */
+  maxWorkspaces?: number | null
+  /**
+   * 組織層級的發票開立資訊（**預設值**）。
+   *
+   * 統一編號與公司抬頭幾乎一定是組織層級的東西——一家公司開 3 個官方帳號,
+   * 不會想填 3 次統編。所以預設放這裡,個別 OA 需要不同抬頭時才在
+   * `WorkspaceDoc.invoiceProfile` 覆寫（合併規則見 resolveInvoiceProfile）。
+   */
+  invoiceProfile?: InvoiceProfile
   createdAt: Timestamp | FieldValue
   updatedAt: Timestamp | FieldValue
 }
@@ -35,8 +59,9 @@ export interface WorkspaceDoc {
    */
   subscription?: WorkspaceSubscription
   /**
-   * 電子發票開立資訊（統編／抬頭／載具／捐贈碼）。客戶在帳單頁自己填,
-   * 每次付款成功後據此開立發票。未填 → B2C 紙本發票（見 server/utils/ezpay-invoice.ts）。
+   * 這個官方帳號**專屬**的發票資訊（覆寫組織的預設值）。
+   * 一般情況留空 → 沿用 `OrganizationDoc.invoiceProfile`。只有「同一家公司底下不同 OA
+   * 要開不同抬頭」時才需要填（例：代理商幫不同客戶各開一個 OA）。
    */
   invoiceProfile?: InvoiceProfile
   updatedAt: Timestamp | FieldValue
@@ -51,6 +76,33 @@ export interface InvoiceProfile {
   carrierNum?: string | null
   /** 捐贈碼（3–7 碼數字） */
   loveCode?: string | null
+}
+
+/** 發票資訊有沒有被填過（全空 = 沒填，該回退到組織的預設值）。 */
+export function hasInvoiceProfile(p: InvoiceProfile | null | undefined): boolean {
+  if (!p) return false
+  return Boolean(
+    String(p.buyerUBN ?? '').trim()
+    || String(p.buyerName ?? '').trim()
+    || String(p.buyerEmail ?? '').trim()
+    || String(p.carrierNum ?? '').trim()
+    || String(p.loveCode ?? '').trim(),
+  )
+}
+
+/**
+ * 實際用來開立發票的資訊：**OA 有填就整份用 OA 的，沒填就整份用組織的。**
+ *
+ * ⚠️ 刻意「整份取代」而不是逐欄位合併。逐欄位合併會組出危險的混合體——
+ *    例如 OA 填了自己的抬頭但沒填統編，就會拼出「A 公司的抬頭 + B 公司的統編」，
+ *    那是一張報不了帳、甚至有稅務問題的發票。發票的買受人身分必須是完整的一組。
+ */
+export function resolveInvoiceProfile(
+  orgProfile: InvoiceProfile | null | undefined,
+  workspaceProfile: InvoiceProfile | null | undefined,
+): InvoiceProfile {
+  if (hasInvoiceProfile(workspaceProfile)) return workspaceProfile!
+  return orgProfile ?? {}
 }
 
 // ═══════════════════════════════════════════════════════════════════
