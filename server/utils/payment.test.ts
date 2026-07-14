@@ -1,8 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
-  buildFreeSubscription,
   buildPaidSubscription,
-  isExpiredPaidSub,
   newMerchantOrderNo,
   settlePaidOrder,
 } from './payment'
@@ -10,39 +8,69 @@ import { invalidateWorkspaceSubscriptionCache } from './billing'
 import type { WorkspaceSubscription } from '~~/shared/billing/plans'
 import type { PaymentOrderDoc } from '~~/shared/types/payment'
 
-// 2026-07-20（UTC）：月中，用來驗週期會被夾到日曆月邊界
-const JUL = new Date(Date.UTC(2026, 6, 20, 8, 30, 15))
+// 2026-07-28（UTC 08:30 = 台灣 16:30）：月底,正是舊制會讓客戶「付整月只買到 3 天」的日子
+const JUL28 = new Date(Date.UTC(2026, 6, 28, 8, 30, 15))
 
 describe('buildPaidSubscription', () => {
-  const active = (over: Partial<WorkspaceSubscription> & Pick<WorkspaceSubscription, 'planId'>): WorkspaceSubscription => ({
-    status: 'active', currentPeriodStart: '2026-07-01', currentPeriodEnd: '2026-07-31', ...over,
+  const existing = (over: Partial<WorkspaceSubscription> & Pick<WorkspaceSubscription, 'planId'>): WorkspaceSubscription => ({
+    status: 'active', currentPeriodStart: '2026-07-28', currentPeriodEnd: '2026-08-27', anchorDay: 28, ...over,
   })
 
-  it('無現有訂閱 → 對齊當月、active、不帶 quotaOverride', () => {
-    const sub = buildPaidSubscription('lite', JUL)
-    expect(sub).toEqual({ planId: 'lite', status: 'active', currentPeriodStart: '2026-07-01', currentPeriodEnd: '2026-07-31' })
+  it('無現有訂閱 → 從付款日起算完整一期（月底付款不再只買到月底）', () => {
+    const sub = buildPaidSubscription('lite', JUL28)
+    expect(sub).toEqual({
+      planId: 'lite',
+      status: 'active',
+      currentPeriodStart: '2026-07-28',
+      currentPeriodEnd: '2026-08-27',
+      anchorDay: 28,
+    })
     expect(sub.quotaOverride).toBeUndefined()
   })
-  it('續訂仍有效的訂閱 → 期間堆疊到下一個月(不重設當月、不白付)', () => {
-    const sub = buildPaidSubscription('lite', JUL, active({ planId: 'lite' }))
-    expect(sub.currentPeriodStart).toBe('2026-08-01')
-    expect(sub.currentPeriodEnd).toBe('2026-08-31')
+
+  it('從免費層升級 → 立刻生效,錨定日重設為付款日（不接在免費期之後）', () => {
+    const free = existing({ planId: 'free', currentPeriodStart: '2026-07-01', currentPeriodEnd: '2026-07-31', anchorDay: 1 })
+    const sub = buildPaidSubscription('starter', JUL28, free)
+    expect(sub.currentPeriodStart).toBe('2026-07-28')
+    expect(sub.currentPeriodEnd).toBe('2026-08-27')
+    expect(sub.anchorDay).toBe(28)
   })
-  it('已過期的訂閱 → 回到當月(不堆疊)', () => {
-    const sub = buildPaidSubscription('lite', JUL, active({ planId: 'lite', currentPeriodStart: '2026-05-01', currentPeriodEnd: '2026-05-31' }))
-    expect(sub.currentPeriodStart).toBe('2026-07-01')
+
+  it('續訂同方案且未到期 → 期間堆疊、錨定日不變（提前續訂不白付）', () => {
+    const sub = buildPaidSubscription('lite', JUL28, existing({ planId: 'lite' }))
+    expect(sub.currentPeriodStart).toBe('2026-08-28')
+    expect(sub.currentPeriodEnd).toBe('2026-09-27')
+    expect(sub.anchorDay).toBe(28)
   })
+
+  it('同方案但已過期 → 從付款日重新起算（不堆疊到過去）', () => {
+    const sub = buildPaidSubscription('lite', JUL28, existing({ planId: 'lite', currentPeriodStart: '2026-05-01', currentPeriodEnd: '2026-05-31', anchorDay: 1 }))
+    expect(sub.currentPeriodStart).toBe('2026-07-28')
+  })
+
+  it('換方案（升級）→ 立刻生效,不堆疊在舊方案之後', () => {
+    const sub = buildPaidSubscription('pro', JUL28, existing({ planId: 'lite' }))
+    expect(sub.planId).toBe('pro')
+    expect(sub.currentPeriodStart).toBe('2026-07-28')
+  })
+
+  it('已解約的訂閱 → 不堆疊,從付款日重新起算', () => {
+    const sub = buildPaidSubscription('lite', JUL28, existing({ planId: 'lite', status: 'canceled' }))
+    expect(sub.currentPeriodStart).toBe('2026-07-28')
+  })
+
   it('同方案續訂 → 保留 super admin 的 quotaOverride', () => {
-    expect(buildPaidSubscription('pro', JUL, active({ planId: 'pro', quotaOverride: 15000 })).quotaOverride).toBe(15000)
+    expect(buildPaidSubscription('pro', JUL28, existing({ planId: 'pro', quotaOverride: 15000 })).quotaOverride).toBe(15000)
   })
+
   it('換方案 → 不沿用舊 quotaOverride', () => {
-    expect(buildPaidSubscription('pro', JUL, active({ planId: 'lite', quotaOverride: 15000 })).quotaOverride).toBeUndefined()
+    expect(buildPaidSubscription('pro', JUL28, existing({ planId: 'lite', quotaOverride: 15000 })).quotaOverride).toBeUndefined()
   })
 })
 
 describe('newMerchantOrderNo', () => {
   it('NP + 14 碼時間 + 4 碼亂數，僅英數且 <=30', () => {
-    const no = newMerchantOrderNo(JUL, 'AB12')
+    const no = newMerchantOrderNo(new Date(Date.UTC(2026, 6, 20, 8, 30, 15)), 'AB12')
     expect(no).toBe('NP20260720083015AB12')
     expect(no).toMatch(/^[0-9A-Za-z]+$/)
     expect(no.length).toBeLessThanOrEqual(30)
@@ -85,32 +113,32 @@ function pendingOrder(over: Partial<PaymentOrderDoc> = {}): Record<string, unkno
 describe('settlePaidOrder', () => {
   beforeEach(() => invalidateWorkspaceSubscriptionCache())
 
-  it('pending + 付款成功 → 結算並原子開通訂閱', async () => {
+  it('pending + 付款成功 → 結算並原子開通訂閱（從付款日起算完整一期）', async () => {
     const db = makeDb({ 'paymentOrders/NP1': pendingOrder() }) as any
-    const r = await settlePaidOrder({ merchantOrderNo: 'NP1', paid: true, amount: 499, tradeNo: 'T9', paymentType: 'CREDIT', now: JUL }, db)
+    const r = await settlePaidOrder({ merchantOrderNo: 'NP1', paid: true, amount: 499, tradeNo: 'T9', paymentType: 'CREDIT', now: JUL28 }, db)
 
     expect(r.outcome).toBe('settled')
     const order = db._store.get('paymentOrders/NP1')
     expect(order.status).toBe('paid')
     expect(order.tradeNo).toBe('T9')
-    expect(order.periodStart).toBe('2026-07-01')
+    expect(order.periodStart).toBe('2026-07-28')
 
     const ws = db._store.get('workspaces/ws1')
-    expect(ws.subscription).toMatchObject({ planId: 'lite', status: 'active', currentPeriodStart: '2026-07-01', currentPeriodEnd: '2026-07-31' })
+    expect(ws.subscription).toMatchObject({ planId: 'lite', status: 'active', currentPeriodStart: '2026-07-28', currentPeriodEnd: '2026-08-27' })
   })
 
-  it('帳號已有有效訂閱 → 結算時期間堆疊(續訂不重設當月)', async () => {
+  it('帳號已有同方案的有效訂閱 → 結算時期間堆疊(提前續訂不白付)', async () => {
     const db = makeDb({
       'paymentOrders/NP1': pendingOrder({ planId: 'lite', amount: 499 }),
-      'workspaces/ws1': { subscription: { planId: 'lite', status: 'active', currentPeriodStart: '2026-07-01', currentPeriodEnd: '2026-07-31' } },
+      'workspaces/ws1': { subscription: { planId: 'lite', status: 'active', currentPeriodStart: '2026-07-28', currentPeriodEnd: '2026-08-27', anchorDay: 28 } },
     }) as any
-    await settlePaidOrder({ merchantOrderNo: 'NP1', paid: true, amount: 499, now: JUL }, db)
-    expect(db._store.get('workspaces/ws1').subscription.currentPeriodStart).toBe('2026-08-01')
+    await settlePaidOrder({ merchantOrderNo: 'NP1', paid: true, amount: 499, now: JUL28 }, db)
+    expect(db._store.get('workspaces/ws1').subscription.currentPeriodStart).toBe('2026-08-28')
   })
 
   it('付款失敗 → 訂單 failed、不開通訂閱', async () => {
     const db = makeDb({ 'paymentOrders/NP1': pendingOrder() }) as any
-    const r = await settlePaidOrder({ merchantOrderNo: 'NP1', paid: false, now: JUL }, db)
+    const r = await settlePaidOrder({ merchantOrderNo: 'NP1', paid: false, now: JUL28 }, db)
 
     expect(r.outcome).toBe('settled')
     expect(db._store.get('paymentOrders/NP1').status).toBe('failed')
@@ -119,7 +147,7 @@ describe('settlePaidOrder', () => {
 
   it('已結算（redelivery）→ 冪等跳過、不覆蓋', async () => {
     const db = makeDb({ 'paymentOrders/NP1': pendingOrder({ status: 'paid', tradeNo: 'ORIG' }) }) as any
-    const r = await settlePaidOrder({ merchantOrderNo: 'NP1', paid: true, tradeNo: 'DUP', now: JUL }, db)
+    const r = await settlePaidOrder({ merchantOrderNo: 'NP1', paid: true, tradeNo: 'DUP', now: JUL28 }, db)
 
     expect(r.outcome).toBe('already')
     expect(db._store.get('paymentOrders/NP1').tradeNo).toBe('ORIG')
@@ -128,39 +156,15 @@ describe('settlePaidOrder', () => {
 
   it('查無訂單 → unknown', async () => {
     const db = makeDb() as any
-    expect((await settlePaidOrder({ merchantOrderNo: 'NOPE', paid: true, now: JUL }, db)).outcome).toBe('unknown')
+    expect((await settlePaidOrder({ merchantOrderNo: 'NOPE', paid: true, now: JUL28 }, db)).outcome).toBe('unknown')
   })
 
   it('金額不符 → 標記失敗、不開通', async () => {
     const db = makeDb({ 'paymentOrders/NP1': pendingOrder({ amount: 499 }) }) as any
-    const r = await settlePaidOrder({ merchantOrderNo: 'NP1', paid: true, amount: 1, now: JUL }, db)
+    const r = await settlePaidOrder({ merchantOrderNo: 'NP1', paid: true, amount: 1, now: JUL28 }, db)
     expect(r.amountMismatch).toBe(true)
     expect(db._store.get('paymentOrders/NP1').status).toBe('failed')
     expect(db._store.get('workspaces/ws1')).toBeUndefined()
   })
 })
 
-describe('isExpiredPaidSub（陷阱 A:只降過期付費,跳過 free/canceled）', () => {
-  const today = '2026-07-13'
-  it('付費、已過期、active → true', () => {
-    expect(isExpiredPaidSub({ planId: 'lite', status: 'active', currentPeriodStart: '2026-06-01', currentPeriodEnd: '2026-06-30' }, today)).toBe(true)
-  })
-  it('尚未到期 → false', () => {
-    expect(isExpiredPaidSub({ planId: 'lite', status: 'active', currentPeriodStart: '2026-07-01', currentPeriodEnd: '2026-07-31' }, today)).toBe(false)
-  })
-  it('free 方案 → false（本來就靠日曆月重置）', () => {
-    expect(isExpiredPaidSub({ planId: 'free', status: 'active', currentPeriodStart: '2026-06-01', currentPeriodEnd: null }, today)).toBe(false)
-  })
-  it('canceled → false（維持 grandfather,不改動）', () => {
-    expect(isExpiredPaidSub({ planId: 'pro', status: 'canceled', currentPeriodStart: '2026-06-01', currentPeriodEnd: '2026-06-30' }, today)).toBe(false)
-  })
-  it('無訂閱 → false', () => {
-    expect(isExpiredPaidSub(null, today)).toBe(false)
-  })
-})
-
-describe('buildFreeSubscription', () => {
-  it('降級為 free/active、無到期日', () => {
-    expect(buildFreeSubscription('2026-07-13')).toEqual({ planId: 'free', status: 'active', currentPeriodStart: '2026-07-13', currentPeriodEnd: null })
-  })
-})

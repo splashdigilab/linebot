@@ -3,10 +3,17 @@ import { requireSuperAdmin } from '~~/server/utils/workspace-auth'
 import { invalidateWorkspaceSubscriptionCache } from '~~/server/utils/billing'
 import { BILLING_PLAN_ORDER } from '~~/shared/billing/plans'
 import type { BillingPlanId, SubscriptionStatus, WorkspaceSubscription } from '~~/shared/billing/plans'
+import { newSubscription } from '~~/shared/billing/period'
+import { dayOfDate, normalizeAnchorDay, taipeiDate } from '~~/shared/time'
 
 const VALID_STATUS: SubscriptionStatus[] = ['active', 'trialing', 'past_due', 'canceled']
 
-/** 驗證並正規化 super admin 傳入的訂閱；null = 取消訂閱（刪除欄位）。 */
+/**
+ * 驗證並正規化 super admin 傳入的訂閱；null = 刪除欄位。
+ *
+ * 週期用錨定日制：未帶起始日 → 今天;未帶到期日 → 由錨定日自動算出（起日 + 一期）。
+ * 錨定日未指定則取起始日當天,之後每個月同一天續期。
+ */
 function normalizeSubscription(raw: unknown): WorkspaceSubscription | FieldValue {
   if (raw == null) return FieldValue.delete()
   const r = raw as Record<string, unknown>
@@ -18,13 +25,14 @@ function normalizeSubscription(raw: unknown): WorkspaceSubscription | FieldValue
   if (!VALID_STATUS.includes(status)) {
     throw createError({ statusCode: 400, statusMessage: 'invalid subscription status' })
   }
-  const sub: WorkspaceSubscription = {
-    planId,
-    status,
-    // 首次開通若未帶起始日 → 預設為今天（YYYY-MM-DD）；之後編輯時前端會回傳既有值以保留
-    currentPeriodStart: r.currentPeriodStart ? String(r.currentPeriodStart) : new Date().toISOString().slice(0, 10),
-    currentPeriodEnd: r.currentPeriodEnd ? String(r.currentPeriodEnd) : null,
-  }
+
+  const start = r.currentPeriodStart ? String(r.currentPeriodStart).slice(0, 10) : taipeiDate()
+  const anchorDay = r.anchorDay ? normalizeAnchorDay(Number(r.anchorDay)) : dayOfDate(start)
+
+  const sub = newSubscription(planId, start, { anchorDay, status })
+  // 明確指定到期日（合約特例）時尊重之；否則用錨定日自動算出的那一期
+  if (r.currentPeriodEnd) sub.currentPeriodEnd = String(r.currentPeriodEnd).slice(0, 10)
+
   const override = Number(r.quotaOverride)
   if (r.quotaOverride != null && r.quotaOverride !== '' && Number.isFinite(override) && override >= 0) {
     sub.quotaOverride = Math.floor(override)
@@ -38,8 +46,9 @@ function normalizeSubscription(raw: unknown): WorkspaceSubscription | FieldValue
  * PATCH /api/admin/super/workspaces/:id
  * 更新 workspace 名稱、所屬組織或計費訂閱。Body: { name?, organizationId?, subscription? }
  *
- * subscription：{ planId, status?, currentPeriodStart?/End?, quotaOverride?, note? }
- *   - null → 取消訂閱（刪欄位，該帳號回到「未開通、不攔截則數」）
+ * subscription：{ planId, status?, currentPeriodStart?/End?, anchorDay?, quotaOverride?, note? }
+ *   - null → 刪掉訂閱欄位。該帳號會被**當成免費層（200 則）並照常攔截**——
+ *     沒有「未開通就不攔截」這種後門了（見 server/utils/billing.ts）。
  *   - 寫入後清 billing 快取，則數額度攔截即時生效
  */
 export default defineEventHandler(async (event) => {

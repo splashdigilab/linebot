@@ -315,6 +315,9 @@ async function saveEdit() {
           status: editForm.status,
           currentPeriodStart: editTarget.value?.subscription?.currentPeriodStart ?? null,
           currentPeriodEnd: editForm.currentPeriodEnd || null,
+          // 原樣帶回錨定日：若只靠 currentPeriodStart 反推，錨定日 31 的訂閱在經過 2 月
+          // （起日被夾成 28）之後會被永久改成 28，之後再也回不到 31。
+          anchorDay: editTarget.value?.subscription?.anchorDay ?? null,
           quotaOverride: editForm.quotaOverride ?? null,
           note: editForm.note.trim() || null,
         }

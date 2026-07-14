@@ -2,14 +2,16 @@ import { derivePlanState, type PlanView } from '~~/shared/billing/plan-state'
 import { useWorkspace } from './useWorkspace'
 
 interface PlanSummaryResponse {
-  period: string
   plan: PlanView | null
+  /** 本期（訂閱週期）已用則數 —— 與後端額度攔截看的是同一顆計數器。 */
   answered: number
 }
 
 /**
- * 抓「目前方案 + 本月已用則數」並導出額度使用狀態，供設定頁等處顯示精簡方案卡。
+ * 抓「目前方案 + 本期已用則數」並導出額度使用狀態，供設定頁等處顯示精簡方案卡。
  * 與用量監控頁共用 derivePlanState（單一事實來源）；資料走輕量的 plan-summary 端點。
+ *
+ * 「本期」= 訂閱週期（錨定日制），不是日曆月。
  */
 export function usePlanSummary() {
   const { apiFetch } = useWorkspace()

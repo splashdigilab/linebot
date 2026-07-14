@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { nextCalendarMonthPeriod, taipeiDate, taipeiMonthPeriod, taipeiYyyyMm } from './time'
+import { addDays, anchoredPeriod, dayOfDate, nextAnchoredPeriod, normalizeAnchorDay, taipeiDate, taipeiYyyyMm } from './time'
 
-describe('taipeiYyyyMm', () => {
+describe('taipeiYyyyMm（成本報表的月結桶）', () => {
   it('月中:UTC 與台灣同月', () => {
     expect(taipeiYyyyMm(new Date('2026-07-13T00:00:00Z'))).toBe('202607')
   })
@@ -10,19 +10,6 @@ describe('taipeiYyyyMm', () => {
   })
   it('UTC 7/31 15:00 = 台灣 7/31 23:00 → 仍算 7 月', () => {
     expect(taipeiYyyyMm(new Date('2026-07-31T15:00:00Z'))).toBe('202607')
-  })
-})
-
-describe('taipeiMonthPeriod', () => {
-  it('7 月 → 07-01 ~ 07-31', () => {
-    expect(taipeiMonthPeriod(new Date('2026-07-13T00:00:00Z'))).toEqual({ start: '2026-07-01', end: '2026-07-31' })
-  })
-  it('月底跨時區歸到台灣的下個月', () => {
-    expect(taipeiMonthPeriod(new Date('2026-07-31T18:00:00Z'))).toEqual({ start: '2026-08-01', end: '2026-08-31' })
-  })
-  it('二月非閏年 → 28、閏年 → 29', () => {
-    expect(taipeiMonthPeriod(new Date('2026-02-10T00:00:00Z')).end).toBe('2026-02-28')
-    expect(taipeiMonthPeriod(new Date('2028-02-10T00:00:00Z')).end).toBe('2028-02-29')
   })
 })
 
@@ -35,14 +22,68 @@ describe('taipeiDate', () => {
   })
 })
 
-describe('nextCalendarMonthPeriod', () => {
-  it('7 月底 → 下一期 8 月', () => {
-    expect(nextCalendarMonthPeriod('2026-07-31')).toEqual({ start: '2026-08-01', end: '2026-08-31' })
+describe('日曆小工具', () => {
+  it('dayOfDate', () => {
+    expect(dayOfDate('2026-07-28')).toBe(28)
+    expect(dayOfDate('2026-07-01')).toBe(1)
   })
-  it('12 月底 → 跨年到隔年 1 月', () => {
-    expect(nextCalendarMonthPeriod('2026-12-31')).toEqual({ start: '2027-01-01', end: '2027-01-31' })
+  it('addDays 跨月 / 跨年', () => {
+    expect(addDays('2026-07-31', 1)).toBe('2026-08-01')
+    expect(addDays('2026-08-01', -1)).toBe('2026-07-31')
+    expect(addDays('2026-12-31', 1)).toBe('2027-01-01')
   })
-  it('接到閏年 2 月 → 29 天', () => {
-    expect(nextCalendarMonthPeriod('2028-01-31')).toEqual({ start: '2028-02-01', end: '2028-02-29' })
+  it('normalizeAnchorDay 夾到 1–31', () => {
+    expect(normalizeAnchorDay(28)).toBe(28)
+    expect(normalizeAnchorDay(0)).toBe(1)
+    expect(normalizeAnchorDay(99)).toBe(31)
+    expect(normalizeAnchorDay(undefined)).toBe(1)
+  })
+})
+
+describe('anchoredPeriod（訂閱週期 = 錨定日制）', () => {
+  it('月底訂閱 → 拿到完整一期,不是「只買到月底剩幾天」', () => {
+    // 這一行就是修掉「7/28 付 799 卻只用到 7/31」的地方
+    expect(anchoredPeriod('2026-07-28', 28)).toEqual({ start: '2026-07-28', end: '2026-08-27' })
+  })
+  it('月初訂閱', () => {
+    expect(anchoredPeriod('2026-07-01', 1)).toEqual({ start: '2026-07-01', end: '2026-07-31' })
+  })
+  it('跨年', () => {
+    expect(anchoredPeriod('2026-12-15', 15)).toEqual({ start: '2026-12-15', end: '2027-01-14' })
+  })
+  it('錨定日 31 遇 2 月 → 夾到當月最後一天', () => {
+    expect(anchoredPeriod('2026-01-31', 31)).toEqual({ start: '2026-01-31', end: '2026-02-27' })
+    expect(anchoredPeriod('2028-01-31', 31)).toEqual({ start: '2028-01-31', end: '2028-02-28' }) // 閏年
+  })
+  it('起日早於本月錨定日（期中降級 → 一段短的過渡期）', () => {
+    expect(anchoredPeriod('2026-07-15', 28)).toEqual({ start: '2026-07-15', end: '2026-07-27' })
+  })
+})
+
+describe('nextAnchoredPeriod（續期）', () => {
+  it('接在到期日隔天,不留空隙也不重疊', () => {
+    const p1 = anchoredPeriod('2026-07-28', 28)
+    const p2 = nextAnchoredPeriod(p1, 28)
+    expect(p2).toEqual({ start: '2026-08-28', end: '2026-09-27' })
+    expect(p2.start).toBe(addDays(p1.end, 1))
+  })
+
+  it('錨定日 31 被短月夾過之後會回到 31，不會一路往前漂', () => {
+    // 這就是「錨定日必須單獨存起來、不能從上一期起日反推」的理由
+    let p = anchoredPeriod('2026-01-31', 31) // 1/31 ~ 2/27
+    p = nextAnchoredPeriod(p, 31)
+    expect(p).toEqual({ start: '2026-02-28', end: '2026-03-30' }) // 被 2 月夾成 28
+    p = nextAnchoredPeriod(p, 31)
+    expect(p).toEqual({ start: '2026-03-31', end: '2026-04-29' }) // 回到 31 ✓
+  })
+
+  it('連滾 12 期不會漂移或斷檔', () => {
+    let p = anchoredPeriod('2026-07-28', 28)
+    for (let i = 0; i < 12; i++) {
+      const next = nextAnchoredPeriod(p, 28)
+      expect(next.start).toBe(addDays(p.end, 1)) // 不留空隙
+      p = next
+    }
+    expect(p.start).toBe('2027-07-28') // 一年後仍回到錨定日
   })
 })

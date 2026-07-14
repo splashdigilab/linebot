@@ -1,19 +1,22 @@
 /**
- * 付款（藍新金流）server 側工具：訂單帳本存取、由「已付款方案」組出訂閱物件。
+ * 付款（藍新金流）server 側工具：訂單帳本存取、由「已付款方案」組出訂閱物件、
+ * 每日續期對帳。
  *
- * 純函式（週期計算、訂單編號、組訂閱）可單元測試;會碰 Firestore 的部分
- * （建單、開通）由 create-order API 與 Notify webhook 呼叫。
+ * 純函式（組訂閱、訂單編號）可單元測試;會碰 Firestore 的部分（建單、開通、對帳）
+ * 由 create-order API、Notify webhook 與排程呼叫。
  *
- * 付款週期「對齊日曆月（台灣時區）」：則數額度以 aiUsage 的月結桶重置,故本期起訖
- * 也用台灣時區日曆月（taipeiMonthPeriod）,兩者同一把尺、邊界一致,避免跨月被重置
- * 兩次（見 billing Phase 2 規劃）。
+ * **付款週期對齊「錨定日」**（客戶付款那天）,不是日曆月：7/28 付款 → 7/28~8/27。
+ * 額度桶 `quotaUsage/{ws}_{periodStart}` 跟著同一把尺,所以月底才升級的人不會付了
+ * 整月的錢只買到幾天、額度還被同月份的免費用量吃掉。成本報表仍走日曆月
+ * （aiUsage）,兩把尺刻意分開,見 shared/time.ts。
  */
 import { FieldValue } from 'firebase-admin/firestore'
 import type { Firestore, Timestamp } from 'firebase-admin/firestore'
 import { getDb } from './firebase'
 import { invalidateWorkspaceSubscriptionCache } from './billing'
-import { nextCalendarMonthPeriod, taipeiDate, taipeiMonthPeriod } from '~~/shared/time'
-import type { BillingPlanId, WorkspaceSubscription } from '~~/shared/billing/plans'
+import { addDays, dayOfDate, taipeiDate } from '~~/shared/time'
+import { isSelfServePaidPlan, type BillingPlanId, type WorkspaceSubscription } from '~~/shared/billing/plans'
+import { anchorDayOf, newSubscription, rollSubscriptionToCurrentPeriod } from '~~/shared/billing/period'
 import type { WorkspaceDoc } from '~~/shared/types/organization'
 import type { PaymentOrderDoc, PaymentOrderStatus } from '~~/shared/types/payment'
 
@@ -22,8 +25,19 @@ export const PAYMENT_ORDERS_COLLECTION = 'paymentOrders'
 const pad = (n: number, len = 2) => String(n).padStart(len, '0')
 
 /**
- * 由「已付款方案」組出 workspace 訂閱物件：active、對齊日曆月、用方案預設額度
- * （不帶 quotaOverride）。付款開通與 super admin 手動開通產出的訂閱形狀一致。
+ * 由「已付款方案」組出 workspace 訂閱物件（active、方案預設額度）。
+ * 付款開通與 super admin 手動開通產出的訂閱形狀一致。
+ *
+ * 兩種情形：
+ *
+ * · **續訂同一個方案且尚未到期** → 期間堆疊：新一期接在現有到期日的隔天,錨定日不變。
+ *   避免「還沒到期就提前續訂 → 週期被重設 → 白付一次」。
+ *
+ * · **從免費升級 / 換方案** → 立刻生效：錨定日重設為付款日,本期從今天起算一整期。
+ *   這正是修掉「7/28 付 799 卻只買到 3 天」的地方。
+ *
+ * ⚠️ 換方案時舊方案的**剩餘天數不折抵**（按比例補差額 proration 留到接定期定額時一起做）。
+ *    目前結帳 UI 只做升級,升級的人拿到完整一期,不會吃虧;真要做降級前得先補上折抵。
  */
 export function buildPaidSubscription(
   planId: BillingPlanId,
@@ -31,21 +45,18 @@ export function buildPaidSubscription(
   existingSub?: WorkspaceSubscription | null,
 ): WorkspaceSubscription {
   const today = taipeiDate(now)
-  // 續訂/提前付款:現有訂閱若仍在有效期內,新一期接在現有到期日之後(期間堆疊),
-  // 不重設回當月——避免「還沒到期就續訂 → 被重設成同一個月 → 白付一次」。
+
   const stacking = existingSub != null
-    && (existingSub.status === 'active' || existingSub.status === 'trialing')
+    && existingSub.planId === planId
+    && isSelfServePaidPlan(planId)
+    && existingSub.status !== 'canceled'
     && existingSub.currentPeriodEnd != null
     && existingSub.currentPeriodEnd >= today
-  const { start, end } = stacking
-    ? nextCalendarMonthPeriod(existingSub!.currentPeriodEnd!)
-    : taipeiMonthPeriod(now)
-  const sub: WorkspaceSubscription = {
-    planId,
-    status: 'active',
-    currentPeriodStart: start,
-    currentPeriodEnd: end,
-  }
+
+  const anchorDay = stacking ? anchorDayOf(existingSub!) : dayOfDate(today)
+  const startDate = stacking ? addDays(existingSub!.currentPeriodEnd!, 1) : today
+
+  const sub = newSubscription(planId, startDate, { anchorDay })
   // 同方案續訂保留 super admin 設定的特批額度;換方案則以新方案預設為準。
   if (existingSub?.planId === planId && existingSub.quotaOverride != null) {
     sub.quotaOverride = existingSub.quotaOverride
@@ -227,46 +238,40 @@ export async function settlePaidOrder(
   return result
 }
 
-// ── 到期對帳（reconcile）──────────────────────────────────────────
+// ── 每日續期對帳（reconcile）────────────────────────────────────────
 
 /** pending 訂單保留天數:放寬到 4 天以涵蓋 ATM/超商繳費期,逾期才視為 expired（純清理）。 */
 const STALE_PENDING_MS = 4 * 24 * 60 * 60 * 1000
 
 /**
- * 是否為「應降級的過期付費訂閱」（陷阱 A）：
- * 只處理付費、已過本期到期日、且仍在計費狀態者;**free / canceled / 無訂閱一律不動**
- * （canceled 維持 grandfather 不攔截,若改成 free/active 反而會開始擋 200 則）。
- */
-export function isExpiredPaidSub(sub: WorkspaceSubscription | undefined | null, today: string): boolean {
-  if (!sub || sub.planId === 'free' || !sub.currentPeriodEnd) return false
-  if (sub.status !== 'active' && sub.status !== 'trialing' && sub.status !== 'past_due') return false
-  return sub.currentPeriodEnd < today
-}
-
-/** 降級為免費訂閱（active、無到期日;免費靠日曆月自動重置,不會再被對帳降級）。 */
-export function buildFreeSubscription(today: string): WorkspaceSubscription {
-  return { planId: 'free', status: 'active', currentPeriodStart: today, currentPeriodEnd: null }
-}
-
-/**
- * 到期對帳：① 過期付費訂閱 → 降 free（不設 canceled,見陷阱 A）
+ * 每日對帳：① 過期的訂閱 → 滾到當期（免費層補回額度；付費方案沒續費則降回免費）
  *          ② 卡住的 pending 訂單 → expired（純清理,不影響訂閱）。
- * 由排程（Amplify 用 EventBridge 帶 X-Cron-Secret 打 /api/payment/reconcile）每日觸發。
+ *
+ * ⚠️ 這支排程是**把結果落地成資料**,不是正確性的前提。真正決定「現在是哪一期、
+ *    額度該不該歸零」的是 `rollSubscriptionToCurrentPeriod`,它在每次讀訂閱時就地推算。
+ *    所以排程沒跑（Amplify 不跑 scheduledTasks,這個雷踩過）,額度重置與到期降級照樣
+ *    正確,只是 Firestore 裡的 subscription 欄位會暫時停留在舊的一期。
+ *
+ * 由外部排程（EventBridge 帶 X-Cron-Secret 打 /api/payment/reconcile）每日觸發。
  */
 export async function runPaymentReconcile(
   now: Date = new Date(),
   db: Firestore = getDb(),
-): Promise<{ downgraded: number; expiredOrders: number }> {
+): Promise<{ renewed: number; downgraded: number; expiredOrders: number }> {
   const today = taipeiDate(now)
 
+  let renewed = 0
   let downgraded = 0
-  const expired = await db.collection('workspaces').where('subscription.currentPeriodEnd', '<', today).get()
-  for (const doc of expired.docs) {
+  const stale = await db.collection('workspaces').where('subscription.currentPeriodEnd', '<', today).get()
+  for (const doc of stale.docs) {
     const sub = (doc.data() as WorkspaceDoc).subscription
-    if (!isExpiredPaidSub(sub, today)) continue
-    await doc.ref.update({ subscription: buildFreeSubscription(today), updatedAt: FieldValue.serverTimestamp() })
+    if (!sub) continue
+    const rolled = rollSubscriptionToCurrentPeriod(sub, today)
+    if (!rolled.changed) continue
+    await doc.ref.update({ subscription: rolled.sub, updatedAt: FieldValue.serverTimestamp() })
     invalidateWorkspaceSubscriptionCache(doc.id)
-    downgraded++
+    renewed++
+    if (rolled.downgraded) downgraded++
   }
 
   let expiredOrders = 0
@@ -281,5 +286,5 @@ export async function runPaymentReconcile(
     }
   }
 
-  return { downgraded, expiredOrders }
+  return { renewed, downgraded, expiredOrders }
 }

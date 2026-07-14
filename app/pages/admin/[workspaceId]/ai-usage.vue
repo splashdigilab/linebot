@@ -54,10 +54,10 @@
             <div class="message-card-header">
               <div class="card-header-main">
                 <span class="badge badge-green">🎟️ 方案額度</span>
-                <span class="text-xs text-muted">{{ planQuota.name }} · {{ periodLabel }}</span>
+                <span class="text-xs text-muted">{{ planQuota.name }} · 本期 {{ quotaPeriodLabel }}</span>
               </div>
               <div class="plan-card-head-actions">
-                <span v-if="planQuota.currentPeriodEnd" class="text-xs text-muted">到期 {{ planQuota.currentPeriodEnd }}</span>
+                <span v-if="planQuota.currentPeriodEnd" class="text-xs text-muted">{{ planQuota.currentPeriodEnd }} 續期</span>
                 <el-button size="small" @click="upgradeDialogOpen = true">升級方案</el-button>
               </div>
             </div>
@@ -71,7 +71,7 @@
                   :format="() => `${quotaPercentRaw}%`"
                 />
                 <p class="usage-hint">
-                  {{ periodLabel }} 已用 <strong>{{ formatNumber(quotaUsed) }}</strong> / {{ formatNumber(quotaLimit) }} 則
+                  本期已用 <strong>{{ formatNumber(quotaUsed) }}</strong> / {{ formatNumber(quotaLimit) }} 則
                   <template v-if="quotaRemaining !== null">（剩 {{ formatNumber(quotaRemaining) }} 則）</template>
                   <template v-if="planQuota.overagePerReply">・超量加購 NT${{ planQuota.overagePerReply }}/則</template>
                 </p>
@@ -231,6 +231,8 @@ const { showToast } = useAdminToast()
 
 interface Summary {
   period: string
+  /** 本期（訂閱週期）已用則數 —— 額度進度條看這個，與攔截同一顆計數器；不隨月份切換。 */
+  quotaAnswered: number
   invocations: number
   answered: number
   handoffs: number
@@ -253,6 +255,7 @@ interface Summary {
     name: string
     answeredQuota: number | null
     overagePerReply: number | null
+    currentPeriodStart: string | null
     currentPeriodEnd: string | null
   } | null
 }
@@ -303,9 +306,17 @@ const isCurrentPeriod = computed(() => period.value === periodOptions[0]!.value)
 
 // ── 方案額度（D1/D2） ─────────────────────────────────────
 // 額度狀態（門檻/顏色）由共用的 derivePlanState 導出，與設定頁方案卡同一份邏輯。
+// 進度條吃 quotaAnswered（本期 = 訂閱週期）而不是 answered（所選月份的報表數字）——
+// 額度按錨定日重置，跟日曆月不是同一把尺，拿報表數字當進度條會顯示錯的剩餘則數。
 const planQuota = computed(() => summary.value?.plan ?? null)
 const upgradeDialogOpen = ref(false)
-const planState = computed(() => derivePlanState(planQuota.value, summary.value?.answered ?? 0))
+const planState = computed(() => derivePlanState(planQuota.value, summary.value?.quotaAnswered ?? 0))
+// 額度週期的起訖（錨定日制，例如 07/28 ~ 08/27）；與下方報表的月份選擇無關。
+const quotaPeriodLabel = computed(() => {
+  const p = planQuota.value
+  if (!p?.currentPeriodStart || !p.currentPeriodEnd) return '—'
+  return `${p.currentPeriodStart.slice(5)} ~ ${p.currentPeriodEnd.slice(5)}`
+})
 const quotaUsed = computed(() => planState.value.used)
 const quotaLimit = computed(() => planState.value.limit)
 const quotaPercentRaw = computed(() => planState.value.percentRaw)

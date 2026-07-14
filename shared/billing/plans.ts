@@ -198,9 +198,18 @@ export type SubscriptionStatus = 'active' | 'trialing' | 'past_due' | 'canceled'
 export interface WorkspaceSubscription {
   planId: BillingPlanId
   status: SubscriptionStatus
-  /** 本期起訖（ISO 字串）；額度以「本期」為單位重置。 */
+  /**
+   * 本期起訖（YYYY-MM-DD，**起訖皆含當日**）；則數額度以「本期」為單位重置。
+   * 週期由錨定日決定（見 shared/time.ts），不是日曆月。
+   */
   currentPeriodStart: string | null
   currentPeriodEnd: string | null
+  /**
+   * 錨定日（1–31）：客戶開始訂閱的那一天,每期都在這天續期。
+   * 單獨存起來而不從 currentPeriodStart 反推,是為了讓「錨定日 31」經過 2 月被夾成 28 之後
+   * 還能回到 31,不會一路往前漂（見 shared/time.ts anchoredPeriod）。
+   */
+  anchorDay?: number
   /** 例外額度：覆蓋方案預設則數（企業客製 / 業務談定的特例）。 */
   quotaOverride?: number | null
   /** 內部備註（開通原因、合約號等），不對客戶顯示。 */
@@ -221,6 +230,17 @@ export function getBillingPlan(id: string | null | undefined): BillingPlan {
 export function effectiveAnsweredQuota(plan: BillingPlan, quotaOverride?: number | null): number | null {
   if (quotaOverride != null) return quotaOverride
   return plan.answeredQuota
+}
+
+/**
+ * 是否為「客戶自己刷卡買得到」的付費方案（lite / starter / growth / pro）。
+ *
+ * 只有這種方案到期沒續費才會自動降回免費層。免費層本來就不會過期；
+ * enterprise（走合約）與 test / internal（super admin 指派）由人管理,不該被排程自動降級。
+ */
+export function isSelfServePaidPlan(id: BillingPlanId): boolean {
+  const p = BILLING_PLANS[id]
+  return !!p && !p.internal && !p.custom && p.priceMonthly != null && p.priceMonthly > 0
 }
 
 // dev 自我檢查：BILLING_PLAN_ORDER 必須剛好涵蓋 BILLING_PLANS 的所有 key。

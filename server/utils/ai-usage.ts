@@ -1,25 +1,68 @@
 /**
- * AI 用量統計（aiUsage/{workspaceId}_{yyyyMM}）。
+ * AI 用量統計。這裡有**兩套計數,用途不同,刻意不共用同一把尺**：
  *
- * - Doc ID: `{workspaceId}_{yyyyMM}`（top-level；workspaceId 一起入 ID 方便 list）
- * - 每次 AI 介入（呼叫 /api/ai/answer）都會 bump 一次
- * - 透過 Firestore 原子 increment 避免 race
+ * ① `aiUsage/{workspaceId}_{yyyyMM}` —— **成本報表**。對齊台灣日曆月,讓用量監控頁
+ *    能按月比較、對得上財務期間。記 token、次數、轉真人率等所有欄位。
+ *
+ * ② `quotaUsage/{workspaceId}_{periodStart}` —— **則數額度攔截**。對齊訂閱週期（錨定日）,
+ *    只記 answered。換一期 = 換一顆 doc,所以「額度歸零」不需要任何寫入或排程,
+ *    也不會出現「月底升級 → 額度被同月份的免費用量吃掉」。
+ *
+ * 兩者都用 Firestore 原子 increment 避免 race；失敗只 log,不阻塞回覆。
  */
 import { FieldValue, type Firestore } from 'firebase-admin/firestore'
 import { getDb } from './firebase'
+import { getWorkspaceSubscription } from './billing'
 import { taipeiYyyyMm } from '~~/shared/time'
 import type { AiUsageDoc } from '~~/shared/types/ai-knowledge'
 
 export const AI_USAGE_COLLECTION = 'aiUsage'
+export const QUOTA_USAGE_COLLECTION = 'quotaUsage'
 
-// 月結桶用台灣時區（與方案付款週期 taipeiMonthPeriod 同一把尺；台灣固定 UTC+8、無 DST）。
-// 月中切換與 UTC 同鍵,故當月用量 doc 不斷檔;僅月底 8 小時邊界改依台灣時間歸月。
+// 月結桶用台灣時區（台灣固定 UTC+8、無 DST）。月中切換與 UTC 同鍵,故當月用量 doc
+// 不斷檔;僅月底 8 小時邊界改依台灣時間歸月。
 export function currentYyyyMm(date = new Date()): string {
   return taipeiYyyyMm(date)
 }
 
 function usageDocId(workspaceId: string, yyyyMm: string): string {
   return `${workspaceId}_${yyyyMm}`
+}
+
+function quotaDocId(workspaceId: string, periodStart: string): string {
+  return `${workspaceId}_${periodStart}`
+}
+
+/** 本期（訂閱週期）已用則數 —— 額度攔截與方案卡進度條都看這個數字。 */
+export async function getQuotaAnswered(
+  workspaceId: string,
+  periodStart: string,
+  db: Firestore = getDb(),
+): Promise<number> {
+  const snap = await db.collection(QUOTA_USAGE_COLLECTION).doc(quotaDocId(workspaceId, periodStart)).get()
+  return snap.exists ? Number(snap.data()?.answered ?? 0) : 0
+}
+
+/**
+ * 把 answered 記進「本期」額度桶。週期由訂閱決定（讀取時就地推算,60s 快取）。
+ * 訂閱讀不到就跳過——寧可漏記一則,也不要因為記帳失敗而擋掉客人的回覆。
+ */
+async function recordQuotaAnswered(workspaceId: string, answered: number, db: Firestore): Promise<void> {
+  try {
+    const sub = await getWorkspaceSubscription(workspaceId, db)
+    if (!sub?.currentPeriodStart) return
+    await db.collection(QUOTA_USAGE_COLLECTION).doc(quotaDocId(workspaceId, sub.currentPeriodStart)).set({
+      workspaceId,
+      periodStart: sub.currentPeriodStart,
+      periodEnd: sub.currentPeriodEnd,
+      planId: sub.planId,
+      answered: FieldValue.increment(answered),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true })
+  }
+  catch (e) {
+    console.error('[ai-usage] recordQuotaAnswered failed:', e)
+  }
 }
 
 export interface UsageDelta {
@@ -41,13 +84,20 @@ export interface UsageDelta {
 }
 
 /**
- * 把這次 AI 介入的用量原子加總到當月 doc。失敗只 log 不阻塞主流程。
+ * 把這次 AI 介入的用量記帳：報表月結桶（全部欄位）+ 額度週期桶（只記 answered）。
+ * 失敗只 log 不阻塞主流程。
  */
 export async function recordAiUsage(
   workspaceId: string,
   delta: UsageDelta,
   db: Firestore = getDb(),
 ): Promise<void> {
+  // answered 同時要記進「本期」額度桶——攔截看的是它,不是月結桶。
+  // 兩顆 doc 互不相干,並行寫（這段在回覆路徑上,不該串著等）。
+  const quotaWrite = delta.answered
+    ? recordQuotaAnswered(workspaceId, delta.answered, db)
+    : Promise.resolve()
+
   const yyyyMm = currentYyyyMm()
   const ref = db.collection(AI_USAGE_COLLECTION).doc(usageDocId(workspaceId, yyyyMm))
   const updates: Record<string, unknown> = {
@@ -67,7 +117,7 @@ export async function recordAiUsage(
   if (delta.answeredThenHandoffs) updates.answeredThenHandoffs = FieldValue.increment(delta.answeredThenHandoffs)
 
   try {
-    await ref.set(updates, { merge: true })
+    await Promise.all([ref.set(updates, { merge: true }), quotaWrite])
   }
   catch (e) {
     console.error('[ai-usage] recordAiUsage failed:', e)
@@ -75,8 +125,11 @@ export async function recordAiUsage(
 }
 
 /**
- * 取得本月已使用 token 總數（input + output + embedding）。
- * 給 quota 判斷用。
+ * 本月已用 token 總數（input + output + embedding）。
+ *
+ * 只在「沒有則數上限」時才會被讀（enterprise 客製未設額度 / 訂閱讀取失敗）——
+ * 那種帳號沒有則數可擋,token 護欄是唯一煞車。有則數額度的帳號不讀這個,
+ * 否則會在遠低於所購則數處被固定的 token cap 提早切斷。
  */
 export async function getCurrentMonthTokens(
   workspaceId: string,
@@ -88,30 +141,4 @@ export async function getCurrentMonthTokens(
   if (!snap.exists) return 0
   const data = snap.data() as Partial<AiUsageDoc>
   return Number(data?.inputTokens ?? 0) + Number(data?.outputTokens ?? 0) + Number(data?.embeddingTokens ?? 0)
-}
-
-export interface CurrentMonthUsage {
-  /** input + output + embedding tokens（給 token 內部護欄用） */
-  tokens: number
-  /** answered 則數（給方案「則數額度」用） */
-  answered: number
-}
-
-/**
- * 一次讀當月 usage doc，同時回傳 token 總量與 answered 則數。
- * 讓 quota 護欄的「則數額度」與「token 護欄」共用同一次 Firestore 讀取。
- */
-export async function getCurrentMonthUsage(
-  workspaceId: string,
-  db: Firestore = getDb(),
-): Promise<CurrentMonthUsage> {
-  const yyyyMm = currentYyyyMm()
-  const ref = db.collection(AI_USAGE_COLLECTION).doc(usageDocId(workspaceId, yyyyMm))
-  const snap = await ref.get()
-  if (!snap.exists) return { tokens: 0, answered: 0 }
-  const data = snap.data() as Partial<AiUsageDoc>
-  return {
-    tokens: Number(data?.inputTokens ?? 0) + Number(data?.outputTokens ?? 0) + Number(data?.embeddingTokens ?? 0),
-    answered: Number(data?.answered ?? 0),
-  }
 }

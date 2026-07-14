@@ -16,6 +16,8 @@ export interface PlanView {
   answeredQuota: number | null
   /** 超量加購單價（TWD/則）；null = 不提供超量。 */
   overagePerReply: number | null
+  /** 本期起訖（YYYY-MM-DD）。週期由錨定日決定,不是日曆月（見 shared/time.ts）。 */
+  currentPeriodStart: string | null
   currentPeriodEnd: string | null
 }
 

@@ -47,8 +47,10 @@
                 :format="() => `${planState.percentRaw}%`"
               />
               <p class="text-xs text-muted">
-                本月已用 <strong>{{ planState.used.toLocaleString() }}</strong> / {{ planState.limit.toLocaleString() }} 則
-                <template v-if="planView.currentPeriodEnd">· 本期至 {{ planView.currentPeriodEnd }}</template>
+                本期已用 <strong>{{ planState.used.toLocaleString() }}</strong> / {{ planState.limit.toLocaleString() }} 則
+                <template v-if="planView.currentPeriodStart && planView.currentPeriodEnd">
+                  · 本期 {{ planView.currentPeriodStart }} ~ {{ planView.currentPeriodEnd }}
+                </template>
               </p>
             </template>
             <p v-else class="text-xs text-muted">客製額度,無固定則數上限。</p>

@@ -24,7 +24,7 @@ import { searchChunksByIdentifierTag, searchSimilarChunks, type SimilarChunk } f
 import { getCatalogSourceIds } from './ai-knowledge-sources'
 import { embedQuery, estimateTokens, generateJson, generateText } from './gemini'
 import { getAiSettings, getGroundingThreshold } from './ai-settings'
-import { getCurrentMonthUsage, recordAiUsage, type UsageDelta } from './ai-usage'
+import { getCurrentMonthTokens, getQuotaAnswered, recordAiUsage, type UsageDelta } from './ai-usage'
 import { resolveAnsweredQuota, resolveQuotaAction } from './billing'
 import { getDb } from './firebase'
 import {
@@ -994,17 +994,28 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   // ── 2. quota 護欄 ────────────────────────────────────────
   // 放在 router/embed 之前：超量時不要再花 LLM。處置由 resolveQuotaAction 決定：
   //   · 內部/測試方案 → 完全不擋（真無限）。
-  //   · 已開通訂閱   → **只看則數**（則數即成本上限；不再疊 token 護欄，否則付費
+  //   · 有則數額度   → **只看本期則數**（則數即成本上限；不再疊 token 護欄，否則付費
   //                    方案會在遠低於所購則數處被固定的 token cap 提早切斷）。
-  //   · 未開通訂閱   → token 護欄為唯一煞車（防呆；實務上新帳號一律掛訂閱）。
-  // 注意：「先讀用量再答題、答完才記帳」並非嚴格原子——併發訊息可能讓當月用量
-  // 略為超過額度（誤差約為同時在途的幾次呼叫）。屬軟性護欄，可接受此誤差。
+  //   · 無則數上限   → token 護欄為唯一煞車（enterprise 客製未設額度 / 訂閱讀取失敗）。
+  //
+  // 「本期」= 訂閱週期（錨定日制），不是日曆月：月底才升級的人不會被同月份的免費用量
+  // 吃掉額度。週期在讀取時就地推算，不依賴排程。
+  //
+  // 注意：「先讀用量再答題、答完才記帳」並非嚴格原子——併發訊息可能讓本期用量略為
+  // 超過額度（誤差約為同時在途的幾次呼叫）。屬軟性護欄，可接受此誤差。
   let answerModel = settings.answerModel
   const billing = await resolveAnsweredQuota(workspaceId, db)
   const tokenCap = settings.quota.monthlyTokenCap
-  if (!billing.internal && (billing.enforce || tokenCap > 0)) {
-    const usage = await getCurrentMonthUsage(workspaceId, db)
-    const action = resolveQuotaAction(billing, usage, tokenCap, settings.quota.onExceed)
+  if (!billing.internal) {
+    let usage: { answered: number; tokens: number } | null = null
+    if (billing.quota != null && billing.periodStart) {
+      usage = { answered: await getQuotaAnswered(workspaceId, billing.periodStart, db), tokens: 0 }
+    }
+    else if (tokenCap > 0) {
+      usage = { answered: 0, tokens: await getCurrentMonthTokens(workspaceId, db) }
+    }
+
+    const action = usage ? resolveQuotaAction(billing, usage, tokenCap, settings.quota.onExceed) : 'allow'
 
     if (action === 'handoff') {
       await record({ invocations: 1, handoffs: 1 })

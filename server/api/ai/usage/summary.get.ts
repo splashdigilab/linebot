@@ -1,6 +1,6 @@
 import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
-import { AI_USAGE_COLLECTION, currentYyyyMm } from '~~/server/utils/ai-usage'
+import { AI_USAGE_COLLECTION, currentYyyyMm, getQuotaAnswered } from '~~/server/utils/ai-usage'
 import { buildPlanView, getWorkspaceSubscription } from '~~/server/utils/billing'
 import type { AiUsageDoc } from '~~/shared/types/ai-knowledge'
 
@@ -40,15 +40,22 @@ export default defineEventHandler(async (event) => {
 
   const db = getDb()
 
-  // 目前方案（給前端顯示額度進度條 / 超量提示）。未開通訂閱回 null → 前端不顯示額度區塊。
+  // 目前方案（給前端顯示額度進度條 / 超量提示）。
   const sub = await getWorkspaceSubscription(workspaceId, db)
   const plan = buildPlanView(sub)
+
+  // 額度進度條看的是「本期」（訂閱週期）用量,與攔截同一顆計數器——跟下面按月份查的
+  // 報表 KPI（answered/tokens…）是兩把不同的尺,故不隨 ?period 切換。
+  const quotaAnswered = sub?.currentPeriodStart
+    ? await getQuotaAnswered(workspaceId, sub.currentPeriodStart, db)
+    : 0
 
   const snap = await db.collection(AI_USAGE_COLLECTION).doc(`${workspaceId}_${period}`).get()
 
   const empty = {
     period,
     plan,
+    quotaAnswered,
     invocations: 0,
     answered: 0,
     handoffs: 0,
@@ -89,6 +96,7 @@ export default defineEventHandler(async (event) => {
   return {
     period,
     plan,
+    quotaAnswered,
     invocations,
     answered,
     handoffs,
