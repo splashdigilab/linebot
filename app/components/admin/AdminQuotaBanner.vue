@@ -73,19 +73,31 @@ const desc = computed(() => {
 
 function dismiss() {
   dismissed.value = true
+  // 沒有本期起日就沒有穩定的鍵可用——這時寧可不記住「關閉」，也不要寫進一個
+  // 沒有期別的鍵（`quota-dismiss:{ws}:`）：那會讓他關掉一次之後，**每一期都不再提醒**。
+  if (!plan.value?.currentPeriodStart) return
   try {
     localStorage.setItem(dismissKey.value, '1')
   }
   catch { /* 無痕模式等情況：關不掉就下次再顯示，不是什麼大事 */ }
 }
 
-onMounted(async () => {
-  // 沒有計費權限的人不必打這支（plan-summary 需要 admin，打了只會拿到 403）
-  if (!canManageSettings.value) return
+const loaded = ref(false)
+
+/**
+ * ⚠️ **不能用 onMounted 判斷權限。**
+ * canManageSettings 是從 workspaceList 導出的，而那份清單是由 layout 的 onMounted 去載的——
+ * Vue 的子元件 onMounted **早於**父層 layout 的 onMounted，所以這裡在掛載當下看到的
+ * 永遠是「還沒有權限」，然後就直接 return、永遠不載入，整個橫幅形同不存在。
+ * 改成 watch：等權限真的出現時才打 API（只打一次）。
+ */
+watch(canManageSettings, async (can) => {
+  if (!can || loaded.value) return // 沒有計費權限的人不必打這支（plan-summary 需要 admin，打了只會拿到 403）
+  loaded.value = true
   await load()
   try {
     dismissed.value = localStorage.getItem(dismissKey.value) === '1'
   }
   catch { /* ignore */ }
-})
+}, { immediate: true })
 </script>

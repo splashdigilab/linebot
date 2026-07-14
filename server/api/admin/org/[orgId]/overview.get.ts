@@ -1,5 +1,5 @@
 import { getDb } from '~~/server/utils/firebase'
-import { requireOrgAdmin } from '~~/server/utils/workspace-auth'
+import { requireActiveOrgAdmin } from '~~/server/utils/workspace-auth'
 import { buildPlanView, defaultFreeSubscription } from '~~/server/utils/billing'
 import { getQuotaAnswered } from '~~/server/utils/ai-usage'
 import { rollSubscriptionToCurrentPeriod } from '~~/shared/billing/period'
@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
   const orgId = event.context.params?.orgId
   if (!orgId) throw createError({ statusCode: 400, statusMessage: 'orgId is required' })
 
-  await requireOrgAdmin(event, orgId)
+  await requireActiveOrgAdmin(event, orgId)
 
   const db = getDb()
   const today = taipeiDate()

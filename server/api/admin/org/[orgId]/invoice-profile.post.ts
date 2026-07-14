@@ -1,6 +1,6 @@
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '~~/server/utils/firebase'
-import { requireOrgAdmin } from '~~/server/utils/workspace-auth'
+import { requireActiveOrgAdmin } from '~~/server/utils/workspace-auth'
 import { normalizeInvoiceProfile } from '~~/server/utils/ezpay-invoice'
 
 /**
@@ -14,10 +14,17 @@ export default defineEventHandler(async (event) => {
   const orgId = event.context.params?.orgId
   if (!orgId) throw createError({ statusCode: 400, statusMessage: 'orgId is required' })
 
-  await requireOrgAdmin(event, orgId)
+  await requireActiveOrgAdmin(event, orgId)
   const profile = normalizeInvoiceProfile(await readBody(event))
 
-  await getDb().collection('organizations').doc(orgId).update({
+  const db = getDb()
+  const ref = db.collection('organizations').doc(orgId)
+  // update() 打在不存在的文件上會丟 NOT_FOUND（前端只看得到一句 500「儲存失敗」）
+  if (!(await ref.get()).exists) {
+    throw createError({ statusCode: 404, statusMessage: '找不到此組織' })
+  }
+
+  await ref.update({
     invoiceProfile: profile,
     updatedAt: FieldValue.serverTimestamp(),
   })

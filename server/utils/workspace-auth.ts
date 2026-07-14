@@ -123,6 +123,24 @@ export async function requireOrgAdmin(event: H3Event, orgId: string) {
   return { uid: token.uid, email, token, isSuperAdmin: false }
 }
 
+/**
+ * requireOrgAdmin + **組織必須是啟用中**。組織後台的每一支端點都該用這個。
+ *
+ * `requireOrgAdmin` 刻意不檢查停用（有些流程需要在停用狀態下仍能讀），但那意味著
+ * 每個呼叫端都得自己記得檢查——而「忘記檢查」的後果是：組織因為欠費 / 濫用被停用之後，
+ * 它的管理員照樣讀得到帳務、改得動發票抬頭、刪得掉其他管理員。停用等於沒停。
+ * 所以把「停用即擋」收斂成一個函式，不要散在每支端點裡靠人記得。
+ *
+ * super admin 不受限（他就是去處理被停用的組織的人）。
+ */
+export async function requireActiveOrgAdmin(event: H3Event, orgId: string) {
+  const ctx = await requireOrgAdmin(event, orgId)
+  if (!ctx.isSuperAdmin && await isOrgDisabled(orgId)) {
+    throw createError({ statusCode: 403, statusMessage: '此組織已停用，請聯繫客服' })
+  }
+  return ctx
+}
+
 // ── Core: 驗證 token ─────────────────────────────────────────────
 
 async function verifyToken(event: H3Event): Promise<DecodedIdToken> {

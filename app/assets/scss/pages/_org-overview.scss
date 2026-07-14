@@ -58,6 +58,33 @@
   font-size: 0.9rem;
 }
 
+/* 分頁：總覽 / 帳務 / 管理員 */
+.org-tabs {
+  :deep(.el-tabs__header) {
+    margin-bottom: 1.25rem;
+  }
+}
+
+.org-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* 新增管理員：輸入框吃滿剩餘寬度，按鈕不縮 */
+.org-member-add {
+  display: flex;
+  gap: 0.5rem;
+
+  .el-input {
+    flex: 1;
+  }
+
+  .el-button {
+    flex-shrink: 0;
+  }
+}
+
 /* 摘要列：先回答「有沒有事要處理」，再讓他往下看細節 */
 .org-stats {
   display: grid;
