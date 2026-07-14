@@ -104,6 +104,9 @@
       <div v-if="isViewer" class="admin-viewer-banner" role="status">
         觀察者模式：僅能檢視資料，無法新增、儲存或發送。
       </div>
+      <!-- 額度快用完 / 已用完的升級提示。掛在 layout 而不是某一頁：
+           「快沒額度了」不管他人在哪一頁都該知道，而額度用完更是服務中斷。 -->
+      <AdminQuotaBanner v-if="workspaceId" />
       <slot />
     </main>
     <AdminToastHost />
