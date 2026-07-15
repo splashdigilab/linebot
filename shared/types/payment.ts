@@ -37,6 +37,16 @@ export interface PaymentOrderDoc {
   anchorDay?: number | null
   /** 藍新定期定額委託單號（PeriodNo）；取消／暫停要拿它去打 AlterStatus */
   periodNo?: string | null
+  /**
+   * 換方案時「這張新委託要取代的**舊**委託」的單號。
+   *
+   * 舊委託不在建單當下終止——那會讓「放棄付款」的客戶白白丟掉他原本還在用的訂閱。
+   * 改成把舊委託單號記在這裡,等新委託**首期扣款成功**（settlePaidOrder 開通）之後,
+   * 才在 period-notify 裡終止舊委託。放棄付款 → 這張 pending 訂單被 reconcile 清成 expired、
+   * 舊訂閱原封不動。
+   */
+  supersedesPeriodNo?: string | null
+  supersedesPeriodOrderNo?: string | null
   /** 這是委託的第幾期（定期定額續期帳才有） */
   periodTimes?: number | null
   /** 藍新交易序號（Notify 回傳） */

@@ -144,6 +144,33 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // ⚠️ 換方案：新委託開通成功了 → **現在**才終止舊委託。
+  //    在這裡（而非建單時）終止,是為了讓「放棄付款」的客戶保住原本的訂閱：沒付款就
+  //    不會走到這裡,舊委託原封不動。terminatePeriodMandate 冪等,重送 Notify 再跑也安全。
+  //    也在 outcome='already'（redelivery）時嘗試——涵蓋「首次開通成功、但終止失敗」的補救,
+  //    因為那時舊委託單號已被新訂閱覆蓋、reconcile 也救不了,只剩重送這條路。
+  const settledOk = settled.outcome === 'settled' || settled.outcome === 'already'
+  const oldPeriodNo = settled.supersedesPeriodNo
+  const oldPeriodOrderNo = settled.supersedesPeriodOrderNo
+  if (paid && settledOk && !settled.amountMismatch && oldPeriodNo && oldPeriodOrderNo) {
+    const periodCfg = periodConfigFrom(config as unknown as Record<string, unknown>)
+    if (periodCfg) {
+      const t = await terminatePeriodMandate(oldPeriodOrderNo, oldPeriodNo, periodCfg)
+      if (t.ok) {
+        console.log('[newebpay:period] 換方案：已終止舊委託', oldPeriodNo, t.alreadyGone ? '(本來就已終止)' : '')
+      }
+      else {
+        // 舊委託停不掉 = 客戶這個月會被新舊兩張委託都扣。無法在通知流程內解決,
+        // 記成 error 讓維運介入手動終止 / 退款。
+        console.error('[newebpay:period] 換方案：終止舊委託失敗,恐重複扣款,需人工介入',
+          settled.workspaceId, oldPeriodNo, t.code, t.message)
+      }
+    }
+    else {
+      console.error('[newebpay:period] 換方案：無法終止舊委託（設定缺失）', oldPeriodNo)
+    }
+  }
+
   if (activated) {
     await issueInvoiceForOrder({
       merchantOrderNo,

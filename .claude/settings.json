@@ -6,7 +6,10 @@
       "Bash(npm root *)",
       "WebFetch(domain:www.v5.com.tw)",
       "Bash(pip3 install *)",
-      "Bash(curl -sL -o invoice.pdf \"https://cinv.ezpay.com.tw/dw_files/info_api/EZP_INVI_1_2_1.pdf\")"
+      "Bash(curl -sL -o invoice.pdf \"https://cinv.ezpay.com.tw/dw_files/info_api/EZP_INVI_1_2_1.pdf\")",
+      "Bash(firebase projects:list)",
+      "Bash(npx --yes firebase-tools projects:list)",
+      "Bash(npx --yes firebase-tools login:list)"
     ],
     "additionalDirectories": [
       "/Users/kevin/.claude"

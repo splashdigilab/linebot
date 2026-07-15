@@ -3,7 +3,6 @@ import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import { BILLING_PLAN_ORDER, getBillingPlan } from '~~/shared/billing/plans'
 import type { BillingPlanId } from '~~/shared/billing/plans'
 import { buildPeriodPostData } from '~~/server/utils/newebpay'
-import { periodConfigFrom, terminatePeriodMandate } from '~~/server/utils/newebpay-period'
 import { createPendingOrder, findRecentPendingOrder, newMerchantOrderNo } from '~~/server/utils/payment'
 import { getWorkspaceSubscription } from '~~/server/utils/billing'
 import { dayOfDate, taipeiDate } from '~~/shared/time'
@@ -61,25 +60,14 @@ export default defineEventHandler(async (event) => {
   if (!wsSnap.exists) throw createError({ statusCode: 404, statusMessage: '找不到此官方帳號' })
   const organizationId = (wsSnap.data() as WorkspaceDoc).organizationId ?? null
 
-  // ⚠️ 先終止既有委託，再建新的。
-  // 一個帳號同時存在兩張生效委託 = 每個月被扣兩次錢，而且我方只存得下一個 periodNo,
-  // 舊的那張會變成「誰都終止不了、卻一直在扣款」的孤兒。換方案 / 重新訂閱都會走到這裡。
+  // ⚠️ 換方案時**不在這裡終止舊委託**。
+  // 建單只是「產生一張要送去藍新的表單」,客戶可能關掉分頁、刷卡失敗、改變主意而從未真的
+  // 付款。若此刻就終止舊委託,放棄付款的客戶就白白丟掉他原本還在用的訂閱（下期沒扣款 →
+  // 進寬限期 → 降回免費層）。改成把舊委託單號記在訂單上,等**新委託首期扣款成功**
+  // （period-notify 收到 SUCCESS）之後才終止舊委託——見 server/routes/newebpay/period-notify.post.ts。
   const currentSub = await getWorkspaceSubscription(workspaceId, db)
-  if (currentSub?.periodNo && currentSub.periodOrderNo) {
-    const periodCfg = periodConfigFrom(config as unknown as Record<string, unknown>)
-    if (!periodCfg) throw createError({ statusCode: 500, statusMessage: '金流尚未設定' })
-
-    const t = await terminatePeriodMandate(currentSub.periodOrderNo, currentSub.periodNo, periodCfg)
-    if (!t.ok) {
-      // 終止不掉就不能建新的——否則客戶會同時被兩張委託扣款
-      console.error('[payment] 換方案前終止舊委託失敗', workspaceId, currentSub.periodNo, t.code, t.message)
-      throw createError({
-        statusCode: 502,
-        statusMessage: '無法終止現有的自動扣款委託，請聯繫客服（避免重複扣款，已中止本次變更）',
-      })
-    }
-    console.log('[payment] 換方案：已終止舊委託', workspaceId, currentSub.periodNo, t.alreadyGone ? '(本來就已終止)' : '')
-  }
+  const supersedesPeriodNo = currentSub?.periodNo ?? null
+  const supersedesPeriodOrderNo = currentSub?.periodOrderNo ?? null
 
   const now = new Date()
   // PeriodPoint 需 01–31 兩碼；今天幾號就是錨定日。
@@ -94,7 +82,12 @@ export default defineEventHandler(async (event) => {
   const merchantOrderNo = existing?.merchantOrderNo ?? newMerchantOrderNo(now)
   if (!existing) {
     await createPendingOrder(
-      { merchantOrderNo, workspaceId, organizationId, planId, amount, createdBy: uid, kind: 'period_first', anchorDay },
+      {
+        merchantOrderNo, workspaceId, organizationId, planId, amount,
+        createdBy: uid, kind: 'period_first', anchorDay,
+        // 開通成功後由 period-notify 拿去終止（現在不動）
+        supersedesPeriodNo, supersedesPeriodOrderNo,
+      },
       db,
     )
   }

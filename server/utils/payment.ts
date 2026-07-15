@@ -128,6 +128,9 @@ export async function createPendingOrder(
     kind?: PaymentOrderKind
     /** 定期定額：建單當下決定的錨定日（= PeriodPoint），開通時沿用不重算。 */
     anchorDay?: number | null
+    /** 換方案：這張新委託開通成功後要終止的舊委託（見 PaymentOrderDoc.supersedes*）。 */
+    supersedesPeriodNo?: string | null
+    supersedesPeriodOrderNo?: string | null
   },
   db: Firestore = getDb(),
 ): Promise<void> {
@@ -140,6 +143,8 @@ export async function createPendingOrder(
     status: 'pending',
     kind: order.kind ?? 'one_time',
     anchorDay: order.anchorDay ?? null,
+    supersedesPeriodNo: order.supersedesPeriodNo ?? null,
+    supersedesPeriodOrderNo: order.supersedesPeriodOrderNo ?? null,
     periodNo: null,
     tradeNo: null,
     paymentType: null,
@@ -208,6 +213,12 @@ export interface SettleOrderResult {
   amount?: number
   /** 付款金額與建單金額不符（疑似竄改）；此時標記失敗、不開通 */
   amountMismatch?: boolean
+  /**
+   * 換方案：本次開通的新委託所取代的**舊**委託單號。開通成功後由 period-notify 拿去
+   * 終止舊委託（此刻才終止，放棄付款的客戶舊訂閱才不會被白白殺掉）。
+   */
+  supersedesPeriodNo?: string | null
+  supersedesPeriodOrderNo?: string | null
 }
 
 /**
@@ -239,8 +250,16 @@ export async function settlePaidOrder(
     if (!snap.exists) return { outcome: 'unknown' }
     const order = snap.data() as PaymentOrderDoc
     if (order.status !== 'pending') {
-      // 已結算過（redelivery）→ 冪等跳過
-      return { outcome: 'already', workspaceId: order.workspaceId, planId: order.planId }
+      // 已結算過（redelivery）→ 冪等跳過。但仍回報 supersedes（僅限先前真的開通的 paid 單）,
+      // 讓「首次開通成功、終止舊委託卻失敗」的情況能在藍新重送時補做終止（終止冪等）。
+      return {
+        outcome: 'already',
+        workspaceId: order.workspaceId,
+        planId: order.planId,
+        ...(order.status === 'paid'
+          ? { supersedesPeriodNo: order.supersedesPeriodNo ?? null, supersedesPeriodOrderNo: order.supersedesPeriodOrderNo ?? null }
+          : {}),
+      }
     }
 
     // 讀現有訂閱（續訂堆疊 + 保留 quotaOverride 用）;Firestore 要求所有讀在所有寫之前
@@ -288,7 +307,15 @@ export async function settlePaidOrder(
       subscription: sub,
       updatedAt: FieldValue.serverTimestamp(),
     })
-    return { outcome: 'settled', workspaceId: order.workspaceId, planId: order.planId, amount: order.amount }
+    return {
+      outcome: 'settled',
+      workspaceId: order.workspaceId,
+      planId: order.planId,
+      amount: order.amount,
+      // 換方案：新委託開通了 → 回報要終止的舊委託（同一張新委託時兩者不會相同）
+      supersedesPeriodNo: order.supersedesPeriodNo ?? null,
+      supersedesPeriodOrderNo: order.supersedesPeriodOrderNo ?? null,
+    }
   })
 
   // 開通後清快取（transaction 外，確保已 commit）

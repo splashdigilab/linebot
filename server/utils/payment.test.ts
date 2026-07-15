@@ -193,6 +193,40 @@ describe('settlePaidOrder', () => {
     expect(db._store.get('workspaces/ws1')).toBeUndefined()
   })
 
+  it('換方案：開通成功 → 回報要終止的舊委託（period-notify 據此終止舊委託）', async () => {
+    const db = makeDb({
+      'paymentOrders/NP1': pendingOrder({
+        kind: 'period_first', supersedesPeriodNo: 'P_OLD', supersedesPeriodOrderNo: 'NP_OLD',
+      }),
+    }) as any
+    const r = await settlePaidOrder({ merchantOrderNo: 'NP1', paid: true, amount: 499, periodNo: 'P_NEW', now: JUL28 }, db)
+    expect(r.outcome).toBe('settled')
+    expect(r.supersedesPeriodNo).toBe('P_OLD')
+    expect(r.supersedesPeriodOrderNo).toBe('NP_OLD')
+  })
+
+  it('換方案 redelivery（已 paid）→ 仍回報舊委託，讓「開通成功但終止失敗」能在重送時補做', async () => {
+    const db = makeDb({
+      'paymentOrders/NP1': pendingOrder({
+        status: 'paid', kind: 'period_first', supersedesPeriodNo: 'P_OLD', supersedesPeriodOrderNo: 'NP_OLD',
+      }),
+    }) as any
+    const r = await settlePaidOrder({ merchantOrderNo: 'NP1', paid: true, periodNo: 'P_NEW', now: JUL28 }, db)
+    expect(r.outcome).toBe('already')
+    expect(r.supersedesPeriodNo).toBe('P_OLD') // ← 重送也要能終止舊委託
+  })
+
+  it('換方案 redelivery 但訂單是 failed → 不回報舊委託（失敗的訂單不該終止任何委託）', async () => {
+    const db = makeDb({
+      'paymentOrders/NP1': pendingOrder({
+        status: 'failed', kind: 'period_first', supersedesPeriodNo: 'P_OLD', supersedesPeriodOrderNo: 'NP_OLD',
+      }),
+    }) as any
+    const r = await settlePaidOrder({ merchantOrderNo: 'NP1', paid: true, periodNo: 'P_NEW', now: JUL28 }, db)
+    expect(r.outcome).toBe('already')
+    expect(r.supersedesPeriodNo).toBeUndefined()
+  })
+
   it('查無訂單 → unknown', async () => {
     const db = makeDb() as any
     expect((await settlePaidOrder({ merchantOrderNo: 'NOPE', paid: true, now: JUL28 }, db)).outcome).toBe('unknown')
