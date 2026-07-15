@@ -30,13 +30,18 @@ export default defineEventHandler(async (event) => {
 
   const wsSnap = await db.collection('workspaces').where('organizationId', '==', orgId).get()
 
-  const workspaces = wsSnap.docs.map((doc) => {
+  // 每個 OA 只推算一次週期（roll 是純函式但沒必要在 map + reduce 各跑一遍）。
+  const rolled = wsSnap.docs.map((doc) => {
     const w = doc.data() as WorkspaceDoc
     const { sub } = rollSubscriptionToCurrentPeriod(w.subscription ?? defaultFreeSubscription(today), today)
+    return { id: doc.id, name: w.name ?? doc.id, sub }
+  })
+
+  const workspaces = rolled.map(({ id, name, sub }) => {
     const plan = buildPlanView(sub)
     return {
-      workspaceId: doc.id,
-      name: w.name ?? doc.id,
+      workspaceId: id,
+      name,
       plan,
       // 下次扣款日 = 本期到期日的隔天（藍新在錨定日當天扣款）。沒有自動續訂就沒有下次。
       nextChargeDate: plan?.autoRenew && sub.currentPeriodEnd ? addDays(sub.currentPeriodEnd, 1) : null,
@@ -45,9 +50,7 @@ export default defineEventHandler(async (event) => {
 
   // 下一輪會被扣的總額：只算「還在自動續訂中」的付費方案。
   // 已取消（cancelAtPeriodEnd）與單次付款的不算——它們不會再被扣一次。
-  const monthlyTotal = wsSnap.docs.reduce((sum, doc) => {
-    const w = doc.data() as WorkspaceDoc
-    const { sub } = rollSubscriptionToCurrentPeriod(w.subscription ?? defaultFreeSubscription(today), today)
+  const monthlyTotal = rolled.reduce((sum, { sub }) => {
     if (!sub.autoRenew || sub.cancelAtPeriodEnd) return sum
     return sum + (getBillingPlan(sub.planId).priceMonthly ?? 0)
   }, 0)

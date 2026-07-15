@@ -32,6 +32,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Email 格式不正確' })
   }
 
+  // 先擋掉「已存在」——這一步也涵蓋 super admin 那條路用 .add() 自動 ID 建的既有文件。
   const existing = await db.collection('orgMembers')
     .where('orgId', '==', orgId)
     .where('email', '==', email)
@@ -39,14 +40,28 @@ export default defineEventHandler(async (event) => {
     .get()
   if (!existing.empty) throw createError({ statusCode: 409, statusMessage: '此 Email 已是組織管理員' })
 
-  const ref = await db.collection('orgMembers').add({
-    orgId,
-    email,
-    role: 'admin',
-    invitedBy: uid,
-    createdAt: FieldValue.serverTimestamp(),
-  })
+  // ⚠️ 用**決定性 doc id** + create()，而不是 .add() 自動 ID。
+  // 「先查再寫」在併發下有競態：兩個請求同時加同一個 email，都通過上面的 where 檢查、
+  // 都 .add() → 產生兩筆重複文件，成員列表顯示兩次，還會灌大刪除端「最後一位管理員」的計數。
+  // 決定性 id 讓第二筆 create() 直接碰撞失敗（code 6），天然去重。
+  // email 可能含 `/`（regex 允許）會破壞 doc id → encodeURIComponent 編掉。
+  const docId = `${orgId}_${encodeURIComponent(email)}`
+  try {
+    await db.collection('orgMembers').doc(docId).create({
+      orgId,
+      email,
+      role: 'admin',
+      invitedBy: uid,
+      createdAt: FieldValue.serverTimestamp(),
+    })
+  }
+  catch (e) {
+    if ((e as { code?: number }).code === 6) { // ALREADY_EXISTS：併發下另一個請求先寫了
+      throw createError({ statusCode: 409, statusMessage: '此 Email 已是組織管理員' })
+    }
+    throw e
+  }
 
   invalidateOrgMemberCache(email, orgId)
-  return { docId: ref.id, email, role: 'admin' }
+  return { docId, email, role: 'admin' }
 })
