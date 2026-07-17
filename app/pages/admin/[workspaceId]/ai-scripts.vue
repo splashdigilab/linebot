@@ -430,6 +430,8 @@ function blankForm() {
 const form = ref(blankForm())
 const { markClean, confirmLeaveIfDirty } = useUnsavedChanges({
   getSnapshot: () => form.value,
+  // 腳本節點流程可能編很久；F5 / 關分頁也要攔，避免整段遺失
+  enableBeforeUnload: true,
 })
 
 const selectedScript = computed(() => scripts.value.find(s => s.id === selectedId.value) ?? null)

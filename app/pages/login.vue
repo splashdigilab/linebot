@@ -82,9 +82,19 @@ async function handleLogin() {
     await loginWithGoogle()
     await navigateTo(loginRedirectTarget())
   }
-  catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : '登入失敗，請重試'
-    errorMsg.value = msg
+  catch (e: any) {
+    // 使用者自己關掉/取消登入視窗 → 正常取消，不當成錯誤顯示
+    const code = String(e?.code ?? '')
+    if (code === 'auth/popup-closed-by-user' || code === 'auth/cancelled-popup-request') {
+      return
+    }
+    const FRIENDLY: Record<string, string> = {
+      'auth/network-request-failed': '網路連線不穩，請檢查網路後再試一次。',
+      'auth/popup-blocked': '瀏覽器擋掉了登入視窗，請允許彈出視窗後再試。',
+      'auth/unauthorized-domain': '此網域尚未被授權登入，請聯繫管理員。',
+      'auth/user-disabled': '此帳號已被停用，請聯繫管理員。',
+    }
+    errorMsg.value = FRIENDLY[code] || '登入失敗，請重試。'
   }
   finally {
     loading.value = false

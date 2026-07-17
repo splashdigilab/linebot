@@ -165,6 +165,15 @@ async function invite() {
 }
 
 async function changeRole(row: any, role: string) {
+  const ROLE_LABEL: Record<string, string> = { admin: '管理員', agent: '客服', viewer: '觀察者' }
+  try {
+    await ElMessageBox.confirm(
+      `確定將此成員的角色改為「${ROLE_LABEL[role] ?? role}」？`,
+      '變更角色',
+      { confirmButtonText: '變更', cancelButtonText: '取消', type: 'warning' },
+    )
+  }
+  catch { return }
   try {
     if (row.pendingInvite && row.inviteId) {
       await apiFetch(`/api/admin/workspaces/${workspaceId.value}/member-invites/${row.inviteId}`, {

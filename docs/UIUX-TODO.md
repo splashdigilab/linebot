@@ -1,8 +1,8 @@
 # UI/UX 審查待辦（依優先順序）
 
 > 建立：2026-07-16。審查範圍：全 30 頁（入口/登入/超管/LIFF、核心營運、AI 客服、Flow/圖文選單、設定/計費/組織）。
-> 進度：已完成 R2、R3、R5(badge/btn hover)、item 7、8、9、12、20、21、22、29、31、33，item 38 的 aria 兩項、
-> item 34 的 .cmp-stat-rate；每批皆 `nuxt typecheck` 通過，均已 commit 到 billing-anchored-period。
+> 進度：已完成 R2、R3、R5(badge/btn hover)、item 7、8、9、12、14、18、20、21、22、23、29、31、33，
+> item 38 的 aria 兩項、item 34 的 .cmp-stat-rate；每批皆 `nuxt typecheck` 通過，均已 commit 到 billing-anchored-period。
 > 排序原則：**先修「一改就同時修好很多頁」的根因**，再修「會流失名單／誤刪心血」的，
 > 再修「明顯瑕疵與一致性破綻」，最後才是打磨。
 > 標記：`[ ]` 未做、`[x] ✅` 已完成。UI＝畫面美感/視覺一致，UX＝流程順暢/資訊清楚。
@@ -78,7 +78,7 @@
 
 ### login.vue
 13. [ ] **品牌斷層** — UI：Landing 是綠色「MYFEEL」，登入頁卻是黑底 💬 emoji「LINE Bot 管理系統」；產品名全站不一致 → 統一品牌標識與命名。
-14. [ ] 錯誤直接顯示 Firebase 英文技術訊息（`auth/popup-closed-by-user`）— UX：使用者只是關彈窗也看到嚇人紅字 → 在地化並忽略「取消」類。
+14. [x] ✅ login 錯誤顯示 Firebase 英文技術訊息 — UX　（2026-07-17 完成）：常見錯誤碼映射為繁中友善訊息；使用者關掉/取消登入視窗（popup-closed-by-user/cancelled-popup-request）不再顯示紅字。
 
 ### billing / org 帳務
 15. [ ] 付款狀態、藍新導回結果（成功🎉/失敗）灰階下同色 — UI：**最需要顏色的地方失去顏色**（根因 R1，但此頁風險最高，單獨列）。
@@ -86,7 +86,7 @@
 17. [ ] `AdminInvoiceProfileForm` 幾乎無格式驗證 — UX：統編 8 碼/捐贈碼/手機條碼/Email 無檢查，錯格式付款後才被 ezPay 退件才發現。
 
 ### settings（members / organization）
-18. [ ] 角色下拉 `@change` 即改權限、無確認無 undo — UX：降權一按生效；而破壞性較低的「移除」反而有 confirm。
+18. [x] ✅ 角色下拉 `@change` 即改權限無確認 — UX　（2026-07-17 完成）：changeRole 前加 `ElMessageBox.confirm`（顯示要改成的角色）；取消時因 `:model-value` 單向綁定自然回復原值。
 19. [ ] webhook 測試結果、角色標籤灰階下成敗/角色看不出差異 — UI（根因 R1）；標題塞長段說明文字牆淹沒關鍵輸入；成員表無 `empty-text`。
 
 ### org/[orgId]
@@ -95,7 +95,7 @@
 ### AI 客服
 21. [x] ✅ knowledge/sources **「新增單張手寫卡」無入口** — UX　（2026-07-17 完成）：sidebar header 補「✍️ 手寫」按鈕接 `openCreateManual`（guard `canEditKb`）。
 22. [x] ✅ 「全部重新索引」藏在無文字 `🔁` emoji 鈕 — UX　（2026-07-17 完成）：改為「🔁 重建索引」有文字，與「🔄 重新同步」不再混淆。
-23. [ ] ai-scripts 刪除用原生 confirm；`useUnsavedChanges` 沒帶 `enableBeforeUnload`（:430）— UX：編很久按 F5 全丟無提醒。
+23. [x] ✅ ai-scripts 關頁不提醒 — UX　（2026-07-17 完成）：`useUnsavedChanges` 補 `enableBeforeUnload: true`，F5/關分頁會攔；（刪除的原生 confirm 已於 R2 一併改為 ElMessageBox）。
 24. [ ] playground 五態區塊、ai-usage KPI 卡、ai-scripts 六種節點徽章灰階下只靠 emoji 撐 — UI（根因 R1）。
 
 ### flow / richmenu（兩大編輯器）
