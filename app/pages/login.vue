@@ -4,8 +4,8 @@
       <!-- Logo -->
       <div class="login-logo">
         <div class="logo-circle">💬</div>
-        <h1>LINE Bot 管理系統</h1>
-        <p>使用 Google 帳號登入以繼續</p>
+        <h1>{{ brandName }}</h1>
+        <p>管理後台 · 使用 Google 帳號登入</p>
       </div>
 
       <!-- Error -->
@@ -58,6 +58,8 @@ const contact = String(config.public.supportContact ?? '').trim()
 const contactHref = contact
   ? (contact.startsWith('http') ? contact : `mailto:${contact}`)
   : ''
+// 品牌名走 runtimeConfig（多租戶可覆寫），不寫死租戶名
+const brandName = String(config.public.brandName ?? '').trim() || 'MYFEEL'
 const loading = ref(false)
 const errorMsg = ref('')
 

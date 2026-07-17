@@ -7,12 +7,12 @@
 .lp #top, .lp #value, .lp #diff, .lp #pricing, .lp #faq, .lp #demo { scroll-margin-top: 80px; }
 
 .lp {
-  /* Palette — LINE 風 */
-  --g: #06C755;
-  --g-deep: #05B24C;
-  --g-press: #04A046;
-  --g-ink: #05421f;
-  --g-wash: #eafaf1;
+  /* Palette — 沿用全站共用品牌綠 token（門面頁統一同一套來源）*/
+  --g: var(--brand-green);
+  --g-deep: var(--brand-green-deep);
+  --g-press: var(--brand-green-press);
+  --g-ink: var(--brand-green-ink);
+  --g-wash: var(--brand-green-wash);
   --g-wash-2: #f2fbf6;
   --g-line: rgba(6, 199, 85, 0.24);
 

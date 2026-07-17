@@ -7,6 +7,15 @@
      定義為單色主色，讓那些 accent 回到單色而非殘留綠。 */
   --color-primary: var(--color-line);
 
+  /* 品牌綠（門面/入口頁專用：landing/login/選帳/死路頁）。後台維持單色不吃這組。
+     視覺共用；品牌「名稱」走 runtimeConfig.public.brandName，不寫死租戶。 */
+  --brand-green: #06c755;
+  --brand-green-deep: #05b24c;
+  --brand-green-press: #04a046;
+  --brand-green-ink: #05421f;
+  --brand-green-wash: #eafaf1;
+  --brand-green-glow: rgba(6, 199, 85, 0.14);
+
   /* Background */
   --bg-base: #f3f4f6;
   --bg-surface: #ffffff;

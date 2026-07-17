@@ -1,12 +1,20 @@
 # UI/UX 審查待辦（依優先順序）
 
 > 建立：2026-07-16。審查範圍：全 30 頁（入口/登入/超管/LIFF、核心營運、AI 客服、Flow/圖文選單、設定/計費/組織）。
-> 進度：已完成 R1、R2、R3、R5(badge/btn hover)、item 7、8、9、12、14、15、16、17、18、19、20、21、22、23、24、29、31、32、33、39、42，
+> 進度：已完成 R1、R2、R3、R5(badge/btn hover)、item 7、8、9、12、13、14、15、16、17、18、19、20、21、22、23、24、29、31、32、33、39、42，
 > item 28/34/38 部分；每批皆 `nuxt typecheck`（配色/SCSS 另用 sass CLI）通過，均已 commit 到 billing-anchored-period。
 > ⚠️ R1＋item42 是全站配色變更，建議實機目視一次。
 > 排序原則：**先修「一改就同時修好很多頁」的根因**，再修「會流失名單／誤刪心血」的，
 > 再修「明顯瑕疵與一致性破綻」，最後才是打磨。
 > 標記：`[ ]` 未做、`[x] ✅` 已完成。UI＝畫面美感/視覺一致，UX＝流程順暢/資訊清楚。
+
+---
+
+## 📌 使用者決策紀錄（2026-07-17）
+
+- **延後不做（先記著）**：① landing 假 Demo 表單（P0，待你決定 lead 去向）、③ 手機版 RWD、⑤ emoji→SVG 圖示，以及所有「打磨」項（⑨⑩⑪⑫⑬）。
+- **方向拍板**：門面/入口頁（landing、login、選帳、死路頁）**延續 MYFEEL 綠、統整成共用品牌樣式**；**後台維持單色**（R1 不變）。品牌名走 `runtimeConfig.public.brandName`（多租戶可覆寫，預設 MYFEEL），不寫死。
+- **已 greenlight，待做**：② 門面綠統整＋login 品牌（進行中）、④ flow 訊息即時預覽（大功能）、⑥ LIFF 消費者錯誤頁、⑦ 發票填錯硬擋、⑧ flow 存檔錯誤指出第幾則/欄。
 
 ---
 
@@ -79,7 +87,11 @@
 12. [x] ✅ sticky nav 68px 遮住錨點標題 — UI　（2026-07-16 完成）：`.lp` 各錨點區加 `scroll-margin-top: 80px`。
 
 ### login.vue
-13. [ ] **品牌斷層** — UI：Landing 是綠色「MYFEEL」，登入頁卻是黑底 💬 emoji「LINE Bot 管理系統」；產品名全站不一致 → 統一品牌標識與命名。
+13. [x] ✅ **品牌斷層（門面綠統整）** — UI　（2026-07-17 完成）：
+    - 新增全站共用品牌綠 token `--brand-green*`（core/_variables.scss）。
+    - landing 的 `--g*` 改為 reference 這組 token（同值、lossless）→ 門面頁同一套綠色來源。
+    - login 改綠：logo 綠漸層、連結/裝飾綠、修 btn-google hover 白邊；標題改 `brandName`（`runtimeConfig.public.brandName`，多租戶可覆寫、預設 MYFEEL），不再硬寫「LINE Bot 管理系統」。
+    - 選帳頁 accent 由黑改綜色（`--brand-green-deep`）。後台維持單色不受影響。
 14. [x] ✅ login 錯誤顯示 Firebase 英文技術訊息 — UX　（2026-07-17 完成）：常見錯誤碼映射為繁中友善訊息；使用者關掉/取消登入視窗（popup-closed-by-user/cancelled-popup-request）不再顯示紅字。
 
 ### billing / org 帳務

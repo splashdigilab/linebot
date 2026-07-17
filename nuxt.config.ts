@@ -123,6 +123,8 @@ export default defineNuxtConfig({
       firebaseAppId: process.env.FIREBASE_APP_ID ?? '',
       /** 升級／加購的聯繫方式（email 或 https 連結）；顯示於「升級方案」對話框。未設則顯示通用引導文字。 */
       supportContact: process.env.PUBLIC_SUPPORT_CONTACT ?? '',
+      /** 門面／登入頁顯示的品牌名（多租戶：各 deployment 可用 PUBLIC_BRAND_NAME 覆寫）。預設沿用 landing 的 MYFEEL。 */
+      brandName: process.env.PUBLIC_BRAND_NAME ?? 'MYFEEL',
       /**
        * 線上付款是否已開通（藍新三把金鑰都設好才為 true）。
        * 只是布林值、不含任何金鑰內容；前端據此決定結帳鈕能不能按，
