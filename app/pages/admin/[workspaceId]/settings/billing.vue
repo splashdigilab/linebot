@@ -86,6 +86,10 @@
           </div>
           <AdminPlanUpgradeDialog v-model="upgradeOpen" :current-plan-id="planView.id" />
         </div>
+        <div v-else-if="loading" class="message-card ar-section-card billing-plan-loading">
+          <div class="spinner" />
+          <span class="text-sm text-muted">載入方案資訊…</span>
+        </div>
         <div v-else class="message-card ar-section-card">
           <div class="card-section-stack">
             <p class="text-sm">此帳號尚未開通付費方案。</p>

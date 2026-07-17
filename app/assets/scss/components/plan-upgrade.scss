@@ -82,6 +82,15 @@
 }
 
 /* 帳單頁：付款紀錄的訂單編號（等寬字，方便跟藍新對帳／報給客服） */
+/* 初次載入時的方案骨架：避免付費客戶在資料到位前先看到「尚未開通」 */
+.billing-plan-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 1.75rem 1rem;
+}
+
 .billing-order-no {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 12px;
