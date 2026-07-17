@@ -1,8 +1,8 @@
 # UI/UX 審查待辦（依優先順序）
 
 > 建立：2026-07-16。審查範圍：全 30 頁（入口/登入/超管/LIFF、核心營運、AI 客服、Flow/圖文選單、設定/計費/組織）。
-> 進度：已完成 R2、R3、R5(badge/btn hover)、item 7、8、9、12、20、29、31、33，item 38 的 aria 兩項、
-> item 34 的 .cmp-stat-rate；每批皆 `nuxt typecheck` 通過。R2/R3/R5/多數 P1 已 commit 到 billing-anchored-period。
+> 進度：已完成 R2、R3、R5(badge/btn hover)、item 7、8、9、12、20、21、22、29、31、33，item 38 的 aria 兩項、
+> item 34 的 .cmp-stat-rate；每批皆 `nuxt typecheck` 通過，均已 commit 到 billing-anchored-period。
 > 排序原則：**先修「一改就同時修好很多頁」的根因**，再修「會流失名單／誤刪心血」的，
 > 再修「明顯瑕疵與一致性破綻」，最後才是打磨。
 > 標記：`[ ]` 未做、`[x] ✅` 已完成。UI＝畫面美感/視覺一致，UX＝流程順暢/資訊清楚。
@@ -93,8 +93,8 @@
 20. [x] ✅ org 分頁狀態未進 URL — UX　（2026-07-17 完成）：`tab` 由 `?tab=` 初始化並 `watch` 寫回（`router.replace`），重整/分享連結不再掉回總覽。
 
 ### AI 客服
-21. [ ] knowledge/sources **「新增單張手寫卡」無入口按鈕** — UX：`openCreateManual` 只在 deep-link 時被呼叫，想手動加一條 Q&A 只能繞道匯入 → 補按鈕。
-22. [ ] 「全部重新索引」重量級操作藏在無文字 `🔁` emoji 鈕、且與「🔄 重新同步」極易混淆 — UX：給文字標籤、換區別度高的 icon。
+21. [x] ✅ knowledge/sources **「新增單張手寫卡」無入口** — UX　（2026-07-17 完成）：sidebar header 補「✍️ 手寫」按鈕接 `openCreateManual`（guard `canEditKb`）。
+22. [x] ✅ 「全部重新索引」藏在無文字 `🔁` emoji 鈕 — UX　（2026-07-17 完成）：改為「🔁 重建索引」有文字，與「🔄 重新同步」不再混淆。
 23. [ ] ai-scripts 刪除用原生 confirm；`useUnsavedChanges` 沒帶 `enableBeforeUnload`（:430）— UX：編很久按 F5 全丟無提醒。
 24. [ ] playground 五態區塊、ai-usage KPI 卡、ai-scripts 六種節點徽章灰階下只靠 emoji 撐 — UI（根因 R1）。
 

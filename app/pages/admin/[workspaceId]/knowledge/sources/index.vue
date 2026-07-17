@@ -10,8 +10,11 @@
         <el-tooltip v-if="canEditKb" content="匯入檔案 / 網址 / 大段文字" placement="bottom" :show-after="300">
           <el-button size="small" type="primary" plain data-tour="kb-import" @click="goImport">📥 匯入</el-button>
         </el-tooltip>
+        <el-tooltip v-if="canEditKb" content="手動新增一張問答卡" placement="bottom" :show-after="300">
+          <el-button size="small" plain @click="openCreateManual">✍️ 手寫</el-button>
+        </el-tooltip>
         <el-tooltip v-if="canReindexAll" content="全部重新索引(系統升級檢索方式後使用)" placement="bottom" :show-after="300">
-          <el-button size="small" plain :loading="reindexingAll" @click="reindexAll">🔁</el-button>
+          <el-button size="small" plain :loading="reindexingAll" @click="reindexAll">🔁 重建索引</el-button>
         </el-tooltip>
       </div>
     </template>
