@@ -2,7 +2,7 @@
 
 > 建立：2026-07-16。審查範圍：全 30 頁（入口/登入/超管/LIFF、核心營運、AI 客服、Flow/圖文選單、設定/計費/組織）。
 > 進度：已完成 R1、R2、R3、R5、item 7、8、9、12、13、14、15、16、17、18、19、20、21、22、23、24、29、30、31、32、33、38、39、42，
-> item 26/28/34 部分；greenlit 待做 ④flow 訊息即時預覽。每批皆 `nuxt typecheck`（配色/SCSS 另用 sass CLI）通過，均已 commit 到 billing-anchored-period。
+> item 26/28/34 部分。**所有 greenlit 項目（②④⑥⑦⑧）已全數完成**。每批皆 `nuxt typecheck`（配色/SCSS 另用 sass CLI）通過，均已 commit 到 billing-anchored-period。
 > ⚠️ R1＋item42 是全站配色變更，建議實機目視一次。
 > 排序原則：**先修「一改就同時修好很多頁」的根因**，再修「會流失名單／誤刪心血」的，
 > 再修「明顯瑕疵與一致性破綻」，最後才是打磨。
@@ -113,7 +113,7 @@
 24. [x] ✅ playground 五態區塊、ai-usage KPI 卡、ai-scripts 節點徽章灰階下只靠 emoji — UI　（2026-07-17 由 R1 解決）：el-color 與 badge 色恢復後自動有顏色。
 
 ### flow / richmenu（兩大編輯器）
-25. [ ] **完全沒有 LINE 訊息所見即所得預覽** — UX：9 種訊息只是表單欄位（除圖文 hero 畫布），新手看不到氣泡長相 → 加 LINE 樣式即時預覽。
+25. [x] ✅ **LINE 訊息即時預覽（item 4）** — UX　（2026-07-18 完成）：新增 `FlowMessagePreview.vue`（`components/flow/`）+ `_flow-preview.scss`，編輯器右側加一欄仿 LINE 聊天預覽，隨編輯即時更新。涵蓋全部 10 種型別：text（純氣泡/按鈕卡）、image、video、richMessage/richMessageRef（imagemap 大圖＋版型區塊 overlay，用 `PRESET_BOUNDS_PCT`/custom bounds）、carousel、imageCarousel、flexImageCarousel（比例用 `line-image-spec` 換算）、quickReply（氣泡＋膠囊列）、userInput。≤1100px 自動收起。`sass`＋`nuxt typecheck` 皆過；**建議實機目視一次**。
 26. [ ] （部分完成）flow 存檔驗證定位 — UX：
     - [x] ✅ 存檔錯誤現在會帶「第 N 則」位置（`validateMessages` 每則包 IIFE，回傳自動加前綴；圖文訊息另已帶「區塊 X」）(item 8)。
     - [ ] 尚未做：輪播「第 M 欄」欄位級定位、自動捲動到出錯卡、inline 紅框、`AdminAreaActionEditor` 的 `errorMessage` 死碼（永不 render）。

@@ -220,6 +220,7 @@
 
     <!-- ── Editor Body ── -->
     <template #editor-body>
+      <div class="fem-split">
       <div class="flow-editor-messages">
         <!-- Sticky header -->
         <div class="fem-header" data-tour="flow-messages">
@@ -997,6 +998,8 @@
           <!-- End rail -->
           </div>
         </div>
+        <FlowMessagePreview :messages="form.messages" :rich-messages="richMessages" />
+      </div>
 
     </template>
   </AdminSplitLayout>

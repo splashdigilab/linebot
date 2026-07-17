@@ -157,6 +157,19 @@
   margin: 0;
 }
 
+/* 左編輯／右即時預覽 兩欄 */
+.fem-split {
+  display: flex;
+  gap: 1rem;
+  height: 100%;
+  min-height: 0;
+}
+.fem-split > .flow-editor-messages {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
 /* ─── Toolbar (fixed, non-scrolling) ─────────────────── */
 .fem-header {
   display: flex;
