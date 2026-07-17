@@ -2526,7 +2526,9 @@ function validateMessages(messages: any[]): string | null {
   const lastMsg = messages[messages.length - 1]
   if (uiCount > 0 && lastMsg?.type !== 'userInput') return '用戶輸入卡片必須放在所有訊息的最結尾'
 
-  for (const msg of messages ?? []) {
+  for (const [msgIdx, msg] of (messages ?? []).entries()) {
+    // 每則訊息的驗證包成 IIFE，回傳的錯誤自動帶上「第 N 則」位置，方便定位
+    const perMessageError = ((): string | null => {
     // text message optional buttons, but if a button exists it must be complete
     if (msg?.type === 'text' && Array.isArray(msg.buttons)) {
       for (const btn of msg.buttons) {
@@ -2711,6 +2713,9 @@ function validateMessages(messages: any[]): string | null {
         }
       }
     }
+      return null
+    })()
+    if (perMessageError) return `第 ${msgIdx + 1} 則・${perMessageError}`
   }
   return null
 }
