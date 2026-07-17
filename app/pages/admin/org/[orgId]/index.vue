@@ -287,7 +287,13 @@ const { getBearer } = useWorkspace()
 const { showToast } = useAdminToast()
 
 const orgId = computed(() => String(route.params.orgId || ''))
-const tab = ref('overview')
+// 分頁狀態同步到 URL（?tab=），重整或分享連結不會掉回總覽
+const ORG_TABS = ['overview', 'billing', 'members']
+const initialTab = String(route.query.tab || '')
+const tab = ref(ORG_TABS.includes(initialTab) ? initialTab : 'overview')
+watch(tab, (t) => {
+  router.replace({ query: { ...route.query, tab: t } })
+})
 
 const config = useRuntimeConfig()
 const invoiceEnabled = Boolean(config.public.invoiceEnabled)

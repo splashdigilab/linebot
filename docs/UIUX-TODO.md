@@ -1,8 +1,8 @@
 # UI/UX 審查待辦（依優先順序）
 
 > 建立：2026-07-16。審查範圍：全 30 頁（入口/登入/超管/LIFF、核心營運、AI 客服、Flow/圖文選單、設定/計費/組織）。
-> 進度：已完成 R2、R3、R5(badge/btn hover)、item 7、8、9、12、29、31、33，以及 item 38 的 aria 兩項；
-> 每批皆 `nuxt typecheck` 通過。尚未 commit。
+> 進度：已完成 R2、R3、R5(badge/btn hover)、item 7、8、9、12、20、29、31、33，item 38 的 aria 兩項、
+> item 34 的 .cmp-stat-rate；每批皆 `nuxt typecheck` 通過。R2/R3/R5/多數 P1 已 commit 到 billing-anchored-period。
 > 排序原則：**先修「一改就同時修好很多頁」的根因**，再修「會流失名單／誤刪心血」的，
 > 再修「明顯瑕疵與一致性破綻」，最後才是打磨。
 > 標記：`[ ]` 未做、`[x] ✅` 已完成。UI＝畫面美感/視覺一致，UX＝流程順暢/資訊清楚。
@@ -90,7 +90,7 @@
 19. [ ] webhook 測試結果、角色標籤灰階下成敗/角色看不出差異 — UI（根因 R1）；標題塞長段說明文字牆淹沒關鍵輸入；成員表無 `empty-text`。
 
 ### org/[orgId]
-20. [ ] 分頁狀態只存本地 ref、未進 URL — UX：重整/分享都跳回「總覽」→ 綁 `?tab=` query。
+20. [x] ✅ org 分頁狀態未進 URL — UX　（2026-07-17 完成）：`tab` 由 `?tab=` 初始化並 `watch` 寫回（`router.replace`），重整/分享連結不再掉回總覽。
 
 ### AI 客服
 21. [ ] knowledge/sources **「新增單張手寫卡」無入口按鈕** — UX：`openCreateManual` 只在 deep-link 時被呼叫，想手動加一條 Q&A 只能繞道匯入 → 補按鈕。
@@ -119,7 +119,11 @@
 
 ## 🟡 第 3 順位 — 打磨（死碼清理／微調／無障礙）
 
-34. [ ] **殘留死碼清理** — UI：`_auto-reply.scss` 整批舊版手刻樣式（`.ar-layout`/`.ar-sidebar`…）、`_campaigns.scss` 的 `.cmp-stat-rate`、organization 永遠隱藏的「清除憑證」區塊（`showClearStoredCredentials=false`）、`areaColors` 色盤重複兩份。
+34. [ ] **殘留死碼清理**（部分完成，稽核有高估）— UI：
+    - [x] ✅ `_campaigns.scss` 的 `.cmp-stat-rate`（未用且帶錯誤綠 fallback）已移除。
+    - [ ] `_auto-reply.scss`：**不是整批死碼**。`.ar-section-hint`/`.ar-status-switch`/`.ar-any-text-note`/`.ar-section-card` 其實**跨頁共用**（campaigns/organization/support-presets/flow）；只有舊版 layout 類（`.ar-layout`/`.ar-sidebar*`/`.ar-list*`/`.ar-editor(-inner/header/title)`/`.module-picker`/`.module-option*`/`.input-base`）疑似死碼，且與共用類交錯，需**逐類確認**後再動，暫緩。
+    - [—] organization「清除憑證」區塊（`showClearStoredCredentials=false`）是**刻意的功能開關**（註解：「改為 true 即可顯示」），**非死碼**，保留。
+    - [ ] `areaColors` 色盤在 richmenu 與 FlowRichMessageAreas 重複兩份 → 抽共用常數（待處理）。
 35. [ ] **emoji 當功能圖示** — UI：側欄/super/workspaces 大量 emoji 導覽圖示跨平台造型不一（🛡️🗂️ 尤甚），削弱單色設計語言 → 關鍵導覽改單色 SVG，emoji 僅留行銷區。
 36. [ ] **樣式散落 `<style scoped>`** — UI：AiContextBanner 大量 px 值寫在元件內，違反本專案「樣式放 partials + token」慣例 → 搬到 partial。
 37. [ ] **重複元件抽共用** — UI：統計卡三套（el-card / .bc-stat-box / .cmp-stat-box）、表格兩套（el-table vs 手刻 table）→ 抽 stat-box、統一表格。
