@@ -135,6 +135,7 @@
 </template>
 
 <script setup lang="ts">
+import { ElMessageBox } from 'element-plus'
 definePageMeta({ middleware: ['auth', 'super-admin'], layout: 'super-admin' })
 useHead({ title: 'Super Admin 管理 — Super Admin' })
 
@@ -186,7 +187,15 @@ async function grantSuperAdmin() {
   const msg = already
     ? `「${foundUser.value.email}」已是 Super Admin，補登記到清單？`
     : `確定授予「${foundUser.value.email}」Super Admin 權限？`
-  if (!confirm(msg)) return
+  try {
+    await ElMessageBox.confirm(msg, '授予 Super Admin', {
+      confirmButtonText: already ? '補登記' : '授予',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
   acting.value = true
   try {
     await apiFetch(`/api/admin/super/users/${foundUser.value.uid}/super-admin`, { method: 'POST' })
@@ -201,7 +210,15 @@ async function grantSuperAdmin() {
 }
 
 async function revokeByUid(uid: string, email: string) {
-  if (!confirm(`確定撤銷「${email || uid}」的 Super Admin 權限？`)) return
+  try {
+    await ElMessageBox.confirm(`確定撤銷「${email || uid}」的 Super Admin 權限？`, '撤銷確認', {
+      confirmButtonText: '撤銷',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
   acting.value = true
   try {
     await apiFetch(`/api/admin/super/users/${uid}/super-admin`, { method: 'DELETE' })

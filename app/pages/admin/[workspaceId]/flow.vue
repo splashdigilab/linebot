@@ -752,7 +752,7 @@
                         <span class="drag-handle" draggable="true" @dragstart.stop="onColDragStart($event, i, Number(ci))" @dragend.stop="onColDragEnd">⠿</span>
                         <span class="carousel-card-idx">{{ Number(ci) + 1 }}</span>
                       </div>
-                      <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(Number(ci), 1)">✕</el-button>
+                      <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="removeColumn(msg, Number(ci))">✕</el-button>
                     </div>
                     <div class="carousel-sub-body admin-field-stack">
                       <FlowUploadZone
@@ -837,7 +837,7 @@
                         <span class="drag-handle" draggable="true" @dragstart.stop="onColDragStart($event, i, Number(ci))" @dragend.stop="onColDragEnd">⠿</span>
                         <span class="carousel-card-idx">{{ Number(ci) + 1 }}</span>
                       </div>
-                      <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(Number(ci), 1)">✕</el-button>
+                      <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="removeColumn(msg, Number(ci))">✕</el-button>
                     </div>
                     <div class="carousel-sub-body">
                       <FlowUploadZone
@@ -883,7 +883,7 @@
                         <span class="drag-handle" draggable="true" @dragstart.stop="onColDragStart($event, i, Number(ci))" @dragend.stop="onColDragEnd">⠿</span>
                         <span class="carousel-card-idx">{{ Number(ci) + 1 }}</span>
                       </div>
-                      <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="msg.columns.splice(Number(ci), 1)">✕</el-button>
+                      <el-button v-if="msg.columns.length > 1" link type="danger" size="small" @click="removeColumn(msg, Number(ci))">✕</el-button>
                     </div>
                     <div class="carousel-sub-body admin-field-stack">
                       <template v-if="flexCarouselUsesImage(msg)">
@@ -2097,8 +2097,30 @@ function removeFlexImageCarouselButton(col: any, actionIndex: number) {
   col.actions.splice(actionIndex, 1)
 }
 
-function removeMessage(i: number) {
+async function removeMessage(i: number) {
+  try {
+    await ElMessageBox.confirm(`確定刪除第 ${i + 1} 則訊息？此動作無法復原。`, '刪除確認', {
+      confirmButtonText: '刪除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
   form.value.messages.splice(i, 1)
+}
+
+async function removeColumn(msg: any, ci: number) {
+  try {
+    await ElMessageBox.confirm('確定刪除這一欄？此動作無法復原。', '刪除確認', {
+      confirmButtonText: '刪除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
+  msg.columns.splice(ci, 1)
 }
 
 // ── Buttons (text type) ───────────────────────────────
@@ -2316,7 +2338,16 @@ async function submitForm() {
 
 async function deleteFlow() {
   if (!canOperate.value) return showToast('觀察者無法執行此操作', 'warning')
-  if (!selectedId.value || !confirm(`確定刪除「${form.value.name}」？`)) return
+  if (!selectedId.value) return
+  try {
+    await ElMessageBox.confirm(`確定刪除「${form.value.name}」？`, '刪除確認', {
+      confirmButtonText: '刪除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
   try {
     await apiFetch(`/api/flow/${selectedId.value}`, { method: 'DELETE' })
     showToast('已刪除', 'success')

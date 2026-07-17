@@ -193,6 +193,7 @@
 </template>
 
 <script setup lang="ts">
+import { ElMessageBox } from 'element-plus'
 import {
   IMAGE_MAX_BYTES,
 } from '~~/shared/upload-rules'
@@ -770,7 +771,15 @@ async function setAsDefault(menu: any) {
 async function deleteMenu() {
   if (!selectedId.value) return
   const menuName = form.value.name
-  if (!confirm(`確定刪除「${menuName}」？此動作無法復原。`)) return
+  try {
+    await ElMessageBox.confirm(`確定刪除「${menuName}」？此動作無法復原。`, '刪除確認', {
+      confirmButtonText: '刪除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
   try {
     await apiFetch(`/api/richmenu/${selectedId.value}`, { method: 'DELETE' })
     showToast('已刪除', 'success')

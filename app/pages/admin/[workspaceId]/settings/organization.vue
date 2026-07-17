@@ -244,6 +244,7 @@
 </template>
 
 <script setup lang="ts">
+import { ElMessageBox } from 'element-plus'
 import type { WorkspaceMemberRole } from '~~/shared/types/organization'
 
 definePageMeta({ middleware: ['auth', 'workspace-settings'], layout: 'default' })
@@ -580,7 +581,15 @@ async function save() {
 }
 
 async function clearWorkspace() {
-  if (!confirm('確定清除在此頁儲存的 LINE 憑證？')) return
+  try {
+    await ElMessageBox.confirm('確定清除在此頁儲存的 LINE 憑證？此動作無法復原。', '清除憑證', {
+      confirmButtonText: '清除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
   clearing.value = true
   try {
     const token = await getBearer()

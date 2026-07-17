@@ -88,6 +88,7 @@
 </template>
 
 <script setup lang="ts">
+import { ElMessageBox } from 'element-plus'
 definePageMeta({ middleware: ['auth', 'workspace-settings'], layout: 'default' })
 useHead({ title: '成員管理 — LINE Bot 管理系統' })
 
@@ -186,7 +187,15 @@ async function changeRole(row: any, role: string) {
 
 async function removeMember(row: any) {
   const label = row.pendingInvite ? '此邀請' : '此成員'
-  if (!confirm(`確定移除${label}？`)) return
+  try {
+    await ElMessageBox.confirm(`確定移除${label}？`, '移除確認', {
+      confirmButtonText: '移除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
   try {
     if (row.pendingInvite && row.inviteId) {
       await apiFetch(`/api/admin/workspaces/${workspaceId.value}/member-invites/${row.inviteId}`, {

@@ -160,6 +160,7 @@
 </template>
 
 <script setup lang="ts">
+import { ElMessageBox } from 'element-plus'
 import { DEFAULT_MAX_WORKSPACES_PER_ORG } from '~~/shared/types/organization'
 
 definePageMeta({ middleware: ['auth', 'super-admin'], layout: 'super-admin' })
@@ -277,7 +278,15 @@ async function saveEdit() {
 
 async function toggleDisable(row: any) {
   const action = row.disabled ? '啟用' : '停用'
-  if (!confirm(`確定要${action}「${row.name}」？`)) return
+  try {
+    await ElMessageBox.confirm(`確定要${action}「${row.name}」？`, `${action}組織`, {
+      confirmButtonText: action,
+      cancelButtonText: '取消',
+      confirmButtonClass: row.disabled ? '' : 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
   try {
     await apiFetch(`/api/admin/super/organizations/${row.id}/disable`, {
       method: 'POST',
@@ -313,7 +322,15 @@ async function addMember() {
 }
 
 async function removeMember(docId: string) {
-  if (!confirm('確定移除此管理員？')) return
+  try {
+    await ElMessageBox.confirm('確定移除此管理員？', '移除確認', {
+      confirmButtonText: '移除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
   try {
     await apiFetch(`/api/admin/super/organizations/${membersTarget.value.id}/members/${docId}`, {
       method: 'DELETE',

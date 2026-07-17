@@ -684,6 +684,7 @@
 </template>
 
 <script setup lang="ts">
+import { ElMessageBox } from 'element-plus'
 import {
   AUDIO_ACCEPT_ATTR,
   AUDIO_MAX_BYTES,
@@ -1492,6 +1493,14 @@ async function closeSelectedSession() {
   const st = sessionToolbarMeta.value?.status
   if (!sid || st === 'closed')
     return
+  try {
+    await ElMessageBox.confirm('結束會話後，這位客人下次來訊會被視為新的一段會話。確定結束？', '結束會話', {
+      confirmButtonText: '結束會話',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+  }
+  catch { return }
   closingSession.value = true
   try {
     await apiFetch(`/api/conversations/sessions/${sid}/close`, {

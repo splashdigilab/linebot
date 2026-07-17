@@ -347,6 +347,7 @@
 </template>
 
 <script setup lang="ts">
+import { ElMessageBox } from 'element-plus'
 import { v4 as uuidv4 } from 'uuid'
 import type {
   BranchOp,
@@ -769,7 +770,15 @@ async function submitForm() {
 
 async function deleteScript() {
   if (!selectedId.value) return
-  if (!confirm(`確定刪除「${form.value.name}」這條腳本？`)) return
+  try {
+    await ElMessageBox.confirm(`確定刪除「${form.value.name}」這條腳本？`, '刪除確認', {
+      confirmButtonText: '刪除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
   try {
     await apiFetch(`/api/ai/scripts/${selectedId.value}`, { method: 'DELETE' })
     showToast('已刪除', 'success')
