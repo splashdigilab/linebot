@@ -1,8 +1,9 @@
 # UI/UX 審查待辦（依優先順序）
 
 > 建立：2026-07-16。審查範圍：全 30 頁（入口/登入/超管/LIFF、核心營運、AI 客服、Flow/圖文選單、設定/計費/組織）。
-> 進度：已完成 R2、R3、R5(badge/btn hover)、item 7、8、9、12、14、18、20、21、22、23、29、31、33，
-> item 38 的 aria 兩項、item 34 的 .cmp-stat-rate；每批皆 `nuxt typecheck` 通過，均已 commit 到 billing-anchored-period。
+> 進度：已完成 R1、R2、R3、R5(badge/btn hover)、item 7、8、9、12、14、15、18、20、21、22、23、24、29、31、33，
+> item 19/38/34 部分；每批皆 `nuxt typecheck`（＋R1 另用 sass CLI）通過，均已 commit 到 billing-anchored-period。
+> ⚠️ R1 是全站配色變更，建議實機目視一次。
 > 排序原則：**先修「一改就同時修好很多頁」的根因**，再修「會流失名單／誤刪心血」的，
 > 再修「明顯瑕疵與一致性破綻」，最後才是打磨。
 > 標記：`[ ]` 未做、`[x] ✅` 已完成。UI＝畫面美感/視覺一致，UX＝流程順暢/資訊清楚。
@@ -11,13 +12,14 @@
 
 ## 🔑 第 0 順位 — 五個根因（最高槓桿，先修這五項會一次消掉下面約半數單頁項目）
 
-1. [ ] **狀態色被灰階化（R1）** — UI
-   `element-variables.scss` + `core/_variables.scss` 把 `success/warning/danger/info` 全設成相近深灰
-   （#404040 / #525252 / #262626 / #737373）。結果「靠顏色分辨狀態」在全站普遍失效：
-   付款成功/失敗、角色標籤、訂閱狀態、對話狀態橫幅、KPI 卡、標籤啟用/停用、推播 failed、
-   flow 訊息類型、super 全部 el-tag、進度條…幾乎每一頁都中。
-   **修法**：保留一組「不吃單色化」的語意色 token（可比照 org-flag 已用的真彩綠/橙/紅）；
-   需要區分處一律用**顏色＋圖示＋文字**三重編碼，別只靠已被抹平的 hue。
+1. [x] ✅ **狀態色被灰階化（R1）** — UI　（2026-07-17 完成；方向＝狀態保留彩色）
+   - `element-variables.scss`：primary 維持近黑單色，但 success/warning/danger/info 的 base 由灰改回
+     語意彩色（#16a34a 綠 / #d97706 橙 / #dc2626 紅 / #2563eb 藍）→ 所有 el-tag / el-alert /
+     danger 按鈕 / el-switch 等狀態元件重新有顏色（付款、訂閱、角色、對話狀態、KPI…一次解決）。
+   - `core/_variables.scss`：`--color-success/warning/error/info` 同步改為對齊的彩色 →
+     自訂 `.badge-*`、`.text-success/danger`、`.btn-danger`（順帶變真紅）也恢復顏色。
+   - 已用 `sass` CLI 驗證兩檔皆編譯通過。**建議實機再目視一次配色**（我在此環境無法算繪顏色）。
+   一次解決 item 15/19(色彩部分)/24；殘留 item 42（清掉散落的舊綠/藍/紫）另計。
 
 2. [x] ✅ **確認框兩套並行、破壞性動作保護不足（R2）** — UX　（2026-07-16 完成）
    已把 13 處原生 `confirm()` 全部改為 `ElMessageBox.confirm` + `confirmButtonClass: 'el-button--danger'`
@@ -81,13 +83,13 @@
 14. [x] ✅ login 錯誤顯示 Firebase 英文技術訊息 — UX　（2026-07-17 完成）：常見錯誤碼映射為繁中友善訊息；使用者關掉/取消登入視窗（popup-closed-by-user/cancelled-popup-request）不再顯示紅字。
 
 ### billing / org 帳務
-15. [ ] 付款狀態、藍新導回結果（成功🎉/失敗）灰階下同色 — UI：**最需要顏色的地方失去顏色**（根因 R1，但此頁風險最高，單獨列）。
+15. [x] ✅ 付款狀態、藍新導回結果（成功🎉/失敗）灰階下同色 — UI　（2026-07-17 由 R1 解決）：付款 el-tag（paid 綠/failed 紅/pending 橙/expired 藍）與導回結果 el-alert 恢復彩色。
 16. [ ] billing 初次載入無骨架 — UX：`planView` 為 null 時直接顯示「尚未開通付費方案」，付費客戶開頁瞬間看到會誤解、甚至誤觸重新結帳 → 加 loading 骨架。
 17. [ ] `AdminInvoiceProfileForm` 幾乎無格式驗證 — UX：統編 8 碼/捐贈碼/手機條碼/Email 無檢查，錯格式付款後才被 ezPay 退件才發現。
 
 ### settings（members / organization）
 18. [x] ✅ 角色下拉 `@change` 即改權限無確認 — UX　（2026-07-17 完成）：changeRole 前加 `ElMessageBox.confirm`（顯示要改成的角色）；取消時因 `:model-value` 單向綁定自然回復原值。
-19. [ ] webhook 測試結果、角色標籤灰階下成敗/角色看不出差異 — UI（根因 R1）；標題塞長段說明文字牆淹沒關鍵輸入；成員表無 `empty-text`。
+19. [ ] （部分完成）— [x] ✅ webhook 測試結果（.text-success/danger）、角色標籤灰階下看不出差異已由 R1 恢復彩色。[ ] 標題長段說明文字牆淹沒關鍵輸入、成員表無 `empty-text` 仍待處理。
 
 ### org/[orgId]
 20. [x] ✅ org 分頁狀態未進 URL — UX　（2026-07-17 完成）：`tab` 由 `?tab=` 初始化並 `watch` 寫回（`router.replace`），重整/分享連結不再掉回總覽。
@@ -96,7 +98,7 @@
 21. [x] ✅ knowledge/sources **「新增單張手寫卡」無入口** — UX　（2026-07-17 完成）：sidebar header 補「✍️ 手寫」按鈕接 `openCreateManual`（guard `canEditKb`）。
 22. [x] ✅ 「全部重新索引」藏在無文字 `🔁` emoji 鈕 — UX　（2026-07-17 完成）：改為「🔁 重建索引」有文字，與「🔄 重新同步」不再混淆。
 23. [x] ✅ ai-scripts 關頁不提醒 — UX　（2026-07-17 完成）：`useUnsavedChanges` 補 `enableBeforeUnload: true`，F5/關分頁會攔；（刪除的原生 confirm 已於 R2 一併改為 ElMessageBox）。
-24. [ ] playground 五態區塊、ai-usage KPI 卡、ai-scripts 六種節點徽章灰階下只靠 emoji 撐 — UI（根因 R1）。
+24. [x] ✅ playground 五態區塊、ai-usage KPI 卡、ai-scripts 節點徽章灰階下只靠 emoji — UI　（2026-07-17 由 R1 解決）：el-color 與 badge 色恢復後自動有顏色。
 
 ### flow / richmenu（兩大編輯器）
 25. [ ] **完全沒有 LINE 訊息所見即所得預覽** — UX：9 種訊息只是表單欄位（除圖文 hero 畫布），新手看不到氣泡長相 → 加 LINE 樣式即時預覽。

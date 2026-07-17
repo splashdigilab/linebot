@@ -1,19 +1,22 @@
+// UI 主色維持單色（primary=近黑），但狀態色保留語意彩色（R1 決策：狀態保留彩色）。
+// 只有 primary 是單色；success/warning/danger/info 恢復彩色 → el-tag/el-alert/
+// danger 按鈕/開關等狀態元件重新能用顏色分辨。
 @forward "element-plus/theme-chalk/src/common/var.scss" with (
   $colors: (
     "primary": (
       "base": #171717,
     ),
     "success": (
-      "base": #404040,
+      "base": #16a34a,
     ),
     "warning": (
-      "base": #525252,
+      "base": #d97706,
     ),
     "danger": (
-      "base": #262626,
+      "base": #dc2626,
     ),
     "info": (
-      "base": #737373,
+      "base": #2563eb,
     ),
   ),
   $bg-color: (

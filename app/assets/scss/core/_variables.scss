@@ -20,11 +20,12 @@
   --border: rgba(0, 0, 0, 0.08);
   --border-active: rgba(0, 0, 0, 0.3);
 
-  /* Status */
-  --color-success: #404040;
-  --color-warning: #525252;
-  --color-error: #262626;
-  --color-info: #737373;
+  /* Status — 語意彩色（R1：UI 主色單色、狀態保留彩色）。
+     用於狀態徽章/文字/開關等；與 element-variables.scss 的 el-color-* 對齊。 */
+  --color-success: #16a34a;
+  --color-warning: #d97706;
+  --color-error: #dc2626;
+  --color-info: #2563eb;
 
   /*
    * 圓角階層（全站優先使用這些，避免散落 magic number）
