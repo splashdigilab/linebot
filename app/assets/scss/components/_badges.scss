@@ -13,3 +13,7 @@
 .badge-red { background: rgba(0, 0, 0, 0.1); color: var(--color-error); }
 .badge-blue { background: rgba(0, 0, 0, 0.1); color: var(--color-info); }
 .badge-gray { background: rgba(0, 0, 0, 0.1); color: var(--text-secondary); }
+/* yellow/purple 曾被 ai-settings/ai-usage/knowledge/flow 引用卻沒定義 → 徽章會渲染成無底透明。
+   先補齊使其至少與其他 badge 同一視覺（灰底膠囊）；真正「用顏色分辨狀態」屬 R1 狀態色 token 議題。 */
+.badge-yellow { background: rgba(0, 0, 0, 0.1); color: var(--color-warning); }
+.badge-purple { background: rgba(0, 0, 0, 0.1); color: var(--text-secondary); }

@@ -1,5 +1,5 @@
 <template>
-  <div v-if="show" class="quota-banner" :class="`quota-banner--${state.state}`" role="status">
+  <div v-if="show" class="quota-banner" :class="`quota-banner--${state.state}`" :role="state.state === 'over' ? 'alert' : 'status'">
     <span class="quota-banner__icon">{{ state.state === 'over' ? '🛑' : '⚠️' }}</span>
 
     <div class="quota-banner__body">

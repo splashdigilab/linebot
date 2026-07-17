@@ -28,7 +28,7 @@
           <el-option label="月" value="month" />
         </el-select>
         <el-button size="small" :loading="loading" @click="loadAll">重整</el-button>
-        <el-button size="small" @click="exportCsv">匯出 CSV</el-button>
+        <el-button size="small" :disabled="!trend.buckets.length" @click="exportCsv">匯出 CSV</el-button>
       </div>
     </template>
 

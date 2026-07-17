@@ -259,7 +259,7 @@
           </div>
           <div class="card-section-stack">
             <p class="src-section-hint">
-              排程會定期抓網頁內容、跟上次比對。**偵測到變動不會自動覆蓋**，會在這裡標一個提示等你進來看差異再決定。
+              排程會定期抓網頁內容、跟上次比對。<strong>偵測到變動不會自動覆蓋</strong>，會在這裡標一個提示等你進來看差異再決定。
             </p>
             <div class="admin-field-group">
               <AdminFieldLabel text="偵測頻率" tight />
@@ -301,7 +301,7 @@
           </div>
           <div class="card-section-stack">
             <p class="src-section-hint">
-              排程會定期重讀這份 Sheet，**一列一卡自動套用**（新增/更新/刪除）。你在後台手動編輯過的卡（🔒）會保留、不被覆蓋。
+              排程會定期重讀這份 Sheet，<strong>一列一卡自動套用</strong>（新增/更新/刪除）。你在後台手動編輯過的卡（🔒）會保留、不被覆蓋。
             </p>
             <div class="admin-field-group">
               <AdminFieldLabel text="同步頻率" tight />
@@ -591,7 +591,7 @@
       </div>
       <p v-if="folderEditTarget" class="folder-form-hint">
         目前底下 {{ countByFolder[folderEditTarget.id] ?? 0 }} 筆來源。
-        若刪除，底下的來源會自動移到「未分類」，**不會**被刪掉。
+        若刪除，底下的來源會自動移到「未分類」，<strong>不會</strong>被刪掉。
       </p>
     </div>
     <template #footer>

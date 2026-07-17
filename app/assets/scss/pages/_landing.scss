@@ -2,6 +2,10 @@
  * 設計語言：以 LINE 官方帳號的對話為主軸，沿用 LINE 綠(#06C755)、大圓角、留白。
  * 互動（reveal / nav 陰影 / 手機選單 / 表單）在 pages/index.vue 的 <script setup>。
  */
+
+/* 錨點捲動時避開 68px sticky nav（item 12） */
+.lp #top, .lp #value, .lp #diff, .lp #pricing, .lp #faq, .lp #demo { scroll-margin-top: 80px; }
+
 .lp {
   /* Palette — LINE 風 */
   --g: #06C755;

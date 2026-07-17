@@ -17,7 +17,7 @@
         <div class="lp-nav__right">
           <NuxtLink to="/login" class="lp-nav__signin">登入</NuxtLink>
           <a class="lp-btn lp-btn--primary" href="#demo">預約 Demo</a>
-          <button class="lp-nav__burger" aria-label="選單" @click="menuOpen = !menuOpen"><span /></button>
+          <button class="lp-nav__burger" aria-label="選單" :aria-expanded="menuOpen" @click="menuOpen = !menuOpen"><span /></button>
         </div>
       </div>
     </nav>
