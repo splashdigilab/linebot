@@ -58,14 +58,20 @@
   }
 
   &-btn {
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px; /* 觸控目標 ≥44px */
     padding: 0.625rem 1.25rem;
-    background: #06c755;
+    background: var(--brand-green);
     color: #fff;
     font-size: 0.9375rem;
     font-weight: 600;
+    font-family: inherit;
+    border: none;
     border-radius: var(--radius-md);
     text-decoration: none;
+    cursor: pointer;
 
     &:active {
       opacity: 0.85;

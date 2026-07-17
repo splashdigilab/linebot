@@ -1,8 +1,8 @@
 # UI/UX 審查待辦（依優先順序）
 
 > 建立：2026-07-16。審查範圍：全 30 頁（入口/登入/超管/LIFF、核心營運、AI 客服、Flow/圖文選單、設定/計費/組織）。
-> 進度：已完成 R1、R2、R3、R5(badge/btn hover)、item 7、8、9、12、13、14、15、16、17、18、19、20、21、22、23、24、29、31、32、33、39、42，
-> item 28/34/38 部分；每批皆 `nuxt typecheck`（配色/SCSS 另用 sass CLI）通過，均已 commit 到 billing-anchored-period。
+> 進度：已完成 R1、R2、R3、R5、item 7、8、9、12、13、14、15、16、17、18、19、20、21、22、23、24、29、30、31、32、33、38、39、42，
+> item 28/34 部分；greenlit 待做 ④flow 預覽、⑧flow 錯誤定位。每批皆 `nuxt typecheck`（配色/SCSS 另用 sass CLI）通過，均已 commit 到 billing-anchored-period。
 > ⚠️ R1＋item42 是全站配色變更，建議實機目視一次。
 > 排序原則：**先修「一改就同時修好很多頁」的根因**，再修「會流失名單／誤刪心血」的，
 > 再修「明顯瑕疵與一致性破綻」，最後才是打磨。
@@ -122,7 +122,7 @@
 29. [x] ✅ `/admin/super` 首頁**空白頁** — UI/UX　（2026-07-16 完成）：加了重導向 middleware 直接送到 `/admin/super/organizations`（未來若要做總覽 dashboard 再改回）。
 
 ### liff/lead.vue（LINE webview 內給消費者看）
-30. [ ] **出錯把含網址/內部欄位的原始 JSON 倒給消費者看** — UX：還寫「請截圖給工程」；錯誤指示（「回後台重新儲存」）對錯對象（消費者無後台權限）、且無重試按鈕卡死 → 診斷區改 `?debug=1` 才顯示，給消費者可執行出口。
+30. [x] ✅ LIFF 消費者錯誤頁 — UX　（2026-07-17 完成）：診斷 JSON 改成只在 `?debug=1` 才顯示（消費者看不到內部資訊）；錯誤文案由「回後台重新儲存」改為「請聯繫這個官方帳號的商家」（對的對象）；補「重新整理再試」按鈕，不再卡死。
 
 ### 其他
 31. [x] ✅ conversation-stats「匯出 CSV」無資料時靜默 — UX　（2026-07-16 完成）：按鈕加 `:disabled="!trend.buckets.length"`。
@@ -144,7 +144,7 @@
 38. [ ] **無障礙**（部分完成）— UI：
     - [x] ✅ 漢堡鈕補 `:aria-expanded="menuOpen"`（index.vue）。
     - [x] ✅ 額度 `over` 由 `role="status"` 改為動態 `role="alert"`（AdminQuotaBanner）。
-    - [ ] LIFF 按鈕 <44px 觸控目標、done/error 容器缺 `aria-live` 尚未處理。
+    - [x] ✅ LIFF：`.liff-lead-btn` 加 `min-height: 44px`（觸控目標）＋按鈕安全屬性；`.liff-lead` 根容器加 `role="status"` 與動態 `aria-live`（error=assertive），階段變化會被螢幕報讀。
 39. [x] ✅ **對話框固定像素寬** — UI　（2026-07-17 完成）：全站 17 個 `width="Npx"` 對話框改為 `width="min(Npx, 92vw)"`，小螢幕不再頂滿/溢出。
 40. [ ] **flow 編輯器打磨** — UI/UX：拖曳把手 `⠿` 對比過低、9 顆訊息類型按鈕同權重無主次、`{{...}}` 插入變數鈕語意不明且只附加到字串尾端、用戶輸入卡「必須放最後」只在存檔時驗證、達上限/互斥時按鈕不先 disable。
 41. [ ] **匯入對話框** — UI/UX：虛線框暗示可拖放但沒綁 drop 事件、長輪詢（8 分鐘）無取消鈕。

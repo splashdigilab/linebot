@@ -1,6 +1,6 @@
 <template>
-  <div class="liff-lead" :class="{ 'liff-lead--loading': phase === 'loading' }">
-    <div v-if="phase === 'loading'" class="liff-lead-loading" role="status" aria-live="polite">
+  <div class="liff-lead" :class="{ 'liff-lead--loading': phase === 'loading' }" role="status" :aria-live="phase === 'error' ? 'assertive' : 'polite'">
+    <div v-if="phase === 'loading'" class="liff-lead-loading">
       <span class="liff-lead-spinner" aria-hidden="true" />
       <p class="liff-lead-loading-text">載入中…</p>
     </div>
@@ -23,7 +23,9 @@
     <template v-else-if="phase === 'error'">
       <p class="liff-lead-title">無法完成綁定</p>
       <p class="liff-lead-msg liff-lead-err">{{ errorText }}</p>
-      <div v-if="debugInfo" class="liff-lead-debug">
+      <p class="liff-lead-hint">請重新整理再試一次；若仍無法完成，請直接聯繫這個官方帳號的商家。</p>
+      <button type="button" class="liff-lead-btn" @click="reloadPage">重新整理再試</button>
+      <div v-if="debugInfo && showDebug" class="liff-lead-debug">
         <p class="liff-lead-debug-title">診斷資訊（請截圖提供給工程）</p>
         <pre class="liff-lead-debug-body">{{ debugInfo }}</pre>
       </div>
@@ -32,7 +34,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { $fetch } from 'ofetch'
 import { parseLeadClaimFromQuery } from '~~/shared/liff-lead-query'
 
@@ -53,6 +55,11 @@ const phase = ref<'loading' | 'need-login' | 'done' | 'error'>('loading')
 const errorText = ref('')
 const doneMessage = ref('')
 const debugInfo = ref('')
+// 診斷資訊預設隱藏（消費者不該看到內部 JSON）；工程要看時在網址加 ?debug=1
+const showDebug = computed(() => route.query.debug === '1' || route.query.debug === 'true')
+function reloadPage() {
+  if (typeof window !== 'undefined') window.location.reload()
+}
 const needAddFriend = ref(false)
 const addFriendUrl = ref('')
 /**  Official Account `basicId`（例：@abc），用於對話 deeplink／加好友連結 */
@@ -284,7 +291,7 @@ onMounted(async () => {
 
   if (!liffId) {
     phase.value = 'error'
-    errorText.value = '這個連結不完整、沒辦法辨識活動。請回後台重新儲存一次活動，用產生的新連結再打開。'
+    errorText.value = '這個連結不完整、沒辦法辨識活動。請聯繫這個官方帳號的商家，重新提供正確的連結。'
     debugInfo.value = buildDebugInfo({ reason: 'missing_liff_id', mergedParsed: parsed, ...ctx })
     return
   }
@@ -331,8 +338,8 @@ onMounted(async () => {
     phase.value = 'error'
     const malformedCtOnly = typeof window !== 'undefined' && window.location.search === '?ct'
     errorText.value = malformedCtOnly
-      ? '這個連結少了活動資料，通常是複製到錯的網址、或連結在轉傳時被截斷了。請回後台重新複製「活動進入網址（開頭不是 liff.line.me 的那組直接網址）」再試一次。'
-      : '這個連結不完整、少了必要資料。請回後台重新儲存一次活動，取得最新連結後再重新打開。'
+      ? '這個連結少了活動資料，可能是複製到錯的網址、或轉傳時被截斷了。請聯繫這個官方帳號的商家，重新提供正確的活動連結。'
+      : '這個連結不完整、少了必要資料。請聯繫這個官方帳號的商家，重新提供最新的連結。'
     debugInfo.value = buildDebugInfo({ reason: 'missing_ct', mergedParsed: parsed, ...ctx })
     return
   }
