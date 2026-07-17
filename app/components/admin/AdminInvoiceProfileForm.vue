@@ -59,6 +59,9 @@ const props = defineProps<{
   fallbackNameHint?: string
 }>()
 
+// 對外回報「目前格式是否全部合法」，讓父頁在填錯時停用儲存鈕（硬擋）
+const emit = defineEmits<{ 'update:valid': [boolean] }>()
+
 const namePlaceholder = computed(() =>
   props.fallbackNameHint ? `留空則使用「${props.fallbackNameHint}」` : '留空則使用帳號名稱',
 )
@@ -83,4 +86,9 @@ const loveCodeError = computed(() => {
 const exclusiveError = computed(() =>
   form.value.carrierNum.trim() && form.value.loveCode.trim() ? '手機條碼與捐贈碼只能擇一' : '',
 )
+
+const isValid = computed(() =>
+  !ubnError.value && !emailError.value && !carrierError.value && !loveCodeError.value && !exclusiveError.value,
+)
+watch(isValid, v => emit('update:valid', v), { immediate: true })
 </script>

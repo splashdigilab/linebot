@@ -184,7 +184,7 @@
               <el-button
                 size="small"
                 :loading="savingInvoice"
-                :disabled="!invoiceLoaded"
+                :disabled="!invoiceLoaded || !invoiceValid"
                 @click="saveInvoiceProfile"
               >
                 儲存
@@ -202,7 +202,7 @@
             >
               <span class="text-xs">為避免覆蓋掉已儲存的統編與抬頭，儲存已停用。請重新整理後再試。</span>
             </el-alert>
-            <AdminInvoiceProfileForm v-else v-model="invoiceForm" :fallback-name-hint="orgName" />
+            <AdminInvoiceProfileForm v-else v-model="invoiceForm" :fallback-name-hint="orgName" @update:valid="invoiceValid = $event" />
           </div>
         </div>
       </el-tab-pane>
@@ -425,6 +425,7 @@ const invoiceForm = reactive<InvoiceForm>({
   buyerUBN: '', buyerName: '', buyerEmail: '', carrierNum: '', loveCode: '',
 })
 const savingInvoice = ref(false)
+const invoiceValid = ref(true)
 /** 讀取成功才允許儲存——見下方 saveInvoiceProfile 的說明。 */
 const invoiceLoaded = ref(false)
 

@@ -149,7 +149,7 @@
               <span class="badge badge-green">📄 發票資訊</span>
               <span class="text-xs text-muted">每次付款成功後自動開立</span>
             </div>
-            <el-button v-if="invoiceOverriding" size="small" :loading="savingInvoice" @click="saveInvoiceProfile">
+            <el-button v-if="invoiceOverriding" size="small" :loading="savingInvoice" :disabled="!invoiceValid" @click="saveInvoiceProfile">
               儲存
             </el-button>
           </div>
@@ -177,7 +177,7 @@
                   全部欄位清空並儲存即可改回沿用。
                 </span>
               </el-alert>
-              <AdminInvoiceProfileForm v-model="invoiceForm" :fallback-name-hint="workspaceName" />
+              <AdminInvoiceProfileForm v-model="invoiceForm" :fallback-name-hint="workspaceName" @update:valid="invoiceValid = $event" />
             </template>
           </div>
         </div>
@@ -265,6 +265,7 @@ const invoiceForm = reactive<InvoiceForm>({
   buyerUBN: '', buyerName: '', buyerEmail: '', carrierNum: '', loveCode: '',
 })
 const savingInvoice = ref(false)
+const invoiceValid = ref(true)
 /** true = 這個 OA 有自己的專屬設定（不沿用組織）。 */
 const invoiceOverriding = ref(false)
 const invoiceOrgId = ref<string | null>(null)
