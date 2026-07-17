@@ -1,8 +1,8 @@
 # UI/UX 審查待辦（依優先順序）
 
 > 建立：2026-07-16。審查範圍：全 30 頁（入口/登入/超管/LIFF、核心營運、AI 客服、Flow/圖文選單、設定/計費/組織）。
-> 進度：已完成 R1、R2、R3、R5(badge/btn hover)、item 7、8、9、12、14、15、16、18、20、21、22、23、24、29、31、33、39、42，
-> item 19/28/34/38 部分；每批皆 `nuxt typecheck`（配色/SCSS 另用 sass CLI）通過，均已 commit 到 billing-anchored-period。
+> 進度：已完成 R1、R2、R3、R5(badge/btn hover)、item 7、8、9、12、14、15、16、18、19、20、21、22、23、24、29、31、32、33、39、42，
+> item 28/34/38 部分；每批皆 `nuxt typecheck`（配色/SCSS 另用 sass CLI）通過，均已 commit 到 billing-anchored-period。
 > ⚠️ R1＋item42 是全站配色變更，建議實機目視一次。
 > 排序原則：**先修「一改就同時修好很多頁」的根因**，再修「會流失名單／誤刪心血」的，
 > 再修「明顯瑕疵與一致性破綻」，最後才是打磨。
@@ -89,7 +89,7 @@
 
 ### settings（members / organization）
 18. [x] ✅ 角色下拉 `@change` 即改權限無確認 — UX　（2026-07-17 完成）：changeRole 前加 `ElMessageBox.confirm`（顯示要改成的角色）；取消時因 `:model-value` 單向綁定自然回復原值。
-19. [ ] （部分完成）— [x] ✅ webhook 測試結果（.text-success/danger）、角色標籤灰階下看不出差異已由 R1 恢復彩色。[ ] 標題長段說明文字牆淹沒關鍵輸入、成員表無 `empty-text` 仍待處理。
+19. [x] ✅ webhook/角色色彩＋成員頁收尾 — UI/UX　（2026-07-17 完成）：色彩由 R1 恢復；members 標題長文字牆精簡為一句、el-table 補 `empty-text="尚無成員，點右上「邀請成員」新增"`。
 
 ### org/[orgId]
 20. [x] ✅ org 分頁狀態未進 URL — UX　（2026-07-17 完成）：`tab` 由 `?tab=` 初始化並 `watch` 寫回（`router.replace`），重整/分享連結不再掉回總覽。
@@ -114,7 +114,7 @@
 
 ### 其他
 31. [x] ✅ conversation-stats「匯出 CSV」無資料時靜默 — UX　（2026-07-16 完成）：按鈕加 `:disabled="!trend.buckets.length"`。
-32. [ ] users「從 LINE 同步好友」跑 25 輪無進度顯示 — UX：大量好友時像卡死 → 加進度。
+32. [x] ✅ users「從 LINE 同步好友」無進度顯示 — UX　（2026-07-17 完成）：新增 `syncProgress`，每輪更新「已處理 X 筆，剩約 Y 位」並顯示在同步鈕旁，大量好友時不再像卡死。
 33. [x] ✅ broadcasts 側欄 **failed/cancelled/processing 全同一種灰** — UI　（2026-07-16 完成）：改用 `broadcastTone()`，failed→error、processing→warning、completed/scheduled→success、其餘 neutral。
 
 ---

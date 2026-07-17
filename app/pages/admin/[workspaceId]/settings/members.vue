@@ -4,7 +4,7 @@
       <AdminSoloPageHeading
         field-label="設定"
         title="👥 成員管理"
-        caption="以 Email 邀請成員（無需對方已註冊 Firebase）；已註冊者會直接加入，尚未註冊者待建立帳號後首次登入即生效。若官方帳號已綁定組織，列表底部會一併列出「組織擁有者（登記）」與「組織管理員」帳號（僅供檢視；變更請由 Super Admin 組織管理處理）。"
+        caption="以 Email 邀請成員（對方無需先註冊）。若已綁定組織，列表也會顯示組織擁有者／管理員（僅供檢視）。"
       />
       <div class="flex gap-2 admin-header-actions">
         <el-button v-if="canManageSettings" type="primary" data-tour="mem-invite" @click="openInvite">邀請成員</el-button>
@@ -24,7 +24,7 @@
               <div class="spinner" />
               <span>載入中…</span>
             </div>
-            <el-table v-else :data="members" size="small">
+            <el-table v-else :data="members" size="small" empty-text="尚無成員，點右上「邀請成員」新增">
               <el-table-column label="Email / UID">
                 <template #default="{ row }">
                   <div>{{ row.invitedEmail || row.uid || '—' }}</div>

@@ -10,6 +10,7 @@
         <el-button v-if="canOperate" size="small" type="primary" data-tour="usr-sync" :loading="syncingLine" @click="syncFromLine">
           從 LINE 同步好友
         </el-button>
+        <span v-if="syncingLine" class="text-xs text-muted">{{ syncProgress }}</span>
         <el-button size="small" @click="loadData">重新整理</el-button>
       </div>
     </template>
@@ -265,6 +266,7 @@ const dialogUser = ref<any>(null)
 const addTagIds = ref<string[]>([])
 const userTagSaving = ref(false)
 const syncingLine = ref(false)
+const syncProgress = ref('')
 
 function userListQuery(targetPage = page.value) {
   return {
@@ -331,6 +333,7 @@ async function syncFromLine() {
   if (!assertCanOperate()) return
   if (syncingLine.value) return
   syncingLine.value = true
+  syncProgress.value = '同步中…'
   let offset = 0
   let totalProcessed = 0
   let lastRemaining = -1
@@ -357,6 +360,7 @@ async function syncFromLine() {
       totalProcessed += res.processed ?? 0
       lastRemaining = res.remaining ?? 0
       offset += res.processed ?? 0
+      syncProgress.value = `同步中：已處理 ${totalProcessed} 筆${(res.remaining ?? 0) > 0 ? `，剩約 ${res.remaining} 位` : ''}`
       if ((res.remaining ?? 0) <= 0) {
         const extra = (res.profileFailures ?? 0) > 0 ? `（${res.profileFailures} 位頭像／名稱未取得）` : ''
         showToast(
@@ -379,6 +383,7 @@ async function syncFromLine() {
   }
   finally {
     syncingLine.value = false
+    syncProgress.value = ''
   }
 }
 
