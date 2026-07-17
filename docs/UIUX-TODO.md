@@ -1,7 +1,7 @@
 # UI/UX 審查待辦（依優先順序）
 
 > 建立：2026-07-16。審查範圍：全 30 頁（入口/登入/超管/LIFF、核心營運、AI 客服、Flow/圖文選單、設定/計費/組織）。
-> 進度：已完成 R1、R2、R3、R5(badge/btn hover)、item 7、8、9、12、14、15、16、18、19、20、21、22、23、24、29、31、32、33、39、42，
+> 進度：已完成 R1、R2、R3、R5(badge/btn hover)、item 7、8、9、12、14、15、16、17、18、19、20、21、22、23、24、29、31、32、33、39、42，
 > item 28/34/38 部分；每批皆 `nuxt typecheck`（配色/SCSS 另用 sass CLI）通過，均已 commit 到 billing-anchored-period。
 > ⚠️ R1＋item42 是全站配色變更，建議實機目視一次。
 > 排序原則：**先修「一改就同時修好很多頁」的根因**，再修「會流失名單／誤刪心血」的，
@@ -85,7 +85,7 @@
 ### billing / org 帳務
 15. [x] ✅ 付款狀態、藍新導回結果（成功🎉/失敗）灰階下同色 — UI　（2026-07-17 由 R1 解決）：付款 el-tag（paid 綠/failed 紅/pending 橙/expired 藍）與導回結果 el-alert 恢復彩色。
 16. [x] ✅ billing 初次載入無骨架 — UX　（2026-07-17 完成）：在方案卡與「未開通」之間加 `v-else-if="loading"` 載入骨架（spinner＋「載入方案資訊…」），付費客戶不再於資料到位前先看到「尚未開通」。
-17. [ ] `AdminInvoiceProfileForm` 幾乎無格式驗證 — UX：統編 8 碼/捐贈碼/手機條碼/Email 無檢查，錯格式付款後才被 ezPay 退件才發現。
+17. [x] ✅ `AdminInvoiceProfileForm` 無格式驗證 — UX　（2026-07-17 完成）：加即時 inline 驗證（統編 8 碼數字、Email 格式、手機條碼「/」+7 碼、捐贈碼 3–7 碼數字、載具/捐贈碼互斥），錯格式當場紅字提示。（尚未硬擋儲存＝可再讓父頁依 validity 停用儲存鈕。）
 
 ### settings（members / organization）
 18. [x] ✅ 角色下拉 `@change` 即改權限無確認 — UX　（2026-07-17 完成）：changeRole 前加 `ElMessageBox.confirm`（顯示要改成的角色）；取消時因 `:model-value` 單向綁定自然回復原值。
