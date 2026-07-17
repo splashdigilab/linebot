@@ -7,7 +7,7 @@
         caption="建立與管理會員標籤，用於分眾推播"
       />
       <div class="flex gap-1 admin-header-actions">
-        <el-button type="primary" data-tour="tag-new" @click="openCreate">➕ 新增標籤</el-button>
+        <el-button v-if="canOperate" type="primary" data-tour="tag-new" @click="openCreate">➕ 新增標籤</el-button>
       </div>
     </template>
 
@@ -191,7 +191,7 @@
 
     <template #footer>
       <el-button @click="dialogVisible = false">取消</el-button>
-      <el-button type="primary" :loading="saving" @click="submitForm">
+      <el-button v-if="canOperate" type="primary" :loading="saving" @click="submitForm">
         {{ isEditing ? '儲存變更' : '建立標籤' }}
       </el-button>
     </template>
@@ -206,6 +206,7 @@ import { TAG_CATEGORY_OPTIONS, TAG_PRESET_COLORS, tagCategoryLabel } from '~~/sh
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 const { workspaceId, apiFetch } = useWorkspace()
+const { canOperate, assertCanOperate } = useAdminOperateGuard()
 const { tags, loading, total, page, pageSize, loadTags } = useAdminTagList()
 const { showToast } = useAdminToast()
 
@@ -294,6 +295,7 @@ function validateForm(): string | null {
 }
 
 async function submitForm() {
+  if (!assertCanOperate()) return
   const err = validateForm()
   if (err) return showToast(err, 'error')
   saving.value = true

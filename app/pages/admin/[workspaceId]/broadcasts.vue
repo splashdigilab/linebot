@@ -3,7 +3,7 @@
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
       <span class="split-sidebar-title" data-tour="bc-title">📣 推播</span>
-      <el-button type="primary" size="small" data-tour="bc-new" @click="openCreate">➕ 新增</el-button>
+      <el-button v-if="canOperate" type="primary" size="small" data-tour="bc-new" @click="openCreate">➕ 新增</el-button>
     </template>
 
     <!-- ── Sidebar List ── -->
@@ -13,7 +13,7 @@
       </div>
       <div v-else-if="!broadcasts.length" class="split-sidebar-empty">
         <span>尚無推播</span>
-        <el-button size="small" type="primary" plain @click="openCreate">立即建立</el-button>
+        <el-button v-if="canOperate" size="small" type="primary" plain @click="openCreate">立即建立</el-button>
       </div>
       <div v-else ref="listEl" class="split-list" @scroll.passive="onSidebarListScroll">
         <AdminSplitListItem
@@ -24,7 +24,7 @@
           time-in-title-row
           title-row-chip
           :chip-text="statusLabel(bc.status)"
-          :chip-tone="bc.status === 'completed' || bc.status === 'scheduled' ? 'success' : 'neutral'"
+          :chip-tone="broadcastTone(bc.status)"
           :meta-text="bcMetaText(bc)"
           meta-truncate
           @select="selectItem(bc)"
@@ -42,7 +42,7 @@
       <span class="empty-icon">📣</span>
       <h3>選擇一則推播來查看或編輯</h3>
       <p>或點擊左側「➕ 新增」建立新推播</p>
-      <el-button type="primary" @click="openCreate">建立推播</el-button>
+      <el-button v-if="canOperate" type="primary" @click="openCreate">建立推播</el-button>
     </template>
 
     <!-- ── Editor Header ── -->
@@ -63,7 +63,7 @@
         <!-- 可編輯 -->
         <template v-else>
           <el-button
-            v-if="!isCreating && selectedItem && ['draft','scheduled'].includes(selectedItem.status)"
+            v-if="canOperate && !isCreating && selectedItem && ['draft','scheduled'].includes(selectedItem.status)"
             type="danger"
             plain
             @click="cancelBroadcast"
@@ -71,10 +71,10 @@
             {{ selectedItem.status === 'scheduled' ? '取消排程' : '取消推播' }}
           </el-button>
           <el-button @click="cancelEdit">取消</el-button>
-          <el-button :loading="saving" @click="saveDraft">
+          <el-button v-if="canOperate" :loading="saving" @click="saveDraft">
             {{ selectedItem?.status === 'scheduled' ? '儲存變更' : '儲存草稿' }}
           </el-button>
-          <el-button type="primary" :loading="validating" @click="openValidateDialog">
+          <el-button v-if="canOperate" type="primary" :loading="validating" @click="openValidateDialog">
             {{ headerSubmitLabel }}
           </el-button>
         </template>
@@ -320,6 +320,7 @@
 </template>
 
 <script setup lang="ts">
+import { ElMessageBox } from 'element-plus'
 import type { UnifiedAction } from '~~/shared/action-schema'
 import { normalizeUnifiedAction, validateUnifiedAction } from '~~/shared/action-schema'
 import { parseLineMessagesToUnifiedAction, unifiedActionToLineMessages } from '~~/shared/broadcast-content'
@@ -372,6 +373,7 @@ function isNotFoundApiError(e: unknown): boolean {
 }
 
 const { workspaceId, apiFetch } = useWorkspace()
+const { canOperate, assertCanOperate } = useAdminOperateGuard()
 
 // ── 狀態 ────────────────────────────────────────────────────────────
 const flows = ref<{ id: string; name: string }[]>([])
@@ -455,6 +457,14 @@ function statusLabel(s: string) {
     cancelled: '已取消',
   }
   return map[s] ?? s
+}
+
+// 狀態膠囊色調：失敗要跳出來（error）、發送中提示（warning）、完成/排程正向（success）、其餘中性
+function broadcastTone(s: string): 'success' | 'neutral' | 'warning' | 'error' {
+  if (s === 'completed' || s === 'scheduled') return 'success'
+  if (s === 'failed') return 'error'
+  if (s === 'processing') return 'warning'
+  return 'neutral'
 }
 
 function formatNullableStat(n: number | null | undefined): string {
@@ -624,6 +634,7 @@ async function cancelEdit() {
 }
 
 async function saveDraft(): Promise<boolean> {
+  if (!assertCanOperate()) return false
   const err = validateForm({
     requireScheduleTime: form.value.scheduleMode === 'schedule',
   })
@@ -737,6 +748,7 @@ async function onConfirmDialogSubmit() {
 }
 
 async function confirmSchedule() {
+  if (!assertCanOperate()) return
   const id = pendingBroadcastId.value
   const scheduleAtLocal = pendingScheduleAtLocal.value
 
@@ -790,6 +802,7 @@ async function confirmSchedule() {
 }
 
 async function confirmSendNow() {
+  if (!assertCanOperate()) return
   const id = pendingBroadcastId.value || selectedId.value
   if (!id) {
     confirmDialogError.value = '推播 ID 遺失，請關閉視窗後重試'
@@ -816,9 +829,19 @@ async function confirmSendNow() {
 }
 
 async function cancelBroadcast() {
+  if (!assertCanOperate()) return
   const isScheduled = selectedItem.value?.status === 'scheduled'
   const msg = isScheduled ? '確定要取消這則排程？' : '確定要取消這則推播？'
-  if (!selectedId.value || !confirm(msg)) return
+  if (!selectedId.value) return
+  try {
+    await ElMessageBox.confirm(msg, isScheduled ? '取消排程' : '取消推播', {
+      confirmButtonText: isScheduled ? '取消排程' : '取消推播',
+      cancelButtonText: '返回',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
   try {
     await apiFetch(`/api/broadcast/${selectedId.value}/cancel`, { method: 'POST' })
     showToast(isScheduled ? '已取消排程' : '已取消推播', 'success')
@@ -838,6 +861,7 @@ function hasScheduledBroadcasts() {
 }
 
 async function processDueScheduledBroadcasts() {
+  if (!canOperate.value) return
   if (!hasScheduledBroadcasts()) return
   try {
     const res = await apiFetch<{ triggered: number; results: Array<{ id: string; success: boolean; error?: string }> }>(

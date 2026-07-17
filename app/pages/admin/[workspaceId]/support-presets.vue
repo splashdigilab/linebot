@@ -2,7 +2,7 @@
   <AdminSplitLayout :is-empty="!selectedPreset && !isCreating">
     <template #sidebar-header>
       <span class="split-sidebar-title" data-tour="sp-title">📦 客服預存</span>
-      <el-button type="primary" size="small" data-tour="sp-new" @click="openCreate">➕ 新增</el-button>
+      <el-button v-if="canOperate" type="primary" size="small" data-tour="sp-new" @click="openCreate">➕ 新增</el-button>
     </template>
 
     <template #sidebar-list>
@@ -12,7 +12,7 @@
       <div v-else-if="!presets.length" class="split-sidebar-empty">
         <span>尚無預存</span>
         <p class="text-xs text-muted">新增常用回覆或模組捷徑，於「對話」中一選即送</p>
-        <el-button size="small" type="primary" plain @click="openCreate">立即新增</el-button>
+        <el-button v-if="canOperate" size="small" type="primary" plain @click="openCreate">立即新增</el-button>
       </div>
       <div v-else ref="listEl" class="split-list" @scroll.passive="onSidebarListScroll">
         <AdminSplitListItem
@@ -39,7 +39,7 @@
       <span class="empty-icon">📦</span>
       <h3>選擇一筆預存開始編輯</h3>
       <p>或點擊左側「➕ 新增」建立新的客服預存</p>
-      <el-button type="primary" @click="openCreate">新增預存</el-button>
+      <el-button v-if="canOperate" type="primary" @click="openCreate">新增預存</el-button>
     </template>
 
     <template #editor-header>
@@ -53,11 +53,11 @@
         @enter="submitForm"
       />
       <div class="flex gap-2 admin-header-actions">
-        <el-button v-if="!isCreating && selectedPreset" type="danger" @click="deletePreset">
+        <el-button v-if="canOperate && !isCreating && selectedPreset" type="danger" @click="deletePreset">
           🗑️ 刪除
         </el-button>
         <el-button @click="cancelEdit">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitForm">
+        <el-button v-if="canOperate" type="primary" :loading="saving" @click="submitForm">
           {{ isCreating ? '建立預存' : '儲存變更' }}
         </el-button>
       </div>
@@ -161,6 +161,7 @@
 </template>
 
 <script setup lang="ts">
+import { ElMessageBox } from 'element-plus'
 import { normalizeAutoReplyAction, normalizeAutoReplyTagging } from '~~/shared/auto-reply-rule'
 import {
   normalizeSupportPreset,
@@ -171,6 +172,7 @@ import {
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 const { workspaceId, apiFetch } = useWorkspace()
+const { canOperate, assertCanOperate } = useAdminOperateGuard()
 
 const modules = ref<any[]>([])
 const {
@@ -255,6 +257,7 @@ function cancelEdit() {
 }
 
 async function submitForm() {
+  if (!assertCanOperate()) return
   const payload: SupportPresetShape = normalizeSupportPreset({
     ...form.value,
     tagging: form.value.tagging,
@@ -294,7 +297,17 @@ async function submitForm() {
 }
 
 async function deletePreset() {
-  if (!selectedId.value || !confirm(`確定刪除「${form.value.name || '此預存'}」？`)) return
+  if (!assertCanOperate()) return
+  if (!selectedId.value) return
+  try {
+    await ElMessageBox.confirm(`確定刪除「${form.value.name || '此預存'}」？`, '刪除確認', {
+      confirmButtonText: '刪除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
   try {
     await apiFetch(`/api/support-preset/${selectedId.value}`, { method: 'DELETE' })
     showToast('已刪除', 'success')

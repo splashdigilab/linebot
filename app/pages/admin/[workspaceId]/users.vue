@@ -7,7 +7,7 @@
         caption="管理 LINE 好友，查看與操作會員標籤"
       />
       <div class="flex gap-1 admin-header-actions">
-        <el-button size="small" type="primary" data-tour="usr-sync" :loading="syncingLine" @click="syncFromLine">
+        <el-button v-if="canOperate" size="small" type="primary" data-tour="usr-sync" :loading="syncingLine" @click="syncFromLine">
           從 LINE 同步好友
         </el-button>
         <el-button size="small" @click="loadData">重新整理</el-button>
@@ -18,8 +18,8 @@
       <div class="solo-editor-body admin-panel-stack">
         <div v-if="selectedIds.length" class="users-batch-bar">
           <span class="users-batch-info">已選 {{ selectedIds.length }} 位</span>
-          <el-button size="small" type="primary" @click="openBatchTag('add')">＋ 批次加標</el-button>
-          <el-button size="small" @click="openBatchTag('remove')">－ 批次移標</el-button>
+          <el-button v-if="canOperate" size="small" type="primary" @click="openBatchTag('add')">＋ 批次加標</el-button>
+          <el-button v-if="canOperate" size="small" @click="openBatchTag('remove')">－ 批次移標</el-button>
           <el-button size="small" text @click="selectedIds = []">取消選取</el-button>
         </div>
 
@@ -161,6 +161,7 @@
     <template #footer>
       <el-button @click="batchDialogVisible = false">取消</el-button>
       <el-button
+        v-if="canOperate"
         type="primary"
         :loading="batchSaving"
         :disabled="!batchTagIds.length"
@@ -187,7 +188,7 @@
             :color="tag.color"
           >
             {{ tag.name }}
-            <button type="button" class="tag-chip-remove" @click="removeUserTag(dialogUser.id, tag.id)">✕</button>
+            <button v-if="canOperate" type="button" class="tag-chip-remove" @click="removeUserTag(dialogUser.id, tag.id)">✕</button>
           </AdminTagTintChip>
         </div>
         <span v-else class="text-muted text-sm">尚無標籤</span>
@@ -212,6 +213,7 @@
             </el-option>
           </el-select>
           <el-button
+            v-if="canOperate"
             type="primary"
             :loading="userTagSaving"
             :disabled="!addTagIds.length"
@@ -235,6 +237,7 @@ import { formatZhDateOnly } from '~~/shared/firestore-date'
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 const { workspaceId, apiFetch } = useWorkspace()
+const { canOperate, assertCanOperate } = useAdminOperateGuard()
 
 const {
   users,
@@ -325,6 +328,7 @@ function toggleSelectAll() {
 }
 
 async function syncFromLine() {
+  if (!assertCanOperate()) return
   if (syncingLine.value) return
   syncingLine.value = true
   let offset = 0
@@ -398,6 +402,7 @@ function openBatchTag(mode: 'add' | 'remove') {
 }
 
 async function submitBatch() {
+  if (!assertCanOperate()) return
   if (!selectedIds.value.length) {
     showToast('請先勾選至少一位會員', 'error')
     return
@@ -438,6 +443,7 @@ function openUserTagDialog(user: any) {
 }
 
 async function addUserTags() {
+  if (!assertCanOperate()) return
   if (!dialogUser.value) return
   if (!addTagIds.value.length) {
     showToast('請至少選擇一個標籤', 'error')
@@ -464,6 +470,7 @@ async function addUserTags() {
 }
 
 async function removeUserTag(userId: string, tagId: string) {
+  if (!assertCanOperate()) return
   try {
     await apiFetch(`/api/users/${userId}/tags/${tagId}`, { method: 'DELETE' })
     showToast('標籤已移除', 'success')

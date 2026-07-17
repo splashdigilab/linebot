@@ -3,7 +3,7 @@
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
       <span class="split-sidebar-title" data-tour="ar-title">⚡ 自動回覆</span>
-      <el-button type="primary" size="small" data-tour="ar-new" @click="openCreate">➕ 新增</el-button>
+      <el-button v-if="canOperate" type="primary" size="small" data-tour="ar-new" @click="openCreate">➕ 新增</el-button>
     </template>
 
     <!-- ── Sidebar List ── -->
@@ -14,7 +14,7 @@
       <div v-else-if="!rules.length" class="split-sidebar-empty">
         <span>尚無規則</span>
         <p class="text-xs text-muted">新增一條關鍵字規則來開始</p>
-        <el-button size="small" type="primary" plain @click="openCreate">立即新增</el-button>
+        <el-button v-if="canOperate" size="small" type="primary" plain @click="openCreate">立即新增</el-button>
       </div>
       <div v-else ref="listEl" class="split-list" @scroll.passive="onSidebarListScroll">
         <AdminSplitListItem
@@ -43,7 +43,7 @@
       <span class="empty-icon">⚡</span>
       <h3>選擇一條規則開始編輯</h3>
       <p>或點擊左側「➕ 新增」建立一條新的關鍵字觸發規則</p>
-      <el-button type="primary" @click="openCreate">新增規則</el-button>
+      <el-button v-if="canOperate" type="primary" @click="openCreate">新增規則</el-button>
     </template>
 
     <!-- ── Editor Header ── -->
@@ -58,11 +58,11 @@
         @enter="submitForm"
       />
       <div class="flex gap-2 admin-header-actions">
-        <el-button v-if="!isCreating && selectedRule" type="danger" @click="deleteRule">
+        <el-button v-if="canOperate && !isCreating && selectedRule" type="danger" @click="deleteRule">
           🗑️ 刪除
         </el-button>
         <el-button @click="cancelEdit">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submitForm">
+        <el-button v-if="canOperate" type="primary" :loading="saving" @click="submitForm">
           {{ isCreating ? '建立規則' : '儲存變更' }}
         </el-button>
       </div>
@@ -227,6 +227,7 @@
 
 
 <script setup lang="ts">
+import { ElMessageBox } from 'element-plus'
 import {
   AUTO_REPLY_COOLDOWN_OPTIONS,
   normalizeAutoReplyAction,
@@ -240,6 +241,7 @@ import {
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
 const { workspaceId, apiFetch } = useWorkspace()
+const { canOperate, assertCanOperate } = useAdminOperateGuard()
 
 // ── State ────────────────────────────────────────────────
 const modules = ref<any[]>([])
@@ -348,6 +350,7 @@ function cancelEdit() {
 
 // ── Save / Delete ─────────────────────────────────────────
 async function submitForm() {
+  if (!assertCanOperate()) return
   const payload: AutoReplyRuleShape = normalizeAutoReplyRule({
     ...form.value,
     tagging: form.value.tagging,
@@ -388,7 +391,17 @@ async function submitForm() {
 
 
 async function deleteRule() {
-  if (!selectedId.value || !confirm(`確定刪除「${form.value.name || form.value.keyword}」這條規則？`)) return
+  if (!assertCanOperate()) return
+  if (!selectedId.value) return
+  try {
+    await ElMessageBox.confirm(`確定刪除「${form.value.name || form.value.keyword}」這條規則？`, '刪除確認', {
+      confirmButtonText: '刪除',
+      cancelButtonText: '取消',
+      confirmButtonClass: 'el-button--danger',
+      type: 'warning',
+    })
+  }
+  catch { return }
   try {
     await apiFetch(`/api/auto-reply/${selectedId.value}`, { method: 'DELETE' })
     showToast('已刪除', 'success')
