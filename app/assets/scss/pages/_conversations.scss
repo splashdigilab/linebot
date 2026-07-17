@@ -45,7 +45,7 @@
   }
 
   .conv-status-tab.active {
-    background: #eef3fb;
+    background: var(--bg-hover);
     border-color: var(--border-active);
     color: var(--text-primary);
   }
@@ -298,7 +298,7 @@
   }
 
   .conv-link-text {
-    color: #1f5fae;
+    color: var(--color-line);
     text-decoration: underline;
     text-underline-offset: 2px;
   }
@@ -922,7 +922,7 @@
 
   .conv-picker-trigger:hover:not(:disabled) {
     border-color: var(--border-active);
-    background: linear-gradient(180deg, #ffffff 0%, #eef3fb 100%);
+    background: linear-gradient(180deg, #ffffff 0%, var(--bg-hover) 100%);
   }
 
   .conv-picker-trigger:focus-visible {
@@ -1071,7 +1071,7 @@
 
 .conv-picker-tab.active {
   border-color: var(--border-active);
-  background: #eef3fb;
+  background: var(--bg-hover);
 }
 
 .conv-picker-grid {
@@ -1160,12 +1160,12 @@
 
 .conv-support-preset-option:hover:not(:disabled) {
   border-color: var(--border-active);
-  background: #eef3fb;
+  background: var(--bg-hover);
 }
 
 .conv-support-preset-option.active {
   border-color: var(--border-active);
-  background: #eef3fb;
+  background: var(--bg-hover);
 }
 
 .conv-support-preset-option:disabled {

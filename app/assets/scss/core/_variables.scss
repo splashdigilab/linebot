@@ -3,6 +3,9 @@
   --color-line: #171717;
   --color-line-dark: #0a0a0a;
   --color-line-glow: rgba(0, 0, 0, 0.15);
+  /* 舊碼常寫 var(--color-primary, #0f7b54)；此變數原本未定義 → 退化成綠。
+     定義為單色主色，讓那些 accent 回到單色而非殘留綠。 */
+  --color-primary: var(--color-line);
 
   /* Background */
   --bg-base: #f3f4f6;

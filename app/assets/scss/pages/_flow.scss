@@ -235,7 +235,7 @@
 .message-card.dragging { opacity: 0.35; transform: scale(0.98); }
 .message-card.drag-over {
   border-color: var(--color-line);
-  box-shadow: 0 0 0 2px rgba(6,199,85,0.15); /* Green glow */
+  box-shadow: 0 0 0 2px var(--color-line-glow);
 }
 
 .message-card-header {
@@ -305,7 +305,7 @@
 
     &:focus {
       border-color: var(--color-line);
-      box-shadow: 0 0 0 1px rgba(6, 199, 85, 0.2) inset;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2) inset;
     }
   }
 
@@ -563,7 +563,7 @@
 .carousel-sub-card.col-dragging { opacity: 0.35; transform: scale(0.98); }
 .carousel-sub-card.col-drag-over {
   border-color: var(--color-line);
-  box-shadow: 0 0 0 2px rgba(6,199,85,0.15); /* Green glow */
+  box-shadow: 0 0 0 2px var(--color-line-glow);
 }
 
 /* Sub-card top bar (index badge + delete) */
@@ -773,7 +773,7 @@
 }
 .qr-pill-card.qr-drag-over {
   border-color: var(--color-line);
-  box-shadow: 0 0 0 2px rgba(6,199,85,0.15);
+  box-shadow: 0 0 0 2px var(--color-line-glow);
 }
 
 /* Top row inside pill: Action type/Status and Delete */

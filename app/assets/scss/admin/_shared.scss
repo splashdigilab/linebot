@@ -304,7 +304,7 @@
 
 .admin-layout-item.active {
   border-color: var(--color-line);
-  box-shadow: 0 0 0 2px rgba(6, 199, 85, 0.12);
+  box-shadow: 0 0 0 2px var(--color-line-glow);
   background: var(--bg-hover);
 }
 
@@ -318,7 +318,7 @@
 .admin-layout-preview {
   width: 100%;
   aspect-ratio: 1 / 1;
-  border: 1px solid #8bb6ff;
+  border: 1px solid var(--border-active);
   border-radius: var(--radius-sm);
   background: #fff;
   display: grid;
@@ -331,7 +331,7 @@
 }
 
 .admin-layout-cell {
-  border: 1px solid #8bb6ff;
+  border: 1px solid var(--border-active);
 }
 
 .preview-custom,

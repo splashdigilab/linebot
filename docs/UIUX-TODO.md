@@ -1,9 +1,9 @@
 # UI/UX 審查待辦（依優先順序）
 
 > 建立：2026-07-16。審查範圍：全 30 頁（入口/登入/超管/LIFF、核心營運、AI 客服、Flow/圖文選單、設定/計費/組織）。
-> 進度：已完成 R1、R2、R3、R5(badge/btn hover)、item 7、8、9、12、14、15、18、20、21、22、23、24、29、31、33，
-> item 19/38/34 部分；每批皆 `nuxt typecheck`（＋R1 另用 sass CLI）通過，均已 commit 到 billing-anchored-period。
-> ⚠️ R1 是全站配色變更，建議實機目視一次。
+> 進度：已完成 R1、R2、R3、R5(badge/btn hover)、item 7、8、9、12、14、15、18、20、21、22、23、24、29、31、33、42，
+> item 19/38/34 部分；每批皆 `nuxt typecheck`（配色/SCSS 另用 sass CLI）通過，均已 commit 到 billing-anchored-period。
+> ⚠️ R1＋item42 是全站配色變更，建議實機目視一次。
 > 排序原則：**先修「一改就同時修好很多頁」的根因**，再修「會流失名單／誤刪心血」的，
 > 再修「明顯瑕疵與一致性破綻」，最後才是打磨。
 > 標記：`[ ]` 未做、`[x] ✅` 已完成。UI＝畫面美感/視覺一致，UX＝流程順暢/資訊清楚。
@@ -136,7 +136,13 @@
 39. [ ] **對話框固定像素寬** — UI：super（480/440/520px）、邀請（400px）小螢幕頂滿 → 改 `min(Npx, 92vw)`。
 40. [ ] **flow 編輯器打磨** — UI/UX：拖曳把手 `⠿` 對比過低、9 顆訊息類型按鈕同權重無主次、`{{...}}` 插入變數鈕語意不明且只附加到字串尾端、用戶輸入卡「必須放最後」只在存檔時驗證、達上限/互斥時按鈕不先 disable。
 41. [ ] **匯入對話框** — UI/UX：虛線框暗示可拖放但沒綁 drop 事件、長輪詢（8 分鐘）無取消鈕。
-42. [ ] **殘留彩色收斂**（併入根因 R5 一起做）— UI：flow 拖放綠暈＋黑框雙訊號、LayoutPresetPicker 藍縮圖框、對話頁 active 藍、stats handoff 紫。
+42. [x] ✅ **殘留彩色收斂** — UI　（2026-07-17 完成）：
+    - flow 拖放綠暈 → `--color-line-glow`（改單色，不再黑框＋綠暈雙訊號）。
+    - LayoutPresetPicker 藍縮圖框 `#8bb6ff` → `--border-active`；active 綠暈 → `--color-line-glow`。
+    - 對話頁 active/hover 藍 `#eef3fb` → `--bg-hover`、連結藍 `#1f5fae` → `--color-line`。
+    - **定義 `--color-primary: var(--color-line)`** → 修好 6 處 `var(--color-primary, #0f7b54)` 殘留綠 fallback（plan-upgrade/workspaces/org-overview/login）。
+    - 保留：`_landing.scss`/`_liff-lead.scss` 的 LINE 綠（刻意品牌色）、stats handoff 紫（post-R1 屬彩色狀態）、split-list-chip is-success 綠（正確的 status 色）；login 綠底歸 item 13 品牌決策。
+    已用 `sass` CLI 驗證編譯通過。
 
 ---
 

@@ -30,7 +30,7 @@
   border-radius: 8px;
 
   &.is-current {
-    border-color: #0f7b54;
+    border-color: var(--color-line);
     background: rgba(15, 123, 84, 0.06);
   }
 
