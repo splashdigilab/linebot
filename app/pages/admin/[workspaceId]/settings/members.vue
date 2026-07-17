@@ -65,7 +65,7 @@
   </AdminSplitLayout>
 
   <!-- Invite dialog -->
-  <el-dialog v-model="showInvite" title="邀請成員" width="400px">
+  <el-dialog v-model="showInvite" title="邀請成員" width="min(400px, 92vw)">
     <div class="admin-panel-stack">
       <div class="admin-field-group">
         <AdminFieldLabel text="Email" tight />

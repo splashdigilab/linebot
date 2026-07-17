@@ -125,7 +125,7 @@
   </div>
 
   <!-- 新增官方帳號 dialog -->
-  <el-dialog v-model="showCreate" title="新增官方帳號" width="420px" @closed="resetCreate">
+  <el-dialog v-model="showCreate" title="新增官方帳號" width="min(420px, 92vw)" @closed="resetCreate">
     <div class="ws-create-dialog-body">
       <div class="admin-field-group">
         <AdminFieldLabel text="官方帳號名稱" tight />

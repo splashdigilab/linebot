@@ -138,7 +138,7 @@
   <el-dialog
     v-model="batchDialogVisible"
     :title="batchMode === 'add' ? `批次加標（${selectedIds.length} 位）` : `批次移標（${selectedIds.length} 位）`"
-    width="420px"
+    width="min(420px, 92vw)"
   >
     <div class="admin-field-stack">
       <div class="admin-field-group">
@@ -175,7 +175,7 @@
   <el-dialog
     v-model="userTagDialogVisible"
     :title="`管理標籤：${dialogUser?.displayName ?? ''}`"
-    width="480px"
+    width="min(480px, 92vw)"
     class="users-tag-dialog"
   >
     <div v-if="dialogUser" class="admin-field-stack">

@@ -373,7 +373,7 @@
   <el-dialog
     v-model="diffOpen"
     title="🔄 重新同步：差異預覽"
-    width="900px"
+    width="min(900px, 92vw)"
     :close-on-click-modal="false"
     destroy-on-close
   >
@@ -469,7 +469,7 @@
   <el-dialog
     v-model="chunkEditOpen"
     :title="chunkEditMode === 'create' ? '➕ 新增卡片(手寫一條知識)' : '✏️ 編輯卡片'"
-    width="700px"
+    width="min(700px, 92vw)"
     :close-on-click-modal="false"
     destroy-on-close
   >
@@ -578,7 +578,7 @@
   <el-dialog
     v-model="folderEditOpen"
     title="✏️ 編輯資料夾"
-    width="480px"
+    width="min(480px, 92vw)"
     :close-on-click-modal="false"
     destroy-on-close
   >

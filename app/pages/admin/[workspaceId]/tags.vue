@@ -114,7 +114,7 @@
   <el-dialog
     v-model="dialogVisible"
     :title="isEditing ? '編輯標籤' : '新增標籤'"
-    width="480px"
+    width="min(480px, 92vw)"
     class="tags-dialog"
     :close-on-click-modal="false"
   >

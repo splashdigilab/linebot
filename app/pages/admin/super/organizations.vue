@@ -61,7 +61,7 @@
   </AdminSplitLayout>
 
   <!-- Create dialog -->
-  <el-dialog v-model="showCreate" title="建立組織" width="440px">
+  <el-dialog v-model="showCreate" title="建立組織" width="min(440px, 92vw)">
     <div class="admin-panel-stack">
       <div class="admin-field-group">
         <AdminFieldLabel text="組織名稱" tight />
@@ -79,7 +79,7 @@
   </el-dialog>
 
   <!-- Edit dialog -->
-  <el-dialog v-model="showEdit" title="編輯組織" width="480px">
+  <el-dialog v-model="showEdit" title="編輯組織" width="min(480px, 92vw)">
     <div class="admin-panel-stack">
       <div class="admin-field-group">
         <AdminFieldLabel text="組織名稱" tight />
@@ -111,7 +111,7 @@
   <el-dialog
     v-model="showMembers"
     :title="`組織管理員：${membersTarget?.name ?? ''}`"
-    width="520px"
+    width="min(520px, 92vw)"
   >
     <div class="admin-panel-stack">
       <!-- 新增管理員 -->

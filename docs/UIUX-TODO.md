@@ -1,8 +1,8 @@
 # UI/UX 審查待辦（依優先順序）
 
 > 建立：2026-07-16。審查範圍：全 30 頁（入口/登入/超管/LIFF、核心營運、AI 客服、Flow/圖文選單、設定/計費/組織）。
-> 進度：已完成 R1、R2、R3、R5(badge/btn hover)、item 7、8、9、12、14、15、18、20、21、22、23、24、29、31、33、42，
-> item 19/38/34 部分；每批皆 `nuxt typecheck`（配色/SCSS 另用 sass CLI）通過，均已 commit 到 billing-anchored-period。
+> 進度：已完成 R1、R2、R3、R5(badge/btn hover)、item 7、8、9、12、14、15、18、20、21、22、23、24、29、31、33、39、42，
+> item 19/28/34/38 部分；每批皆 `nuxt typecheck`（配色/SCSS 另用 sass CLI）通過，均已 commit 到 billing-anchored-period。
 > ⚠️ R1＋item42 是全站配色變更，建議實機目視一次。
 > 排序原則：**先修「一改就同時修好很多頁」的根因**，再修「會流失名單／誤刪心血」的，
 > 再修「明顯瑕疵與一致性破綻」，最後才是打磨。
@@ -104,7 +104,7 @@
 25. [ ] **完全沒有 LINE 訊息所見即所得預覽** — UX：9 種訊息只是表單欄位（除圖文 hero 畫布），新手看不到氣泡長相 → 加 LINE 樣式即時預覽。
 26. [ ] 驗證只在存檔時跑、不指明「第幾則/第幾欄」、不捲動定位、無 inline 紅框 — UX；自訂區塊 `actionError` 是**死碼永不顯示**（`AdminAreaActionEditor` 沒 render `errorMessage`）。
 27. [ ] 輪播卡固定 380px 造成「垂直捲動裡再包水平捲動」雙軸捲動、窄螢幕被裁 — UI（_flow.scss:223）。
-28. [ ] richmenu 建立即刻部署到 LINE、無草稿/確認步驟 — UX；超界靠存檔自動修正並要求再送一次（逼按兩次，:619）。
+28. [ ] （部分完成）— [x] ✅ richmenu 建立即刻部署到 LINE：`submitForm` 在建立時加「確認部署」ElMessageBox（提示會即時對所有好友生效）。[ ] 超界靠存檔自動修正並要求再送一次（逼按兩次）尚未改成即時 clamp。
 
 ### super-admin
 29. [x] ✅ `/admin/super` 首頁**空白頁** — UI/UX　（2026-07-16 完成）：加了重導向 middleware 直接送到 `/admin/super/organizations`（未來若要做總覽 dashboard 再改回）。
@@ -133,7 +133,7 @@
     - [x] ✅ 漢堡鈕補 `:aria-expanded="menuOpen"`（index.vue）。
     - [x] ✅ 額度 `over` 由 `role="status"` 改為動態 `role="alert"`（AdminQuotaBanner）。
     - [ ] LIFF 按鈕 <44px 觸控目標、done/error 容器缺 `aria-live` 尚未處理。
-39. [ ] **對話框固定像素寬** — UI：super（480/440/520px）、邀請（400px）小螢幕頂滿 → 改 `min(Npx, 92vw)`。
+39. [x] ✅ **對話框固定像素寬** — UI　（2026-07-17 完成）：全站 17 個 `width="Npx"` 對話框改為 `width="min(Npx, 92vw)"`，小螢幕不再頂滿/溢出。
 40. [ ] **flow 編輯器打磨** — UI/UX：拖曳把手 `⠿` 對比過低、9 顆訊息類型按鈕同權重無主次、`{{...}}` 插入變數鈕語意不明且只附加到字串尾端、用戶輸入卡「必須放最後」只在存檔時驗證、達上限/互斥時按鈕不先 disable。
 41. [ ] **匯入對話框** — UI/UX：虛線框暗示可拖放但沒綁 drop 事件、長輪詢（8 分鐘）無取消鈕。
 42. [x] ✅ **殘留彩色收斂** — UI　（2026-07-17 完成）：

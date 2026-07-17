@@ -67,7 +67,7 @@
   </AdminSplitLayout>
 
   <!-- Create dialog -->
-  <el-dialog v-model="showCreate" title="建立官方帳號" width="480px">
+  <el-dialog v-model="showCreate" title="建立官方帳號" width="min(480px, 92vw)">
     <div class="admin-panel-stack">
       <div class="admin-field-group">
         <AdminFieldLabel text="帳號名稱" tight />
@@ -97,7 +97,7 @@
   </el-dialog>
 
   <!-- Edit dialog -->
-  <el-dialog v-model="showEdit" title="編輯官方帳號" width="440px">
+  <el-dialog v-model="showEdit" title="編輯官方帳號" width="min(440px, 92vw)">
     <div class="admin-panel-stack">
       <div v-if="!editForm.organizationId" class="ws-sa-no-org-warning">
         ⚠️ 此帳號尚未歸屬任何組織，org admin 將無法存取，建議補填。

@@ -1005,7 +1005,7 @@
   <el-dialog
     v-model="flowFolderEditOpen"
     title="✏️ 編輯資料夾"
-    width="480px"
+    width="min(480px, 92vw)"
     :close-on-click-modal="false"
     destroy-on-close
   >

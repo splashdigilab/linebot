@@ -271,7 +271,7 @@
   </AdminSplitLayout>
 
   <!-- 驗證 / 發送確認 Dialog -->
-  <el-dialog v-model="validateDialogVisible" class="bc-dialog-validate" :title="validateDialogTitle" width="440px">
+  <el-dialog v-model="validateDialogVisible" class="bc-dialog-validate" :title="validateDialogTitle" width="min(440px, 92vw)">
     <div v-if="validateLoading" class="bc-validate-loading">
       <div class="spinner" />
       <span>分析受眾中…</span>

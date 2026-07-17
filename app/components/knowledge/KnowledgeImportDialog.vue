@@ -2,7 +2,7 @@
   <el-dialog
     :model-value="modelValue"
     title="📥 上傳 / 匯入"
-    width="760px"
+    width="min(760px, 92vw)"
     :close-on-click-modal="false"
     class="kb-import-dialog"
     @update:model-value="emit('update:modelValue', $event)"

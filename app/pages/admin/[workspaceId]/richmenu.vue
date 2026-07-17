@@ -692,6 +692,18 @@ async function submitForm() {
     return a
   })
 
+  // 建立＝第一次上線到 LINE，會立即對所有好友生效 → 部署前確認一次
+  if (isCreating.value) {
+    try {
+      await ElMessageBox.confirm(
+        '建立後會立即部署到 LINE，所有好友的圖文選單會即時更新。確定要部署嗎？',
+        '確認部署',
+        { confirmButtonText: '建立並部署', cancelButtonText: '再檢查一下', type: 'warning' },
+      )
+    }
+    catch { return }
+  }
+
   creating.value = true
   let createdFirestoreId = ''
   try {

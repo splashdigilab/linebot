@@ -552,7 +552,7 @@
   <el-dialog
     v-model="mediaDialogVisible"
     :title="quickSendDialogTitle"
-    width="520px"
+    width="min(520px, 92vw)"
     destroy-on-close
   >
     <div class="admin-field-stack conv-quick-send-form">
