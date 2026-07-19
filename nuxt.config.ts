@@ -62,6 +62,17 @@ export default defineNuxtConfig({
 
   css: ['~/assets/scss/main.scss'],
 
+  app: {
+    head: {
+      link: [
+        { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
+        { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
+        // 繁中主字型：Google Fonts 依 unicode-range 分片，只下載實際用到的字；native 字型為 fallback（display=swap 不擋首屏）
+        { rel: 'stylesheet', href: 'https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap' },
+      ],
+    },
+  },
+
   runtimeConfig: {
     // Server-only (private)
     lineChannelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN ?? '',

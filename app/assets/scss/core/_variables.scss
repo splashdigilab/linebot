@@ -41,6 +41,16 @@
   --color-error: #dc2626;
   --color-info: #2563eb;
 
+  /* Typography — 主字型（繁中優先，Noto Sans TC 載入、native 為 fallback）＋ type scale */
+  --font-sans: "Noto Sans TC", system-ui, -apple-system, "PingFang TC", "Microsoft JhengHei", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --fs-xs: 0.75rem;    /* 12 - caption/meta */
+  --fs-sm: 0.8125rem;  /* 13 - secondary */
+  --fs-base: 0.875rem; /* 14 - UI 預設 */
+  --fs-md: 1rem;       /* 16 */
+  --fs-lg: 1.25rem;    /* 20 - 區塊標題 */
+  --fs-xl: 1.5rem;     /* 24 - 頁面標題 */
+
   /*
    * 圓角階層（全站優先使用這些，避免散落 magic number）
    * xs — 拖曳點等極小元件
