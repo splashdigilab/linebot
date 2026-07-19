@@ -2,7 +2,7 @@
   <div class="ws-select-page">
     <div class="ws-select-card">
       <div class="ws-select-logo">
-        <span class="logo-icon">💬</span>
+        <span class="logo-icon"><el-icon color="#fff"><ChatDotRound /></el-icon></span>
         <h1>LINE Bot 管理系統</h1>
       </div>
       <p class="ws-select-sub">選擇要管理的官方帳號</p>
@@ -44,7 +44,7 @@
         </div>
 
         <NuxtLink v-if="isSuperAdmin" to="/admin/super" class="ws-super-admin-link">
-          <span>⚙️</span>
+          <el-icon><Setting /></el-icon>
           <span>Super Admin 後台</span>
           <span class="ws-item-arrow">→</span>
         </NuxtLink>
@@ -57,7 +57,7 @@
         <div class="ws-groups">
           <div v-for="group in groupedWorkspaces" :key="group.key">
             <div class="ws-group-header">
-              <span>🏢</span>
+              <el-icon><OfficeBuilding /></el-icon>
               <span class="ws-group-name">{{ group.orgName }}</span>
               <!-- 組織管理員才看得到組織後台入口（canCreate 就是 org admin 的判斷） -->
               <NuxtLink
@@ -84,7 +84,7 @@
                 class="ws-item"
                 @click="enter(ws.workspaceId)"
               >
-                <div class="ws-item-icon">💬</div>
+                <div class="ws-item-icon"><el-icon><ChatDotRound /></el-icon></div>
                 <div class="ws-item-info">
                   <div class="ws-item-name">{{ ws.name }}</div>
                   <div class="ws-item-role">
@@ -112,7 +112,7 @@
         </div>
 
         <NuxtLink v-if="isSuperAdmin" to="/admin/super" class="ws-super-admin-link">
-          <span>⚙️</span>
+          <el-icon><Setting /></el-icon>
           <span>Super Admin 後台</span>
           <span class="ws-item-arrow">→</span>
         </NuxtLink>
@@ -153,6 +153,7 @@
 </template>
 
 <script setup lang="ts">
+import { ChatDotRound, OfficeBuilding, Setting } from '@element-plus/icons-vue'
 const { showToast } = useAdminToast()
 import type { WorkspaceItem } from '~~/app/composables/useWorkspace'
 import { DEFAULT_LINE_WORKSPACE_ID } from '~~/shared/line-workspace'

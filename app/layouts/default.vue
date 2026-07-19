@@ -4,7 +4,7 @@
     <aside class="sidebar">
       <div class="sidebar-scroll">
         <div class="sidebar-logo">
-          <span class="logo-icon">💬</span>
+          <span class="logo-icon"><el-icon color="#fff"><ChatDotRound /></el-icon></span>
           <div>
             <span class="logo-text">LINE Bot</span>
             <span class="logo-sub">管理系統</span>
@@ -17,7 +17,7 @@
           <div class="sidebar-workspace-name">{{ currentWorkspaceName }}</div>
           <div v-if="showWorkspaceSwitcher" class="sidebar-workspace-actions">
             <NuxtLink to="/admin/workspaces" class="ws-sidebar-switch">
-              <span class="ws-sidebar-switch__icon">💬</span>
+              <span class="ws-sidebar-switch__icon"><el-icon><ChatDotRound /></el-icon></span>
               <span class="ws-sidebar-switch__main">
                 <span class="ws-sidebar-switch__title">{{ workspaceSwitchLabel }}</span>
                 <span class="ws-sidebar-switch__sub">選擇要管理的官方帳號</span>
@@ -85,7 +85,7 @@
 
       <div class="sidebar-footer">
         <div class="sidebar-footer-user">
-          <div class="sidebar-footer-avatar">👤</div>
+          <div class="sidebar-footer-avatar"><el-icon><User /></el-icon></div>
           <div class="sidebar-footer-user-meta">
             <div class="sidebar-footer-email truncate text-sm font-bold">
               {{ user?.email ?? '管理員' }}
@@ -94,7 +94,7 @@
           </div>
         </div>
         <button class="btn btn-secondary btn-sm w-full" @click="logout">
-          🚪 登出
+          <el-icon><SwitchButton /></el-icon> 登出
         </button>
       </div>
     </aside>
@@ -118,7 +118,7 @@
 import {
   Box, ChatDotRound, Connection, CreditCard, DataLine, Grid, Lightning,
   Monitor, OfficeBuilding, Operation, PriceTag, Promotion, Reading,
-  Setting, Tickets, TrendCharts, User, UserFilled,
+  Setting, SwitchButton, Tickets, TrendCharts, User, UserFilled,
 } from '@element-plus/icons-vue'
 
 const route = useRoute()
