@@ -2,7 +2,7 @@
   <AdminSplitLayout :is-empty="!selectedMenu && !isCreating">
     <template #sidebar-header>
       <span class="split-sidebar-title" data-tour="rm-title">圖文選單</span>
-      <el-button type="primary" size="small" data-tour="rm-new" @click="openCreate">➕ 新增</el-button>
+      <el-button :icon="Plus" type="primary" size="small" data-tour="rm-new" @click="openCreate">新增</el-button>
     </template>
 
     <template #sidebar-list>
@@ -193,6 +193,7 @@
 </template>
 
 <script setup lang="ts">
+import { Plus } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import {
   IMAGE_MAX_BYTES,

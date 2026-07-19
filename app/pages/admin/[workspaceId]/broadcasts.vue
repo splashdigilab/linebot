@@ -3,7 +3,7 @@
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
       <span class="split-sidebar-title" data-tour="bc-title">推播</span>
-      <el-button v-if="canOperate" type="primary" size="small" data-tour="bc-new" @click="openCreate">➕ 新增</el-button>
+      <el-button v-if="canOperate" :icon="Plus" type="primary" size="small" data-tour="bc-new" @click="openCreate">新增</el-button>
     </template>
 
     <!-- ── Sidebar List ── -->
@@ -320,6 +320,7 @@
 </template>
 
 <script setup lang="ts">
+import { Plus } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import type { UnifiedAction } from '~~/shared/action-schema'
 import { normalizeUnifiedAction, validateUnifiedAction } from '~~/shared/action-schema'

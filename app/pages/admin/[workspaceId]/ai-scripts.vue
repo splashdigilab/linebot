@@ -3,7 +3,7 @@
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
       <span class="split-sidebar-title">腳本</span>
-      <el-button v-if="canEditScripts" type="primary" size="small" data-tour="scr-new" @click="openCreate">➕ 新增</el-button>
+      <el-button v-if="canEditScripts" :icon="Plus" type="primary" size="small" data-tour="scr-new" @click="openCreate">新增</el-button>
     </template>
 
     <!-- ── Sidebar List ── -->
@@ -70,7 +70,7 @@
         @enter="submitForm"
       />
       <div class="flex gap-2 admin-header-actions">
-        <el-button v-if="canEditScripts && !isCreating && selectedScript" type="danger" @click="deleteScript">🗑️ 刪除</el-button>
+        <el-button v-if="canEditScripts && !isCreating && selectedScript" :icon="Delete" type="danger" @click="deleteScript">刪除</el-button>
         <el-button @click="cancelEdit">{{ canEditScripts ? '取消' : '關閉' }}</el-button>
         <el-button v-if="canEditScripts" type="primary" :loading="saving" @click="submitForm">
           {{ isCreating ? '建立腳本' : '儲存變更' }}
@@ -347,6 +347,7 @@
 </template>
 
 <script setup lang="ts">
+import { Delete, Plus } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { v4 as uuidv4 } from 'uuid'
 import type {

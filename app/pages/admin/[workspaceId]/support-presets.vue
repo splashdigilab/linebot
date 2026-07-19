@@ -2,7 +2,7 @@
   <AdminSplitLayout :is-empty="!selectedPreset && !isCreating">
     <template #sidebar-header>
       <span class="split-sidebar-title" data-tour="sp-title">客服預存</span>
-      <el-button v-if="canOperate" type="primary" size="small" data-tour="sp-new" @click="openCreate">➕ 新增</el-button>
+      <el-button v-if="canOperate" :icon="Plus" type="primary" size="small" data-tour="sp-new" @click="openCreate">新增</el-button>
     </template>
 
     <template #sidebar-list>
@@ -161,6 +161,7 @@
 </template>
 
 <script setup lang="ts">
+import { Plus } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { normalizeAutoReplyAction, normalizeAutoReplyTagging } from '~~/shared/auto-reply-rule'
 import {

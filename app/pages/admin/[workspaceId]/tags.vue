@@ -7,7 +7,7 @@
         caption="建立與管理會員標籤，用於分眾推播"
       />
       <div class="flex gap-1 admin-header-actions">
-        <el-button v-if="canOperate" type="primary" data-tour="tag-new" @click="openCreate">➕ 新增標籤</el-button>
+        <el-button v-if="canOperate" :icon="Plus" type="primary" data-tour="tag-new" @click="openCreate">新增標籤</el-button>
       </div>
     </template>
 
@@ -200,6 +200,7 @@
 </template>
 
 <script setup lang="ts">
+import { Plus } from '@element-plus/icons-vue'
 import { formatZhDateOnly } from '~~/shared/firestore-date'
 import { TAG_CATEGORY_OPTIONS, TAG_PRESET_COLORS, tagCategoryLabel } from '~~/shared/tag-admin'
 

@@ -5,16 +5,16 @@
       <span class="split-sidebar-title" data-tour="kb-sources">來源</span>
       <div class="flex gap-1">
         <el-tooltip v-if="canEditFolders" content="新增資料夾" placement="bottom" :show-after="300">
-          <el-button size="small" plain data-tour="kb-folder-new" @click="createFolderPrompt">📂</el-button>
+          <el-button :icon="FolderAdd" size="small" plain data-tour="kb-folder-new" @click="createFolderPrompt" />
         </el-tooltip>
         <el-tooltip v-if="canEditKb" content="匯入檔案 / 網址 / 大段文字" placement="bottom" :show-after="300">
-          <el-button size="small" type="primary" plain data-tour="kb-import" @click="goImport">📥 匯入</el-button>
+          <el-button :icon="Upload" size="small" type="primary" plain data-tour="kb-import" @click="goImport">匯入</el-button>
         </el-tooltip>
         <el-tooltip v-if="canEditKb" content="手動新增一張問答卡" placement="bottom" :show-after="300">
-          <el-button size="small" plain @click="openCreateManual">✍️ 手寫</el-button>
+          <el-button :icon="EditPen" size="small" plain @click="openCreateManual">手寫</el-button>
         </el-tooltip>
         <el-tooltip v-if="canReindexAll" content="全部重新索引(系統升級檢索方式後使用)" placement="bottom" :show-after="300">
-          <el-button size="small" plain :loading="reindexingAll" @click="reindexAll">🔁 重建索引</el-button>
+          <el-button :icon="Refresh" size="small" plain :loading="reindexingAll" @click="reindexAll">重建索引</el-button>
         </el-tooltip>
       </div>
     </template>
@@ -48,7 +48,7 @@
         <span>沒有任何來源</span>
         <p class="text-xs text-muted">每個來源代表一份知識（PDF / 網址 / 文字），AI 從這些來源裡找答案。</p>
         <div v-if="canEditKb" class="flex gap-1" style="margin-top:8px;">
-          <el-button size="small" type="primary" plain @click="goImport">📥 匯入</el-button>
+          <el-button :icon="Upload" size="small" type="primary" plain @click="goImport">匯入</el-button>
         </div>
       </div>
       <div v-else class="split-list">
@@ -169,7 +169,7 @@
       <h3>選擇一個來源開始管理</h3>
       <p>{{ canEditKb ? '或匯入新的 PDF、網址、文字' : '（僅檢視）' }}</p>
       <div v-if="canEditKb" class="flex gap-2" style="margin-top:8px;">
-        <el-button type="primary" @click="goImport">📥 匯入</el-button>
+        <el-button :icon="Upload" type="primary" @click="goImport">匯入</el-button>
       </div>
     </template>
 
@@ -187,7 +187,7 @@
         </div>
       </div>
       <div v-if="canEditSources" class="flex gap-1 admin-header-actions">
-        <el-button plain @click="renameSource">✏️ 重新命名</el-button>
+        <el-button :icon="EditPen" plain @click="renameSource">重新命名</el-button>
         <el-button
           v-if="selectedSource?.type === 'url'"
           type="primary"
@@ -360,7 +360,7 @@
                   <p class="src-chunk-preview">{{ chunkPreview(c) }}</p>
                   <span class="src-chunk-meta">{{ c.content.length }} 字 · {{ chunkStatusLabel(c.status) }} · {{ relativeTime(c.updatedAtMs) }}</span>
                 </div>
-                <el-button v-if="canEditKb" size="small" plain @click="openEditChunk(c)">✏️ 編輯</el-button>
+                <el-button v-if="canEditKb" :icon="EditPen" size="small" plain @click="openEditChunk(c)">編輯</el-button>
               </div>
             </div>
           </div>
@@ -625,6 +625,7 @@
 </template>
 
 <script setup lang="ts">
+import { EditPen, FolderAdd, Refresh, Upload } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 
 definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })

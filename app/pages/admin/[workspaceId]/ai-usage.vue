@@ -15,7 +15,7 @@
             :label="opt.label"
           />
         </el-select>
-        <el-button :loading="loading" @click="loadAll">🔄 重新整理</el-button>
+        <el-button :icon="Refresh" :loading="loading" @click="loadAll">重新整理</el-button>
       </div>
     </template>
 
@@ -204,8 +204,8 @@
                   最相近卡：{{ row.sources.slice(0, 2).map(s => s.title).join('、') }}
                 </div>
                 <div class="usage-handoff-actions">
-                  <el-button size="small" plain @click="goConversation(row.userId)">💬 開對話</el-button>
-                  <el-button size="small" type="primary" plain @click="goAddKnowledge(row.lastQuery)">📥 補知識</el-button>
+                  <el-button :icon="ChatDotRound" size="small" plain @click="goConversation(row.userId)">開對話</el-button>
+                  <el-button :icon="Upload" size="small" type="primary" plain @click="goAddKnowledge(row.lastQuery)">補知識</el-button>
                   <el-button size="small" plain @click="goPlayground(row.lastQuery)">▶ 重演</el-button>
                   <el-button v-if="!row.resolved" size="small" type="success" plain :loading="resolvingUserId === row.userId" @click="resolveHandoff(row.userId)">✓ 已處理</el-button>
                 </div>
@@ -219,6 +219,7 @@
 </template>
 
 <script setup lang="ts">
+import { ChatDotRound, Refresh, Upload } from '@element-plus/icons-vue'
 import { HANDOFF_REASON_LABELS, type HandoffReason } from '~~/shared/types/ai-knowledge'
 import { useAdminToast } from '~~/app/composables/useAdminToast'
 import { derivePlanState } from '~~/shared/billing/plan-state'

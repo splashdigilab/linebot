@@ -3,7 +3,7 @@
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
       <span class="split-sidebar-title" data-tour="ar-title">自動回覆</span>
-      <el-button v-if="canOperate" type="primary" size="small" data-tour="ar-new" @click="openCreate">➕ 新增</el-button>
+      <el-button v-if="canOperate" :icon="Plus" type="primary" size="small" data-tour="ar-new" @click="openCreate">新增</el-button>
     </template>
 
     <!-- ── Sidebar List ── -->
@@ -227,6 +227,7 @@
 
 
 <script setup lang="ts">
+import { Plus } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import {
   AUTO_REPLY_COOLDOWN_OPTIONS,

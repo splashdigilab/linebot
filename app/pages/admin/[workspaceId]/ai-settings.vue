@@ -134,9 +134,9 @@
           <div class="card-section-stack">
             <p class="ai-section-hint">給 AI 的指示:講話口吻、不能說什麼、要怎麼處理特殊狀況。不知道怎麼寫?先套一個範本再改:</p>
             <div class="flex gap-1 ai-tone-row">
-              <el-button size="small" plain :disabled="!canEditSettings" @click="applyToneTemplate('friendly')">😊 親切活潑</el-button>
-              <el-button size="small" plain :disabled="!canEditSettings" @click="applyToneTemplate('professional')">💼 專業簡潔</el-button>
-              <el-button size="small" plain :disabled="!canEditSettings" @click="applyToneTemplate('warm')">🤝 溫暖體貼</el-button>
+              <el-button size="small" plain :disabled="!canEditSettings" @click="applyToneTemplate('friendly')">親切活潑</el-button>
+              <el-button size="small" plain :disabled="!canEditSettings" @click="applyToneTemplate('professional')">專業簡潔</el-button>
+              <el-button size="small" plain :disabled="!canEditSettings" @click="applyToneTemplate('warm')">溫暖體貼</el-button>
             </div>
             <el-input
               v-model="form.systemPrompt"

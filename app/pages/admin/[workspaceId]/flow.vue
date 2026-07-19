@@ -6,10 +6,10 @@
       <AdminOperateGate>
         <div class="flex gap-1">
           <el-tooltip content="新增資料夾" placement="bottom" :show-after="300">
-            <el-button size="small" plain @click="createFlowFolderPrompt">📂</el-button>
+            <el-button :icon="FolderAdd" size="small" plain @click="createFlowFolderPrompt" />
           </el-tooltip>
           <el-tooltip content="新增模組" placement="bottom" :show-after="300">
-            <el-button type="primary" size="small" plain data-tour="flow-new" @click="openCreate">➕</el-button>
+            <el-button :icon="Plus" type="primary" size="small" plain data-tour="flow-new" @click="openCreate" />
           </el-tooltip>
         </div>
       </AdminOperateGate>
@@ -1060,6 +1060,7 @@
 
 
 <script setup lang="ts">
+import { FolderAdd, Plus } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import {
   SLOT_LABELS as ACTION_SLOT_LABELS,
