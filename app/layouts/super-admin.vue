@@ -27,15 +27,15 @@
 
         <nav class="sidebar-nav">
           <NuxtLink to="/admin/super/organizations" class="nav-item" :class="{ active: route.path.startsWith('/admin/super/organizations') }">
-            <span class="nav-icon">🏢</span>
+            <el-icon class="nav-icon"><OfficeBuilding /></el-icon>
             <span>組織管理</span>
           </NuxtLink>
           <NuxtLink to="/admin/super/workspaces" class="nav-item" :class="{ active: route.path.startsWith('/admin/super/workspaces') }">
-            <span class="nav-icon">💬</span>
+            <el-icon class="nav-icon"><ChatDotRound /></el-icon>
             <span>官方帳號管理</span>
           </NuxtLink>
           <NuxtLink to="/admin/super/users" class="nav-item" :class="{ active: route.path.startsWith('/admin/super/users') }">
-            <span class="nav-icon">🛡️</span>
+            <el-icon class="nav-icon"><Avatar /></el-icon>
             <span>Super Admin 管理</span>
           </NuxtLink>
         </nav>
@@ -63,6 +63,8 @@
 </template>
 
 <script setup lang="ts">
+import { Avatar, ChatDotRound, OfficeBuilding } from '@element-plus/icons-vue'
+
 const route = useRoute()
 const { user, logout } = useAuth()
 </script>

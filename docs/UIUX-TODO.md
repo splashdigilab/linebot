@@ -145,7 +145,9 @@
     - [ ] `_auto-reply.scss`：**不是整批死碼**。`.ar-section-hint`/`.ar-status-switch`/`.ar-any-text-note`/`.ar-section-card` 其實**跨頁共用**（campaigns/organization/support-presets/flow）；只有舊版 layout 類（`.ar-layout`/`.ar-sidebar*`/`.ar-list*`/`.ar-editor(-inner/header/title)`/`.module-picker`/`.module-option*`/`.input-base`）疑似死碼，且與共用類交錯，需**逐類確認**後再動，暫緩。
     - [—] organization「清除憑證」區塊（`showClearStoredCredentials=false`）是**刻意的功能開關**（註解：「改為 true 即可顯示」），**非死碼**，保留。
     - [ ] `areaColors` 色盤在 richmenu 與 FlowRichMessageAreas 重複兩份 → 抽共用常數（待處理）。
-35. [ ] **emoji 當功能圖示** — UI：側欄/super/workspaces 大量 emoji 導覽圖示跨平台造型不一（🛡️🗂️ 尤甚），削弱單色設計語言 → 關鍵導覽改單色 SVG，emoji 僅留行銷區。
+35. [ ] （部分完成）**emoji 當功能圖示** — UI：
+    - [x] ✅ 側欄導覽（default.vue 15 項 + super-admin.vue 3 項）改用 `@element-plus/icons-vue`（與 Element 元件同一設計語言、單一線條風格、MIT、免加依賴）。`nuxt build` 通過。
+    - [ ] 尚未：頁首標題 emoji（如「👥 好友與標籤」）、fem-header「💬 回覆訊息」、各按鈕/空狀態的裝飾 emoji（可留可換，屬第二波）。
 36. [ ] **樣式散落 `<style scoped>`** — UI：AiContextBanner 大量 px 值寫在元件內，違反本專案「樣式放 partials + token」慣例 → 搬到 partial。
 37. [ ] **重複元件抽共用** — UI：統計卡三套（el-card / .bc-stat-box / .cmp-stat-box）、表格兩套（el-table vs 手刻 table）→ 抽 stat-box、統一表格。
 38. [ ] **無障礙**（部分完成）— UI：

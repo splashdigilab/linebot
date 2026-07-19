@@ -35,7 +35,7 @@
             class="nav-item"
             :class="{ active: route.path === item.to }"
           >
-            <span class="nav-icon">{{ item.icon }}</span>
+            <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
             <span>{{ item.label }}</span>
           </NuxtLink>
 
@@ -50,7 +50,7 @@
               :data-tour="item.tour"
               :class="{ active: route.path.startsWith(item.to) }"
             >
-              <span class="nav-icon">{{ item.icon }}</span>
+              <el-icon class="nav-icon"><component :is="item.icon" /></el-icon>
               <span>{{ item.label }}</span>
             </NuxtLink>
           </template>
@@ -59,7 +59,7 @@
           <template v-if="canManageSettings">
             <div class="nav-section-label">設定</div>
             <NuxtLink :to="`/admin/${workspaceId}/settings/members`" class="nav-item" :class="{ active: route.path.includes('/settings/members') }">
-              <span class="nav-icon">👥</span>
+              <el-icon class="nav-icon"><UserFilled /></el-icon>
               <span>成員管理</span>
             </NuxtLink>
             <NuxtLink
@@ -72,11 +72,11 @@
                   || route.path === `/admin/${workspaceId}/line-settings`,
               }"
             >
-              <span class="nav-icon">🏢</span>
+              <el-icon class="nav-icon"><OfficeBuilding /></el-icon>
               <span>組織與 LINE</span>
             </NuxtLink>
             <NuxtLink :to="`/admin/${workspaceId}/settings/billing`" class="nav-item" :class="{ active: route.path.includes('/settings/billing') }">
-              <span class="nav-icon">💳</span>
+              <el-icon class="nav-icon"><CreditCard /></el-icon>
               <span>訂閱與付款</span>
             </NuxtLink>
           </template>
@@ -115,6 +115,12 @@
 </template>
 
 <script setup lang="ts">
+import {
+  Box, ChatDotRound, Connection, CreditCard, DataLine, Grid, Lightning,
+  Monitor, OfficeBuilding, Operation, PriceTag, Promotion, Reading,
+  Setting, Tickets, TrendCharts, User, UserFilled,
+} from '@element-plus/icons-vue'
+
 const route = useRoute()
 const { user, logout } = useAuth()
 const { workspaceId, currentRole, currentWorkspaceName, canManageSettings, isViewer, workspaceList, loadWorkspaceList } = useWorkspace()
@@ -147,16 +153,16 @@ const navItems = computed(() => {
   const wid = workspaceId.value
   if (!wid) return []
   return [
-    { to: `/admin/${wid}/conversation-stats`, icon: '📊', label: '對話統計' },
-    { to: `/admin/${wid}/conversations`, icon: '💬', label: '對話' },
-    { to: `/admin/${wid}/flow`, icon: '🤖', label: '機器人模組' },
-    { to: `/admin/${wid}/richmenu`, icon: '🗂️', label: '圖文選單' },
-    { to: `/admin/${wid}/auto-reply`, icon: '⚡', label: '自動回覆' },
-    { to: `/admin/${wid}/support-presets`, icon: '📦', label: '客服預存' },
-    { to: `/admin/${wid}/tags`, icon: '🏷️', label: '標籤管理' },
-    { to: `/admin/${wid}/campaigns`, icon: '📋', label: '活動標籤' },
-    { to: `/admin/${wid}/broadcasts`, icon: '📣', label: '推播' },
-    { to: `/admin/${wid}/users`, icon: '👥', label: '會員' },
+    { to: `/admin/${wid}/conversation-stats`, icon: DataLine, label: '對話統計' },
+    { to: `/admin/${wid}/conversations`, icon: ChatDotRound, label: '對話' },
+    { to: `/admin/${wid}/flow`, icon: Connection, label: '機器人模組' },
+    { to: `/admin/${wid}/richmenu`, icon: Grid, label: '圖文選單' },
+    { to: `/admin/${wid}/auto-reply`, icon: Lightning, label: '自動回覆' },
+    { to: `/admin/${wid}/support-presets`, icon: Box, label: '客服預存' },
+    { to: `/admin/${wid}/tags`, icon: PriceTag, label: '標籤管理' },
+    { to: `/admin/${wid}/campaigns`, icon: Tickets, label: '活動標籤' },
+    { to: `/admin/${wid}/broadcasts`, icon: Promotion, label: '推播' },
+    { to: `/admin/${wid}/users`, icon: User, label: '會員' },
   ]
 })
 
@@ -166,11 +172,11 @@ const aiNavItems = computed(() => {
   const wid = workspaceId.value
   if (!wid || !canManageSettings.value) return []
   return [
-    { to: `/admin/${wid}/knowledge/sources`, icon: '📚', label: '知識庫', tour: 'nav-knowledge' },
-    { to: `/admin/${wid}/ai-scripts`, icon: '🧩', label: '客服腳本', tour: 'nav-ai-scripts' },
-    { to: `/admin/${wid}/ai-playground`, icon: '🎮', label: '測試對話' },
-    { to: `/admin/${wid}/ai-usage`, icon: '📈', label: '用量監控' },
-    { to: `/admin/${wid}/ai-settings`, icon: '⚙️', label: 'AI 設定', tour: 'nav-ai-settings' },
+    { to: `/admin/${wid}/knowledge/sources`, icon: Reading, label: '知識庫', tour: 'nav-knowledge' },
+    { to: `/admin/${wid}/ai-scripts`, icon: Operation, label: '客服腳本', tour: 'nav-ai-scripts' },
+    { to: `/admin/${wid}/ai-playground`, icon: Monitor, label: '測試對話' },
+    { to: `/admin/${wid}/ai-usage`, icon: TrendCharts, label: '用量監控' },
+    { to: `/admin/${wid}/ai-settings`, icon: Setting, label: 'AI 設定', tour: 'nav-ai-settings' },
   ]
 })
 </script>
