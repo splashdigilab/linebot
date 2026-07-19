@@ -38,7 +38,7 @@
 
     <!-- ── Empty State ── -->
     <template #editor-empty>
-      <span class="empty-icon">🧩</span>
+      <el-icon class="empty-icon"><Operation /></el-icon>
       <h3>選擇一條腳本開始{{ canEditScripts ? '編輯' : '檢視' }}</h3>
       <template v-if="canEditScripts">
         <p>從範本快速建立，或點「從空白開始」自己組</p>
@@ -120,7 +120,7 @@
               <div v-for="node in form.nodes" :key="node.id" class="scripts-node-card">
                 <div class="scripts-node-header">
                   <span class="scripts-node-badge" :class="nodeBadgeClass(node.type)">
-                    {{ nodeIcon(node.type) }} {{ nodeTypeLabel(node.type) }}
+                    <el-icon><component :is="nodeIcon(node.type)" /></el-icon> {{ nodeTypeLabel(node.type) }}
                   </span>
                   <span v-if="nodeHeaderHint(node)" class="text-xs text-muted">{{ nodeHeaderHint(node) }}</span>
                   <el-button
@@ -144,8 +144,8 @@
                       size="small"
                       @change="setTriggerMode(node, $event)"
                     >
-                      <el-radio-button value="keyword">🔑 關鍵字</el-radio-button>
-                      <el-radio-button value="semantic">🧠 看意思</el-radio-button>
+                      <el-radio-button value="keyword">關鍵字</el-radio-button>
+                      <el-radio-button value="semantic">看意思</el-radio-button>
                     </el-radio-group>
                   </div>
 
@@ -170,7 +170,7 @@
                       />
                     </div>
                     <p class="scripts-section-hint">
-                      💡 不用列出所有講法——填 3～5 句不同說法即可，客人用相近意思的話也會觸發（最多 {{ MAX_TRIGGER_EXAMPLES }} 句）。
+                      不用列出所有講法——填 3～5 句不同說法即可，客人用相近意思的話也會觸發（最多 {{ MAX_TRIGGER_EXAMPLES }} 句）。
                     </p>
                   </template>
                 </template>
@@ -337,7 +337,7 @@
             </div>
 
             <p class="scripts-section-hint">
-              💡 一般步驟會由上到下自動接下去；只有「分支」要自己用「前往…」下拉，指定每條路各接到哪一步。
+              一般步驟會由上到下自動接下去；只有「分支」要自己用「前往…」下拉，指定每條路各接到哪一步。
             </p>
           </div>
         </div>
@@ -347,7 +347,8 @@
 </template>
 
 <script setup lang="ts">
-import { Delete, Plus } from '@element-plus/icons-vue'
+import type { Component } from 'vue'
+import { ChatDotRound, Collection, Delete, Notebook, Operation, Plus, Pointer, Position, PriceTag, Share } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { v4 as uuidv4 } from 'uuid'
 import type {
@@ -444,7 +445,7 @@ const statsText = computed(() => {
   const completions = stats?.completions ?? 0
   if (!starts) return ''
   const rate = Math.round((completions / starts) * 100)
-  return `📊 啟動 ${starts} 次・完成 ${completions} 次（完成率 ${rate}%）`
+  return `啟動 ${starts} 次・完成 ${completions} 次（完成率 ${rate}%）`
 })
 
 // ── List helpers ───────────────────────────────────────────────────
@@ -454,20 +455,20 @@ function triggerSummary(script: ScriptRow): string {
   if ((trig.matchMode ?? 'keyword') === 'semantic') {
     const ex = (trig.examples ?? []).filter(Boolean)
     if (!ex.length) return '無範例'
-    return `🧠 ${ex.slice(0, 3).join('、')}${ex.length > 3 ? '⋯' : ''}`
+    return `${ex.slice(0, 3).join('、')}${ex.length > 3 ? '⋯' : ''}`
   }
   if (!trig.keywords?.length) return '無關鍵字'
-  return `🔑 ${trig.keywords.slice(0, 3).join('、')}${trig.keywords.length > 3 ? '⋯' : ''}`
+  return `${trig.keywords.slice(0, 3).join('、')}${trig.keywords.length > 3 ? '⋯' : ''}`
 }
 
-function nodeIcon(type: string) {
-  if (type === 'trigger') return '🔑'
-  if (type === 'collect') return '📋'
-  if (type === 'branch') return '🔀'
-  if (type === 'quickReply') return '⚡'
-  if (type === 'tag') return '🏷️'
-  if (type === 'saveLead') return '💾'
-  return '💬'
+function nodeIcon(type: string): Component {
+  if (type === 'trigger') return Position
+  if (type === 'collect') return Collection
+  if (type === 'branch') return Share
+  if (type === 'quickReply') return Pointer
+  if (type === 'tag') return PriceTag
+  if (type === 'saveLead') return Notebook
+  return ChatDotRound
 }
 
 function nodeTypeLabel(type: string) {
@@ -491,13 +492,13 @@ function nodeBadgeClass(type: string) {
 
 /** 給「下一步」下拉用的節點選項標籤（trigger 不能當目標） */
 function nodeOptionLabel(n: ScriptNode): string {
-  if (n.type === 'collect') return `📋 收集 ${n.fieldName || '(未命名)'}`
-  if (n.type === 'branch') return '🔀 分支'
-  if (n.type === 'quickReply') return `⚡ 快速回覆${n.question ? `「${n.question.slice(0, 8)}」` : ''}`
-  if (n.type === 'tag') return '🏷️ 貼標'
-  if (n.type === 'saveLead') return '💾 寫名單'
-  if (n.type === 'reply') return `💬 回覆「${(n.text || '').slice(0, 8) || '空白'}」`
-  return '🔑 觸發'
+  if (n.type === 'collect') return `收集 ${n.fieldName || '(未命名)'}`
+  if (n.type === 'branch') return '分支'
+  if (n.type === 'quickReply') return `快速回覆${n.question ? `「${n.question.slice(0, 8)}」` : ''}`
+  if (n.type === 'tag') return '貼標'
+  if (n.type === 'saveLead') return '寫名單'
+  if (n.type === 'reply') return `回覆「${(n.text || '').slice(0, 8) || '空白'}」`
+  return '觸發'
 }
 
 /** 節點短名（給「下一步」摘要用） */
@@ -750,7 +751,7 @@ async function submitForm() {
     }
     if (isCreating.value) {
       const res = await apiFetch<{ id: string }>('/api/ai/scripts/create', { method: 'POST', body: payload })
-      showToast('腳本已建立 ✅', 'success')
+      showToast('腳本已建立', 'success')
       await loadScripts(true)
       const fresh = scripts.value.find(s => s.id === res.id)
       if (fresh) selectScript(fresh, { skipDiscardConfirm: true })
@@ -758,7 +759,7 @@ async function submitForm() {
     }
     else if (selectedId.value) {
       await apiFetch(`/api/ai/scripts/${selectedId.value}`, { method: 'PUT', body: payload })
-      showToast('已儲存 ✅', 'success')
+      showToast('已儲存', 'success')
       await loadScripts(true)
       markClean()
     }

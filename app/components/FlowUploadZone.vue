@@ -18,7 +18,7 @@
       >
         {{ isUploading ? '上傳中...' : modelValue ? `重新選擇${type === 'video' ? '影片' : '圖片'}` : `選擇${type === 'video' ? '影片' : '圖片'}` }}
       </el-button>
-      <span v-if="modelValue" class="admin-upload-status">✅ 已上傳</span>
+      <span v-if="modelValue" class="admin-upload-status"><el-icon><CircleCheck /></el-icon> 已上傳</span>
       <p v-if="hint" class="text-xs text-muted admin-upload-hint">{{ hint }}</p>
     </div>
 
@@ -55,7 +55,7 @@
               <span>上傳中...</span>
             </div>
             <div v-else class="fuz-idle">
-              <span class="fuz-icon">📷</span>
+              <el-icon class="fuz-icon"><Picture /></el-icon>
               <span v-if="label" class="fuz-label">{{ label }}</span>
               <el-button
                 type="primary"
@@ -130,7 +130,7 @@
           <span>上傳中...</span>
         </div>
         <div v-else class="fuz-idle">
-          <span class="fuz-icon">{{ type === 'video' ? '🎬' : '📷' }}</span>
+          <el-icon class="fuz-icon"><component :is="type === 'video' ? VideoCamera : Picture" /></el-icon>
           <span v-if="label" class="fuz-label">{{ label }}</span>
           <el-button
             type="primary"
@@ -155,6 +155,7 @@
 </template>
 
 <script setup lang="ts">
+import { CircleCheck, Picture, VideoCamera } from '@element-plus/icons-vue'
 import {
   IMAGE_ACCEPT_ATTR,
   VIDEO_ACCEPT_ATTR,

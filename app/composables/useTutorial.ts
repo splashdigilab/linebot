@@ -9,6 +9,13 @@
  * 避免 tour 進行到一半換路由造成 target 找不到。
  */
 
+import type { Component } from 'vue'
+import {
+  Box, ChatDotRound, ChatLineSquare, Connection, DataLine, EditPen, Files,
+  FolderOpened, Grid, Lightning, MagicStick, Monitor, OfficeBuilding, Operation,
+  Pointer, Postcard, PriceTag, Promotion, Reading, Tickets, TrendCharts, User, UserFilled,
+} from '@element-plus/icons-vue'
+
 export interface TutorialStep {
   /** CSS selector，對準頁面上標了 data-tour 的元素；留空字串＝置中說明卡（不高亮） */
   target: string
@@ -32,7 +39,7 @@ export interface TutorialStep {
 
 export interface TutorialTopic {
   id: string
-  icon: string
+  icon: Component
   label: string
   /** agent 點此主題後說的話 */
   blurb: string
@@ -52,7 +59,7 @@ function buildTopics(): TutorialTopic[] {
   return [
     {
       id: 'organization',
-      icon: '🏢',
+      icon: OfficeBuilding,
       label: '設定組織與 LINE',
       blurb:
         '我帶你把 LINE 官方帳號接上系統，總共 8 步。準備好就開始，過程中可以隨時點「結束」離開。',
@@ -112,7 +119,7 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="org-save"]',
           title: '第 8 步：儲存',
           description:
-            '最後按右上角「<strong>儲存</strong>」。系統會順手再驗一次 Webhook。看到成功提示就完成囉 🎉',
+            '最後按右上角「<strong>儲存</strong>」。系統會順手再驗一次 Webhook。看到成功提示就完成囉',
           placement: 'bottom-end',
         },
       ],
@@ -120,7 +127,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'ai-settings',
       requiresSettings: true,
-      icon: '🤖',
+      icon: MagicStick,
       label: '開啟 AI 自動回覆',
       blurb: '我帶你把 AI 客服打開、選好回覆模式與語氣，共 3 步。',
       route: wid => `/admin/${wid}/ai-settings`,
@@ -142,7 +149,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="ais-save"]',
           title: '第 3 步：儲存設定',
-          description: '改完一定要按右上「<strong>儲存設定</strong>」才會生效 🎉',
+          description: '改完一定要按右上「<strong>儲存設定</strong>」才會生效',
           placement: 'bottom-end',
         },
       ],
@@ -150,7 +157,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'knowledge',
       requiresOperate: true,
-      icon: '📚',
+      icon: Reading,
       label: '知識庫：建立與匯入',
       blurb: '我帶你看怎麼把知識餵給 AI，四種來源一次搞懂，共 7 步。',
       route: wid => `/admin/${wid}/knowledge/sources`,
@@ -159,7 +166,7 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="kb-import"]',
           title: '第 1 步：從「匯入」開始',
           description:
-            '知識庫是由一份份「<strong>來源</strong>」組成的，AI 只會用這些來源裡的內容回答。點「<strong>📥 匯入</strong>」開始——有 <strong>4 種餵料方式</strong>，我一個一個帶你看。',
+            '知識庫是由一份份「<strong>來源</strong>」組成的，AI 只會用這些來源裡的內容回答。點「<strong>匯入</strong>」開始——有 <strong>4 種餵料方式</strong>，我一個一個帶你看。',
           placement: 'bottom',
         },
         {
@@ -214,7 +221,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'knowledge-manage',
       requiresOperate: true,
-      icon: '🗂️',
+      icon: FolderOpened,
       label: '知識庫：整理與更新',
       blurb: '匯入之後，怎麼分類、微調、讓知識自動保持最新，我帶你看一遍，共 4 步。',
       route: wid => `/admin/${wid}/knowledge/sources`,
@@ -230,14 +237,14 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="kb-folder-new"]',
           title: '第 2 步：來源變多了，用資料夾分類',
           description:
-            '來源一多就會找不到。點「<strong>📂</strong>」開資料夾（例如：商品、退換貨、活動），再把來源<strong>拖進去</strong>歸類。這只是後台整理方便你找，不影響 AI 回答。',
+            '來源一多就會找不到。點上方<strong>新資料夾</strong>按鈕開資料夾（例如：商品、退換貨、活動），再把來源<strong>拖進去</strong>歸類。這只是後台整理方便你找，不影響 AI 回答。',
           placement: 'bottom',
         },
         {
           target: '[data-tour="kb-chunks"]',
           title: '第 3 步：AI 把資料切成一張張「卡片」，你能微調',
           description:
-            '每份來源會被拆成一張張「<strong>卡片</strong>」，AI 就是一張卡一張卡地找答案。覺得哪張不對，按「<strong>✏️ 編輯</strong>」改標題和內容，或用「<strong>AI 整理一下</strong>」讓它更好被找到。<strong>你親手改過的卡會標上 🔒</strong>，日後自動更新時不會被蓋掉，可以放心改。',
+            '每份來源會被拆成一張張「<strong>卡片</strong>」，AI 就是一張卡一張卡地找答案。覺得哪張不對，按「<strong>編輯</strong>」改標題和內容，或用「<strong>AI 整理一下</strong>」讓它更好被找到。<strong>你親手改過的卡會被鎖定</strong>，日後自動更新時不會被蓋掉，可以放心改。',
           placement: 'left',
         },
         {
@@ -252,7 +259,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'ai-scripts',
       requiresSettings: true,
-      icon: '🧩',
+      icon: Operation,
       label: '建立客服腳本',
       blurb: '腳本用來把多步驟流程自動化（預約、報名…）。我帶你開第一條，共 2 步。',
       route: wid => `/admin/${wid}/ai-scripts`,
@@ -261,7 +268,7 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="scr-new"]',
           title: '第 1 步：新增一條腳本',
           description:
-            '腳本能把固定流程自動化，例如<strong>預約、報名、領優惠</strong>。點「<strong>➕ 新增</strong>」開一條新的。',
+            '腳本能把固定流程自動化，例如<strong>預約、報名、領優惠</strong>。點「<strong>新增</strong>」開一條新的。',
           placement: 'right',
         },
         {
@@ -275,7 +282,7 @@ function buildTopics(): TutorialTopic[] {
     },
     {
       id: 'ai-playground',
-      icon: '🎮',
+      icon: Monitor,
       label: '試一下 AI 怎麼回答',
       blurb: '上線前先在這裡試答幾題，確認 AI 答得對，共 2 步。',
       route: wid => `/admin/${wid}/ai-playground`,
@@ -291,7 +298,7 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="pg-composer"]',
           title: '第 2 步：輸入問題試答',
           description:
-            '在這裡打客人可能會問的問題，按「<strong>🚀 送出</strong>」看 AI 怎麼答。多試幾題刁鑽的；確認答得穩，再到 AI 設定切「全自動」上線。',
+            '在這裡打客人可能會問的問題，按「<strong>送出</strong>」看 AI 怎麼答。多試幾題刁鑽的；確認答得穩，再到 AI 設定切「全自動」上線。',
           placement: 'top',
         },
       ],
@@ -299,7 +306,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'ai-usage',
       requiresSettings: true,
-      icon: '📈',
+      icon: TrendCharts,
       label: '看 AI 用量與監控',
       blurb: '看 AI 幫你分擔多少、哪裡答不好要補知識。共 3 步。',
       route: wid => `/admin/${wid}/ai-usage`,
@@ -315,7 +322,7 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="usg-cases"]',
           title: '第 2 步：答不出來的就地補知識',
           description:
-            '這裡列出<strong>客人問了但 AI 答不出來</strong>的案例。點某筆的「<strong>📥 補知識</strong>」會直接跳到知識庫、幫你補一張對應的卡——這是持續把 AI 養好的關鍵動作。',
+            '這裡列出<strong>客人問了但 AI 答不出來</strong>的案例。點某筆的「<strong>補知識</strong>」會直接跳到知識庫、幫你補一張對應的卡——這是持續把 AI 養好的關鍵動作。',
           placement: 'top',
         },
         {
@@ -329,7 +336,7 @@ function buildTopics(): TutorialTopic[] {
     },
     {
       id: 'conversations',
-      icon: '💬',
+      icon: ChatDotRound,
       label: '看懂對話收件匣',
       blurb: '帶你看客人對話怎麼進來、怎麼接手回覆，共 2 步。',
       route: wid => `/admin/${wid}/conversations`,
@@ -353,7 +360,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'flow',
       requiresOperate: true,
-      icon: '🤖',
+      icon: Connection,
       label: '認識機器人模組',
       blurb: '一種一種帶你看：每介紹一個就先幫你選到它的實際畫面，共 6 步。',
       route: wid => `/admin/${wid}/flow`,
@@ -362,13 +369,13 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="flow-title"]',
           title: '第 1 步：模組是「要回什麼」的積木',
           description:
-            '一個模組 = 一組要回給客人的訊息。上面兩個是<strong>系統模組</strong>（🔒，一定在、不能刪），下面是你自己加的。接下來我一個一個帶你看 👇',
+            '一個模組 = 一組要回給客人的訊息。上面兩個是<strong>系統模組</strong>（一定在、不能刪），下面是你自己加的。接下來我一個一個帶你看',
           placement: 'right',
         },
         {
           target: '[data-tour="flow-type"]',
           clickBefore: '[data-tour="flow-sys-welcome"]',
-          title: '① 歡迎模組 🔒',
+          title: '① 歡迎模組',
           description:
             '我幫你選到「<strong>歡迎模組</strong>」了。它在客人<strong>加好友的當下</strong>自動發第一組訊息——通常放品牌介紹、優惠或常見問答入口。系統內建，你只要編內容。',
           placement: 'bottom',
@@ -376,7 +383,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="flow-type"]',
           clickBefore: '[data-tour="flow-sys-live_agent"]',
-          title: '② 真人客服 🔒',
+          title: '② 真人客服',
           description:
             '這是「<strong>真人客服</strong>」模組。當對話<strong>轉給真人</strong>時會發這組訊息——例如「已為您轉接專人，請稍候」。一樣系統內建，編好內容即可。',
           placement: 'bottom',
@@ -386,7 +393,7 @@ function buildTopics(): TutorialTopic[] {
           clickBefore: '[data-tour="flow-new"]',
           title: '③ + ④ 你自己加的兩種',
           description:
-            '我幫你按了「➕」進入新增。你能建的有兩種，在這裡選：<strong>機器人流程</strong>（一般自動回覆，最常用）、<strong>系統通知</strong>（公告型訊息）。先取個名再選類型。',
+            '我幫你按了「新增」進入。你能建的有兩種，在這裡選：<strong>機器人流程</strong>（一般自動回覆，最常用）、<strong>系統通知</strong>（公告型訊息）。先取個名再選類型。',
           placement: 'bottom',
         },
         {
@@ -400,14 +407,14 @@ function buildTopics(): TutorialTopic[] {
           target: '',
           title: '第 6 步：什麼時候會回？',
           description:
-            '模組只管「<strong>回什麼</strong>」；「<strong>什麼時候回</strong>」要另外綁：到「<strong>自動回覆</strong>」用關鍵字指向這個模組（歡迎模組例外，加好友時自動發）。編好按右上「<strong>建立／儲存</strong>」就生效 🎉',
+            '模組只管「<strong>回什麼</strong>」；「<strong>什麼時候回</strong>」要另外綁：到「<strong>自動回覆</strong>」用關鍵字指向這個模組（歡迎模組例外，加好友時自動發）。編好按右上「<strong>建立／儲存</strong>」就生效',
         },
       ],
     },
     {
       id: 'msg-basic',
       requiresOperate: true,
-      icon: '💬',
+      icon: ChatLineSquare,
       label: '基本訊息（文字/圖片/影片）',
       blurb: '最常用的三種訊息，我一顆一顆按給你看、卡片也開出來，共 3 步。',
       route: wid => `/admin/${wid}/flow`,
@@ -415,7 +422,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="fmt-text"]',
           demoType: 'text',
-          title: '📝 文字',
+          title: '文字',
           description:
             '點「<strong>＋ 文字</strong>」加一則純文字（可放表情符號、自動帶入客人暱稱，文字下還能加按鈕）。下方就是它的卡片。',
           placement: 'bottom',
@@ -423,7 +430,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="fmt-image"]',
           demoType: 'image',
-          title: '🖼️ 圖片',
+          title: '圖片',
           description:
             '點「<strong>＋ 圖片</strong>」加一張圖，上傳即可（海報、菜單、活動圖），系統自動處理預覽。',
           placement: 'bottom',
@@ -431,7 +438,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="fmt-video"]',
           demoType: 'video',
-          title: '🎬 影片',
+          title: '影片',
           description:
             '點「<strong>＋ 影片</strong>」加一段影片，再給一張預覽縮圖，客人按了才播放。',
           placement: 'bottom',
@@ -441,7 +448,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'msg-rich',
       requiresOperate: true,
-      icon: '📰',
+      icon: Postcard,
       label: '圖文訊息怎麼填',
       blurb: '一張大圖切成多個可點區塊。我打開一張卡帶你填，共 3 步。',
       route: wid => `/admin/${wid}/flow`,
@@ -449,7 +456,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="fmt-rich"]',
           demoType: 'richMessage',
-          title: '📰 圖文訊息',
+          title: '圖文訊息',
           description:
             '點「<strong>＋ 圖文訊息</strong>」這顆就會加一張。我幫你開好了，往下教你填每個欄位 →',
           placement: 'bottom',
@@ -457,7 +464,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="rich-layout"]',
           demoType: 'richMessage',
-          title: '📰 圖文訊息：① 選版型',
+          title: '圖文訊息：① 選版型',
           description:
             '圖文訊息是一張大圖、切成多個<strong>可點區塊</strong>。先選一個<strong>版型</strong>，決定要切成幾塊。',
           placement: 'top',
@@ -465,7 +472,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="rich-hero"]',
           demoType: 'richMessage',
-          title: '📰 圖文訊息：② 上傳大圖 + 綁動作',
+          title: '圖文訊息：② 上傳大圖 + 綁動作',
           description:
             '在這裡上傳底圖。<strong>上傳後</strong>，圖上每個區塊就能各自綁一個動作（開網址、觸發模組、傳訊息…）——這是圖文訊息最強的地方。',
           placement: 'top',
@@ -475,7 +482,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'msg-carousel',
       requiresOperate: true,
-      icon: '🎠',
+      icon: Files,
       label: '輪播訊息怎麼填',
       blurb: '多張卡片左右滑。我打開一張帶你填，共 4 步。',
       route: wid => `/admin/${wid}/flow`,
@@ -483,7 +490,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="fmt-carousel"]',
           demoType: 'flexImageCarousel',
-          title: '🎠 輪播訊息',
+          title: '輪播訊息',
           description:
             '點「<strong>＋ 輪播訊息</strong>」這顆就會加一張。我幫你開好了，往下教你填每個欄位 →',
           placement: 'bottom',
@@ -491,7 +498,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="flex-enable-image"]',
           demoType: 'flexImageCarousel',
-          title: '🎠 輪播訊息：① 要不要放圖',
+          title: '輪播訊息：① 要不要放圖',
           description:
             '輪播訊息是多張卡片可<strong>左右滑</strong>。先決定每張卡<strong>要不要放圖片</strong>（開了就能上傳圖、設比例）。',
           placement: 'top',
@@ -499,7 +506,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="flex-col-title"]',
           demoType: 'flexImageCarousel',
-          title: '🎠 輪播訊息：② 填卡片內容',
+          title: '輪播訊息：② 填卡片內容',
           description:
             '每張卡填<strong>標題、內文</strong>；若有開圖還能上傳圖片、加最多 3 顆<strong>按鈕</strong>。',
           placement: 'top',
@@ -507,7 +514,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="flex-add-column"]',
           demoType: 'flexImageCarousel',
-          title: '🎠 輪播訊息：③ 多加幾張卡',
+          title: '輪播訊息：③ 多加幾張卡',
           description:
             '按這顆「＋」就多一張卡，客人在聊天室能<strong>左右滑</strong>看更多。商品、方案並排介紹最好用。',
           placement: 'left',
@@ -517,7 +524,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'msg-quick',
       requiresOperate: true,
-      icon: '⚡',
+      icon: Pointer,
       label: '快速回覆怎麼填',
       blurb: '訊息下方一排建議按鈕。我打開一張帶你填，共 4 步。',
       route: wid => `/admin/${wid}/flow`,
@@ -525,7 +532,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="fmt-quick"]',
           demoType: 'quickReply',
-          title: '⚡ 快速回覆',
+          title: '快速回覆',
           description:
             '點「<strong>＋ 快速回覆</strong>」這顆就會加一張。我幫你開好了，往下教你填每個欄位 →',
           placement: 'bottom',
@@ -533,7 +540,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="quick-prompt"]',
           demoType: 'quickReply',
-          title: '⚡ 快速回覆：① 主要文字',
+          title: '快速回覆：① 主要文字',
           description:
             '快速回覆是在訊息<strong>下方冒出一排建議按鈕</strong>。先在這裡打主要的回覆文字。',
           placement: 'top',
@@ -541,7 +548,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="quick-button"]',
           demoType: 'quickReply',
-          title: '⚡ 快速回覆：② 每顆按鈕',
+          title: '快速回覆：② 每顆按鈕',
           description:
             '一顆按鈕 = 一個建議選項：設<strong>顯示文字</strong>、選客人點了要做什麼（回傳訊息／開網址／觸發模組）。',
           placement: 'top',
@@ -549,7 +556,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="quick-add"]',
           demoType: 'quickReply',
-          title: '⚡ 快速回覆：③ 加更多選項',
+          title: '快速回覆：③ 加更多選項',
           description: '要更多選項就按這顆「＋」加一顆按鈕（最多 13 顆）。',
           placement: 'left',
         },
@@ -559,7 +566,7 @@ function buildTopics(): TutorialTopic[] {
       id: 'msg-userinput',
       requiresOperate: true,
       requiresFeature: 'userInput',
-      icon: '✍️',
+      icon: EditPen,
       label: '用戶輸入卡怎麼填',
       blurb: '問問題、收答案、還能觸發下一步。我打開一張帶你填，共 4 步。',
       route: wid => `/admin/${wid}/flow`,
@@ -567,7 +574,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="fmt-userinput"]',
           demoType: 'userInput',
-          title: '✍️ 用戶輸入卡',
+          title: '用戶輸入卡',
           description:
             '點「<strong>＋ 用戶輸入</strong>」這顆就會加一張。我幫你開好了，往下教你填每個欄位 →',
           placement: 'bottom',
@@ -575,7 +582,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="ui-question"]',
           demoType: 'userInput',
-          title: '✍️ 用戶輸入卡：① 提問',
+          title: '用戶輸入卡：① 提問',
           description:
             '用戶輸入卡能<strong>問客人問題、收答案</strong>。先在這裡打你要問的問題。',
           placement: 'top',
@@ -584,7 +591,7 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="ui-attribute"]',
           demoType: 'userInput',
           requiresFeature: 'userInputAttribute',
-          title: '✍️ 用戶輸入卡：② 存成屬性（特殊）',
+          title: '用戶輸入卡：② 存成屬性（特殊）',
           description:
             '把客人的回答<strong>存成一個屬性</strong>（例：phone、email）。存了之後，其他地方就能帶入這個值重複使用。',
           placement: 'top',
@@ -592,7 +599,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="ui-next-module"]',
           demoType: 'userInput',
-          title: '✍️ 用戶輸入卡：③ 觸發下一步（特殊）',
+          title: '用戶輸入卡：③ 觸發下一步（特殊）',
           description:
             '客人回答後，<strong>自動接著跑哪個模組</strong>——這就是把多步驟串成流程的關鍵，做表單、預約都靠它。看完囉，按「結束」我會幫你把示範草稿清掉。',
           placement: 'top',
@@ -602,7 +609,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'auto-reply',
       requiresOperate: true,
-      icon: '⚡',
+      icon: Lightning,
       label: '設定自動回覆',
       blurb: '關鍵字一命中就自動回。我帶你建第一條，共 2 步。',
       route: wid => `/admin/${wid}/auto-reply`,
@@ -618,7 +625,7 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="ar-new"]',
           title: '第 2 步：建第一條規則',
           description:
-            '點「<strong>➕ 新增</strong>」：設好「關鍵字」和「要回什麼」，存檔後把狀態切成「<strong>啟用</strong>」就生效。',
+            '點「<strong>新增</strong>」：設好「關鍵字」和「要回什麼」，存檔後把狀態切成「<strong>啟用</strong>」就生效。',
           placement: 'right',
         },
       ],
@@ -626,7 +633,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'richmenu',
       requiresOperate: true,
-      icon: '🗂️',
+      icon: Grid,
       label: '建立圖文選單',
       blurb: '聊天室下方的圖片選單。我直接幫你進新增畫面、一個欄位一個欄位教你填。',
       route: wid => `/admin/${wid}/richmenu`,
@@ -676,7 +683,7 @@ function buildTopics(): TutorialTopic[] {
         {
           target: '[data-tour="rm-save"]',
           title: '⑥ 建立',
-          description: '都填好後按右上「<strong>建立圖文選單</strong>」就生效 🎉',
+          description: '都填好後按右上「<strong>建立圖文選單</strong>」就生效',
           placement: 'bottom-end',
         },
       ],
@@ -684,7 +691,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'broadcasts',
       requiresOperate: true,
-      icon: '📣',
+      icon: Promotion,
       label: '發一則推播',
       blurb: '主動群發訊息給好友。我帶你認識怎麼發，共 2 步。',
       route: wid => `/admin/${wid}/broadcasts`,
@@ -700,7 +707,7 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="bc-new"]',
           title: '第 2 步：建一則推播',
           description:
-            '點「<strong>➕ 新增</strong>」：寫內容、選對象（可用標籤篩選名單），還能<strong>排程</strong>定時發送。',
+            '點「<strong>新增</strong>」：寫內容、選對象（可用標籤篩選名單），還能<strong>排程</strong>定時發送。',
           placement: 'right',
         },
       ],
@@ -708,7 +715,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'tags',
       requiresOperate: true,
-      icon: '🏷️',
+      icon: PriceTag,
       label: '建立會員標籤',
       blurb: '標籤把好友分群，之後推播、活動都能鎖定分眾。我帶你建第一個，共 4 步。',
       route: wid => `/admin/${wid}/tags`,
@@ -717,7 +724,7 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="tag-new"]',
           title: '第 1 步：標籤用來分眾',
           description:
-            '標籤是把好友<strong>分群</strong>的基礎——貼了標籤，之後<strong>推播</strong>就能只發給某群人、<strong>活動</strong>也能自動貼標歸類。點右上「<strong>➕ 新增標籤</strong>」建第一個。',
+            '標籤是把好友<strong>分群</strong>的基礎——貼了標籤，之後<strong>推播</strong>就能只發給某群人、<strong>活動</strong>也能自動貼標歸類。點右上「<strong>新增標籤</strong>」建第一個。',
           placement: 'bottom-end',
         },
         {
@@ -739,7 +746,7 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="tag-name"]',
           title: '第 4 步：顯示名稱、分類與顏色',
           description:
-            '這裡填<strong>給人看的名字</strong>（例：VIP 會員），再選分類、挑個顏色方便一眼認出。都填好按「<strong>建立標籤</strong>」就完成 🎉',
+            '這裡填<strong>給人看的名字</strong>（例：VIP 會員），再選分類、挑個顏色方便一眼認出。都填好按「<strong>建立標籤</strong>」就完成',
           placement: 'bottom',
         },
       ],
@@ -747,7 +754,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'campaigns',
       requiresOperate: true,
-      icon: '📋',
+      icon: Tickets,
       label: '活動貼標（名單分眾）',
       blurb: '用一條連結收名單、加好友自動貼標。我帶你開一個活動，共 4 步。',
       route: wid => `/admin/${wid}/campaigns`,
@@ -756,7 +763,7 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="cmp-new"]',
           title: '第 1 步：活動貼標是什麼',
           description:
-            '活動貼標給你一條<strong>活動進入網址</strong>：客人點入先綁 LINE，之後<strong>加官方帳號好友時，系統自動幫他貼上這個活動的標籤</strong>。很適合問卷、廣告、線下活動的<strong>名單分眾</strong>。點「<strong>➕ 新增</strong>」開一個。',
+            '活動貼標給你一條<strong>活動進入網址</strong>：客人點入先綁 LINE，之後<strong>加官方帳號好友時，系統自動幫他貼上這個活動的標籤</strong>。很適合問卷、廣告、線下活動的<strong>名單分眾</strong>。點「<strong>新增</strong>」開一個。',
           placement: 'right',
         },
         {
@@ -778,14 +785,14 @@ function buildTopics(): TutorialTopic[] {
           target: '',
           title: '第 4 步：儲存後拿到活動網址',
           description:
-            '按「<strong>建立活動</strong>」後，系統會給一條<strong>活動進入網址</strong>——把它貼到問卷完成頁、廣告按鈕或簡訊就能開始收名單。下方「<strong>行銷成效</strong>」還能看多少人綁定、貼標完成率 🎉',
+            '按「<strong>建立活動</strong>」後，系統會給一條<strong>活動進入網址</strong>——把它貼到問卷完成頁、廣告按鈕或簡訊就能開始收名單。下方「<strong>行銷成效</strong>」還能看多少人綁定、貼標完成率',
         },
       ],
     },
     {
       id: 'users',
       requiresOperate: true,
-      icon: '👥',
+      icon: User,
       label: '管理會員與貼標',
       blurb: '看好友名單、依標籤篩選、批次貼標。我帶你看一遍，共 3 步。',
       route: wid => `/admin/${wid}/users`,
@@ -816,7 +823,7 @@ function buildTopics(): TutorialTopic[] {
     {
       id: 'support-presets',
       requiresOperate: true,
-      icon: '📦',
+      icon: Box,
       label: '建立客服預存',
       blurb: '常用回覆存起來，對話時一選即送。共 2 步。',
       route: wid => `/admin/${wid}/support-presets`,
@@ -832,14 +839,14 @@ function buildTopics(): TutorialTopic[] {
           target: '[data-tour="sp-new"]',
           title: '第 2 步：新增一筆',
           description:
-            '點「<strong>➕ 新增</strong>」設好內容。只有切「<strong>啟用</strong>」的預存，才會出現在對話頁的選單。',
+            '點「<strong>新增</strong>」設好內容。只有切「<strong>啟用</strong>」的預存，才會出現在對話頁的選單。',
           placement: 'right',
         },
       ],
     },
     {
       id: 'conversation-stats',
-      icon: '📊',
+      icon: DataLine,
       label: '看對話統計',
       blurb: '看 AI 幫你擋掉多少、哪裡要優化。共 2 步。',
       route: wid => `/admin/${wid}/conversation-stats`,
@@ -862,7 +869,7 @@ function buildTopics(): TutorialTopic[] {
     },
     {
       id: 'members',
-      icon: '👥',
+      icon: UserFilled,
       label: '邀請團隊成員',
       blurb: '把同事加進來、分配角色權限。共 2 步。',
       requiresSettings: true,

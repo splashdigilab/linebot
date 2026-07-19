@@ -24,7 +24,7 @@
       <!-- 偵測到 orphan chunks → 提示一鍵整理 -->
       <div v-if="orphanCount > 0" class="src-orphan-banner">
         <p class="src-orphan-msg">
-          ⚠️ 偵測到 <strong>{{ orphanCount }}</strong> 張舊版未分組卡片
+          偵測到 <strong>{{ orphanCount }}</strong> 張舊版未分組卡片
         </p>
         <p class="src-orphan-hint">
           舊版手寫單張卡沒被「來源」管理，整理後每張會變成一筆手寫條目顯示在下方。
@@ -37,7 +37,7 @@
           :loading="migrating"
           @click="migrateOrphans"
         >
-          ✨ 一鍵整理
+          一鍵整理
         </el-button>
       </div>
 
@@ -89,7 +89,7 @@
           @dragleave="onFolderDragLeave('__none__')"
           @drop.prevent="onFolderDrop(null)"
         >
-          📥 拖到這裡 = 移出資料夾
+          拖到這裡 = 移出資料夾
         </div>
 
         <!-- 每個資料夾 -->
@@ -116,12 +116,12 @@
             >⠿</span>
             <span class="src-folder-label">
               <span class="src-folder-arrow">{{ isExpanded(folder.id) ? '▾' : '▸' }}</span>
-              📂 {{ folder.name }}
+              <el-icon><Folder /></el-icon> {{ folder.name }}
               <span class="src-folder-count">（{{ countByFolder[folder.id] ?? 0 }}）</span>
             </span>
             <span v-if="canEditFolders" class="src-folder-actions">
               <el-tooltip content="編輯資料夾" placement="top" :show-after="300">
-                <button class="src-folder-icon-btn" @click.stop="openFolderEdit(folder)">✏️</button>
+                <button class="src-folder-icon-btn" @click.stop="openFolderEdit(folder)"><el-icon><EditPen /></el-icon></button>
               </el-tooltip>
             </span>
           </div>
@@ -165,7 +165,7 @@
 
     <!-- ── Empty State ── -->
     <template #editor-empty>
-      <span class="empty-icon">📁</span>
+      <el-icon class="empty-icon"><FolderOpened /></el-icon>
       <h3>選擇一個來源開始管理</h3>
       <p>{{ canEditKb ? '或匯入新的 PDF、網址、文字' : '（僅檢視）' }}</p>
       <div v-if="canEditKb" class="flex gap-2" style="margin-top:8px;">
@@ -196,7 +196,7 @@
           :loading="resyncing"
           @click="startResync"
         >
-          🔄 重新同步
+          重新同步
         </el-button>
         <el-button
           v-if="selectedSource?.type === 'gsheet'"
@@ -206,7 +206,7 @@
           :loading="gsheetSyncing"
           @click="syncGsheetNow"
         >
-          🔄 立即同步
+          立即同步
         </el-button>
         <el-button type="danger" plain :loading="deleting" @click="deleteSource">
           刪除
@@ -226,10 +226,10 @@
           class="src-outdated-alert"
         >
           <template #title>
-            ⚠️ 偵測到網頁內容變動 — {{ relativeTime(selectedSource.outdatedAtMs) }}
+            偵測到網頁內容變動 — {{ relativeTime(selectedSource.outdatedAtMs) }}
           </template>
           <div>
-            最後一次自動偵測發現原始網址內容已改變，建議點上方「🔄 重新同步」檢視差異後決定要不要套用。
+            最後一次自動偵測發現原始網址內容已改變，建議點上方「重新同步」檢視差異後決定要不要套用。
           </div>
         </el-alert>
 
@@ -277,7 +277,7 @@
             <div class="admin-field-group">
               <AdminFieldLabel text="偵測到變動時" tight />
               <el-radio-group v-model="settingsForm.onChangeBehavior">
-                <el-radio value="notify">通知我（在來源頁掛 ⚠️ 提示）</el-radio>
+                <el-radio value="notify">通知我（在來源頁掛 提示）</el-radio>
                 <el-radio value="log_only">只記錄不通知</el-radio>
               </el-radio-group>
             </div>
@@ -304,7 +304,7 @@
           </div>
           <div class="card-section-stack">
             <p class="src-section-hint">
-              排程會定期重讀這份 Sheet，<strong>一列一卡自動套用</strong>（新增/更新/刪除）。你在後台手動編輯過的卡（🔒）會保留、不被覆蓋。
+              排程會定期重讀這份 Sheet，<strong>一列一卡自動套用</strong>（新增/更新/刪除）。你在後台手動編輯過的卡會保留、不被覆蓋。
             </p>
             <div class="admin-field-group">
               <AdminFieldLabel text="同步頻率" tight />
@@ -350,12 +350,12 @@
                 <div class="src-chunk-body">
                   <div class="src-chunk-main">
                     <span class="src-chunk-title">{{ c.title }}</span>
-                    <span v-if="c.manuallyEditedAtMs > 0" class="src-chunk-lock" :title="`手動編輯過：${relativeTime(c.manuallyEditedAtMs)}`">🔒</span>
+                    <span v-if="c.manuallyEditedAtMs > 0" class="src-chunk-lock" :title="`手動編輯過：${relativeTime(c.manuallyEditedAtMs)}`"><el-icon><Lock /></el-icon></span>
                     <span
                       v-if="isShortChunk(c)"
                       class="src-chunk-warn"
                       title="標題＋內容太短,AI 檢索時幾乎派不上用場,還可能干擾其他卡;建議補充內容或刪除"
-                    >⚠️ 內容過短</span>
+                    >內容過短</span>
                   </div>
                   <p class="src-chunk-preview">{{ chunkPreview(c) }}</p>
                   <span class="src-chunk-meta">{{ c.content.length }} 字 · {{ chunkStatusLabel(c.status) }} · {{ relativeTime(c.updatedAtMs) }}</span>
@@ -372,7 +372,7 @@
   <!-- ── Diff Modal ──────────────────────────────────── -->
   <el-dialog
     v-model="diffOpen"
-    title="🔄 重新同步：差異預覽"
+    title="重新同步：差異預覽"
     width="min(900px, 92vw)"
     :close-on-click-modal="false"
     destroy-on-close
@@ -380,17 +380,17 @@
     <div v-if="diffData" class="diff-body">
       <p class="text-muted text-sm">
         已重新抓一次網頁、重新整理成一張張卡片，請逐張決定要換成新的、還是保留舊的。
-        你手動改過的卡（🔒）預設保留你的版本。
+        你手動改過的卡預設保留你的版本。
       </p>
       <div class="diff-summary">
-        <span class="diff-summary-chip diff-summary-chip--add">🟢 新增 {{ diffData.diff.summary.added }}</span>
-        <span class="diff-summary-chip diff-summary-chip--mod">🟡 修改 {{ diffData.diff.summary.modified }}</span>
-        <span class="diff-summary-chip diff-summary-chip--rem">🔴 移除 {{ diffData.diff.summary.removed }}</span>
-        <span class="diff-summary-chip diff-summary-chip--same">⚪ 未變 {{ diffData.diff.summary.unchanged }}</span>
+        <span class="diff-summary-chip diff-summary-chip--add">新增 {{ diffData.diff.summary.added }}</span>
+        <span class="diff-summary-chip diff-summary-chip--mod">修改 {{ diffData.diff.summary.modified }}</span>
+        <span class="diff-summary-chip diff-summary-chip--rem">移除 {{ diffData.diff.summary.removed }}</span>
+        <span class="diff-summary-chip diff-summary-chip--same">未變 {{ diffData.diff.summary.unchanged }}</span>
       </div>
 
       <p v-if="hiddenUnchangedCount > 0" class="diff-unchanged-note text-muted text-xs">
-        ⚪ {{ hiddenUnchangedCount }} 張未變的卡已收合(不需要做決定)
+        {{ hiddenUnchangedCount }} 張未變的卡已收合(不需要做決定)
         <el-button text size="small" @click="showUnchangedDiff = !showUnchangedDiff">
           {{ showUnchangedDiff ? '收合' : '顯示' }}
         </el-button>
@@ -406,7 +406,7 @@
           <div class="diff-entry-head">
             <span class="diff-entry-kind">{{ kindLabel(entry.kind) }}</span>
             <span class="diff-entry-title">{{ entry.newChunk?.title || entry.oldChunk?.title }}</span>
-            <span v-if="entry.oldChunk?.manuallyEdited" class="diff-entry-lock">🔒 手動編輯過</span>
+            <span v-if="entry.oldChunk?.manuallyEdited" class="diff-entry-lock">手動編輯過</span>
           </div>
 
           <!-- 內容對照 -->
@@ -432,16 +432,16 @@
           <div class="diff-entry-actions">
             <el-radio-group v-model="decisions[entry.id]" size="small">
               <template v-if="entry.kind === 'new'">
-                <el-radio-button value="add_new">➕ 新增</el-radio-button>
+                <el-radio-button value="add_new">新增</el-radio-button>
                 <el-radio-button value="skip">⏭️ 略過</el-radio-button>
               </template>
               <template v-else-if="entry.kind === 'modified'">
-                <el-radio-button value="use_new">🟡 用新版</el-radio-button>
-                <el-radio-button value="keep_old">🔒 保留舊版</el-radio-button>
+                <el-radio-button value="use_new">用新版</el-radio-button>
+                <el-radio-button value="keep_old">保留舊版</el-radio-button>
               </template>
               <template v-else-if="entry.kind === 'removed'">
                 <el-radio-button value="delete_old">刪除</el-radio-button>
-                <el-radio-button value="keep_old">🔒 保留</el-radio-button>
+                <el-radio-button value="keep_old">保留</el-radio-button>
               </template>
               <template v-else>
                 <el-radio-button value="keep_old">（無動作）</el-radio-button>
@@ -468,7 +468,7 @@
   <!-- ── Chunk Edit Modal ───────────────────────────── -->
   <el-dialog
     v-model="chunkEditOpen"
-    :title="chunkEditMode === 'create' ? '➕ 新增卡片(手寫一條知識)' : '✏️ 編輯卡片'"
+    :title="chunkEditMode === 'create' ? '新增卡片(手寫一條知識)' : '編輯卡片'"
     width="min(700px, 92vw)"
     :close-on-click-modal="false"
     destroy-on-close
@@ -486,7 +486,7 @@
           :loading="chunkReindexing"
           @click="reindexChunkFromModal"
         >
-          🔄 重新索引
+          重新索引
         </el-button>
       </div>
       <div class="admin-field-group">
@@ -516,7 +516,7 @@
             :disabled="!chunkForm.content.trim()"
             @click="normalizeChunkFromModal"
           >
-            ✨ AI 整理一下
+            AI 整理一下
           </el-button>
           <span class="text-xs text-muted">自動整理成重點、清掉沒用的雜訊，讓 AI 更容易找到這條;整理後記得儲存</span>
         </div>
@@ -577,7 +577,7 @@
   <!-- ── Folder Edit Modal ──────────────────────────── -->
   <el-dialog
     v-model="folderEditOpen"
-    title="✏️ 編輯資料夾"
+    title="編輯資料夾"
     width="min(480px, 92vw)"
     :close-on-click-modal="false"
     destroy-on-close
@@ -625,7 +625,7 @@
 </template>
 
 <script setup lang="ts">
-import { EditPen, FolderAdd, Refresh, Upload } from '@element-plus/icons-vue'
+import { EditPen, Folder, FolderAdd, FolderOpened, Lock, Refresh, Upload } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 
 definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
@@ -957,7 +957,7 @@ async function loadSources() {
 // ── 資料夾 CRUD ─────────────────────────────────────
 async function createFolderPrompt() {
   try {
-    const { value } = await ElMessageBox.prompt('輸入資料夾名稱：', '📂 新資料夾', {
+    const { value } = await ElMessageBox.prompt('輸入資料夾名稱：', '新資料夾', {
       confirmButtonText: '建立',
       cancelButtonText: '取消',
       inputPlaceholder: '例：客服 FAQ',
@@ -1153,7 +1153,7 @@ async function deleteSource() {
     if (src.chunkCount <= 1) {
       await ElMessageBox.confirm(
         `要刪除「${src.name}」嗎?底下 ${src.chunkCount} 張卡片會一併刪除,無法復原。`,
-        '⚠️ 刪除確認',
+        '刪除確認',
         {
           confirmButtonText: '刪除',
           cancelButtonText: '取消',
@@ -1165,7 +1165,7 @@ async function deleteSource() {
     else {
       await ElMessageBox.prompt(
         `要刪除「${src.name}」這個來源，會連同底下 ${src.chunkCount} 張卡片全部刪除，無法復原。\n\n請在下方輸入「刪除」確認：`,
-        '⚠️ 刪除確認',
+        '刪除確認',
         {
           confirmButtonText: '永久刪除',
           cancelButtonText: '取消',
@@ -1297,7 +1297,7 @@ async function reindexAll() {
   try {
     await ElMessageBox.confirm(
       '將這個工作區的所有知識卡重新建立索引(卡片內容不變)。通常只在系統升級檢索方式後需要;卡片多時要花幾分鐘,期間 AI 照常運作。',
-      '🔁 全部重新索引',
+      '全部重新索引',
       { confirmButtonText: '開始', cancelButtonText: '取消', type: 'warning' },
     )
   }
@@ -1365,7 +1365,7 @@ async function renameSource() {
   if (!selectedSource.value) return
   const current = selectedSource.value.name
   try {
-    const { value } = await ElMessageBox.prompt('輸入新名稱：', '✏️ 重新命名來源', {
+    const { value } = await ElMessageBox.prompt('輸入新名稱：', '重新命名來源', {
       confirmButtonText: '儲存',
       cancelButtonText: '取消',
       inputValue: current,
@@ -1431,7 +1431,7 @@ async function normalizeChunkFromModal() {
     chunkForm.value.content = res.content
     chunkForm.value.tags = res.tags
     if (res.questions?.length) chunkForm.value.questions = res.questions
-    showToast('已整理 — 記得儲存 ✨', 'success')
+    showToast('已整理 — 記得儲存', 'success')
   }
   catch (err: any) {
     showToast(err?.statusMessage || 'AI 整理失敗', 'error')
@@ -1561,7 +1561,7 @@ function removeChunkTag(t: string) {
 
 // ─── Display helpers ───────────────────────────────────
 function typeEmoji(t: string | undefined) {
-  return t === 'url' ? '🔗' : t === 'file' ? '📄' : t === 'gsheet' ? '📊' : '✍️'
+  return t === 'url' ? '網址' : t === 'file' ? '檔案' : t === 'gsheet' ? 'Sheet' : '文字'
 }
 function typeLabel(t: string) {
   return t === 'url' ? '網址' : t === 'file' ? '檔案' : t === 'gsheet' ? 'Google Sheet' : '手打'
@@ -1576,7 +1576,7 @@ function chunkStatusBadge(s: string) {
   return s === 'indexed' ? 'badge-green' : s === 'pending' ? 'badge-yellow' : 'badge-red'
 }
 function statusChipText(src: SourceSummary) {
-  if (src.outdatedAtMs > 0) return '⚠️ 有變動'
+  if (src.outdatedAtMs > 0) return '有變動'
   if (src.status === 'ready') return '可用'
   return statusLabel(src.status)
 }
@@ -1593,7 +1593,7 @@ function metaText(src: SourceSummary) {
   return parts.join(' · ')
 }
 function kindLabel(k: string) {
-  return k === 'new' ? '🟢 新增' : k === 'modified' ? '🟡 修改' : k === 'removed' ? '🔴 移除' : '⚪ 未變'
+  return k === 'new' ? '新增' : k === 'modified' ? '修改' : k === 'removed' ? '移除' : '未變'
 }
 function relativeTime(ms: number) {
   if (!ms) return ''
@@ -1612,7 +1612,7 @@ onMounted(async () => {
   const clearQuery = () => { router.replace({ query: {} }).catch(() => {}) }
   await loadSources()
 
-  // 監控頁「📥 補知識」帶 ?q=(客人沒被答到的問題):直接開新增手寫視窗、預填標題
+  // 監控頁「補知識」帶 ?q=(客人沒被答到的問題):直接開新增手寫視窗、預填標題
   const q = String(route.query.q ?? '').trim()
   if (q) {
     openCreateManual()

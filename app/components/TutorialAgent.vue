@@ -8,8 +8,8 @@
         class="ta-nudge"
         @click="onNudgeClick"
       >
-        <span class="ta-nudge__text">第一次來？我帶你一步步把設定做完 👋</span>
-        <span class="ta-nudge__close" aria-label="不用了" @click.stop="dismissNudge">✕</span>
+        <span class="ta-nudge__text">第一次來？我帶你一步步把設定做完</span>
+        <span class="ta-nudge__close" aria-label="不用了" @click.stop="dismissNudge"><el-icon><Close /></el-icon></span>
       </button>
     </Transition>
 
@@ -22,12 +22,12 @@
         aria-label="教學助理"
       >
         <header class="ta-panel__head">
-          <div class="ta-panel__avatar">🤖</div>
+          <div class="ta-panel__avatar"><el-icon><Compass /></el-icon></div>
           <div class="ta-panel__head-meta">
             <div class="ta-panel__name">教學小幫手</div>
             <div class="ta-panel__status"><span class="ta-dot" />線上</div>
           </div>
-          <button class="ta-panel__close" aria-label="關閉" @click="closePanel">✕</button>
+          <button class="ta-panel__close" aria-label="關閉" @click="closePanel"><el-icon><Close /></el-icon></button>
         </header>
 
         <div class="ta-panel__body">
@@ -36,9 +36,9 @@
 
           <!-- agent 訊息泡泡：依真實設定狀態講白話文 -->
           <div class="ta-msg">
-            <div class="ta-msg__avatar">🤖</div>
+            <div class="ta-msg__avatar"><el-icon><Compass /></el-icon></div>
             <div class="ta-msg__bubble" aria-live="polite">
-              <p>嗨{{ userName ? `，${userName}` : '' }} 👋</p>
+              <p>嗨{{ userName ? `，${userName}` : '' }}</p>
               <p>{{ agentLine }}</p>
             </div>
           </div>
@@ -67,7 +67,7 @@
               <div class="ta-progress__meta">
                 <span>
                   必要設定 {{ requiredDone }}/{{ requiredTotal }}
-                  <template v-if="allRequiredDone"> ・可以上線了 ✅</template>
+                  <template v-if="allRequiredDone"> ・可以上線了</template>
                 </span>
                 <button class="ta-progress__refresh" :disabled="loading" @click="refresh">
                   {{ loading ? '檢查中…' : '重新檢查' }}
@@ -84,7 +84,8 @@
               class="ta-gaptour"
               @click="startGapTour"
             >
-              🧭 帶我看一遍還沒做的
+              <el-icon><View /></el-icon>
+              <span>帶我看一遍還沒做的</span>
             </button>
 
             <!-- 待辦：還沒做完的項目（主要操作） -->
@@ -95,7 +96,7 @@
                 class="ta-todo"
                 @click="onFix(cap)"
               >
-                <span class="ta-todo__icon">{{ cap.icon }}</span>
+                <span class="ta-todo__icon"><el-icon><component :is="cap.icon" /></el-icon></span>
                 <span class="ta-todo__main">
                   <span class="ta-todo__title">
                     {{ cap.title }}
@@ -111,7 +112,7 @@
 
             <!-- 必要項都完成 -->
             <div v-else class="ta-alldone">
-              🎉 必要設定都完成了，可以上線囉！需要的話我可以再帶你複習任何一段。
+              必要設定都完成了，可以上線囉！需要的話我可以再帶你複習任何一段。
             </div>
 
             <!-- 這次查不到狀態的項目（現形，不偷偷扣分） -->
@@ -141,7 +142,7 @@
                     class="ta-option ta-option--sm"
                     @click="onPick(topic)"
                   >
-                    <span class="ta-option__icon">{{ topic.icon }}</span>
+                    <span class="ta-option__icon"><el-icon><component :is="topic.icon" /></el-icon></span>
                     <span class="ta-option__label">{{ topic.label }}</span>
                     <span class="ta-option__arrow">→</span>
                   </button>
@@ -162,7 +163,7 @@
       :aria-label="panelOpen ? '關閉教學助理' : '開啟教學助理'"
       @click="onFabClick"
     >
-      <span class="ta-fab__icon">{{ panelOpen ? '✕' : '🤖' }}</span>
+      <span class="ta-fab__icon"><el-icon><component :is="panelOpen ? Close : Compass" /></el-icon></span>
       <span v-if="!panelOpen && !allRequiredDone" class="ta-fab__pulse" aria-hidden="true" />
       <span
         v-if="!panelOpen && incompleteRequired.length"
@@ -211,6 +212,7 @@
 
 <script setup lang="ts">
 import type { ResolvedCapability } from '~/composables/useSetupStatus'
+import { Close, Compass, View } from '@element-plus/icons-vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 
 const { user } = useAuth()
@@ -261,14 +263,14 @@ const agentLine = computed(() => {
     return '我先幫你看一下目前的設定狀況…'
   // 沒有可動手的設定項（例如觀察者）：不談設定，直接導向教學
   if (!hasItems.value)
-    return '嗨！想了解哪個功能，直接點下面的教學，我帶你看 👇'
+    return '嗨！想了解哪個功能，直接點下面的教學，我帶你看 '
   if (incompleteRequired.value.length)
-    return `我看過你的帳號了。最重要的還差 ${incompleteRequired.value.length} 項還沒做，我們一個一個來，點下面就能開始 👇`
+    return `我看過你的帳號了。最重要的還差 ${incompleteRequired.value.length} 項還沒做，我們一個一個來，點下面就能開始 `
   if (!allRequiredDone.value)
     return `有 ${unknownCaps.value.length} 項我這次查不到狀態，先點「重新檢查」確認一下。`
   if (incompleteAll.value.length)
-    return `必要設定都完成了 ✅ 可以上線囉！還有 ${incompleteAll.value.length} 個加分項，想做再做。`
-  return '你的設定都完成了 🎉 之後有任何不熟的地方，隨時點我。'
+    return `必要設定都完成了 可以上線囉！還有 ${incompleteAll.value.length} 個加分項，想做再做。`
+  return '你的設定都完成了 之後有任何不熟的地方，隨時點我。'
 })
 
 function onPick(topic: Parameters<typeof startTopic>[0]) {
@@ -328,7 +330,7 @@ async function onTourFinish() {
   const cap = finishedId ? capabilities.value.find(c => c.tourId === finishedId) : null
   if (cap) {
     postTourNote.value = cap.status === 'done'
-      ? `「${cap.title}」完成了，太好了 🎉`
+      ? `「${cap.title}」完成了，太好了 `
       : `看起來「${cap.title}」還沒生效——設定完記得按「儲存」喔。需要的話可以再走一次。`
   }
   else {

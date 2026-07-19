@@ -6,11 +6,13 @@
  * agent 只能「轉述」這份狀態，不能自己臆測。
  */
 
+import type { Component } from 'vue'
+import { Link, MagicStick, Operation, Reading } from '@element-plus/icons-vue'
 import type { SetupCapabilityId, SetupItemStatus, SetupStatusResponse } from '~~/shared/types/setup'
 
 export interface SetupCapability {
   id: SetupCapabilityId
-  icon: string
+  icon: Component
   /** 一句話、零術語：這是什麼 */
   title: string
   /** 白話文：為什麼要做 / 不做會怎樣 */
@@ -38,7 +40,7 @@ export interface ResolvedCapability extends SetupCapability {
 const CAPABILITIES: SetupCapability[] = [
   {
     id: 'lineConnected',
-    icon: '🔗',
+    icon: Link,
     title: '接上 LINE 官方帳號',
     why: '這是一切的前提。沒接好，機器人就收不到、也回不了訊息。',
     required: true,
@@ -49,7 +51,7 @@ const CAPABILITIES: SetupCapability[] = [
   },
   {
     id: 'aiEnabled',
-    icon: '🤖',
+    icon: MagicStick,
     title: '開啟 AI 自動回覆',
     why: '這個開關關著的話，就算建了知識庫、腳本也都不會生效。',
     required: true,
@@ -60,7 +62,7 @@ const CAPABILITIES: SetupCapability[] = [
   },
   {
     id: 'knowledgeReady',
-    icon: '📚',
+    icon: Reading,
     title: '建立知識庫',
     why: 'AI 靠它來回答客人的問題。空的話，能回的內容會很有限。',
     required: false,
@@ -71,7 +73,7 @@ const CAPABILITIES: SetupCapability[] = [
   },
   {
     id: 'scriptReady',
-    icon: '🧩',
+    icon: Operation,
     title: '啟用一支客服腳本',
     why: '用來處理固定流程，例如預約、報名、領取優惠。沒有也能運作。',
     required: false,

@@ -32,7 +32,7 @@
           v-for="flow in systemFlows"
           :key="flow.id"
           :data-tour="`flow-sys-${flow.moduleType}`"
-          :title="`🔒 ${flow.name}`"
+          :title="`${flow.name}`"
           :active="selectedId === flow.id"
           :meta-text="moduleTypeLabel(flow.moduleType)"
           chip-tone="neutral"
@@ -80,7 +80,7 @@
           @dragleave="onFlowFolderDragLeave('__none__')"
           @drop.prevent="onFlowFolderDrop(null)"
         >
-          📥 拖到這裡 = 移出資料夾
+          拖到這裡 = 移出資料夾
         </div>
 
         <!-- 每個資料夾 -->
@@ -108,13 +108,13 @@
             >⠿</span>
             <span class="src-folder-label">
               <span class="src-folder-arrow">{{ isFlowFolderExpanded(folder.id) ? '▾' : '▸' }}</span>
-              📂 {{ folder.name }}
+              <el-icon><Folder /></el-icon> {{ folder.name }}
               <span class="src-folder-count">（{{ flowCountByFolder[folder.id] ?? 0 }}）</span>
             </span>
             <AdminOperateGate>
               <span class="src-folder-actions">
                 <el-tooltip content="編輯資料夾" placement="top" :show-after="300">
-                  <button class="src-folder-icon-btn" @click.stop="openFlowFolderEdit(folder)">✏️</button>
+                  <button class="src-folder-icon-btn" @click.stop="openFlowFolderEdit(folder)"><el-icon><EditPen /></el-icon></button>
                 </el-tooltip>
               </span>
             </AdminOperateGate>
@@ -168,9 +168,9 @@
 
     <!-- ── Empty State ── -->
     <template #editor-empty>
-      <span class="empty-icon">🤖</span>
+      <el-icon class="empty-icon"><Connection /></el-icon>
       <h3>選擇一個模組開始編輯</h3>
-      <p>或點擊左側「➕ 新增」建立一個全新的回覆模組</p>
+      <p>或點擊左側「新增」建立一個全新的回覆模組</p>
       <AdminOperateGate>
         <el-button type="primary" @click="openCreate">建立模組</el-button>
       </AdminOperateGate>
@@ -187,7 +187,7 @@
         :is-creating="isCreating"
       />
       <div v-if="selectedFlow || isCreating" class="flow-module-meta" data-tour="flow-type">
-        <el-tag v-if="isSystemFlow" type="warning" size="small" disable-transitions>🔒 系統模組</el-tag>
+        <el-tag v-if="isSystemFlow" type="warning" size="small" disable-transitions>系統模組</el-tag>
         <!-- System modules: type is locked, show label only -->
         <el-tag v-if="isSystemFlow" size="small" disable-transitions>
           {{ MODULE_TYPE_LABELS[form.moduleType] ?? '機器人流程' }}
@@ -208,7 +208,7 @@
             刪除
           </el-button>
           <el-button v-if="!isCreating && selectedFlow" :loading="duplicating" @click="duplicateFlow">
-            📋 複製
+            複製
           </el-button>
           <el-button type="primary" :loading="saving" @click="submitForm">
             {{ isCreating ? '建立模組' : '儲存變更' }}
@@ -236,7 +236,7 @@
             <el-button size="small" data-tour="fmt-quick" @click="addMessage('quickReply')">＋ 快速回覆</el-button>
             <el-button v-if="showUserInput" size="small" data-tour="fmt-userinput" @click="addMessage('userInput')">＋ 用戶輸入</el-button>
             <el-button class="fem-preview-toggle" size="small" @click="previewOpen = !previewOpen">
-              {{ previewOpen ? '🔽 隱藏預覽' : '👁 顯示預覽' }}
+              {{ previewOpen ? '隱藏預覽' : '顯示預覽' }}
             </el-button>
           </div>
         </div>
@@ -478,7 +478,7 @@
             >
               <!-- Parent Config Card -->
               <FlowMessageCardShell
-                badge-label="⚡ 快速回覆"
+                badge-label="快速回覆"
                 badge-class="badge-purple"
                 @dragstart="onDragStart($event, i)"
                 @dragend="onDragEnd"
@@ -1010,7 +1010,7 @@
   <!-- ── Flow Folder Edit Modal ──────────────────── -->
   <el-dialog
     v-model="flowFolderEditOpen"
-    title="✏️ 編輯資料夾"
+    title="編輯資料夾"
     width="min(480px, 92vw)"
     :close-on-click-modal="false"
     destroy-on-close
@@ -1060,7 +1060,7 @@
 
 
 <script setup lang="ts">
-import { FolderAdd, Plus } from '@element-plus/icons-vue'
+import { Connection, EditPen, Folder, FolderAdd, Plus } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import {
   SLOT_LABELS as ACTION_SLOT_LABELS,
@@ -1305,16 +1305,16 @@ const { showLegacyImageCarousel, showLegacyCarousel, showUserInput, showUserInpu
 
 // ── Badge helpers ─────────────────────────────────────
 const MSG_META: Record<string, { label: string; badge: string }> = {
-  text:          { label: '📝 文字訊息',  badge: 'badge-blue'   },
-  image:         { label: '🖼️ 圖片訊息', badge: 'badge-orange' },
-  video:         { label: '🎬 影片訊息', badge: 'badge-gray'   },
-  richMessage:   { label: '📰 圖文訊息', badge: 'badge-green'  },
-  richMessageRef:{ label: '📰 圖文訊息(舊)', badge: 'badge-green'  },
-  carousel:      { label: '🎠 輪播訊息', badge: 'badge-green'  },
-  imageCarousel:     { label: '🖼️ 圖片輪播',      badge: 'badge-gray'   },
-  flexImageCarousel: { label: '🖼️ 輪播訊息', badge: 'badge-purple' },
-  quickReply:    { label: '⚡ 快速回覆', badge: 'badge-purple' },
-  userInput:     { label: '✍️ 用戶輸入卡片', badge: 'badge-red' },
+  text:          { label: '文字訊息',  badge: 'badge-blue'   },
+  image:         { label: '圖片訊息', badge: 'badge-orange' },
+  video:         { label: '影片訊息', badge: 'badge-gray'   },
+  richMessage:   { label: '圖文訊息', badge: 'badge-green'  },
+  richMessageRef:{ label: '圖文訊息(舊)', badge: 'badge-green'  },
+  carousel:      { label: '輪播訊息', badge: 'badge-green'  },
+  imageCarousel:     { label: '圖片輪播',      badge: 'badge-gray'   },
+  flexImageCarousel: { label: '輪播訊息', badge: 'badge-purple' },
+  quickReply:    { label: '快速回覆', badge: 'badge-purple' },
+  userInput:     { label: '用戶輸入卡片', badge: 'badge-red' },
 }
 
 const standardActionTypeOptions = [
@@ -1382,7 +1382,7 @@ async function loadFlowFolders() {
 
 async function createFlowFolderPrompt() {
   try {
-    const { value } = await ElMessageBox.prompt('輸入資料夾名稱：', '📂 新資料夾', {
+    const { value } = await ElMessageBox.prompt('輸入資料夾名稱：', '新資料夾', {
       confirmButtonText: '建立',
       cancelButtonText: '取消',
       inputPlaceholder: '例：行銷活動',
@@ -2317,7 +2317,7 @@ async function submitForm() {
           moduleType: form.value.moduleType,
         },
       })
-      showToast('模組已建立 ✅', 'success')
+      showToast('模組已建立', 'success')
       await loadFlows(true)
       const newFlow = flows.value.find(f => f.id === res.id) ?? flows.value[0]
       if (newFlow) selectFlow(newFlow, { skipDiscardConfirm: true })
@@ -2333,7 +2333,7 @@ async function submitForm() {
           ...(!isSystemFlow.value ? { moduleType: form.value.moduleType } : {}),
         },
       })
-      showToast('模組已更新 ✅', 'success')
+      showToast('模組已更新', 'success')
       await loadFlows(true)
       markClean()
     }
@@ -2397,7 +2397,7 @@ async function duplicateFlow() {
         moduleType,
       },
     })
-    showToast('模組已複製 ✅', 'success')
+    showToast('模組已複製', 'success')
     await loadFlows(true)
     const newFlow = flows.value.find(f => f.id === res.id) ?? flows.value[0]
     if (newFlow) selectFlow(newFlow, { skipDiscardConfirm: true })

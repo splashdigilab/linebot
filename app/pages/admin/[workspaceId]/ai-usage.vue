@@ -185,10 +185,10 @@
           </div>
           <div class="card-section-stack">
             <p class="usage-hint">
-              客人問了 AI 但答不出來的情況。點「📥 補知識」直接到知識庫補一張對應卡。
+              客人問了 AI 但答不出來的情況。點「補知識」直接到知識庫補一張對應卡。
             </p>
             <div v-if="loadingHandoffs && !handoffs.length" class="usage-loading"><div class="spinner" /></div>
-            <div v-else-if="!handoffs.length" class="usage-empty">目前沒有待處理的轉真人案例 🎉</div>
+            <div v-else-if="!handoffs.length" class="usage-empty">目前沒有待處理的轉真人案例</div>
             <div v-else class="usage-handoff-list">
               <div v-for="row in handoffs" :key="`${row.userId}-${row.updatedAtMs}`" class="usage-handoff-row" :class="{ 'usage-handoff-row--resolved': row.resolved }">
                 <div class="usage-handoff-meta">

@@ -312,7 +312,7 @@ async function submitForm() {
           status: form.value.status,
         },
       })
-      showToast('標籤已更新 ✅', 'success')
+      showToast('標籤已更新', 'success')
     }
     else {
       await apiFetch('/api/tag/create', {
@@ -326,7 +326,7 @@ async function submitForm() {
           status: form.value.status,
         },
       })
-      showToast('標籤已建立 ✅', 'success')
+      showToast('標籤已建立', 'success')
     }
     dialogVisible.value = false
     await refreshTags()

@@ -20,7 +20,7 @@
         v-else
         class="split-list-item__avatar split-list-item__avatar--placeholder"
         aria-hidden="true"
-      >👤</span>
+      ><el-icon><User /></el-icon></span>
     </span>
     <div class="split-list-item__main">
       <template v-if="props.timeInTitleRow && !$slots.meta">
@@ -70,6 +70,7 @@
 </template>
 
 <script setup lang="ts">
+import { User } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 
 const props = withDefaults(defineProps<{

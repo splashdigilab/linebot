@@ -1,7 +1,7 @@
 <template>
   <div v-if="ctx?.hasMeta" class="conv-ai-banner" :class="bannerClass">
     <div class="conv-ai-banner-header" @click="expanded = !expanded">
-      <span class="conv-ai-banner-badge">{{ decisionEmoji }} AI 脈絡</span>
+      <span class="conv-ai-banner-badge"><el-icon v-if="decisionIcon"><component :is="decisionIcon" /></el-icon> AI 脈絡</span>
       <span class="conv-ai-banner-summary">
         {{ summaryText }}
       </span>
@@ -11,7 +11,7 @@
 
     <div v-if="expanded" class="conv-ai-banner-body">
       <div v-if="ctx.handoffSummary" class="conv-ai-row conv-ai-row--block">
-        <span class="conv-ai-row__label">📋 對話摘要</span>
+        <span class="conv-ai-row__label">對話摘要</span>
         <div class="conv-ai-draft">{{ ctx.handoffSummary }}</div>
       </div>
 
@@ -41,7 +41,7 @@
         <span class="conv-ai-row__label">AI 建議回覆</span>
         <div class="conv-ai-draft">{{ ctx.suggestedReply }}</div>
         <el-button size="small" type="primary" plain @click="$emit('apply-draft', ctx.suggestedReply)">
-          📝 填入回覆框
+          填入回覆框
         </el-button>
       </div>
 
@@ -53,6 +53,7 @@
 </template>
 
 <script setup lang="ts">
+import { ChatDotRound, CircleCheck, Clock, QuestionFilled, User } from '@element-plus/icons-vue'
 import { HANDOFF_REASON_LABELS, type HandoffReason, type AiDecision } from '~~/shared/types/ai-knowledge'
 
 interface AiContextResponse {
@@ -81,13 +82,13 @@ defineEmits<{
 const ctx = ref<AiContextResponse | null>(null)
 const expanded = ref(true)
 
-const decisionEmoji = computed(() => {
-  if (!ctx.value?.hasMeta) return ''
-  if (ctx.value.lastDecision === 'answered') return '✅'
-  if (ctx.value.lastDecision === 'handoff') return '🙋‍♂️'
-  if (ctx.value.lastDecision === 'handoff_confirm') return '🤔'
-  if (ctx.value.lastDecision === 'disambiguate') return '❓'
-  return '💤'
+const decisionIcon = computed(() => {
+  if (!ctx.value?.hasMeta) return null
+  if (ctx.value.lastDecision === 'answered') return CircleCheck
+  if (ctx.value.lastDecision === 'handoff') return User
+  if (ctx.value.lastDecision === 'handoff_confirm') return ChatDotRound
+  if (ctx.value.lastDecision === 'disambiguate') return QuestionFilled
+  return Clock
 })
 
 const summaryText = computed(() => {

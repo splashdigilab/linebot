@@ -10,7 +10,7 @@
       </div>
       <div class="fmp-body">
         <div v-if="!messages.length" class="fmp-empty">
-          <span class="fmp-empty-icon" aria-hidden="true">💬</span>
+          <el-icon class="fmp-empty-icon" aria-hidden="true"><ChatDotRound /></el-icon>
           <p>左側新增訊息後，<br>這裡會即時顯示在 LINE 裡的樣子</p>
         </div>
 
@@ -29,20 +29,20 @@
           <!-- 圖片 -->
           <div v-else-if="msg.type === 'image'" class="fmp-media">
             <img v-if="imgUrl(msg)" :src="imgUrl(msg)" class="fmp-media-img" alt="">
-            <div v-else class="fmp-media-ph">🖼️ 圖片</div>
+            <div v-else class="fmp-media-ph"><el-icon><Picture /></el-icon> 圖片</div>
           </div>
 
           <!-- 影片 -->
           <div v-else-if="msg.type === 'video'" class="fmp-media fmp-media--video">
             <img v-if="msg.previewImageUrl" :src="msg.previewImageUrl" class="fmp-media-img" alt="">
-            <div v-else class="fmp-media-ph">🎬 影片</div>
+            <div v-else class="fmp-media-ph"><el-icon><VideoCamera /></el-icon> 影片</div>
             <span class="fmp-play" aria-hidden="true">▶</span>
           </div>
 
           <!-- 圖文訊息（imagemap 大圖＋可點區塊）／舊版引用 -->
           <div v-else-if="msg.type === 'richMessage' || msg.type === 'richMessageRef'" class="fmp-imagemap" :style="imagemapStyle(msg)">
             <img v-if="heroOf(msg)" :src="heroOf(msg)" class="fmp-imagemap-img" alt="">
-            <div v-else class="fmp-media-ph fmp-imagemap-ph">📰 圖文訊息</div>
+            <div v-else class="fmp-media-ph fmp-imagemap-ph"><el-icon><Postcard /></el-icon> 圖文訊息</div>
             <span v-for="(r, ri) in regionsOf(msg)" :key="ri" class="fmp-region" :style="regionStyle(r)" />
           </div>
 
@@ -51,7 +51,7 @@
             <div v-for="(col, ci) in cols(msg)" :key="ci" class="fmp-cc">
               <div class="fmp-cc-img" :style="{ aspectRatio: carouselAspect(msg) }">
                 <img v-if="col.thumbnailImageUrl" :src="col.thumbnailImageUrl" alt="">
-                <div v-else class="fmp-media-ph">🖼️</div>
+                <div v-else class="fmp-media-ph"><el-icon><Picture /></el-icon></div>
               </div>
               <div class="fmp-cc-body">
                 <p class="fmp-cc-title">{{ col.title || '標題' }}</p>
@@ -68,7 +68,7 @@
             <div v-for="(col, ci) in cols(msg)" :key="ci" class="fmp-cc fmp-cc--imageonly">
               <div class="fmp-cc-img fmp-cc-img--square">
                 <img v-if="col.imageUrl" :src="col.imageUrl" alt="">
-                <div v-else class="fmp-media-ph">🖼️</div>
+                <div v-else class="fmp-media-ph"><el-icon><Picture /></el-icon></div>
               </div>
             </div>
           </div>
@@ -78,7 +78,7 @@
             <div v-for="(col, ci) in cols(msg)" :key="ci" class="fmp-cc">
               <div v-if="flexUsesImage(msg)" class="fmp-cc-img" :style="{ aspectRatio: flexAspect(msg) }">
                 <img v-if="col.imageUrl" :src="col.imageUrl" alt="">
-                <div v-else class="fmp-media-ph">🖼️</div>
+                <div v-else class="fmp-media-ph"><el-icon><Picture /></el-icon></div>
               </div>
               <div v-if="col.title || col.text" class="fmp-cc-body">
                 <p v-if="col.title" class="fmp-cc-title">{{ col.title }}</p>
@@ -117,6 +117,7 @@
 </template>
 
 <script setup lang="ts">
+import { ChatDotRound, Picture, Postcard, VideoCamera } from '@element-plus/icons-vue'
 import { resolveCarouselImageAspectRatio, resolveFlexImageCarouselAspectRatio } from '~~/shared/line-image-spec'
 import { PRESET_BOUNDS_PCT } from '~~/shared/rich-layout-presets'
 

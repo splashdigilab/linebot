@@ -35,9 +35,9 @@
     </template>
 
     <template #editor-empty>
-      <span class="empty-icon">🗂️</span>
+      <el-icon class="empty-icon"><Grid /></el-icon>
       <h3>選擇一個圖文選單開始編輯</h3>
-      <p>或點擊左側「➕ 新增」建立新的圖文選單</p>
+      <p>或點擊左側「新增」建立新的圖文選單</p>
       <el-button type="primary" @click="openCreate">建立圖文選單</el-button>
     </template>
 
@@ -193,7 +193,7 @@
 </template>
 
 <script setup lang="ts">
-import { Plus } from '@element-plus/icons-vue'
+import { Grid, Plus } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import {
   IMAGE_MAX_BYTES,
@@ -722,7 +722,7 @@ async function submitForm() {
           contentType: form.value.contentType,
         },
       })
-      showToast('圖文選單已成功更新 ✅', 'success')
+      showToast('圖文選單已成功更新', 'success')
     } else {
       const docResponse = await apiFetch<any>('/api/richmenu/create', {
         method: 'POST',
@@ -746,7 +746,7 @@ async function submitForm() {
           contentType: form.value.contentType,
         },
       })
-      showToast('圖文選單已成功建立與部署 ✅', 'success')
+      showToast('圖文選單已成功建立與部署', 'success')
     }
 
     await loadMenusList(true)

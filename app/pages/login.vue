@@ -3,14 +3,14 @@
     <div class="login-card">
       <!-- Logo -->
       <div class="login-logo">
-        <div class="logo-circle">💬</div>
+        <div class="logo-circle"><el-icon><ChatDotRound /></el-icon></div>
         <h1>{{ brandName }}</h1>
         <p>管理後台 · 使用 Google 帳號登入</p>
       </div>
 
       <!-- Error -->
       <div v-if="errorMsg" class="login-error">
-        ⚠️ {{ errorMsg }}
+        {{ errorMsg }}
       </div>
 
       <!-- Login Button -->
@@ -47,6 +47,7 @@
 </template>
 
 <script setup lang="ts">
+import { ChatDotRound } from '@element-plus/icons-vue'
 definePageMeta({ layout: false })
 
 const route = useRoute()

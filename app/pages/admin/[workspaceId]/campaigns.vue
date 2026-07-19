@@ -38,9 +38,9 @@
 
     <!-- ── Empty State ── -->
     <template #editor-empty>
-      <span class="empty-icon">📋</span>
+      <el-icon class="empty-icon"><Tickets /></el-icon>
       <h3>選擇一個活動開始編輯</h3>
-      <p>或點擊左側「➕ 新增」建立新的活動貼標設定</p>
+      <p>或點擊左側「新增」建立新的活動貼標設定</p>
       <el-button v-if="canOperate" type="primary" @click="openCreate">新增活動</el-button>
     </template>
 
@@ -262,7 +262,7 @@
 </template>
 
 <script setup lang="ts">
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Tickets } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 definePageMeta({ middleware: 'auth', layout: 'default' })
 

@@ -86,7 +86,7 @@
 
     <!-- ── Empty State ── -->
     <template #editor-empty>
-      <span class="empty-icon">💬</span>
+      <el-icon class="empty-icon"><ChatDotRound /></el-icon>
       <h3>選擇一個對話</h3>
       <p>從左側選擇一位好友，查看訊息紀錄並直接回覆</p>
     </template>
@@ -684,6 +684,7 @@
 </template>
 
 <script setup lang="ts">
+import { ChatDotRound } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import {
   AUDIO_ACCEPT_ATTR,

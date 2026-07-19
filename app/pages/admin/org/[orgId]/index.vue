@@ -393,7 +393,7 @@ const autoRenewCount = computed(() => billingRows.value.filter(r => r.plan?.auto
 function renewLabel(r: BillingRow): string {
   const p = r.plan
   if (!p || p.id === 'free') return '—'
-  if (p.status === 'past_due') return '⚠️ 扣款未成功'
+  if (p.status === 'past_due') return '扣款未成功'
   if (p.cancelAtPeriodEnd) return `已取消，用到 ${p.currentPeriodEnd}`
   if (p.autoRenew) return `自動續訂・${r.nextChargeDate} 扣款`
   return `單次付款，${p.currentPeriodEnd} 到期`

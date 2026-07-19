@@ -16,7 +16,7 @@
     <template #editor-body>
       <!-- 載入失敗:不給人編輯一份存不了的空表單,顯示錯誤 + 重試 -->
       <div v-if="loadError" class="solo-editor-body ai-load-error">
-        <p>⚠️ 設定載入失敗,目前顯示的不是這個工作區的實際設定。</p>
+        <p>設定載入失敗,目前顯示的不是這個工作區的實際設定。</p>
         <el-button type="primary" plain @click="loadSettings">重試</el-button>
       </div>
       <el-form v-else :disabled="!canEditSettings" class="solo-editor-body admin-panel-stack" @submit.prevent>
@@ -47,16 +47,16 @@
             <div v-if="showChecklist" class="ai-checklist">
               <p class="ai-section-hint ai-checklist-title">上線前建議完成:</p>
               <div class="ai-check-item">
-                <span>{{ kbReady ? '✅' : '⬜' }}</span>
+                <span><el-icon :color="kbReady ? 'var(--brand-green-text)' : 'var(--text-muted)'"><component :is="kbReady ? CircleCheckFilled : CircleCheck" /></el-icon></span>
                 <span>知識庫有內容(目前 {{ cardCount ?? '—' }} 張卡)</span>
                 <NuxtLink :to="`/admin/${workspaceId}/knowledge/sources`" class="ai-status-link">去補知識 →</NuxtLink>
               </div>
               <div class="ai-check-item">
-                <span>{{ notifyReady ? '✅' : '⬜' }}</span>
+                <span><el-icon :color="notifyReady ? 'var(--brand-green-text)' : 'var(--text-muted)'"><component :is="notifyReady ? CircleCheckFilled : CircleCheck" /></el-icon></span>
                 <span>設定轉真人通知(AI 答不了時才有人即時接手)</span>
               </div>
               <div class="ai-check-item">
-                <span>💡</span>
+                <span><el-icon><InfoFilled /></el-icon></span>
                 <span>到「測試對話」試答幾題,確認 AI 答得對再上線;先用「草稿」模式跑一兩週更穩</span>
                 <NuxtLink :to="`/admin/${workspaceId}/ai-playground`" class="ai-status-link">去測試 →</NuxtLink>
               </div>
@@ -286,7 +286,7 @@
         <!-- ── 進階調校(預設收合)──────────────── -->
         <button type="button" class="ai-advanced-toggle" @click="showAdvanced = !showAdvanced">
           <span class="ai-advanced-toggle__arrow">{{ showAdvanced ? '▾' : '▸' }}</span>
-          🛠 進階調校
+          進階調校
           <span class="ai-advanced-toggle__sub">門檻、反問澄清、用量上限{{ isSuperAdmin ? '、模型' : '' }} — 一般情況用上方「回答風格」即可</span>
         </button>
 
@@ -492,6 +492,7 @@
 </template>
 
 <script setup lang="ts">
+import { CircleCheck, CircleCheckFilled, InfoFilled } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { buildDefaultAiSettings } from '~~/shared/types/ai-knowledge'
 import type { AiSettingsDoc } from '~~/shared/types/ai-knowledge'
@@ -656,8 +657,8 @@ const usageTokens = ref<number | null>(null)
 const cardCount = ref<number | null>(null)
 
 const statusLabel = computed(() => {
-  if (!form.value.enabled) return '⚪ AI 已停用'
-  return form.value.replyMode === 'draft' ? '🟡 草稿模式運作中(不會自動回客人)' : '🟢 全自動運作中'
+  if (!form.value.enabled) return 'AI 已停用'
+  return form.value.replyMode === 'draft' ? '草稿模式運作中(不會自動回客人)' : '全自動運作中'
 })
 
 // 方案（則數）摘要：已開通方案的帳號以「則數」為上限，token 上限不生效
@@ -825,7 +826,7 @@ async function save() {
   try {
     const updated = await apiFetch<AiSettingsDoc>('/api/ai/settings', { method: 'PUT', body: form.value })
     applySettings(updated)
-    showToast('已儲存 ✅', 'success')
+    showToast('已儲存', 'success')
   }
   catch (err: any) {
     showToast(err?.statusMessage || '儲存失敗', 'error')

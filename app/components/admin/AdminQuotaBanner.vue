@@ -1,6 +1,6 @@
 <template>
   <div v-if="show" class="quota-banner" :class="`quota-banner--${state.state}`" :role="state.state === 'over' ? 'alert' : 'status'">
-    <span class="quota-banner__icon">{{ state.state === 'over' ? '🛑' : '⚠️' }}</span>
+    <span class="quota-banner__icon"><el-icon><component :is="state.state === 'over' ? CircleCloseFilled : WarningFilled" /></el-icon></span>
 
     <div class="quota-banner__body">
       <p class="quota-banner__title">{{ title }}</p>
@@ -20,6 +20,7 @@
 </template>
 
 <script setup lang="ts">
+import { CircleCloseFilled, WarningFilled } from '@element-plus/icons-vue'
 /**
  * 額度快用完 / 已用完的升級提示。
  *

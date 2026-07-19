@@ -1,7 +1,7 @@
 <template>
   <el-dialog
     :model-value="modelValue"
-    title="📥 上傳 / 匯入"
+    title="上傳 / 匯入"
     width="min(760px, 92vw)"
     :close-on-click-modal="false"
     class="kb-import-dialog"
@@ -10,10 +10,10 @@
   >
     <!-- ── Step 1:選來源 ─────────────────────────── -->
     <div v-if="step === 'input'">
-      <p class="kb-step-label">1️⃣ 選擇來源 — 把 PDF、Excel、網址或一大段文字交給 AI 切成知識卡</p>
+      <p class="kb-step-label">選擇來源 — 把 PDF、Excel、網址或一大段文字交給 AI 切成知識卡</p>
       <el-tabs v-model="mode" class="kb-import-tabs">
         <el-tab-pane name="file">
-          <template #label><span data-tour="kb-tab-file">📄 檔案</span></template>
+          <template #label><span data-tour="kb-tab-file">檔案</span></template>
           <p class="kb-section-hint">
             支援 PDF、Excel（.xlsx / .xls），單檔上限 10MB。
             <br><strong>Excel 表格</strong>：跟 Google Sheet 一樣「<strong>一列變成一張卡</strong>」——<strong>第一欄當卡片標題</strong>（例：商品名稱），其餘欄位當內容；第一列請放欄位名稱（例：商品、價格、庫存）。最適合商品表、問答表。
@@ -35,7 +35,7 @@
         </el-tab-pane>
 
         <el-tab-pane name="url">
-          <template #label><span data-tour="kb-tab-url">🔗 網址</span></template>
+          <template #label><span data-tour="kb-tab-url">網址</span></template>
           <p class="kb-section-hint">系統會抓取網頁上的文字做成卡片。若那個網頁需要先登入、或要按按鈕才會顯示內容，可能抓不到，請改用上傳檔案。</p>
           <el-input
             v-model="urlInput"
@@ -45,7 +45,7 @@
         </el-tab-pane>
 
         <el-tab-pane name="gsheet">
-          <template #label><span data-tour="kb-tab-gsheet">📊 Google Sheet</span></template>
+          <template #label><span data-tour="kb-tab-gsheet">Google Sheet</span></template>
           <!-- 官方範本入口:兩欄(問題/答案)就好,其他問法由 AI 匯入時自動補 -->
           <div class="kb-gsheet-template">
             <div class="kb-gsheet-template-text">
@@ -66,7 +66,7 @@
               type="primary"
               plain
             >
-              {{ faqTemplateCopyUrl ? '📄 使用 FAQ 範本' : '📄 下載 FAQ 範本' }}
+              {{ faqTemplateCopyUrl ? '使用 FAQ 範本' : '下載 FAQ 範本' }}
             </el-button>
           </div>
           <p class="kb-section-hint">
@@ -87,7 +87,7 @@
             </template>
             <code class="kb-gsheet-email">{{ serviceAccountEmail }}</code>
             <el-button size="small" text type="primary" class="kb-gsheet-copy-btn" @click="copyServiceEmail">
-              📋 複製
+              複製
             </el-button>
           </el-alert>
           <el-input
@@ -98,7 +98,7 @@
         </el-tab-pane>
 
         <el-tab-pane name="text">
-          <template #label><span data-tour="kb-tab-text">📋 貼上文字</span></template>
+          <template #label><span data-tour="kb-tab-text">貼上文字</span></template>
           <p class="kb-section-hint">貼一大段文字（最多 100,000 字），由 AI 幫你切成多張卡。</p>
           <el-input
             v-model="textInput"
@@ -129,7 +129,7 @@
           :disabled="!canPreview"
           @click="runPreview"
         >
-          {{ previewing ? (mode === 'gsheet' ? '讀取中⋯' : 'AI 切卡中⋯') : (mode === 'gsheet' ? '📊 讀取 Sheet' : '🪄 預覽切卡') }}
+          {{ previewing ? (mode === 'gsheet' ? '讀取中⋯' : 'AI 切卡中⋯') : (mode === 'gsheet' ? '讀取 Sheet' : '預覽切卡') }}
         </el-button>
         <span v-if="previewing && mode !== 'gsheet'" class="text-muted text-xs">
           {{ previewProgressText }}
@@ -139,10 +139,10 @@
 
     <!-- ── Step 2:預覽 + 編輯 ─────────────────────────── -->
     <div v-if="step === 'preview'">
-      <p class="kb-step-label">2️⃣ 預覽切卡結果</p>
+      <p class="kb-step-label">預覽切卡結果</p>
       <p class="kb-section-hint">
         AI 偵測到 <strong>{{ chunks.length }}</strong> 張卡片。
-        <span v-if="truncated" class="kb-warning"> ⚠️ 原文超過 10 萬字已截斷，可能漏掉後半部。</span>
+        <span v-if="truncated" class="kb-warning"> 原文超過 10 萬字已截斷，可能漏掉後半部。</span>
         <span v-else>勾選要匯入的、可直接編輯內容；確認後一鍵建立。</span>
       </p>
 
@@ -165,7 +165,7 @@
         class="kb-ocr-alert"
       >
         <template #title>
-          📷 這份 PDF 是掃描檔，文字由 AI 辨識
+          這份 PDF 是掃描檔，文字由 AI 辨識
         </template>
         <div class="text-xs">辨識可能有錯漏（尤其數字、價格、電話），請逐張確認內容正確再匯入。</div>
       </el-alert>
@@ -194,7 +194,7 @@
         class="kb-dedup-warning"
       >
         <template #title>
-          ⚠️ 已存在 {{ dupMatches.length }} 個同名來源
+          已存在 {{ dupMatches.length }} 個同名來源
         </template>
         <div class="kb-dedup-body">
           <p class="text-xs">繼續建立會在來源列表出現多筆同名項目，可能不是你想要的。在上方「來源名稱」改個名字，這個提醒就會消失。</p>
@@ -212,7 +212,7 @@
           <el-checkbox v-model="overviewCard.included" />
         </div>
         <div class="kb-chunk-content">
-          <div class="kb-overview-badge">🗂️ 總覽卡（接「你們有賣什麼」這類問題）</div>
+          <div class="kb-overview-badge">總覽卡（接「你們有賣什麼」這類問題）</div>
           <el-input v-model="overviewCard.title" placeholder="標題" size="small" class="kb-chunk-title" />
           <el-input
             v-model="overviewCard.content"
@@ -267,7 +267,7 @@
             />
             <!-- 客人問法:AI 自動補的檢索關鍵(參與比對),匯入前可逐題檢查/修改 -->
             <div class="kb-chunk-questions">
-              <span class="kb-questions-label">💬 客人問法</span>
+              <span class="kb-questions-label">客人問法</span>
               <el-tag
                 v-for="(q, qi) in chunk.questions"
                 :key="`${qi}-${q}`"
@@ -330,14 +330,14 @@
           :disabled="includedCount === 0"
           @click="runImport"
         >
-          {{ importing ? '匯入並索引中⋯' : `✅ 確認匯入 ${includedCount} 張` }}
+          {{ importing ? '匯入並索引中⋯' : `確認匯入 ${includedCount} 張` }}
         </el-button>
       </div>
     </div>
 
     <!-- ── Step 3:結果(只有部分失敗才會看到;全成功直接關窗) ── -->
     <div v-if="step === 'result' && result">
-      <p class="kb-step-label">3️⃣ 匯入結果</p>
+      <p class="kb-step-label">匯入結果</p>
       <div class="kb-result-summary">
         <div class="kb-result-stat">
           <span class="kb-result-label">總計</span>
@@ -354,7 +354,7 @@
       </div>
 
       <div v-if="result.failed > 0" class="kb-result-failed-list">
-        <p class="kb-section-hint">以下卡片建立但索引失敗，可在知識庫點開該卡按「🔄 重新索引」：</p>
+        <p class="kb-section-hint">以下卡片建立但索引失敗，可在知識庫點開該卡按「重新索引」：</p>
         <ul class="kb-failed-list">
           <li v-for="item in failedItems" :key="item.id">
             <strong>{{ item.title }}</strong>
@@ -364,7 +364,7 @@
       </div>
 
       <div class="kb-import-actions">
-        <el-button @click="resetAll">📥 繼續匯入</el-button>
+        <el-button @click="resetAll">繼續匯入</el-button>
         <el-button type="primary" @click="close">完成</el-button>
       </div>
     </div>
@@ -739,7 +739,7 @@ async function runImport() {
     // 全部成功直接關窗(關窗 handler 會通知父層刷新並選中新來源);
     // 有失敗才停在結果頁,讓使用者看到哪幾張失敗、原因是什麼
     if (res && res.failed === 0) {
-      showToast(`成功匯入 ${res.indexed} 張 ✅`, 'success')
+      showToast(`成功匯入 ${res.indexed} 張`, 'success')
       close()
     }
     else if (res) {

@@ -346,7 +346,7 @@ const returnedOrder = computed(() => {
   if (!no) return null
   const o = orders.value.find(r => r.merchantOrderNo === no)
   if (!o) return { title: '付款處理中', type: 'info' as const, desc: '若剛完成付款，款項確認後方案會自動更新。', pending: true }
-  if (o.status === 'paid') return { title: '付款完成，方案已開通 🎉', type: 'success' as const, desc: `訂單 ${no}`, pending: false }
+  if (o.status === 'paid') return { title: '付款完成，方案已開通', type: 'success' as const, desc: `訂單 ${no}`, pending: false }
   if (o.status === 'failed') return { title: '這筆付款未成功', type: 'error' as const, desc: '未扣款或已取消，可重新選擇方案結帳。', pending: false }
   if (o.status === 'expired') return { title: '這筆訂單已逾期', type: 'info' as const, desc: '可重新選擇方案結帳。', pending: false }
   return { title: '付款處理中', type: 'warning' as const, desc: '款項確認後方案會自動更新。', pending: true }

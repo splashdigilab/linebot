@@ -36,9 +36,9 @@
     </template>
 
     <template #editor-empty>
-      <span class="empty-icon">📦</span>
+      <el-icon class="empty-icon"><Box /></el-icon>
       <h3>選擇一筆預存開始編輯</h3>
-      <p>或點擊左側「➕ 新增」建立新的客服預存</p>
+      <p>或點擊左側「新增」建立新的客服預存</p>
       <el-button v-if="canOperate" type="primary" @click="openCreate">新增預存</el-button>
     </template>
 
@@ -161,7 +161,7 @@
 </template>
 
 <script setup lang="ts">
-import { Plus } from '@element-plus/icons-vue'
+import { Box, Plus } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { normalizeAutoReplyAction, normalizeAutoReplyTagging } from '~~/shared/auto-reply-rule'
 import {
@@ -276,7 +276,7 @@ async function submitForm() {
         method: 'POST',
         body: payload,
       })
-      showToast('預存已建立 ✅', 'success')
+      showToast('預存已建立', 'success')
       await loadPresets(true)
       const created = presets.value.find(p => p.id === res.id) ?? presets.value[0]
       if (created) selectPreset(created, { skipDiscardConfirm: true })
@@ -286,7 +286,7 @@ async function submitForm() {
         method: 'PUT',
         body: payload,
       })
-      showToast('預存已更新 ✅', 'success')
+      showToast('預存已更新', 'success')
       await loadPresets(true)
       markClean()
     }

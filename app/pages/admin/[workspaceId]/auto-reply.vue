@@ -40,9 +40,9 @@
 
     <!-- ── Empty State ── -->
     <template #editor-empty>
-      <span class="empty-icon">⚡</span>
+      <el-icon class="empty-icon"><Lightning /></el-icon>
       <h3>選擇一條規則開始編輯</h3>
-      <p>或點擊左側「➕ 新增」建立一條新的關鍵字觸發規則</p>
+      <p>或點擊左側「新增」建立一條新的關鍵字觸發規則</p>
       <el-button v-if="canOperate" type="primary" @click="openCreate">新增規則</el-button>
     </template>
 
@@ -227,7 +227,7 @@
 
 
 <script setup lang="ts">
-import { Plus } from '@element-plus/icons-vue'
+import { Lightning, Plus } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import {
   AUTO_REPLY_COOLDOWN_OPTIONS,
@@ -369,7 +369,7 @@ async function submitForm() {
         method: 'POST',
         body: payload,
       })
-      showToast('規則已建立 ✅', 'success')
+      showToast('規則已建立', 'success')
       await loadRules(true)
       const newRule = rules.value.find(r => r.id === res.id) ?? rules.value[0]
       if (newRule) selectRule(newRule, { skipDiscardConfirm: true })
@@ -379,7 +379,7 @@ async function submitForm() {
         method: 'PUT',
         body: payload,
       })
-      showToast('規則已更新 ✅', 'success')
+      showToast('規則已更新', 'success')
       await loadRules(true)
       markClean()
     }

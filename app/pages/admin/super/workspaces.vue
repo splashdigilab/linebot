@@ -28,7 +28,7 @@
               <el-table-column label="所屬組織" min-width="150">
                 <template #default="{ row }">
                   <span v-if="orgNameMap[row.organizationId]" class="text-sm">{{ orgNameMap[row.organizationId] }}</span>
-                  <span v-else class="ws-sa-no-org-cell">⚠️ 未指定</span>
+                  <span v-else class="ws-sa-no-org-cell">未指定</span>
                 </template>
               </el-table-column>
               <el-table-column label="ID" min-width="220">
@@ -100,7 +100,7 @@
   <el-dialog v-model="showEdit" title="編輯官方帳號" width="min(440px, 92vw)">
     <div class="admin-panel-stack">
       <div v-if="!editForm.organizationId" class="ws-sa-no-org-warning">
-        ⚠️ 此帳號尚未歸屬任何組織，org admin 將無法存取，建議補填。
+        此帳號尚未歸屬任何組織，org admin 將無法存取，建議補填。
       </div>
       <div class="admin-field-group">
         <AdminFieldLabel text="帳號名稱" tight />

@@ -39,9 +39,9 @@
 
     <!-- ── Empty State ── -->
     <template #editor-empty>
-      <span class="empty-icon">📣</span>
+      <el-icon class="empty-icon"><Promotion /></el-icon>
       <h3>選擇一則推播來查看或編輯</h3>
-      <p>或點擊左側「➕ 新增」建立新推播</p>
+      <p>或點擊左側「新增」建立新推播</p>
       <el-button v-if="canOperate" type="primary" @click="openCreate">建立推播</el-button>
     </template>
 
@@ -320,7 +320,7 @@
 </template>
 
 <script setup lang="ts">
-import { Plus } from '@element-plus/icons-vue'
+import { Plus, Promotion } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import type { UnifiedAction } from '~~/shared/action-schema'
 import { normalizeUnifiedAction, validateUnifiedAction } from '~~/shared/action-schema'
@@ -648,7 +648,7 @@ async function saveDraft(): Promise<boolean> {
     const body = buildSaveBody()
     if (isCreating.value) {
       const created = await apiFetch<any>('/api/broadcast/create', { method: 'POST', body })
-      showToast('草稿已建立 ✅', 'success')
+      showToast('草稿已建立', 'success')
       await loadData()
       selectedId.value = created.id
       isCreating.value = false
@@ -657,7 +657,7 @@ async function saveDraft(): Promise<boolean> {
     else {
       await apiFetch(`/api/broadcast/${selectedId.value}`, { method: 'PUT', body })
       const savedScheduled = selectedItem.value?.status === 'scheduled' && body.scheduleAt
-      showToast(savedScheduled ? '排程已更新 ✅' : '草稿已儲存 ✅', 'success')
+      showToast(savedScheduled ? '排程已更新' : '草稿已儲存', 'success')
       await loadData()
       if (selectedId.value && !(await loadFormFromId(selectedId.value))) {
         showToast('已儲存但載入內容失敗，請重新點選該推播', 'error')
@@ -785,7 +785,7 @@ async function confirmSchedule() {
         scheduleAt: scheduleAtIso,
       },
     })
-    showToast(`已排程，將於 ${formatScheduleLabel(scheduleAtIso)} 自動發送 ✅`, 'success')
+    showToast(`已排程，將於 ${formatScheduleLabel(scheduleAtIso)} 自動發送`, 'success')
     closeValidateDialog()
     await loadData()
     selectedId.value = id
@@ -812,7 +812,7 @@ async function confirmSendNow() {
   sending.value = true
   try {
     const res = await apiFetch<any>(`/api/broadcast/${id}/send`, { method: 'POST' })
-    showToast(`發送完成 ✅ 成功 ${res.sentCount} / 失敗 ${res.failedCount}`, 'success')
+    showToast(`發送完成 成功 ${res.sentCount} / 失敗 ${res.failedCount}`, 'success')
     closeValidateDialog()
     await loadData()
     selectedId.value = id

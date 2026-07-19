@@ -103,7 +103,7 @@
                           class="user-avatar"
                           :alt="user.displayName"
                         />
-                        <span v-else class="user-avatar-placeholder">👤</span>
+                        <span v-else class="user-avatar-placeholder"><el-icon><User /></el-icon></span>
                         <span class="user-name">{{ user.displayName || user.id }}</span>
                       </div>
                     </td>
@@ -233,6 +233,7 @@
 </template>
 
 <script setup lang="ts">
+import { User } from '@element-plus/icons-vue'
 import { formatZhDateOnly } from '~~/shared/firestore-date'
 
 definePageMeta({ middleware: 'auth', layout: 'default' })
@@ -428,7 +429,7 @@ async function submitBatch() {
     )
 
     const count = res.added ?? res.removed ?? 0
-    showToast(`完成！已影響 ${count} 筆紀錄 ✅`, 'success')
+    showToast(`完成！已影響 ${count} 筆紀錄`, 'success')
     batchDialogVisible.value = false
     selectedIds.value = []
     await refreshUsersOnly()
@@ -460,7 +461,7 @@ async function addUserTags() {
       method: 'POST',
       body: { tagIds: addTagIds.value },
     })
-    showToast('標籤已加入 ✅', 'success')
+    showToast('標籤已加入', 'success')
     addTagIds.value = []
     await refreshUsersOnly()
     const updated = users.value.find((u) => u.id === dialogUser.value!.id)
