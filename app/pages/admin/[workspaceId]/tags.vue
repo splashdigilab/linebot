@@ -3,7 +3,7 @@
     <template #editor-header>
       <AdminSoloPageHeading
         field-label="標籤管理"
-        title="🏷️ 標籤列表"
+        title="標籤列表"
         caption="建立與管理會員標籤，用於分眾推播"
       />
       <div class="flex gap-1 admin-header-actions">

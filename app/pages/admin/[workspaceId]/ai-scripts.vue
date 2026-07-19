@@ -2,7 +2,7 @@
   <AdminSplitLayout :is-empty="!selectedScript && !isCreating">
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
-      <span class="split-sidebar-title">🧩 腳本</span>
+      <span class="split-sidebar-title">腳本</span>
       <el-button v-if="canEditScripts" type="primary" size="small" data-tour="scr-new" @click="openCreate">➕ 新增</el-button>
     </template>
 

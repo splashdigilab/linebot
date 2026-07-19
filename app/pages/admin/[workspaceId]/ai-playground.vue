@@ -3,7 +3,7 @@
     <template #editor-header>
       <AdminSoloPageHeading
         field-label="AI 客服"
-        title="🎮 測試對話"
+        title="測試對話"
         caption="試答模式：以「真實 LINE 對話」方式測試 AI，不會影響正式對話"
       />
     </template>

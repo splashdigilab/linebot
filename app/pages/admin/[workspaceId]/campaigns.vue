@@ -2,7 +2,7 @@
   <AdminSplitLayout :is-empty="!selectedCampaign && !isCreating">
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
-      <span class="split-sidebar-title">📋 活動貼標</span>
+      <span class="split-sidebar-title">活動貼標</span>
       <el-button v-if="canOperate" type="primary" size="small" data-tour="cmp-new" @click="openCreate">➕ 新增</el-button>
     </template>
 

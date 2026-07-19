@@ -2,7 +2,7 @@
   <AdminSplitLayout :is-empty="!selectedFlow && !isCreating">
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
-      <span class="split-sidebar-title" data-tour="flow-title">🤖 機器人模組</span>
+      <span class="split-sidebar-title" data-tour="flow-title">機器人模組</span>
       <AdminOperateGate>
         <div class="flex gap-1">
           <el-tooltip content="新增資料夾" placement="bottom" :show-after="300">
@@ -224,7 +224,7 @@
       <div class="flow-editor-messages">
         <!-- Sticky header -->
         <div class="fem-header" data-tour="flow-messages">
-          <AdminPanelTitle tag="span" text="💬 回覆訊息" tight />
+          <AdminPanelTitle tag="span" text="回覆訊息" tight />
           <div class="msg-type-btns">
             <el-button size="small" data-tour="fmt-text" @click="addMessage('text')">＋ 文字</el-button>
             <el-button size="small" data-tour="fmt-image" @click="addMessage('image')">＋ 圖片</el-button>

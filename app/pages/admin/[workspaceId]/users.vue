@@ -3,7 +3,7 @@
     <template #editor-header>
       <AdminSoloPageHeading
         field-label="會員"
-        title="👥 好友與標籤"
+        title="好友與標籤"
         caption="管理 LINE 好友，查看與操作會員標籤"
       />
       <div class="flex gap-1 admin-header-actions">

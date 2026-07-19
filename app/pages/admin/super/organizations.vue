@@ -3,7 +3,7 @@
     <template #editor-header>
       <AdminSoloPageHeading
         field-label="Super Admin"
-        title="🏢 組織管理"
+        title="組織管理"
         caption="管理系統中的所有組織、管理員與停用狀態。"
       />
       <div class="flex gap-2 admin-header-actions">

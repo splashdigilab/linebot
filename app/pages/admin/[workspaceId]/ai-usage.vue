@@ -3,7 +3,7 @@
     <template #editor-header>
       <AdminSoloPageHeading
         field-label="AI 客服"
-        title="📊 用量 / 監控"
+        title="用量 / 監控"
         caption="這個月的 AI 用量、自動回覆率、待補知識清單"
       />
       <div class="flex gap-2 admin-header-actions">

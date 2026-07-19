@@ -3,7 +3,7 @@
     <template #editor-header>
       <AdminSoloPageHeading
         field-label="Super Admin"
-        title="🛡️ Super Admin 管理"
+        title="Super Admin 管理"
         caption="搜尋使用者並管理 Super Admin 權限。"
       />
     </template>

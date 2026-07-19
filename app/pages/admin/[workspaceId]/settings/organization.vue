@@ -3,7 +3,7 @@
     <template #editor-header>
       <AdminSoloPageHeading
         field-label="設定"
-        title="🏢 組織與 LINE"
+        title="組織與 LINE"
         caption="組織與官方帳號名稱；以及 LINE OA 憑證、LIFF 與 Webhook。預設 LIFF 必填；Token／Secret 第一次要貼，存過後以黑點顯示，點黑點可改。"
       />
       <div class="flex gap-2 admin-header-actions">

@@ -3,7 +3,7 @@
     <template #editor-header>
       <AdminSoloPageHeading
         field-label="AI 客服"
-        title="⚙️ AI 設定"
+        title="AI 設定"
         caption="開關、回覆模式、語氣與轉真人規則;細部參數收在最下方「進階調校」"
       />
       <div v-if="canEditSettings" class="flex gap-1 admin-header-actions">

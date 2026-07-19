@@ -2,7 +2,7 @@
   <AdminSplitLayout :is-empty="!selectedSource">
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
-      <span class="split-sidebar-title" data-tour="kb-sources">📁 來源</span>
+      <span class="split-sidebar-title" data-tour="kb-sources">來源</span>
       <div class="flex gap-1">
         <el-tooltip v-if="canEditFolders" content="新增資料夾" placement="bottom" :show-after="300">
           <el-button size="small" plain data-tour="kb-folder-new" @click="createFolderPrompt">📂</el-button>

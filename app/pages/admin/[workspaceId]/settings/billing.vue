@@ -3,7 +3,7 @@
     <template #editor-header>
       <AdminSoloPageHeading
         field-label="設定"
-        title="💳 訂閱與付款"
+        title="訂閱與付款"
         caption="查看目前方案與付款紀錄,或升級／續訂方案(付款由藍新金流處理)。"
       />
       <div class="flex gap-2 admin-header-actions">

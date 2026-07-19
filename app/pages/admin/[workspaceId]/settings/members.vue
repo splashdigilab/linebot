@@ -3,7 +3,7 @@
     <template #editor-header>
       <AdminSoloPageHeading
         field-label="設定"
-        title="👥 成員管理"
+        title="成員管理"
         caption="以 Email 邀請成員（對方無需先註冊）。若已綁定組織，列表也會顯示組織擁有者／管理員（僅供檢視）。"
       />
       <div class="flex gap-2 admin-header-actions">

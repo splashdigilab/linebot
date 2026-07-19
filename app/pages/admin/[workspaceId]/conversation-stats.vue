@@ -3,7 +3,7 @@
     <template #editor-header>
       <AdminSoloPageHeading
         field-label="統計"
-        title="📊 客服對話統計"
+        title="客服對話統計"
         caption="依日期區間檢視會話量、首接類型、轉真人與結案比例；趨勢表可匯出 CSV。"
       />
       <div class="conv-stats-header-actions admin-header-actions" data-tour="cs-filter">

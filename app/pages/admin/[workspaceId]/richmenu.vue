@@ -1,7 +1,7 @@
 <template>
   <AdminSplitLayout :is-empty="!selectedMenu && !isCreating">
     <template #sidebar-header>
-      <span class="split-sidebar-title" data-tour="rm-title">🗂️ 圖文選單</span>
+      <span class="split-sidebar-title" data-tour="rm-title">圖文選單</span>
       <el-button type="primary" size="small" data-tour="rm-new" @click="openCreate">➕ 新增</el-button>
     </template>
 

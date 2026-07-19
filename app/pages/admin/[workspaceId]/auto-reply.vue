@@ -2,7 +2,7 @@
   <AdminSplitLayout :is-empty="!selectedRule && !isCreating">
     <!-- ── Sidebar Header ── -->
     <template #sidebar-header>
-      <span class="split-sidebar-title" data-tour="ar-title">⚡ 自動回覆</span>
+      <span class="split-sidebar-title" data-tour="ar-title">自動回覆</span>
       <el-button v-if="canOperate" type="primary" size="small" data-tour="ar-new" @click="openCreate">➕ 新增</el-button>
     </template>
 

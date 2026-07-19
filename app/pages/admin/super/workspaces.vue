@@ -3,7 +3,7 @@
     <template #editor-header>
       <AdminSoloPageHeading
         field-label="Super Admin"
-        title="💬 官方帳號管理"
+        title="官方帳號管理"
         caption="管理系統中的所有 LINE 官方帳號（Workspace）。"
       />
       <div class="flex gap-2 admin-header-actions">

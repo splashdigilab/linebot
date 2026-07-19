@@ -1,7 +1,7 @@
 <template>
   <AdminSplitLayout :is-empty="!selectedPreset && !isCreating">
     <template #sidebar-header>
-      <span class="split-sidebar-title" data-tour="sp-title">📦 客服預存</span>
+      <span class="split-sidebar-title" data-tour="sp-title">客服預存</span>
       <el-button v-if="canOperate" type="primary" size="small" data-tour="sp-new" @click="openCreate">➕ 新增</el-button>
     </template>
 
