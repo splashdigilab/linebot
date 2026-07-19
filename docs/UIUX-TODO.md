@@ -14,7 +14,12 @@
 
 - **延後不做（先記著）**：① landing 假 Demo 表單（P0，待你決定 lead 去向）、③ 手機版 RWD、⑤ emoji→SVG 圖示，以及所有「打磨」項（⑨⑩⑪⑫⑬）。
 - **方向拍板**：門面/入口頁（landing、login、選帳、死路頁）**延續 MYFEEL 綠、統整成共用品牌樣式**；**後台維持單色**（R1 不變）。品牌名走 `runtimeConfig.public.brandName`（多租戶可覆寫，預設 MYFEEL），不寫死。
-- **已 greenlight，待做**：② 門面綠統整＋login 品牌（進行中）、④ flow 訊息即時預覽（大功能）、⑥ LIFF 消費者錯誤頁、⑦ 發票填錯硬擋、⑧ flow 存檔錯誤指出第幾則/欄。
+- **已 greenlight，全部完成**：② 門面綠統整＋login、④ flow 即時預覽、⑥ LIFF 錯誤頁、⑦ 發票硬擋、⑧ flow 錯誤第幾則。
+
+### 🎨 2026-07-19 增修（美感／主色延伸）
+- **主色（品牌綠）延伸進整個後台**（用 `artifact-design` 標準檢視後）：`element-variables.scss` 的 `--el-color-primary` 與 `core/_variables.scss` 的 `--color-line` 由近黑 → 品牌綠 #06c755（按鈕／active／focus／邊框全走綠），hover `#04a046`、tint `rgba(6,199,85,.16)`。8 處 active/連結/hover 文字改用可讀深綠 `--brand-green-text: #067a3a`（AA 對比，避免亮綠當文字失效）。中性色與正文維持灰階；語意狀態色（success/warning/danger/info）不受影響、與主色分開。
+- **flow 機器人預覽 UX 升級**：加 LINE 風聊天標題列（頭像＋OA 名，`currentWorkspaceName`）、底部假輸入列、圖示化空狀態；編輯器頂端加「🔽 隱藏／👁 顯示預覽」切換。
+- 驗證：`sass` CLI ＋ `nuxt typecheck` ＋ **完整 `nuxt build` 皆通過**；建議實機目視配色。
 
 ---
 

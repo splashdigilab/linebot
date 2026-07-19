@@ -18,17 +18,62 @@
   overflow: hidden;
 }
 
-.fmp-head {
+/* LINE 風聊天標題列（品牌綠，像真的在跟這個官方帳號聊天） */
+.fmp-chat-head {
   flex-shrink: 0;
   display: flex;
-  align-items: baseline;
-  gap: 0.5rem;
-  padding: 0.6rem 0.85rem;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-elevated);
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.6rem 0.8rem;
+  background: var(--brand-green);
+  color: #fff;
 }
-.fmp-head-title { font-weight: 700; font-size: 0.85rem; color: var(--text-primary); }
-.fmp-head-sub { font-size: 0.68rem; color: var(--text-muted); }
+.fmp-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.22);
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+.fmp-chat-meta { display: flex; flex-direction: column; min-width: 0; }
+.fmp-chat-name {
+  font-weight: 700;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.fmp-chat-sub { font-size: 0.66rem; opacity: 0.85; line-height: 1.2; }
+
+/* 底部假輸入列（補完「這是一段 LINE 對話」的感覺；不可互動） */
+.fmp-inputbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.7rem;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border);
+}
+.fmp-input-fake {
+  flex: 1;
+  padding: 0.35rem 0.7rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+.fmp-input-send {
+  color: var(--brand-green-deep);
+  font-size: 0.95rem;
+}
 
 /* LINE 聊天背景（淡藍灰），讓白色氣泡跳出來 */
 .fmp-body {
@@ -43,12 +88,15 @@
 }
 
 .fmp-empty {
-  margin: 2rem 0.5rem;
+  margin: auto;
+  padding: 1.5rem 1rem;
   text-align: center;
   font-size: 0.8rem;
   color: rgba(255, 255, 255, 0.92);
   line-height: 1.6;
 }
+.fmp-empty-icon { display: block; font-size: 2rem; margin-bottom: 0.4rem; }
+.fmp-empty p { margin: 0; }
 
 .fmp-row {
   display: flex;

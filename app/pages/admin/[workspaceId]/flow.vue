@@ -235,6 +235,9 @@
             <el-button v-if="showLegacyImageCarousel" size="small" @click="addMessage('imageCarousel')">＋ 圖片輪播</el-button>
             <el-button size="small" data-tour="fmt-quick" @click="addMessage('quickReply')">＋ 快速回覆</el-button>
             <el-button v-if="showUserInput" size="small" data-tour="fmt-userinput" @click="addMessage('userInput')">＋ 用戶輸入</el-button>
+            <el-button class="fem-preview-toggle" size="small" @click="previewOpen = !previewOpen">
+              {{ previewOpen ? '🔽 隱藏預覽' : '👁 顯示預覽' }}
+            </el-button>
           </div>
         </div>
 
@@ -998,7 +1001,7 @@
           <!-- End rail -->
           </div>
         </div>
-        <FlowMessagePreview :messages="form.messages" :rich-messages="richMessages" />
+        <FlowMessagePreview v-if="previewOpen" :messages="form.messages" :rich-messages="richMessages" :oa-name="currentWorkspaceName" />
       </div>
 
     </template>
@@ -1094,7 +1097,8 @@ function moduleTypeLabel(raw: unknown): string {
   return MODULE_TYPE_LABELS[raw as ModuleType] ?? '機器人流程'
 }
 
-const { apiFetch, workspaceId } = useWorkspace()
+const { apiFetch, workspaceId, currentWorkspaceName } = useWorkspace()
+const previewOpen = ref(true)
 const { canOperate, guardOperate } = useAdminOperateGuard()
 
 // ── State ─────────────────────────────────────────────

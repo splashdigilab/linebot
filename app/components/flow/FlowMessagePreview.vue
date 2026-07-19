@@ -1,12 +1,18 @@
 <template>
   <aside class="fmp" aria-label="訊息預覽">
     <div class="fmp-frame">
-      <div class="fmp-head">
-        <span class="fmp-head-title">預覽</span>
-        <span class="fmp-head-sub">實際外觀以 LINE 為準</span>
+      <div class="fmp-chat-head">
+        <span class="fmp-avatar">{{ oaInitial }}</span>
+        <div class="fmp-chat-meta">
+          <span class="fmp-chat-name">{{ oaName || '官方帳號' }}</span>
+          <span class="fmp-chat-sub">預覽・實際以 LINE 為準</span>
+        </div>
       </div>
       <div class="fmp-body">
-        <p v-if="!messages.length" class="fmp-empty">左側新增訊息後，這裡會即時預覽在 LINE 裡的樣子。</p>
+        <div v-if="!messages.length" class="fmp-empty">
+          <span class="fmp-empty-icon" aria-hidden="true">💬</span>
+          <p>左側新增訊息後，<br>這裡會即時顯示在 LINE 裡的樣子</p>
+        </div>
 
         <div v-for="(msg, i) in messages" :key="i" class="fmp-row">
           <!-- 文字（無按鈕＝純氣泡；有按鈕＝按鈕範本卡） -->
@@ -102,6 +108,10 @@
           <div v-else class="fmp-bubble fmp-bubble--muted">{{ msg.type }}</div>
         </div>
       </div>
+      <div class="fmp-inputbar" aria-hidden="true">
+        <span class="fmp-input-fake">Aa</span>
+        <span class="fmp-input-send">➤</span>
+      </div>
     </div>
   </aside>
 </template>
@@ -110,7 +120,9 @@
 import { resolveCarouselImageAspectRatio, resolveFlexImageCarouselAspectRatio } from '~~/shared/line-image-spec'
 import { PRESET_BOUNDS_PCT } from '~~/shared/rich-layout-presets'
 
-const props = defineProps<{ messages: any[]; richMessages?: any[] }>()
+const props = defineProps<{ messages: any[]; richMessages?: any[]; oaName?: string }>()
+
+const oaInitial = computed(() => (props.oaName || '官').trim().charAt(0).toUpperCase())
 
 function hasButtons(msg: any) {
   return Array.isArray(msg.buttons) && msg.buttons.length > 0

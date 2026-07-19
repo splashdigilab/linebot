@@ -1,20 +1,22 @@
 :root {
-  /* Brand: Monochrome Theme (Light) */
-  --color-line: #171717;
-  --color-line-dark: #0a0a0a;
-  --color-line-glow: rgba(0, 0, 0, 0.15);
+  /* Brand: 主色＝MYFEEL/LINE 綠（全站主要互動色：按鈕、active、focus、邊框）。
+     中性色與正文仍走灰階；語意狀態色（success/warning/danger/info）另計、不吃主色。 */
+  --color-line: #06c755;
+  --color-line-dark: #04a046;
+  --color-line-glow: rgba(6, 199, 85, 0.16);
   /* 舊碼常寫 var(--color-primary, #0f7b54)；此變數原本未定義 → 退化成綠。
      定義為單色主色，讓那些 accent 回到單色而非殘留綠。 */
   --color-primary: var(--color-line);
 
-  /* 品牌綠（門面/入口頁專用：landing/login/選帳/死路頁）。後台維持單色不吃這組。
-     視覺共用；品牌「名稱」走 runtimeConfig.public.brandName，不寫死租戶。 */
+  /* 品牌綠：門面（landing/login/選帳）與後台主色共用同一組來源。
+     品牌「名稱」走 runtimeConfig.public.brandName，不寫死租戶。 */
   --brand-green: #06c755;
   --brand-green-deep: #05b24c;
   --brand-green-press: #04a046;
   --brand-green-ink: #05421f;
   --brand-green-wash: #eafaf1;
   --brand-green-glow: rgba(6, 199, 85, 0.14);
+  --brand-green-text: #067a3a; /* 可讀深綠：淺底上的綠色文字/連結/active 標籤（AA 對比） */
 
   /* Background */
   --bg-base: #f3f4f6;

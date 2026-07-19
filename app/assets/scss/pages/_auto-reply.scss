@@ -67,7 +67,7 @@
 .ar-list-item.active {
   background: var(--color-line-glow);
   border-color: var(--color-line);
-  color: var(--color-line);
+  color: var(--brand-green-text);
 }
 
 .ar-list-keyword {
@@ -227,7 +227,7 @@
   font-size: 0.7rem;
   font-weight: 700;
   flex-shrink: 0;
-  color: var(--color-line);
+  color: var(--brand-green-text);
   background: transparent;
   transition: background 0.15s, border-color 0.15s;
 }
