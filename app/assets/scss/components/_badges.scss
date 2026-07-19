@@ -8,12 +8,13 @@
   font-size: 0.75rem;
   font-weight: 600;
 }
-.badge-green { background: rgba(0, 0, 0, 0.1); color: var(--color-success); }
-.badge-orange { background: rgba(0, 0, 0, 0.1); color: var(--color-warning); }
-.badge-red { background: rgba(0, 0, 0, 0.1); color: var(--color-error); }
-.badge-blue { background: rgba(0, 0, 0, 0.1); color: var(--color-info); }
-.badge-gray { background: rgba(0, 0, 0, 0.1); color: var(--text-secondary); }
+/* 同色調 chip：淡色底＋深一階同色字（好讀、顏色語意一眼認得，取代舊的彩色字壓灰底） */
+.badge-green { background: #dcfce7; color: #15803d; }
+.badge-orange { background: #fef3c7; color: #b45309; }
+.badge-red { background: #fee2e2; color: #b91c1c; }
+.badge-blue { background: #dbeafe; color: #1d4ed8; }
+.badge-gray { background: #f1f3f5; color: #4b5563; }
 /* yellow/purple 曾被 ai-settings/ai-usage/knowledge/flow 引用卻沒定義 → 徽章會渲染成無底透明。
    先補齊使其至少與其他 badge 同一視覺（灰底膠囊）；真正「用顏色分辨狀態」屬 R1 狀態色 token 議題。 */
-.badge-yellow { background: rgba(0, 0, 0, 0.1); color: var(--color-warning); }
-.badge-purple { background: rgba(0, 0, 0, 0.1); color: var(--text-secondary); }
+.badge-yellow { background: #fef3c7; color: #b45309; }
+.badge-purple { background: #ede9fe; color: #6d28d9; }

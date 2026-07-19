@@ -90,9 +90,11 @@
 
 .nav-item.active {
   background: var(--color-line-glow);
-  color: var(--brand-green-text);
+  color: var(--text-primary);
   border: 1px solid var(--border-active);
 }
+/* 綠色由 icon（指示物）承擔，文字維持中性、最好讀 */
+.nav-item.active .nav-icon { color: var(--color-line); }
 
 .nav-item .nav-icon { font-size: 1.1rem; width: 20px; text-align: center; }
 
