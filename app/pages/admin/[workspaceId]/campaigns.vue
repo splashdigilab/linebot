@@ -57,7 +57,7 @@
       />
       <div class="flex gap-2 admin-header-actions">
         <el-button v-if="canOperate && !isCreating && selectedCampaign" type="danger" @click="deleteCampaign">
-          🗑️ 刪除
+          刪除
         </el-button>
         <el-button @click="cancelEdit">取消</el-button>
         <el-button v-if="canOperate" type="primary" :loading="saving" @click="submitForm">
@@ -74,7 +74,7 @@
         <div class="message-card cmp-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">📍 狀態設定</span>
+              <span class="badge badge-green">狀態設定</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -95,7 +95,7 @@
         <div class="message-card cmp-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">⚙️ 活動設定</span>
+              <span class="badge badge-green">活動設定</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -143,7 +143,7 @@
 
             <template v-if="!isCreating && selectedCampaign">
               <hr class="divider">
-              <h4 class="admin-field-title">🔗 活動進入網址（貼標用）</h4>
+              <h4 class="admin-field-title">活動進入網址（貼標用）</h4>
               <p class="ar-section-hint">
                 這個網址給客服／行政貼到問卷完成頁、簡訊、廣告按鈕即可。
                 使用者點入後會先綁 LINE；之後加官方帳號為好友時，系統才會自動貼上本活動標籤。
@@ -161,7 +161,7 @@
 
               <hr class="divider">
               <div class="flex items-center justify-between gap-2">
-                <h4 class="admin-field-title">📊 行銷成效</h4>
+                <h4 class="admin-field-title">行銷成效</h4>
                 <el-button size="small" :loading="statsLoading" @click="loadStats">重新整理</el-button>
               </div>
               <p class="ar-section-hint">
@@ -194,7 +194,7 @@
         <div class="message-card cmp-section-card" data-tour="cmp-tagsection">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🎯 貼標與觸發設定</span>
+              <span class="badge badge-green">貼標與觸發設定</span>
             </div>
           </div>
           <div class="card-section-stack">

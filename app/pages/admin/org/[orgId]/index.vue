@@ -103,7 +103,7 @@
           <div class="message-card ar-section-card">
             <div class="message-card-header">
               <div class="card-header-main">
-                <span class="badge badge-green">💳 各帳號方案</span>
+                <span class="badge badge-green">各帳號方案</span>
               </div>
             </div>
             <div class="card-section-stack">
@@ -138,7 +138,7 @@
           <div class="message-card ar-section-card">
             <div class="message-card-header">
               <div class="card-header-main">
-                <span class="badge badge-green">🧾 付款紀錄</span>
+                <span class="badge badge-green">付款紀錄</span>
                 <span class="text-xs text-muted">整個組織，新到舊</span>
               </div>
             </div>
@@ -178,7 +178,7 @@
           <div v-if="invoiceEnabled" class="message-card ar-section-card">
             <div class="message-card-header">
               <div class="card-header-main">
-                <span class="badge badge-green">📄 發票資訊</span>
+                <span class="badge badge-green">發票資訊</span>
                 <span class="text-xs text-muted">底下所有官方帳號預設沿用這一份</span>
               </div>
               <el-button
@@ -213,7 +213,7 @@
           <div class="message-card ar-section-card">
             <div class="message-card-header">
               <div class="card-header-main">
-                <span class="badge badge-green">👥 組織管理員</span>
+                <span class="badge badge-green">組織管理員</span>
                 <span class="text-xs text-muted">可管理這個組織底下的所有官方帳號</span>
               </div>
             </div>

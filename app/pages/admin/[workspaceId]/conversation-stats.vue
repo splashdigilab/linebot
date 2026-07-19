@@ -101,7 +101,7 @@
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">📈 趨勢（{{ granularityLabel }}）</span>
+              <span class="badge badge-green">趨勢（{{ granularityLabel }}）</span>
             </div>
           </div>
           <div class="card-section-stack">

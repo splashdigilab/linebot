@@ -59,7 +59,7 @@
       />
       <div class="flex gap-2 admin-header-actions">
         <el-button v-if="canOperate && !isCreating && selectedRule" type="danger" @click="deleteRule">
-          🗑️ 刪除
+          刪除
         </el-button>
         <el-button @click="cancelEdit">取消</el-button>
         <el-button v-if="canOperate" type="primary" :loading="saving" @click="submitForm">
@@ -75,7 +75,7 @@
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">📍 狀態設定</span>
+              <span class="badge badge-green">狀態設定</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -96,7 +96,7 @@
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">⚡ 觸發條件</span>
+              <span class="badge badge-green">觸發條件</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -153,7 +153,7 @@
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🎯 觸發動作設定</span>
+              <span class="badge badge-green">觸發動作設定</span>
             </div>
           </div>
           <div class="card-section-stack">

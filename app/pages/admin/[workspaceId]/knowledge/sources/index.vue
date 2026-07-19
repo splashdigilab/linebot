@@ -209,7 +209,7 @@
           🔄 立即同步
         </el-button>
         <el-button type="danger" plain :loading="deleting" @click="deleteSource">
-          🗑️ 刪除
+          刪除
         </el-button>
       </div>
     </template>
@@ -237,7 +237,7 @@
         <div class="message-card src-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">📊 基本資訊</span>
+              <span class="badge badge-green">基本資訊</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -335,7 +335,7 @@
         <div class="message-card src-section-card" data-tour="kb-chunks">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">📝 卡片（{{ chunks.length }}）</span>
+              <span class="badge badge-green">卡片（{{ chunks.length }}）</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -440,7 +440,7 @@
                 <el-radio-button value="keep_old">🔒 保留舊版</el-radio-button>
               </template>
               <template v-else-if="entry.kind === 'removed'">
-                <el-radio-button value="delete_old">🗑️ 刪除</el-radio-button>
+                <el-radio-button value="delete_old">刪除</el-radio-button>
                 <el-radio-button value="keep_old">🔒 保留</el-radio-button>
               </template>
               <template v-else>
@@ -554,7 +554,7 @@
           :disabled="chunkSaving"
           @click="deleteChunkFromModal"
         >
-          🗑️ 刪除
+          刪除
         </el-button>
         <div class="chunk-footer-right">
           <el-button @click="chunkEditOpen = false">取消</el-button>
@@ -606,7 +606,7 @@
           :disabled="folderSaving"
           @click="deleteFolderFromModal"
         >
-          🗑️ 刪除資料夾
+          刪除資料夾
         </el-button>
         <div class="folder-footer-right">
           <el-button @click="folderEditOpen = false">取消</el-button>
@@ -1014,7 +1014,7 @@ async function deleteFolderFromModal() {
     ? `要刪除「${target.name}」這個資料夾嗎？\n底下的 ${count} 筆來源會自動移到「未分類」，不會被刪除。`
     : `要刪除「${target.name}」這個空資料夾嗎？`
   try {
-    await ElMessageBox.confirm(msg, '🗑️ 刪除資料夾', {
+    await ElMessageBox.confirm(msg, '刪除資料夾', {
       confirmButtonText: '刪除',
       cancelButtonText: '取消',
       confirmButtonClass: 'el-button--danger',
@@ -1510,7 +1510,7 @@ async function deleteChunkFromModal() {
   try {
     await ElMessageBox.confirm(
       `要刪除「${title}」這張卡片嗎？無法復原。`,
-      '🗑️ 刪除卡片',
+      '刪除卡片',
       {
         confirmButtonText: '刪除',
         cancelButtonText: '取消',

@@ -90,7 +90,7 @@
         <div class="message-card bc-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">👥 受眾設定</span>
+              <span class="badge badge-green">受眾設定</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -149,7 +149,7 @@
         <div class="message-card bc-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">💬 訊息內容</span>
+              <span class="badge badge-green">訊息內容</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -209,7 +209,7 @@
         <div v-if="report" class="message-card bc-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">📊 成效報表</span>
+              <span class="badge badge-green">成效報表</span>
             </div>
             <el-button size="small" @click="loadReport">重新整理</el-button>
           </div>

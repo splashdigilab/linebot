@@ -53,7 +53,7 @@
           <div class="message-card usage-card">
             <div class="message-card-header">
               <div class="card-header-main">
-                <span class="badge badge-green">🎟️ 方案額度</span>
+                <span class="badge badge-green">方案額度</span>
                 <span class="text-xs text-muted">{{ planQuota.name }} · 本期 {{ quotaPeriodLabel }}</span>
               </div>
               <div class="plan-card-head-actions">
@@ -87,7 +87,7 @@
         <div class="message-card usage-card" data-tour="usg-kpi">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">📈 核心指標</span>
+              <span class="badge badge-green">核心指標</span>
               <span class="text-xs text-muted">{{ periodLabel }}</span>
             </div>
           </div>
@@ -131,7 +131,7 @@
         <div class="message-card usage-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🔢 用量明細（Token）</span>
+              <span class="badge badge-green">用量明細（Token）</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -168,7 +168,7 @@
         <div class="message-card usage-card" data-tour="usg-cases">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🚨 近期轉真人案例</span>
+              <span class="badge badge-green">近期轉真人案例</span>
               <span class="text-xs text-muted">最近待處理・不分月份</span>
               <el-select v-model="reasonFilter" size="small" style="width: 150px" @change="loadHandoffs">
                 <el-option label="全部原因" value="" />
@@ -193,7 +193,7 @@
               <div v-for="row in handoffs" :key="`${row.userId}-${row.updatedAtMs}`" class="usage-handoff-row" :class="{ 'usage-handoff-row--resolved': row.resolved }">
                 <div class="usage-handoff-meta">
                   <span :class="reasonBadgeClass(row.handoffReason)">{{ reasonLabel(row.handoffReason) }}</span>
-                  <span v-if="row.resolved" class="badge badge-gray">✓ 已處理</span>
+                  <span v-if="row.resolved" class="badge badge-gray">已處理</span>
                   <span class="text-xs text-muted">信心 {{ row.lastConfidence.toFixed(2) }} · {{ formatTime(row.updatedAtMs) }}</span>
                 </div>
                 <div class="usage-handoff-query">

@@ -48,7 +48,7 @@
                 <!-- 腳本觸發：正式 LINE 會由腳本接手，不跑 AI -->
                 <div v-if="turn.result.scriptTrigger" class="pg-script-trigger">
                   <div class="pg-bubble-head">
-                    <span class="badge badge-blue">🧩 觸發腳本</span>
+                    <span class="badge badge-blue">觸發腳本</span>
                     <span class="text-xs text-muted">{{ turn.result.scriptTrigger.mode === 'semantic' ? '看意思命中' : '關鍵字命中' }}</span>
                   </div>
                   <p class="pg-script-name">會啟動腳本：<strong>{{ turn.result.scriptTrigger.name }}</strong></p>
@@ -205,7 +205,7 @@
               :disabled="!query.trim()"
               @click="run"
             >
-              {{ running ? 'AI 思考中⋯' : '🚀 送出' }}
+              {{ running ? 'AI 思考中⋯' : '送出' }}
             </el-button>
             <el-button
               v-if="history.length"

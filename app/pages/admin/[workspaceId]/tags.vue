@@ -16,7 +16,7 @@
         <div class="message-card tags-page-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🔎 篩選與表格</span>
+              <span class="badge badge-green">篩選與表格</span>
             </div>
           </div>
           <div class="card-section-stack">

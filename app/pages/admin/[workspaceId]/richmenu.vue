@@ -52,7 +52,7 @@
       />
       <div class="flex gap-1 admin-header-actions">
         <el-button v-if="!isCreating && selectedMenu" type="danger" @click="deleteMenu">
-          🗑️ 刪除
+          刪除
         </el-button>
         <el-button @click="cancelEdit">取消</el-button>
         <el-button type="primary" :loading="creating" data-tour="rm-save" @click="submitForm">
@@ -66,7 +66,7 @@
         <div class="message-card rm-config-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🖼️ 選單設定</span>
+              <span class="badge badge-green">選單設定</span>
             </div>
           </div>
           <div class="card-section-stack">

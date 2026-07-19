@@ -205,7 +205,7 @@
       <div class="flex gap-1 admin-header-actions">
         <AdminOperateGate>
           <el-button v-if="!isCreating && selectedFlow && !isSystemFlow" type="danger" @click="deleteFlow">
-            🗑️ 刪除
+            刪除
           </el-button>
           <el-button v-if="!isCreating && selectedFlow" :loading="duplicating" @click="duplicateFlow">
             📋 複製
@@ -1039,7 +1039,7 @@
           :disabled="flowFolderSaving"
           @click="deleteFlowFolderFromModal"
         >
-          🗑️ 刪除資料夾
+          刪除資料夾
         </el-button>
         <div class="folder-footer-right">
           <el-button @click="flowFolderEditOpen = false">取消</el-button>
@@ -1438,7 +1438,7 @@ async function deleteFlowFolderFromModal() {
     ? `要刪除「${target.name}」這個資料夾嗎？\n底下的 ${count} 個模組會自動移到「未分類」，不會被刪除。`
     : `要刪除「${target.name}」這個空資料夾嗎？`
   try {
-    await ElMessageBox.confirm(msg, '🗑️ 刪除資料夾', {
+    await ElMessageBox.confirm(msg, '刪除資料夾', {
       confirmButtonText: '刪除',
       cancelButtonText: '取消',
       confirmButtonClass: 'el-button--danger',

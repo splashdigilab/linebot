@@ -24,7 +24,7 @@
         <div class="message-card ai-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🚦 目前狀態</span>
+              <span class="badge badge-green">目前狀態</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -68,7 +68,7 @@
         <div class="message-card ai-section-card" data-tour="ais-toggle">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🔌 總開關</span>
+              <span class="badge badge-green">總開關</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -99,7 +99,7 @@
         <div class="message-card ai-section-card" data-tour="ais-style">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🎯 回答風格</span>
+              <span class="badge badge-green">回答風格</span>
               <span v-if="!activePreset" class="badge badge-gray">已自訂</span>
             </div>
           </div>
@@ -109,13 +109,13 @@
             </p>
             <el-radio-group :model-value="activePreset" class="ai-preset-group" @update:model-value="onPresetChange">
               <el-radio value="strict">
-                🛡 嚴格 — 寧可轉真人也不答錯,適合知識庫剛起步
+                嚴格 — 寧可轉真人也不答錯,適合知識庫剛起步
               </el-radio>
               <el-radio value="balanced">
-                ⚖️ 平衡 — 預設,適合多數情況
+                平衡 — 預設,適合多數情況
               </el-radio>
               <el-radio value="loose">
-                🚀 寬鬆 — 多答少轉,適合知識庫成熟、答題已穩定
+                寬鬆 — 多答少轉,適合知識庫成熟、答題已穩定
               </el-radio>
             </el-radio-group>
             <p v-if="!activePreset" class="ai-section-hint">
@@ -128,7 +128,7 @@
         <div class="message-card ai-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">📝 語氣與禁則</span>
+              <span class="badge badge-green">語氣與禁則</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -153,7 +153,7 @@
         <div class="message-card ai-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🔗 商店 / 官網網址</span>
+              <span class="badge badge-green">商店 / 官網網址</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -173,7 +173,7 @@
         <div class="message-card ai-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🔔 轉真人通知</span>
+              <span class="badge badge-green">轉真人通知</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -254,7 +254,7 @@
         <div class="message-card ai-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">⚠️ 敏感詞</span>
+              <span class="badge badge-green">敏感詞</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -295,7 +295,7 @@
           <div class="message-card ai-section-card">
             <div class="message-card-header">
               <div class="card-header-main">
-                <span class="badge badge-green">🎯 回答行為調校</span>
+                <span class="badge badge-green">回答行為調校</span>
               </div>
             </div>
             <div class="card-section-stack">
@@ -343,7 +343,7 @@
           <div class="message-card ai-section-card">
             <div class="message-card-header">
               <div class="card-header-main">
-                <span class="badge badge-green">❓ 反問澄清</span>
+                <span class="badge badge-green">反問澄清</span>
               </div>
             </div>
             <div class="card-section-stack">
@@ -422,7 +422,7 @@
           <div class="message-card ai-section-card">
             <div class="message-card-header">
               <div class="card-header-main">
-                <span class="badge badge-green">💰 用量上限</span>
+                <span class="badge badge-green">用量上限</span>
               </div>
             </div>
             <div class="card-section-stack">
@@ -468,7 +468,7 @@
           <div v-if="isSuperAdmin" class="message-card ai-section-card">
             <div class="message-card-header">
               <div class="card-header-main">
-                <span class="badge badge-green">🤖 模型</span>
+                <span class="badge badge-green">模型</span>
                 <span class="badge badge-gray">僅系統管理員可見</span>
               </div>
             </div>

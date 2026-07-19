@@ -32,7 +32,7 @@
         <div v-if="planView" class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🎟️ 目前方案</span>
+              <span class="badge badge-green">目前方案</span>
               <span class="text-xs text-muted">{{ planView.name }}</span>
             </div>
             <el-button size="small" type="primary" @click="upgradeOpen = true">升級 / 續訂</el-button>
@@ -101,7 +101,7 @@
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">🧾 付款紀錄</span>
+              <span class="badge badge-green">付款紀錄</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -146,7 +146,7 @@
         <div v-if="invoiceEnabled" class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">📄 發票資訊</span>
+              <span class="badge badge-green">發票資訊</span>
               <span class="text-xs text-muted">每次付款成功後自動開立</span>
             </div>
             <el-button v-if="invoiceOverriding" size="small" :loading="savingInvoice" :disabled="!invoiceValid" @click="saveInvoiceProfile">
