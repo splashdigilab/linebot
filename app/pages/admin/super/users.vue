@@ -13,7 +13,7 @@
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">目前的 Super Admin</span>
+              <span class="section-title">目前的 Super Admin</span>
             </div>
             <span class="text-xs text-muted">共 {{ admins.length }} 筆</span>
           </div>
@@ -60,7 +60,7 @@
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">查詢使用者</span>
+              <span class="section-title">查詢使用者</span>
             </div>
           </div>
           <div class="card-section-stack">

@@ -16,7 +16,7 @@
         <div class="message-card ar-section-card" data-tour="mem-list">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">成員列表</span>
+              <span class="section-title">成員列表</span>
             </div>
           </div>
           <div class="card-section-stack">

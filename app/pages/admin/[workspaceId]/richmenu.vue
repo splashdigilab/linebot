@@ -66,7 +66,7 @@
         <div class="message-card rm-config-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">選單設定</span>
+              <span class="section-title">選單設定</span>
             </div>
           </div>
           <div class="card-section-stack">

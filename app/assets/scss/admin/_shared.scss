@@ -124,6 +124,20 @@
   gap: var(--space-form-stack-gap);
 }
 
+/* 區塊標題：粗體 + 綠色細級條。取代舊的實心綠 chip 當標題——
+   把飽和主色綠留給「真的要點的動作」，標題只用一道細條標記層級，
+   不再和數字／內容搶注意力。 */
+.section-title {
+  display: inline-flex;
+  align-items: center;
+  padding-left: 0.55rem;
+  border-left: 3px solid var(--color-line);
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
 .admin-section-card {
   width: min(780px, 100%);
   background: var(--bg-surface);

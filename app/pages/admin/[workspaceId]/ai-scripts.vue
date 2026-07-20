@@ -85,7 +85,7 @@
         <div class="message-card scripts-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">基本設定</span>
+              <span class="section-title">基本設定</span>
               <span v-if="statsText" class="text-xs text-muted">{{ statsText }}</span>
             </div>
           </div>
@@ -111,7 +111,7 @@
         <div class="message-card scripts-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">流程節點</span>
+              <span class="section-title">流程節點</span>
               <span class="text-xs text-muted">流程：觸發 → 收集（可多個）→ 回覆</span>
             </div>
           </div>

@@ -263,7 +263,7 @@ function decisionLabel(r: AiResult) {
   if (r.decision === 'answered') return 'AI 回答'
   if (r.decision === 'disambiguate') return '反問澄清'
   if (r.handoffReason === 'llm_error') return 'AI 服務失敗'
-  if (r.handoffReason === 'manual') return '⏸ AI 跳過'
+  if (r.handoffReason === 'manual') return 'AI 跳過'
   return '轉真人'
 }
 

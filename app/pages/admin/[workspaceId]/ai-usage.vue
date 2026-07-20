@@ -53,7 +53,7 @@
           <div class="message-card usage-card">
             <div class="message-card-header">
               <div class="card-header-main">
-                <span class="badge badge-green">方案額度</span>
+                <span class="section-title">方案額度</span>
                 <span class="text-xs text-muted">{{ planQuota.name }} · 本期 {{ quotaPeriodLabel }}</span>
               </div>
               <div class="plan-card-head-actions">
@@ -87,7 +87,7 @@
         <div class="message-card usage-card" data-tour="usg-kpi">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">核心指標</span>
+              <span class="section-title">核心指標</span>
               <span class="text-xs text-muted">{{ periodLabel }}</span>
             </div>
           </div>
@@ -96,31 +96,42 @@
             <div v-else class="usage-kpi-grid">
               <div class="usage-kpi">
                 <span class="usage-kpi__label">AI 介入次數</span>
-                <strong>{{ formatNumber(summary?.invocations) }}</strong>
+                <strong class="usage-kpi__value">{{ formatNumber(summary?.invocations) }}</strong>
+                <span class="usage-kpi__sub">本期間 AI 出手的總次數</span>
               </div>
-              <div class="usage-kpi usage-kpi--success">
+              <div class="usage-kpi">
                 <span class="usage-kpi__label">自動回覆率</span>
-                <strong>{{ formatPercent(summary?.autoReplyRate) }}</strong>
+                <strong class="usage-kpi__value" :class="metricTone('autoReply', summary?.autoReplyRate)">{{ formatPercent(summary?.autoReplyRate) }}</strong>
                 <span class="usage-kpi__sub">{{ formatNumber(summary?.answered) }} 次自動答完</span>
               </div>
-              <div class="usage-kpi usage-kpi--warning">
+              <div class="usage-kpi">
                 <span class="usage-kpi__label">轉真人率</span>
-                <strong>{{ formatPercent(summary?.handoffRate) }}</strong>
+                <strong class="usage-kpi__value" :class="metricTone('handoff', summary?.handoffRate)">{{ formatPercent(summary?.handoffRate) }}</strong>
                 <span class="usage-kpi__sub">{{ formatNumber(summary?.handoffs) }} 次轉接</span>
               </div>
-              <div class="usage-kpi usage-kpi--warning">
-                <span class="usage-kpi__label">答後仍轉真人</span>
-                <strong>{{ formatPercent(summary?.answeredThenHandoffRate) }}</strong>
-                <span class="usage-kpi__sub">{{ formatNumber(summary?.answeredThenHandoffs) }} 次（AI 回答後客人還是要找真人，可視為「沒答到重點」，越低越好）</span>
+              <div class="usage-kpi">
+                <span class="usage-kpi__label">
+                  答後仍轉真人
+                  <el-tooltip placement="top" content="AI 回答後客人還是要找真人，可視為「沒答到重點」，越低越好">
+                    <el-icon class="usage-kpi__info"><InfoFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+                <strong class="usage-kpi__value" :class="metricTone('answeredThenHandoff', summary?.answeredThenHandoffRate)">{{ formatPercent(summary?.answeredThenHandoffRate) }}</strong>
+                <span class="usage-kpi__sub">{{ formatNumber(summary?.answeredThenHandoffs) }} 次</span>
               </div>
-              <div class="usage-kpi usage-kpi--warning">
-                <span class="usage-kpi__label">反問澄清率</span>
-                <strong>{{ formatPercent(summary?.disambiguationRate) }}</strong>
-                <span class="usage-kpi__sub">{{ formatNumber(summary?.disambiguations) }} 次反問（AI 先問客人「要哪一個」才作答；偏高通常代表知識卡標題太相近，或可到設定調整反問門檻）</span>
+              <div class="usage-kpi">
+                <span class="usage-kpi__label">
+                  反問澄清率
+                  <el-tooltip placement="top" content="AI 先問客人「要哪一個」才作答；偏高通常代表知識卡標題太相近，或可到設定調整反問門檻">
+                    <el-icon class="usage-kpi__info"><InfoFilled /></el-icon>
+                  </el-tooltip>
+                </span>
+                <strong class="usage-kpi__value" :class="metricTone('disambiguation', summary?.disambiguationRate)">{{ formatPercent(summary?.disambiguationRate) }}</strong>
+                <span class="usage-kpi__sub">{{ formatNumber(summary?.disambiguations) }} 次反問</span>
               </div>
               <div class="usage-kpi">
                 <span class="usage-kpi__label">每對話成本</span>
-                <strong>${{ summary?.perConversationUsd?.toFixed(4) ?? '0.0000' }}</strong>
+                <strong class="usage-kpi__value">${{ summary?.perConversationUsd?.toFixed(4) ?? '0.0000' }}</strong>
                 <span class="usage-kpi__sub">本月 ${{ summary?.estimatedCostUsd?.toFixed(2) ?? '0.00' }} USD</span>
               </div>
             </div>
@@ -131,7 +142,7 @@
         <div class="message-card usage-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">用量明細（Token）</span>
+              <span class="section-title">用量明細（Token）</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -168,7 +179,7 @@
         <div class="message-card usage-card" data-tour="usg-cases">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">近期轉真人案例</span>
+              <span class="section-title">近期轉真人案例</span>
               <span class="text-xs text-muted">最近待處理・不分月份</span>
               <el-select v-model="reasonFilter" size="small" style="width: 150px" @change="loadHandoffs">
                 <el-option label="全部原因" value="" />
@@ -219,7 +230,7 @@
 </template>
 
 <script setup lang="ts">
-import { ChatDotRound, Refresh, Upload } from '@element-plus/icons-vue'
+import { ChatDotRound, InfoFilled, Refresh, Upload } from '@element-plus/icons-vue'
 import { HANDOFF_REASON_LABELS, type HandoffReason } from '~~/shared/types/ai-knowledge'
 import { useAdminToast } from '~~/app/composables/useAdminToast'
 import { derivePlanState } from '~~/shared/billing/plan-state'
@@ -367,6 +378,20 @@ function formatNumber(n?: number | null) {
 function formatPercent(n?: number | null) {
   return `${Math.round((n ?? 0) * 100)}%`
 }
+
+/**
+ * 依「數值門檻」決定數字顏色（rates 為 0~1）。
+ * 正向指標（越高越好）好→綠；負向指標（越高越糟）過線才橘。
+ * 重點：0% 的「答後仍轉真人」是滿分，要綠不是橘——不再無條件警告。
+ */
+function metricTone(kind: string, v?: number | null): string {
+  const x = v ?? 0
+  if (kind === 'autoReply') return x >= 0.5 ? 'is-good' : x < 0.2 ? 'is-warn' : 'is-neutral'
+  if (kind === 'handoff') return x <= 0.3 ? 'is-good' : x > 0.6 ? 'is-warn' : 'is-neutral'
+  if (kind === 'answeredThenHandoff') return x <= 0.1 ? 'is-good' : x > 0.25 ? 'is-warn' : 'is-neutral'
+  if (kind === 'disambiguation') return x <= 0.15 ? 'is-good' : x > 0.3 ? 'is-warn' : 'is-neutral'
+  return 'is-neutral'
+}
 function formatTime(ms: number) {
   if (!ms) return ''
   return new Date(ms).toLocaleString('zh-TW', {
@@ -447,36 +472,43 @@ onMounted(() => loadAll())
   gap: 12px;
 }
 
+/* 中性卡：卡片一律白底細框，只有「數字」依門檻上色（見 metricTone），
+   讓眼睛掃數字而非色塊；異常才會有一顆橘數字跳出來。 */
 .usage-kpi {
-  background: var(--el-fill-color-light);
-  padding: 14px;
-  border-radius: 6px;
-  text-align: center;
-
-  &--success {
-    background: var(--el-color-success-light-9);
-    color: var(--el-color-success);
-  }
-  &--warning {
-    background: var(--el-color-warning-light-9);
-    color: var(--el-color-warning);
-  }
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
 
   &__label {
-    display: block;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
     font-size: 12px;
     color: var(--el-text-color-secondary);
-    margin-bottom: 4px;
   }
-  strong {
-    display: block;
-    font-size: 22px;
+  &__info {
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: help;
+  }
+  &__value {
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+
+    &.is-good { color: var(--brand-green-text); }
+    &.is-warn { color: #b45309; }
+    &.is-bad  { color: #b91c1c; }
   }
   &__sub {
-    display: block;
     font-size: 11px;
     color: var(--el-text-color-secondary);
-    margin-top: 4px;
   }
 }
 

@@ -237,7 +237,7 @@
         <div class="message-card src-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">基本資訊</span>
+              <span class="section-title">基本資訊</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -257,7 +257,7 @@
         <div v-if="selectedSource.type === 'url'" class="message-card src-section-card" data-tour="kb-sync-settings">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">⏰ 自動偵測變動</span>
+              <span class="section-title">自動偵測變動</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -299,7 +299,7 @@
         <div v-if="selectedSource.type === 'gsheet'" class="message-card src-section-card" data-tour="kb-sync-settings">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">⏰ 自動同步</span>
+              <span class="section-title">自動同步</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -335,7 +335,7 @@
         <div class="message-card src-section-card" data-tour="kb-chunks">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">卡片（{{ chunks.length }}）</span>
+              <span class="section-title">卡片（{{ chunks.length }}）</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -433,7 +433,7 @@
             <el-radio-group v-model="decisions[entry.id]" size="small">
               <template v-if="entry.kind === 'new'">
                 <el-radio-button value="add_new">新增</el-radio-button>
-                <el-radio-button value="skip">⏭️ 略過</el-radio-button>
+                <el-radio-button value="skip">略過</el-radio-button>
               </template>
               <template v-else-if="entry.kind === 'modified'">
                 <el-radio-button value="use_new">用新版</el-radio-button>

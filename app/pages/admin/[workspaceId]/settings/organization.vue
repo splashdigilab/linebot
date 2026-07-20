@@ -17,7 +17,7 @@
         <div class="message-card ar-section-card" data-tour="org-identity">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">組織與官方帳號</span>
+              <span class="section-title">組織與官方帳號</span>
             </div>
           </div>
           <div class="card-section-stack card-section-stack--relaxed-summary">
@@ -39,7 +39,7 @@
         <div v-if="planView" class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">目前方案</span>
+              <span class="section-title">目前方案</span>
               <span class="text-xs text-muted">{{ planView.name }}</span>
             </div>
             <el-button size="small" @click="upgradeOpen = true">升級方案</el-button>
@@ -69,7 +69,7 @@
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">LINE 憑證與 Webhook</span>
+              <span class="section-title">LINE 憑證與 Webhook</span>
             </div>
           </div>
           <div class="card-section-stack">

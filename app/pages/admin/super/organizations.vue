@@ -16,7 +16,7 @@
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">所有組織</span>
+              <span class="section-title">所有組織</span>
             </div>
             <span class="text-xs text-muted">共 {{ orgs.length }} 筆</span>
           </div>

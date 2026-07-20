@@ -74,7 +74,7 @@
         <div class="message-card cmp-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">狀態設定</span>
+              <span class="section-title">狀態設定</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -95,7 +95,7 @@
         <div class="message-card cmp-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">活動設定</span>
+              <span class="section-title">活動設定</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -194,7 +194,7 @@
         <div class="message-card cmp-section-card" data-tour="cmp-tagsection">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">貼標與觸發設定</span>
+              <span class="section-title">貼標與觸發設定</span>
             </div>
           </div>
           <div class="card-section-stack">

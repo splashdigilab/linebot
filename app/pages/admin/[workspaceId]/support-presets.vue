@@ -68,7 +68,7 @@
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">狀態設定</span>
+              <span class="section-title">狀態設定</span>
             </div>
           </div>
           <div class="card-section-stack">
@@ -88,7 +88,7 @@
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="badge badge-green">動作設定</span>
+              <span class="section-title">動作設定</span>
             </div>
           </div>
           <div class="card-section-stack">
