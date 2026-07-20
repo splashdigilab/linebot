@@ -60,7 +60,11 @@
       "Bash(node scratch-selfserve-e2e.mjs http://localhost:3003)",
       "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs_out.css --no-source-map)",
       "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs5.css --no-source-map)",
-      "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs7.css --no-source-map)"
+      "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs7.css --no-source-map)",
+      "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs8.css --no-source-map)",
+      "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs9.css --no-source-map)",
+      "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs10.css --no-source-map)",
+      "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs13.css --no-source-map)"
     ],
     "additionalDirectories": [
       "/Users/kevin/.claude",

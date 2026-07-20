@@ -29,8 +29,15 @@
   gap: 0.5rem;
 }
 
-.conv-stats-granularity {
-  width: 90px;
+/* 提高特異度蓋過 Element 預設的 .el-select { width: 100% }，否則會被撐滿把卡片標題擠成直排 */
+.conv-stats-page .conv-stats-granularity {
+  width: 92px;
+  flex: 0 0 auto;
+}
+
+/* 卡片標題不換行（避免「趨勢」被擠成一字一行） */
+.conv-stats-page .section-title {
+  white-space: nowrap;
 }
 
 .conv-stats-kpi-body {
@@ -38,6 +45,20 @@
   flex-direction: column;
   gap: 0.25rem;
   min-width: 0;
+  height: 100%;
+}
+
+/* 讓卡片內文撐滿卡片高度，底部說明列才能一起靠底對齊 */
+.conv-stats-kpi-card .el-card__body {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 三張卡的底部說明列推到最底、對齊 */
+.conv-stats-kpi-foot {
+  margin-top: auto;
+  padding-top: 0.25rem;
 }
 
 .conv-stats-kpi-card .stat-label {
@@ -230,40 +251,19 @@ $seg-unhandled: #e8912d;
   color: var(--el-color-warning);
 }
 
-/* ── 趨勢折線圖（純 SVG）────────────────────────────────── */
-.conv-trend-chart {
+/* ── 趨勢折線圖（ECharts）─────────────────────────────────── */
+.conv-echart {
   width: 100%;
+  height: 320px;
 }
 
-.conv-trend-svg {
-  width: 100%;
-  height: auto;
-  max-height: 220px;
-  display: block;
-}
-
-.conv-trend-area {
-  fill: color-mix(in srgb, var(--el-color-primary) 14%, transparent);
-  stroke: none;
-}
-
-.conv-trend-line {
-  fill: none;
-  stroke: var(--el-color-primary);
-  stroke-width: 2;
-  stroke-linejoin: round;
-  stroke-linecap: round;
-}
-
-.conv-trend-dot {
-  fill: var(--el-color-primary);
-}
-
-.conv-trend-axis {
+.conv-echart-fallback {
   display: flex;
-  justify-content: space-between;
+  align-items: center;
+  justify-content: center;
   gap: 0.5rem;
-  margin-top: 0.35rem;
+  height: 320px;
+  color: var(--el-text-color-secondary);
 }
 
 .conv-trend-detail {

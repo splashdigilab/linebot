@@ -25,8 +25,10 @@
           />
         </div>
         <div class="conv-stats-filter-group">
-          <el-button size="small" :loading="loading" @click="loadAll">重整</el-button>
-          <el-button size="small" type="primary" plain :disabled="!trend.buckets.length" @click="exportCsv">匯出 CSV</el-button>
+          <el-tooltip content="重整" placement="top">
+            <el-button size="small" :icon="Refresh" circle :loading="loading" aria-label="重整" @click="loadAll" />
+          </el-tooltip>
+          <el-button size="small" type="primary" plain :icon="Download" :disabled="!trend.buckets.length" @click="exportCsv">匯出 CSV</el-button>
         </div>
       </div>
     </template>
@@ -51,7 +53,7 @@
                       <span class="conv-stats-delta" :class="deltaClass">{{ deltaLabel }}</span>
                     </el-tooltip>
                   </div>
-                  <div class="text-xs text-muted">
+                  <div class="text-xs text-muted conv-stats-kpi-foot">
                     {{ rangeLabel }}<template v-if="prevTotal !== null">・較上期 {{ prevTotal }}</template>
                   </div>
                 </div>
@@ -68,7 +70,7 @@
                     <div class="stat-label">轉真人場數 <span class="conv-stats-info">ⓘ</span></div>
                   </el-tooltip>
                   <div class="stat-value">{{ kpi.handoffCount }}</div>
-                  <div class="text-xs text-muted">佔 {{ pctNum(kpi.handoffRate) }}</div>
+                  <div class="text-xs text-muted conv-stats-kpi-foot">佔 {{ pctNum(kpi.handoffRate) }}</div>
                 </div>
               </el-card>
             </el-col>
@@ -83,7 +85,7 @@
                     <div class="stat-label">已結束 <span class="conv-stats-info">ⓘ</span></div>
                   </el-tooltip>
                   <div class="stat-value">{{ kpi.closedCount }}</div>
-                  <div class="text-xs text-muted">
+                  <div class="text-xs text-muted conv-stats-kpi-foot">
                     佔總 {{ pctNum(kpi.closeRateByTotal) }}・佔已處理 {{ pctNum(kpi.closeRateByHandled) }}
                   </div>
                 </div>
@@ -142,7 +144,7 @@
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="section-title">趨勢</span>
-              <span class="text-xs text-muted">每期總新增會話</span>
+              <span class="text-xs text-muted">每期會話量與組成（點圖例可開關）</span>
             </div>
             <el-select
               v-model="granularity"
@@ -160,33 +162,16 @@
               <div class="spinner" />
               <span>載入中…</span>
             </div>
-            <template v-else-if="trendChart">
-              <div class="conv-trend-chart">
-                <svg
-                  :viewBox="`0 0 ${trendChart.w} ${trendChart.h}`"
-                  class="conv-trend-svg"
-                  role="img"
-                  aria-label="每期總新增會話趨勢"
-                >
-                  <polygon :points="trendChart.area" class="conv-trend-area" />
-                  <polyline :points="trendChart.line" class="conv-trend-line" vector-effect="non-scaling-stroke" />
-                  <circle
-                    v-for="(p, i) in trendChart.pts"
-                    :key="i"
-                    :cx="p.x"
-                    :cy="p.y"
-                    r="2.4"
-                    class="conv-trend-dot"
-                  >
-                    <title>{{ p.date }}：{{ p.v }} 場</title>
-                  </circle>
-                </svg>
-                <div class="conv-trend-axis text-xs text-muted">
-                  <span>{{ trendChart.first }}</span>
-                  <span>峰值 {{ trendChart.peak.v }}（{{ trendChart.peak.date }}）</span>
-                  <span>{{ trendChart.last }}</span>
-                </div>
-              </div>
+            <template v-else-if="trend.buckets.length">
+              <ClientOnly>
+                <VChart class="conv-echart" :option="chartOption" autoresize />
+                <template #fallback>
+                  <div class="conv-echart-fallback">
+                    <div class="spinner" />
+                    <span>圖表載入中…</span>
+                  </div>
+                </template>
+              </ClientOnly>
 
               <div class="conv-trend-detail">
                 <button
@@ -222,6 +207,7 @@
 </template>
 
 <script setup lang="ts">
+import { Download, Refresh } from '@element-plus/icons-vue'
 import type { KpiResult, TrendGranularity, TrendBucket } from '~~/shared/types/conversation-stats'
 import { useAdminToast } from '~~/app/composables/useAdminToast'
 
@@ -276,7 +262,7 @@ const firstContactSegs = computed(() => {
   return [
     { key: 'bot', label: '機器人', value: k.botHandled, escalated: k.botEscalated, cls: 'seg-bot', tab: 'bot_handling', help: '第一個回覆客人的是機器人罐頭回覆或流程。' },
     { key: 'ai', label: 'AI', value: k.aiHandled, escalated: k.aiEscalated, cls: 'seg-ai', tab: '', help: '第一個回覆客人的是 AI 客服（知識庫問答）。' },
-    { key: 'human', label: '真人', value: k.humanHandled, escalated: 0, cls: 'seg-human', tab: 'human_handling', help: '一開始就由真人客服接手。' },
+    { key: 'human', label: '真人', value: k.humanHandled, escalated: 0, cls: 'seg-human', tab: 'human_handling', help: '第一個回覆客人的是真人客服（例如客人一進來就找真人，或真人直接接手還沒人回過的對話）。' },
     { key: 'unhandled', label: '未首接', value: k.unhandled, escalated: 0, cls: 'seg-unhandled', tab: 'open', help: '整場對話從頭到尾沒有機器人、AI 或真人接手回覆（例如只收到系統通知，或加了好友卻沒互動）。' },
   ]
 })
@@ -308,30 +294,62 @@ const deltaClass = computed(() => {
   return v > 0 ? 'is-up' : 'is-down'
 })
 
-// ── 趨勢折線圖（純 SVG，無外部圖表庫）─────────────────────────
-const CHART_W = 960
-const CHART_H = 200
-const PAD_X = 6
-const PAD_TOP = 16
-const PAD_BOTTOM = 8
-const trendChart = computed(() => {
+// ── 趨勢折線圖：ECharts option（Y 軸刻度、內建 tooltip、圖例點擊開關、峰值標點）──
+// total 畫成面積當「量」的輪廓，其餘畫成線呈現組成/結果。series 順序對齊 color 陣列。
+type SeriesKey = 'total' | 'unhandled' | 'handoff' | 'closed'
+const TREND_SERIES: { key: SeriesKey; label: string; color: string; area?: boolean }[] = [
+  { key: 'total', label: '總會話', color: '#22c55e', area: true },
+  { key: 'unhandled', label: '未首接', color: '#e8912d' },
+  { key: 'handoff', label: '轉真人', color: '#9b59b6' },
+  { key: 'closed', label: '已結束', color: '#909399' },
+]
+
+const chartOption = computed(() => {
   const bs = trend.value.buckets
-  const n = bs.length
-  if (!n) return null
-  const maxV = Math.max(1, ...bs.map(b => b.total))
-  const innerW = CHART_W - PAD_X * 2
-  const innerH = CHART_H - PAD_TOP - PAD_BOTTOM
-  const xAt = (i: number) => (n === 1 ? CHART_W / 2 : PAD_X + (i / (n - 1)) * innerW)
-  const yAt = (v: number) => PAD_TOP + innerH - (v / maxV) * innerH
-  const pts = bs.map((b, i) => ({ x: +xAt(i).toFixed(1), y: +yAt(b.total).toFixed(1), v: b.total, date: b.date }))
-  const line = pts.map(p => `${p.x},${p.y}`).join(' ')
-  const baseY = PAD_TOP + innerH
-  const firstPt = pts[0]!
-  const lastPt = pts[n - 1]!
-  const area = `${firstPt.x},${baseY} ${line} ${lastPt.x},${baseY}`
-  let peak = firstPt
-  for (const p of pts) { if (p.v > peak.v) peak = p }
-  return { line, area, pts, maxV, peak, first: firstPt.date, last: lastPt.date, w: CHART_W, h: CHART_H }
+  return {
+    color: TREND_SERIES.map(s => s.color),
+    tooltip: { trigger: 'axis', axisPointer: { type: 'line' } },
+    legend: {
+      bottom: 0,
+      icon: 'roundRect',
+      itemWidth: 14,
+      itemHeight: 8,
+      data: TREND_SERIES.map(s => s.label),
+    },
+    grid: { left: 8, right: 16, top: 28, bottom: 40, containLabel: true },
+    xAxis: {
+      type: 'category',
+      boundaryGap: false,
+      data: bs.map(b => b.date),
+      axisLabel: { hideOverlap: true },
+      axisTick: { alignWithLabel: true },
+    },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      // 頂部留 ~12% 餘量，避免峰值標點（pin）頂到邊被切掉
+      max: (v: { max: number }) => Math.max(1, Math.ceil((v.max || 1) * 1.12)),
+      splitLine: { lineStyle: { type: 'dashed' } },
+    },
+    series: TREND_SERIES.map(s => ({
+      name: s.label,
+      type: 'line',
+      showSymbol: false,
+      smooth: false,
+      emphasis: { focus: 'series' },
+      lineStyle: { width: s.area ? 2.4 : 1.6 },
+      areaStyle: s.area ? { opacity: 0.13 } : undefined,
+      markPoint: s.key === 'total'
+        ? {
+            symbol: 'pin',
+            symbolSize: 46,
+            label: { color: '#fff', fontSize: 10, fontWeight: 'bold' },
+            data: [{ type: 'max', name: '峰值' }],
+          }
+        : undefined,
+      data: bs.map(b => b[s.key]),
+    })),
+  }
 })
 
 function buildQuery() {

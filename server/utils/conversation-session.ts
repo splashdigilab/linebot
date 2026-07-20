@@ -437,18 +437,59 @@ export async function onHumanOutgoingMessage(userId: string, workspaceId: string
   const sessionId = convSnap.data()?.currentSessionId as string | undefined
   if (!sessionId) return
 
-  const sessionSnap = await db.collection('conversationSessions').doc(sessionId).get()
+  const sessionRef = db.collection('conversationSessions').doc(sessionId)
+  const sessionSnap = await sessionRef.get()
   const session = sessionSnap.data()
   if (!session || session.status === 'closed') return
 
+  // 已正式轉真人（pending_human）等真人首次回覆 → 走既有流程（hasHandoff 已於進 live_agent 時設定）
   if (session.status === 'pending_human' && !session.humanFirstRepliedAt) {
     await recordHumanFirstReply(sessionId, userId)
-  } else {
-    await db.collection('conversationSessions').doc(sessionId).update({
+    return
+  }
+
+  // 已在真人處理中 → 只更新「真人最後回覆時間」（auto-handback 用；與 lastActivityAt 分開，
+  // 因為 lastActivityAt 客人傳訊也會動）
+  if (session.status === 'human_handling') {
+    await sessionRef.update({
       lastActivityAt: FieldValue.serverTimestamp(),
-      // 與 lastActivityAt 分開記：lastActivityAt 客人傳訊也會動，
-      // auto-handback 要的是「真人最後一次回覆」的時間
       humanLastRepliedAt: FieldValue.serverTimestamp(),
     })
+    return
   }
+
+  // 其餘（open / bot_handling）＝ 真人「直接在收件匣接手」，先前完全沒被記帳。
+  // 依「在他回覆之前有沒有人接過」補記，並把會話轉成真人處理中
+  //（副作用：會停止機器人／AI 對後續訊息自動回覆，避免與真人搶話；閒置後由 auto-handback 交還）：
+  //   - 之前沒人接（unhandled）→ 真人是第一個回覆的人 → 記「真人首接」
+  //   - 機器人／AI 已先接過      → 真人後來接手           → 記「轉真人」
+  const alreadyHandled
+    = session.initialHandler === 'bot' || session.initialHandler === 'ai' || session.initialHandler === 'human'
+  const updates: Record<string, any> = {
+    status: 'human_handling' as ConversationStatus,
+    currentHandler: 'human' as InitialHandler,
+    currentModuleType: 'live_agent' as ModuleType,
+    lastActivityAt: FieldValue.serverTimestamp(),
+    humanLastRepliedAt: FieldValue.serverTimestamp(),
+  }
+  const isFirstHumanReply = !session.humanFirstRepliedAt
+  if (isFirstHumanReply) updates.humanFirstRepliedAt = FieldValue.serverTimestamp()
+
+  let newHandoff = false
+  if (!alreadyHandled) {
+    // 真人首接
+    updates.initialHandler = 'human' as InitialHandler
+    updates.initialModuleType = 'live_agent' as ModuleType
+  } else if (!session.hasHandoff) {
+    // 轉真人
+    updates.hasHandoff = true
+    updates.handoffRequestedAt = FieldValue.serverTimestamp()
+    newHandoff = true
+  }
+
+  await sessionRef.update(updates)
+  _updateSessionStatusCache(sessionId, 'human_handling')
+
+  if (isFirstHumanReply) await recordConversationEvent(sessionId, userId, 'human_first_reply')
+  if (newHandoff) await recordConversationEvent(sessionId, userId, 'handoff_request')
 }

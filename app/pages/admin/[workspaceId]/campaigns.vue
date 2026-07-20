@@ -266,7 +266,7 @@ import { Plus, Tickets } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 definePageMeta({ middleware: 'auth', layout: 'default' })
 
-const { workspaceId, apiFetch, getBearer } = useWorkspace()
+const { workspaceId, apiFetch } = useWorkspace()
 const { canOperate, assertCanOperate } = useAdminOperateGuard()
 
 const { tags: allTags, loading: tagsLoading, loadTags } = useAdminTagList()
@@ -294,6 +294,8 @@ const stats = ref<{
 const statsLoading = ref(false)
 /** 產 CTA 時實際 fallback 的預設 LIFF（僅 Firestore） */
 const effectiveDefaultLiffId = ref('')
+/** LIFF 讀取是否失敗（區分「未設定」與「讀不到」，避免誤導成缺 LIFF） */
+const liffLoadFailed = ref(false)
 
 function campaignTimestampToPicker(v: unknown): string {
   if (v == null || v === '') return ''
@@ -346,16 +348,17 @@ async function loadModules() {
 }
 
 async function loadWorkspaceEffectiveLiff() {
+  // 用免管理員權限的 /api/liff/config 讀預設 LIFF（與 CTA fallback 同一來源 getLineWorkspaceCredentials）。
+  // 原本打 admin 專屬的 /api/admin/line-workspace，agent 會收 403 被吞成「缺 LIFF」。
   try {
-    const token = await getBearer()
-    const data = await $fetch<{ effectiveDefaultLiffId?: string }>('/api/admin/line-workspace', {
-      query: { workspaceId: workspaceId.value },
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    effectiveDefaultLiffId.value = String(data?.effectiveDefaultLiffId ?? '').trim()
+    const data = await apiFetch<{ liffId?: string }>('/api/liff/config')
+    effectiveDefaultLiffId.value = String(data?.liffId ?? '').trim()
+    liffLoadFailed.value = false
   }
   catch {
+    // 讀取失敗（非「未設定」）：標記起來，送出時給出真正原因而非假裝缺 LIFF
     effectiveDefaultLiffId.value = ''
+    liffLoadFailed.value = true
   }
 }
 
@@ -423,7 +426,12 @@ async function submitForm() {
   if (!assertCanOperate()) return
   if (!form.value.name.trim()) return showToast('請輸入活動名稱', 'error')
   if (!effectiveDefaultLiffId.value.trim()) {
-    return showToast('請先到「組織與 LINE」設定預設 LIFF', 'error')
+    return showToast(
+      liffLoadFailed.value
+        ? '無法讀取 LIFF 設定，請重新整理後再試'
+        : '請先到「組織與 LINE」設定預設 LIFF',
+      'error',
+    )
   }
   if (!form.value.tagIds.length) return showToast('請至少選擇一個標籤', 'error')
   if (form.value.action.type === 'module' && !String(form.value.action.moduleId || '').trim()) {
