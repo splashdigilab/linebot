@@ -2,6 +2,7 @@ import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import { AI_USAGE_COLLECTION, currentYyyyMm, getQuotaAnswered } from '~~/server/utils/ai-usage'
 import { buildPlanView, getWorkspaceSubscription } from '~~/server/utils/billing'
+import { getAiSettings } from '~~/server/utils/ai-settings'
 import type { AiUsageDoc } from '~~/shared/types/ai-knowledge'
 
 /**
@@ -44,6 +45,11 @@ export default defineEventHandler(async (event) => {
   const sub = await getWorkspaceSubscription(workspaceId, db)
   const plan = buildPlanView(sub)
 
+  // AI 是否已啟用（前端頂端狀態列用）：未啟用時 webhook 完全不跑 AI，畫面數字皆為歷史/測試。
+  const settings = await getAiSettings(workspaceId, db)
+  const aiEnabled = settings.enabled
+  const replyMode = settings.replyMode // 'auto' | 'draft'
+
   // 額度進度條看的是「本期」（訂閱週期）用量,與攔截同一顆計數器——跟下面按月份查的
   // 報表 KPI（answered/tokens…）是兩把不同的尺,故不隨 ?period 切換。
   const quotaAnswered = sub?.currentPeriodStart
@@ -55,6 +61,8 @@ export default defineEventHandler(async (event) => {
   const empty = {
     period,
     plan,
+    aiEnabled,
+    replyMode,
     quotaAnswered,
     invocations: 0,
     answered: 0,
@@ -119,6 +127,8 @@ export default defineEventHandler(async (event) => {
   return {
     period,
     plan,
+    aiEnabled,
+    replyMode,
     quotaAnswered,
     invocations,
     answered,

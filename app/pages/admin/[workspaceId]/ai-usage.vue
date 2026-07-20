@@ -21,6 +21,16 @@
 
     <template #editor-body>
       <div class="usage-body admin-panel-stack">
+        <!-- ── AI 狀態列：老闆第一眼要知道 AI 有沒有在跑；未啟用時點明數字是歷史/測試 ── -->
+        <div v-if="aiStatus" class="usage-status" :class="`usage-status--${aiStatus.tone}`">
+          <span class="usage-status__dot" />
+          <div class="usage-status__body">
+            <span class="usage-status__title">{{ aiStatus.title }}</span>
+            <span class="usage-status__desc">{{ aiStatus.desc }}</span>
+          </div>
+          <el-button v-if="aiStatus.tone === 'off'" size="small" type="primary" @click="goSettings">去啟用</el-button>
+        </div>
+
         <!-- ── 方案額度（D1 進度條 / D2 超量提示） ── -->
         <template v-if="planQuota">
           <el-alert
@@ -298,6 +308,9 @@ const tokenOpen = ref(false)
 
 interface Summary {
   period: string
+  /** AI 自動回覆是否已啟用；未啟用時 webhook 不跑 AI，畫面數字皆為歷史/測試 */
+  aiEnabled: boolean
+  replyMode: 'auto' | 'draft'
   /** 本期（訂閱週期）已用則數 —— 額度進度條看這個，與攔截同一顆計數器；不隨月份切換。 */
   quotaAnswered: number
   invocations: number
@@ -370,6 +383,21 @@ const segPct = computed(() => {
     clarify: ((summary.value?.disambiguations ?? 0) / total) * 100,
   }
 })
+
+// 頂端狀態列：AI 有沒有在跑（老闆第一眼要知道的）。未啟用時特別點明「數字是歷史/測試」。
+const aiStatus = computed(() => {
+  if (!summary.value) return null
+  if (!summary.value.aiEnabled) {
+    return { tone: 'off', title: 'AI 客服尚未啟用', desc: '客人目前不會收到 AI 回覆。下方數字是先前建置或測試留下的，不是真實客服表現。' }
+  }
+  if (summary.value.replyMode === 'draft') {
+    return { tone: 'draft', title: 'AI 草稿模式', desc: 'AI 會擬好回覆放進收件匣，但不會自動發送給客人。' }
+  }
+  return { tone: 'on', title: 'AI 客服運作中', desc: '客人傳訊息時，AI 會自動回答；答不出來的會轉給真人。' }
+})
+function goSettings() {
+  router.push(`/admin/${workspaceId.value}/ai-settings`)
+}
 
 // 三桶成本相加＝工作區總花費（客人對話 + 知識庫建置 + 後台測試）
 const totalCostUsd = computed(() => {
@@ -542,6 +570,63 @@ onMounted(() => loadAll())
 
 .usage-card {
   margin-bottom: 16px;
+}
+
+/* 頂端 AI 狀態列：運作中=綠、草稿=琥珀、未啟用=灰。顏色帶語意，一眼判斷 AI 有沒有在跑 */
+.usage-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+
+  &__dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex: none;
+    background: var(--text-muted);
+  }
+  &__body {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    flex: 1;
+    min-width: 0;
+  }
+  &__title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+  }
+  &__desc {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+  }
+
+  &--on {
+    background: var(--brand-green-wash);
+    border-color: rgba(6, 199, 85, 0.3);
+
+    .usage-status__dot {
+      background: var(--brand-green);
+      box-shadow: 0 0 0 4px rgba(6, 199, 85, 0.18);
+    }
+  }
+  &--draft {
+    background: #fdf6e9;
+    border-color: rgba(217, 154, 43, 0.35);
+
+    .usage-status__dot { background: #d99a2b; }
+  }
+  &--off {
+    background: var(--el-fill-color-light);
+
+    .usage-status__dot { background: var(--text-muted); }
+  }
 }
 
 .usage-loading {
