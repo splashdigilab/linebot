@@ -94,48 +94,78 @@
           </div>
           <div class="card-section-stack">
             <div v-if="loading && !summary" class="usage-loading"><div class="spinner" /></div>
-            <div v-else class="usage-kpi-grid">
-              <div class="usage-kpi">
-                <span class="usage-kpi__label">AI 介入次數</span>
-                <strong class="usage-kpi__value">{{ formatNumber(summary?.invocations) }}</strong>
-                <span class="usage-kpi__sub">本期間 AI 出手的總次數</span>
+            <template v-else>
+              <!-- Hero：AI 介入 = 答完 + 轉真人 + 反問（乾淨拆解，一條分段長條看懂產出結構） -->
+              <div class="usage-hero">
+                <div class="usage-hero__head">
+                  <strong class="usage-hero__num">{{ formatNumber(summary?.invocations) }}</strong>
+                  <span class="usage-hero__label">次 <b>AI 介入</b><br>本期間 AI 出手的總次數</span>
+                </div>
+                <template v-if="(summary?.invocations ?? 0) > 0">
+                  <div
+                    class="usage-segbar"
+                    role="img"
+                    :aria-label="`答完 ${summary?.answered}、轉真人 ${summary?.handoffs}、反問 ${summary?.disambiguations}`"
+                  >
+                    <span class="usage-seg usage-seg--answered" :style="{ width: `${segPct.answered}%` }" />
+                    <span class="usage-seg usage-seg--handoff" :style="{ width: `${segPct.handoff}%` }" />
+                    <span class="usage-seg usage-seg--clarify" :style="{ width: `${segPct.clarify}%` }" />
+                  </div>
+                  <div class="usage-legend">
+                    <div class="usage-leg usage-leg--answered">
+                      <span class="usage-leg__dot" />
+                      <span class="usage-leg__k">答完</span>
+                      <span class="usage-leg__v">{{ formatNumber(summary?.answered) }}</span>
+                      <span class="usage-leg__pct">{{ formatPercent(summary?.autoReplyRate) }}</span>
+                    </div>
+                    <div class="usage-leg usage-leg--handoff">
+                      <span class="usage-leg__dot" />
+                      <span class="usage-leg__k">轉真人</span>
+                      <span class="usage-leg__v">{{ formatNumber(summary?.handoffs) }}</span>
+                      <span class="usage-leg__pct">{{ formatPercent(summary?.handoffRate) }}</span>
+                    </div>
+                    <div class="usage-leg usage-leg--clarify">
+                      <span class="usage-leg__dot" />
+                      <span class="usage-leg__k">
+                        反問澄清
+                        <el-tooltip placement="top" content="AI 先問客人「要哪一個」才作答；偏高通常代表知識卡標題太相近，或可到設定調整反問門檻">
+                          <el-icon class="usage-leg__info"><InfoFilled /></el-icon>
+                        </el-tooltip>
+                      </span>
+                      <span class="usage-leg__v">{{ formatNumber(summary?.disambiguations) }}</span>
+                      <span class="usage-leg__pct">{{ formatPercent(summary?.disambiguationRate) }}</span>
+                    </div>
+                  </div>
+                </template>
+                <div v-else class="usage-empty">本期間 AI 尚未出手</div>
               </div>
-              <div class="usage-kpi">
-                <span class="usage-kpi__label">自動回覆率</span>
-                <strong class="usage-kpi__value" :class="metricTone('autoReply', summary?.autoReplyRate)">{{ formatPercent(summary?.autoReplyRate) }}</strong>
-                <span class="usage-kpi__sub">{{ formatNumber(summary?.answered) }} 次自動答完</span>
+
+              <!-- 次要指標：品質 proxy + 成本（標籤不寫死「本月」——月份可切到過去） -->
+              <div class="usage-substats">
+                <div class="usage-substat">
+                  <span class="usage-substat__label">
+                    答後仍轉真人
+                    <el-tooltip placement="top" content="AI 回答後客人還是要找真人，可視為「沒答到重點」，越低越好">
+                      <el-icon class="usage-substat__info"><InfoFilled /></el-icon>
+                    </el-tooltip>
+                  </span>
+                  <strong class="usage-substat__value" :class="metricTone('answeredThenHandoff', summary?.answeredThenHandoffRate)">{{ formatPercent(summary?.answeredThenHandoffRate) }}</strong>
+                  <span class="usage-substat__sub">{{ formatNumber(summary?.answeredThenHandoffs) }} 次</span>
+                </div>
+                <div class="usage-substat">
+                  <span class="usage-substat__label">
+                    AI 成本
+                    <el-tooltip placement="top" content="只計「客人對話」。知識庫建置（匯入 / 建索引）與 playground 測試的花費，都在下方「用量明細」分開列，不含在此、也不影響每對話成本">
+                      <el-icon class="usage-substat__info"><InfoFilled /></el-icon>
+                    </el-tooltip>
+                  </span>
+                  <strong class="usage-substat__value">${{ summary?.estimatedCostUsd?.toFixed(2) ?? '0.00' }}</strong>
+                  <span class="usage-substat__sub">
+                    每對話約 ${{ summary?.perConversationUsd?.toFixed(4) ?? '0.0000' }} USD<template v-if="((summary?.buildCostUsd ?? 0) + (summary?.testCostUsd ?? 0)) > 0"> · 建置 / 測試另計，見明細</template>
+                  </span>
+                </div>
               </div>
-              <div class="usage-kpi">
-                <span class="usage-kpi__label">轉真人率</span>
-                <strong class="usage-kpi__value" :class="metricTone('handoff', summary?.handoffRate)">{{ formatPercent(summary?.handoffRate) }}</strong>
-                <span class="usage-kpi__sub">{{ formatNumber(summary?.handoffs) }} 次轉接</span>
-              </div>
-              <div class="usage-kpi">
-                <span class="usage-kpi__label">
-                  答後仍轉真人
-                  <el-tooltip placement="top" content="AI 回答後客人還是要找真人，可視為「沒答到重點」，越低越好">
-                    <el-icon class="usage-kpi__info"><InfoFilled /></el-icon>
-                  </el-tooltip>
-                </span>
-                <strong class="usage-kpi__value" :class="metricTone('answeredThenHandoff', summary?.answeredThenHandoffRate)">{{ formatPercent(summary?.answeredThenHandoffRate) }}</strong>
-                <span class="usage-kpi__sub">{{ formatNumber(summary?.answeredThenHandoffs) }} 次</span>
-              </div>
-              <div class="usage-kpi">
-                <span class="usage-kpi__label">
-                  反問澄清率
-                  <el-tooltip placement="top" content="AI 先問客人「要哪一個」才作答；偏高通常代表知識卡標題太相近，或可到設定調整反問門檻">
-                    <el-icon class="usage-kpi__info"><InfoFilled /></el-icon>
-                  </el-tooltip>
-                </span>
-                <strong class="usage-kpi__value" :class="metricTone('disambiguation', summary?.disambiguationRate)">{{ formatPercent(summary?.disambiguationRate) }}</strong>
-                <span class="usage-kpi__sub">{{ formatNumber(summary?.disambiguations) }} 次反問</span>
-              </div>
-              <div class="usage-kpi">
-                <span class="usage-kpi__label">本月 AI 成本</span>
-                <strong class="usage-kpi__value">${{ summary?.estimatedCostUsd?.toFixed(2) ?? '0.00' }}</strong>
-                <span class="usage-kpi__sub">每對話約 ${{ summary?.perConversationUsd?.toFixed(4) ?? '0.0000' }} USD</span>
-              </div>
-            </div>
+            </template>
           </div>
         </div>
 
@@ -152,31 +182,36 @@
             </el-button>
           </div>
           <div v-show="tokenOpen" class="card-section-stack">
-            <div class="usage-tokens">
-              <div class="usage-token-row">
-                <span class="text-muted">Input</span>
-                <strong>{{ formatNumber(summary?.inputTokens) }}</strong>
-                <span class="text-xs text-muted">送進 AI 的內容（客人問題 + 參考的知識卡）</span>
+            <!-- 依「用途」把花費拆三桶：客人對話才是上方「AI 成本」；建置與測試各自獨立、不灌進每對話成本 -->
+            <div class="usage-cost-split">
+              <div class="usage-cost-row">
+                <span class="usage-cost-row__dot usage-cost-row__dot--conv" />
+                <span class="usage-cost-row__k">客人對話</span>
+                <span class="usage-cost-row__tok">{{ formatNumber(summary?.conversationTokens) }} tokens</span>
+                <strong class="usage-cost-row__cost">${{ (summary?.estimatedCostUsd ?? 0).toFixed(2) }}</strong>
               </div>
-              <div class="usage-token-row">
-                <span class="text-muted">Output</span>
-                <strong>{{ formatNumber(summary?.outputTokens) }}</strong>
-                <span class="text-xs text-muted">AI 生成的回覆</span>
+              <div class="usage-cost-row">
+                <span class="usage-cost-row__dot usage-cost-row__dot--build" />
+                <span class="usage-cost-row__k">知識庫建置</span>
+                <span class="usage-cost-row__tok">{{ formatNumber(summary?.buildTokens) }} tokens</span>
+                <strong class="usage-cost-row__cost">${{ (summary?.buildCostUsd ?? 0).toFixed(2) }}</strong>
               </div>
-              <div class="usage-token-row">
-                <span class="text-muted">Embedding</span>
-                <strong>{{ formatNumber(summary?.embeddingTokens) }}</strong>
-                <span class="text-xs text-muted">把客人問題轉成可搜尋的形式，用來找對應的知識卡</span>
+              <div class="usage-cost-row">
+                <span class="usage-cost-row__dot usage-cost-row__dot--test" />
+                <span class="usage-cost-row__k">後台測試</span>
+                <span class="usage-cost-row__tok">{{ formatNumber(summary?.testTokens) }} tokens</span>
+                <strong class="usage-cost-row__cost">${{ (summary?.testCostUsd ?? 0).toFixed(2) }}</strong>
               </div>
-              <div class="usage-token-row">
-                <span class="text-muted">匯入 / 整理</span>
-                <strong>{{ formatNumber((summary?.importInputTokens ?? 0) + (summary?.importOutputTokens ?? 0)) }}</strong>
-                <span class="text-xs text-muted">匯入資料時，AI 幫忙切成知識卡、整理內容所花的量（已含在上方 Input / Output 內）</span>
+              <div class="usage-cost-total">
+                <span>合計 · 工作區總花費</span>
+                <strong>${{ totalCostUsd.toFixed(2) }}</strong>
               </div>
             </div>
             <p class="usage-hint">
-              這裡的金額是依 Gemini Flash 公開價格估算的<strong>偏高參考值</strong>（部分呼叫實際走更便宜的 Flash-Lite）<template v-if="pricing">，每 100 萬用量：送入 ${{ pricing.inputPerM }} / 產生 ${{ pricing.outputPerM }} / 搜尋 ${{ pricing.embedPerM }}</template>。
-              實際費用還是以 Google 帳單為準。
+              成本依「用途」拆三塊：<strong>客人對話</strong>＝跟真客人來回問答（上方「AI 成本」就是這桶）；<strong>知識庫建置</strong>＝匯入、切卡、建索引，屬一次性 / 偶爾的花費，不是每次對話都有；<strong>後台測試</strong>＝你在 playground「重演」試打，不計入客人成本。
+            </p>
+            <p class="usage-hint">
+              金額是依 Gemini Flash 公開價格估算的<strong>偏高參考值</strong>（部分呼叫實際走更便宜的 Flash-Lite）<template v-if="pricing">，每 100 萬用量：送入 ${{ pricing.inputPerM }} / 產生 ${{ pricing.outputPerM }} / 搜尋 ${{ pricing.embedPerM }}</template>。實際費用以 Google 帳單為準。
             </p>
           </div>
         </div>
@@ -186,8 +221,16 @@
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="section-title">近期轉真人案例</span>
-              <span class="text-xs text-muted">最近待處理・不分月份</span>
-              <el-select v-model="reasonFilter" size="small" style="width: 150px" @change="loadHandoffs">
+              <span class="text-xs text-muted">還沒處理的問題</span>
+            </div>
+          </div>
+          <div class="card-section-stack">
+            <p class="usage-hint">
+              客人問了 AI 但答不出來的情況。點「補知識」直接到知識庫補一張對應卡。
+            </p>
+            <!-- 篩選移到卡片內（不再擠在標題列），並補中文 placeholder（原本顯示英文「Select」） -->
+            <div class="usage-handoff-toolbar">
+              <el-select v-model="reasonFilter" size="small" placeholder="全部原因" style="width: 150px" @change="loadHandoffs">
                 <el-option label="全部原因" value="" />
                 <!-- 由共用標籤表導出:手打第二份會漂移(曾發生下拉與列表徽章同一原因兩種名字) -->
                 <el-option
@@ -199,13 +242,16 @@
               </el-select>
               <el-checkbox v-model="showResolved" size="small" @change="loadHandoffs">顯示已處理</el-checkbox>
             </div>
-          </div>
-          <div class="card-section-stack">
-            <p class="usage-hint">
-              客人問了 AI 但答不出來的情況。點「補知識」直接到知識庫補一張對應卡。
-            </p>
             <div v-if="loadingHandoffs && !handoffs.length" class="usage-loading"><div class="spinner" /></div>
-            <div v-else-if="!handoffs.length" class="usage-empty">目前沒有待處理的轉真人案例</div>
+            <!-- 和解：此清單＝「目前還卡著、尚未處理」的對話（不分月份），與上方本月轉接次數不是同一份計數，
+                 避免「本月 141 次轉接」與「0 待處理」被誤讀成互相矛盾。空狀態要像「已清空」而非「沒資料」。 -->
+            <div v-else-if="!handoffs.length" class="usage-empty usage-empty--good">
+              <span class="usage-empty__icon">✓</span>
+              <div>
+                <div class="usage-empty__title">沒有待補知識的轉真人對話了</div>
+                <div class="usage-empty__desc">這裡只列「目前還卡著、尚未處理」的對話，和上方本月轉接次數不是同一份計數。想回顧請勾「顯示已處理」。</div>
+              </div>
+            </div>
             <div v-else class="usage-handoff-list">
               <div v-for="row in handoffs" :key="`${row.userId}-${row.updatedAtMs}`" class="usage-handoff-row" :class="{ 'usage-handoff-row--resolved': row.resolved }">
                 <div class="usage-handoff-meta">
@@ -266,6 +312,12 @@ interface Summary {
   embeddingTokens: number
   importInputTokens: number
   importOutputTokens: number
+  /** 三桶用途拆分：客人對話（headline 成本就是這桶）/ 知識庫建置 / 後台測試 */
+  conversationTokens: number
+  buildTokens: number
+  buildCostUsd: number
+  testTokens: number
+  testCostUsd: number
   autoReplyRate: number
   handoffRate: number
   estimatedCostUsd: number
@@ -306,6 +358,25 @@ const reasonOptions = (Object.entries(HANDOFF_REASON_LABELS) as Array<[HandoffRe
 
 // 單價由 summary API 回傳（後端單一事實來源），還沒載到前先不顯示數字
 const pricing = computed(() => summary.value?.pricing ?? null)
+
+// AI 介入的三種結果佔比（分段長條寬度）。已驗證每次介入只記一種結果，
+// 故 invocations = answered + handoffs + disambiguations 恆等，三段相加即 100%。
+const segPct = computed(() => {
+  const total = summary.value?.invocations || 0
+  if (!total) return { answered: 0, handoff: 0, clarify: 0 }
+  return {
+    answered: ((summary.value?.answered ?? 0) / total) * 100,
+    handoff: ((summary.value?.handoffs ?? 0) / total) * 100,
+    clarify: ((summary.value?.disambiguations ?? 0) / total) * 100,
+  }
+})
+
+// 三桶成本相加＝工作區總花費（客人對話 + 知識庫建置 + 後台測試）
+const totalCostUsd = computed(() => {
+  const s = summary.value
+  if (!s) return 0
+  return (s.estimatedCostUsd ?? 0) + (s.buildCostUsd ?? 0) + (s.testCostUsd ?? 0)
+})
 
 // ── Period selector（過去 3 個月） ─────────────────────────
 function makePeriodOptions() {
@@ -479,19 +550,107 @@ onMounted(() => loadAll())
   padding: 24px;
 }
 
-.usage-kpi-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+/* ── Hero：AI 介入 = 答完 + 轉真人 + 反問（分母一致、相加成整體） ── */
+.usage-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.usage-hero__head {
+  display: flex;
+  align-items: flex-end;
   gap: 12px;
 }
+.usage-hero__num {
+  font-size: 40px;
+  font-weight: 750;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+.usage-hero__label {
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--el-text-color-secondary);
+  padding-bottom: 4px;
 
-/* 中性卡：卡片一律白底細框，只有「數字」依門檻上色（見 metricTone），
-   讓眼睛掃數字而非色塊；異常才會有一顆橘數字跳出來。 */
-.usage-kpi {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  padding: 14px 16px;
-  border-radius: 8px;
+  b { color: var(--text-primary); font-weight: 600; }
+}
+
+/* 分段長條：顏色帶語意——答完＝綠（自助成功）、轉真人＝藍（正常交接、非壞事）、反問＝琥珀 */
+.usage-segbar {
+  display: flex;
+  height: 26px;
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--el-fill-color, #f0f2f5);
+}
+.usage-seg {
+  display: block;
+  height: 100%;
+  transition: width 0.3s ease;
+
+  &--answered { background: var(--brand-green-deep); }
+  &--handoff  { background: #5b7a9d; }
+  &--clarify  { background: #d99a2b; }
+}
+
+.usage-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+}
+.usage-leg {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+
+  &__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    align-self: center;
+    flex: none;
+  }
+  &__k {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+  }
+  &__info {
+    font-size: 12px;
+    color: var(--text-muted);
+    cursor: help;
+  }
+  &__v {
+    font-size: 18px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  &__pct {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  &--answered { .usage-leg__dot { background: var(--brand-green-deep); } .usage-leg__v { color: var(--brand-green-text); } }
+  &--handoff  { .usage-leg__dot { background: #5b7a9d; } .usage-leg__v { color: #3f5a78; } }
+  &--clarify  { .usage-leg__dot { background: #d99a2b; } .usage-leg__v { color: #b45309; } }
+}
+
+/* ── 次要指標：品質 proxy + 成本；數字依門檻上色（見 metricTone） ── */
+.usage-substats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 4px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.usage-substat {
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -509,7 +668,7 @@ onMounted(() => loadAll())
     cursor: help;
   }
   &__value {
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 700;
     line-height: 1.15;
     font-variant-numeric: tabular-nums;
@@ -525,20 +684,60 @@ onMounted(() => loadAll())
   }
 }
 
-.usage-tokens {
+/* 成本三桶：客人對話 / 知識庫建置 / 後台測試 —— 依用途拆分，數字靠右對齊成一欄 */
+.usage-cost-split {
   display: flex;
   flex-direction: column;
-  gap: 8px;
 }
 
-.usage-token-row {
+.usage-cost-row {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
   font-size: 13px;
+  border-bottom: 1px solid var(--el-fill-color-light);
+
+  &__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 2px;
+    flex: none;
+
+    &--conv { background: var(--brand-green-deep); }
+    &--build { background: #8a6fb0; }
+    &--test { background: #b0783f; }
+  }
+  &__k {
+    font-weight: 600;
+    color: var(--text-primary);
+    min-width: 80px;
+  }
+  &__tok {
+    flex: 1;
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+    font-variant-numeric: tabular-nums;
+  }
+  &__cost {
+    font-weight: 700;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+.usage-cost-total {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding-top: 10px;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--el-text-color-secondary);
 
   strong {
-    min-width: 120px;
+    font-size: 15px;
+    color: var(--text-primary);
     font-variant-numeric: tabular-nums;
   }
 }
@@ -554,6 +753,53 @@ onMounted(() => loadAll())
   text-align: center;
   color: var(--el-text-color-secondary);
   font-style: italic;
+}
+
+/* 「已清空」而非「沒資料」：正向框 + 下一步，並說明此清單與上方本月次數計數不同 */
+.usage-empty--good {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  text-align: left;
+  font-style: normal;
+  background: var(--brand-green-wash);
+  border: 1px solid rgba(6, 199, 85, 0.3);
+  border-radius: 8px;
+}
+.usage-empty__icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--brand-green);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+  flex: none;
+}
+.usage-empty__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.usage-empty__desc {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-top: 2px;
+}
+
+/* 篩選列改放卡片內（不擠在標題）；與清單之間留一條分隔 */
+.usage-handoff-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--el-fill-color-light);
 }
 
 .usage-handoff-list {
