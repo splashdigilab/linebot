@@ -47,6 +47,17 @@
                   <span v-else class="text-xs text-muted">未開通</span>
                 </template>
               </el-table-column>
+              <el-table-column label="本月用量" min-width="170">
+                <template #default="{ row }">
+                  <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+                    <el-tag :type="row.usage?.aiEnabled ? 'success' : 'info'" size="small">
+                      {{ row.usage?.aiEnabled ? '啟用' : '未啟用' }}
+                    </el-tag>
+                    <span class="text-sm">{{ (row.usage?.invocations ?? 0).toLocaleString('zh-TW') }} 則</span>
+                    <span v-if="(row.usage?.conversationCostUsd ?? 0) > 0" class="text-xs text-muted">約 NT${{ Math.round((row.usage?.conversationCostUsd ?? 0) * 32).toLocaleString('zh-TW') }}</span>
+                  </div>
+                </template>
+              </el-table-column>
               <el-table-column label="LINE 設定" width="100" align="center">
                 <template #default="{ row }">
                   <el-tag v-if="row.channelAccessTokenConfigured && row.channelSecretConfigured" type="success" size="small">已設定</el-tag>
