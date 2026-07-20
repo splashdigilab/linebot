@@ -34,6 +34,10 @@
             <el-icon class="nav-icon"><ChatDotRound /></el-icon>
             <span>官方帳號管理</span>
           </NuxtLink>
+          <NuxtLink to="/admin/super/leads" class="nav-item" :class="{ active: route.path.startsWith('/admin/super/leads') }">
+            <el-icon class="nav-icon"><Message /></el-icon>
+            <span>潛在客戶名單</span>
+          </NuxtLink>
           <NuxtLink to="/admin/super/users" class="nav-item" :class="{ active: route.path.startsWith('/admin/super/users') }">
             <el-icon class="nav-icon"><Avatar /></el-icon>
             <span>Super Admin 管理</span>
@@ -63,7 +67,7 @@
 </template>
 
 <script setup lang="ts">
-import { Avatar, ChatDotRound, OfficeBuilding, Setting, SwitchButton } from '@element-plus/icons-vue'
+import { Avatar, ChatDotRound, Message, OfficeBuilding, Setting, SwitchButton } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const { user, logout } = useAuth()

@@ -13,6 +13,7 @@
     "set-super-admin": "node --env-file=.env --experimental-strip-types scripts/set-super-admin.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-sesv2": "^3.1090.0",
     "@line/bot-sdk": "^11.0.0",
     "@line/liff": "^2.27.3",
     "croner": "^10.0.1",

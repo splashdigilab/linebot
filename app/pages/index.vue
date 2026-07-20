@@ -281,34 +281,31 @@
           <p class="lp-price__intro">每個帳號都有免費額度,之後按 AI 回覆的則數計價。<b>用量在後台看得清清楚楚,超量才以固定單價加購——花多少一目了然。</b></p>
         </div>
 
-        <div class="lp-plans">
-          <div class="lp-plan lp-reveal">
-            <span class="lp-plan__name">入門</span>
-            <div class="lp-plan__price">NT$300–500 <small>／月</small></div>
-            <p class="lp-plan__for">適合剛導入、想先讓 AI 接客服的店家。</p>
+        <div class="lp-plans lp-plans--catalog">
+          <div
+            v-for="p in publicPlans"
+            :key="p.id"
+            class="lp-plan lp-reveal"
+            :class="{ 'lp-plan--pro': p.recommended }"
+          >
+            <span v-if="p.recommended" class="lp-plan__ribbon">最受歡迎</span>
+            <span class="lp-plan__name">{{ p.name }}</span>
+            <div class="lp-plan__price">
+              {{ p.price.amount }}<small v-if="p.price.unit">{{ p.price.unit }}</small>
+            </div>
+            <p class="lp-plan__for">{{ p.quota }}</p>
             <ul class="lp-plan__list">
-              <li><span class="tick">✓</span> AI 即時客服</li>
-              <li><span class="tick">✓</span> 腳本設定</li>
-              <li><span class="tick">✓</span> 基礎推播</li>
-              <li><span class="tick">✓</span> 一鍵轉真人</li>
+              <li v-for="(feat, i) in p.features" :key="i"><span class="tick">✓</span> {{ feat }}</li>
             </ul>
-            <a class="lp-btn lp-btn--ghost lp-btn--block" href="#demo">預約 Demo</a>
-          </div>
-          <div class="lp-plan lp-plan--pro lp-reveal">
-            <span class="lp-plan__ribbon">最完整</span>
-            <span class="lp-plan__name">進階</span>
-            <div class="lp-plan__price">NT$1,000 <small>內／月</small></div>
-            <p class="lp-plan__for">適合要做完整再行銷與忠誠度經營的品牌。</p>
-            <ul class="lp-plan__list">
-              <li><span class="tick">✓</span> 入門的全部功能</li>
-              <li><span class="tick">✓</span> 分眾再行銷</li>
-              <li><span class="tick">✓</span> 活動成效追蹤</li>
-              <li><span class="tick">✓</span> 對話統計</li>
-            </ul>
-            <a class="lp-btn lp-btn--primary lp-btn--block" href="#demo">預約 Demo</a>
+            <a
+              class="lp-btn lp-btn--block"
+              :class="p.recommended ? 'lp-btn--primary' : 'lp-btn--ghost'"
+              href="#demo"
+              @click="pickPlan(p.id)"
+            >{{ p.cta }}</a>
           </div>
         </div>
-        <p class="lp-price__fine lp-reveal">＊試銷期價格,實際方案與額度以洽談為準。</p>
+        <p class="lp-price__fine lp-reveal">＊價格為每月費用、已含稅;試銷期方案與額度可能調整,實際以後台顯示為準。</p>
 
         <div id="faq" class="lp-faq lp-reveal">
           <h3 class="lp-faq__h">常見問題</h3>
@@ -364,7 +361,7 @@
         </div>
 
         <div>
-          <form v-if="!submitted" class="lp-form" novalidate @submit.prevent="submitted = true">
+          <form v-if="!submitted" class="lp-form" novalidate @submit.prevent="submitLead">
             <div class="lp-form__row">
               <div class="lp-field">
                 <label for="f-name">稱呼</label>
@@ -391,7 +388,15 @@
                 </select>
               </div>
             </div>
-            <button class="lp-btn lp-btn--primary lp-btn--block" type="submit">預約 Demo</button>
+            <!-- honeypot：真人看不到、也 tab 不到；機器人填了就會被後端擋掉 -->
+            <div class="lp-hp" aria-hidden="true">
+              <label for="f-company">公司（免填）</label>
+              <input id="f-company" v-model="form.company" type="text" tabindex="-1" autocomplete="off">
+            </div>
+            <p v-if="submitError" class="lp-form__err">{{ submitError }}</p>
+            <button class="lp-btn lp-btn--primary lp-btn--block" type="submit" :disabled="submitting">
+              {{ submitting ? '送出中…' : '預約 Demo' }}
+            </button>
             <p class="lp-form__hint">送出即表示同意我們與你聯繫,不會有其他用途。</p>
           </form>
 
@@ -423,6 +428,8 @@
 </template>
 
 <script setup lang="ts">
+import { BILLING_PLAN_ORDER, BILLING_PLANS, type BillingPlan, type BillingPlanId } from '~~/shared/billing/plans'
+
 definePageMeta({ layout: false })
 
 useSeoMeta({
@@ -437,12 +444,93 @@ useSeoMeta({
 const plusIcon
   = '<svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 3v12M3 9h12"/></svg>'
 
+// ── 定價卡：直接讀 shared/billing/plans.ts（單一事實來源），改價只動那份、不用改門面 ──
+// 標記為「最受歡迎」的方案（給 ribbon 與主色 CTA）。
+const RECOMMENDED_PLAN: BillingPlanId = 'growth'
+
+function priceText(p: BillingPlan): { amount: string, unit: string } {
+  if (p.priceMonthly === null) return { amount: '面談', unit: '' }
+  if (p.priceMonthly === 0) return { amount: '免費', unit: '' }
+  return { amount: `NT$${p.priceMonthly.toLocaleString()}`, unit: '／月' }
+}
+
+function quotaText(p: BillingPlan): string {
+  if (p.answeredQuota === null) return '客製 AI 回覆額度'
+  return `每月 ${p.answeredQuota.toLocaleString()} 則 AI 回覆`
+}
+
+function featureList(p: BillingPlan): string[] {
+  const f: string[] = []
+  f.push(p.seats === null ? '團隊席次不限' : `團隊 ${p.seats} 席`)
+  f.push(p.knowledgeSources === null ? '知識庫來源不限' : `知識庫 ${p.knowledgeSources} 個來源`)
+  if (p.scripting) f.push('腳本自動化')
+  if (p.broadcast === 'basic') f.push('基礎推播')
+  else if (p.broadcast === 'advanced') f.push('進階分眾推播')
+  if (p.reports === 'export') f.push('報表匯出')
+  else if (p.reports === 'advanced') f.push('進階數據報表')
+  if (p.api) f.push('API 串接')
+  return f
+}
+
+// 只顯示對外方案（排除 test/internal）；enterprise 走「預約 Demo」，其餘走「免費開始」。
+const publicPlans = computed(() =>
+  BILLING_PLAN_ORDER
+    .map(id => BILLING_PLANS[id])
+    .filter(p => !p.internal)
+    .map(p => ({
+      id: p.id,
+      name: p.name,
+      price: priceText(p),
+      quota: quotaText(p),
+      features: featureList(p),
+      cta: p.custom ? '預約 Demo' : '免費開始',
+      recommended: p.id === RECOMMENDED_PLAN,
+    })),
+)
+
+// 使用者從哪張方案卡點進 #demo，一併記進名單（業務知道他對哪個方案有興趣）。
+const interestedPlan = ref<string>('')
+function pickPlan(id: string) { interestedPlan.value = id }
+
 const root = ref<HTMLElement | null>(null)
 const stuck = ref(false)
 const anim = ref(false)
 const menuOpen = ref(false)
 const submitted = ref(false)
-const form = reactive({ name: '', contact: '', industry: '電商', need: '客服回不完' })
+const submitting = ref(false)
+const submitError = ref('')
+// company = honeypot（真人不填）；其餘為表單實際欄位
+const form = reactive({ name: '', contact: '', industry: '電商', need: '客服回不完', company: '' })
+
+async function submitLead() {
+  submitError.value = ''
+  if (!form.contact.trim()) {
+    submitError.value = '請留下聯絡方式（Email 或 LINE ID），我們才能與你聯繫。'
+    return
+  }
+  submitting.value = true
+  try {
+    await $fetch('/api/leads', {
+      method: 'POST',
+      body: {
+        name: form.name,
+        contact: form.contact,
+        industry: form.industry,
+        need: form.need,
+        company: form.company, // honeypot
+        source: 'landing_demo',
+        planId: interestedPlan.value || undefined,
+      },
+    })
+    submitted.value = true
+  }
+  catch (e: any) {
+    submitError.value = e?.data?.statusMessage || '送出失敗，請稍後再試，或直接與我們聯繫。'
+  }
+  finally {
+    submitting.value = false
+  }
+}
 
 function closeMenu() { menuOpen.value = false }
 function onScroll() { stuck.value = window.scrollY > 8 }

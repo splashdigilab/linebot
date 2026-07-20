@@ -1,6 +1,7 @@
 import { parseNotifyResult, verifyAndDecryptNotify } from '~~/server/utils/newebpay'
 import { settlePaidOrder } from '~~/server/utils/payment'
 import { invoiceKeysFromConfig, issueInvoiceForOrder } from '~~/server/utils/invoice'
+import { sendReceiptNotification } from '~~/server/utils/billing-emails'
 
 /**
  * POST /newebpay/notify — 藍新 MPG 幕後 Notify(server→server,開通的唯一真相來源)。
@@ -77,6 +78,8 @@ export default defineEventHandler(async (event) => {
       planId: settled.planId!,
       totalAmt: settled.amount!,
     }, invoiceKeysFromConfig(config as unknown as Record<string, unknown>))
+    // 收據信（發票開立後才寄，才能帶到發票號碼）。永不 throw，不影響回 200。
+    await sendReceiptNotification(merchantOrderNo)
   }
 
   return { status: 'ok' }

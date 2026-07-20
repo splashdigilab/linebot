@@ -2,6 +2,7 @@ import { decryptPeriodNotify, isPeriodRecurringNotify } from '~~/server/utils/ne
 import { periodConfigFrom, terminatePeriodMandate } from '~~/server/utils/newebpay-period'
 import { settlePaidOrder, settleRecurringAuth } from '~~/server/utils/payment'
 import { invoiceKeysFromConfig, issueInvoiceForOrder } from '~~/server/utils/invoice'
+import { sendReceiptNotification, sendChargeFailedNotification } from '~~/server/utils/billing-emails'
 
 /**
  * POST /newebpay/period-notify — 藍新定期定額的幕後通知（開通與續期的唯一真相來源）。
@@ -92,6 +93,12 @@ export default defineEventHandler(async (event) => {
         planId: settled.planId!,
         totalAmt: settled.amount!,
       }, invoiceKeys)
+      // 續期收據信（本期帳本單，發票開立後才寄）
+      await sendReceiptNotification(settled.ledgerOrderNo)
+    }
+    // 扣款失敗（信用卡過期/餘額不足）→ 通知客戶更新付款方式。past_due 只在首次失敗回傳，天然冪等。
+    else if (settled.outcome === 'past_due' && settled.workspaceId && settled.planId) {
+      await sendChargeFailedNotification({ workspaceId: settled.workspaceId, planId: settled.planId })
     }
     return { status: 'ok' }
   }
@@ -178,6 +185,8 @@ export default defineEventHandler(async (event) => {
       planId: settled.planId!,
       totalAmt: settled.amount!,
     }, invoiceKeys)
+    // 首期收據信（委託建立當下扣一期全額；發票開立後才寄）
+    await sendReceiptNotification(merchantOrderNo)
   }
 
   return { status: 'ok' }

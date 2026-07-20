@@ -244,6 +244,16 @@ export interface WorkspaceSubscription {
   quotaOverride?: number | null
   /** 內部備註（開通原因、合約號等），不對客戶顯示。 */
   note?: string
+  /**
+   * 已寄過「續扣前提醒」信的那一期（值 = 寄送當下的 currentPeriodEnd）。
+   * 續扣提醒由每日對帳寄，靠這個欄位防止同一期每天重寄。
+   */
+  renewalReminderSentFor?: string | null
+  /**
+   * 已寄過額度通知信的「本期起日:類型」（例 `2026-07-20:near`）。
+   * 額度信由每日對帳寄，靠這個防止同期同門檻重寄；near→over 會因值不同而各寄一次。
+   */
+  quotaEmailSentFor?: string | null
 }
 
 // ── helpers ────────────────────────────────────────────────────────

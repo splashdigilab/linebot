@@ -1,0 +1,142 @@
+/* ── 自助開通精靈 ─────────────────────────────────────────── */
+
+.onb-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-base);
+  padding: 2rem;
+}
+
+.onb-card {
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  padding: 2.5rem 2rem;
+  width: 100%;
+  max-width: 460px;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.onb-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 0.5rem;
+
+  h1 {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin: 0;
+    color: var(--text-primary);
+  }
+}
+
+.onb-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--brand-green);
+  display: grid;
+  place-items: center;
+  font-size: 1.7rem;
+  box-shadow: var(--shadow-md);
+  margin-bottom: 0.25rem;
+}
+
+.onb-logo--done {
+  background: var(--brand-green-deep, var(--brand-green));
+}
+
+.onb-sub {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.onb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.onb-hint {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 0.1rem 0 0;
+}
+
+.onb-err {
+  font-size: 0.85rem;
+  color: var(--el-color-danger, #f56c6c);
+  margin: 0;
+}
+
+.onb-primary-btn {
+  width: 100%;
+}
+
+.onb-secondary-btn {
+  width: 100%;
+  margin-left: 0 !important; /* el-button 連續排列時預設帶左邊距，堆疊時要清掉 */
+}
+
+.onb-foot {
+  text-align: center;
+  font-size: 0.85rem;
+
+  a {
+    color: var(--text-muted);
+    text-decoration: none;
+
+    &:hover {
+      text-decoration: underline;
+    }
+  }
+}
+
+/* 完成頁的方案摘要卡 */
+.onb-plan {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-base);
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.onb-plan__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+.onb-plan__k {
+  color: var(--text-secondary);
+}
+
+.onb-plan__v {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.onb-plan__note {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0.25rem 0 0;
+}
+
+.onb-next-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0.25rem 0 -0.25rem;
+}

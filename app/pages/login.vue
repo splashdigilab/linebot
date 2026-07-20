@@ -30,13 +30,13 @@
       </button>
 
       <!--
-        講清楚「這是邀請制」。原本只寫「僅限授權管理員帳號登入」，語意是「你沒被授權」，
-        但沒說「要怎樣才會被授權」——結果潛在客戶照樣點下去，然後撞上一堵牆。
-        先說明制度，再給他一個不用登入也能走的出口。
+        登入頁要同時服務三種人：想開始用的新客、被團隊邀請的成員、想先了解的人。
+        原本只寫「邀請制」會把新客擋在門外；改成中性歡迎語，登入後的迎賓頁再分流
+        （見 admin/workspaces.vue 空狀態）。
       -->
-      <p class="login-hint">目前採邀請制。若你的團隊已在使用，請管理員先邀請你的 Google 信箱。</p>
+      <p class="login-hint">第一次使用？登入後可以建立自己的官方帳號空間。被團隊邀請的話，用受邀的 Google 信箱登入即可。</p>
       <p v-if="contactHref" class="login-hint">
-        還不是客戶？<a :href="contactHref" target="_blank" rel="noopener" class="login-contact">聯繫我們 / 預約 Demo →</a>
+        想先了解？<a :href="contactHref" target="_blank" rel="noopener" class="login-contact">聯繫我們 / 預約 Demo →</a>
       </p>
     </div>
 

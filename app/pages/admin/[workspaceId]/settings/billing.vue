@@ -29,6 +29,22 @@
           </div>
         </el-alert>
 
+        <!--
+          發票開立失敗要看得到。開票在收款後於背景進行、失敗會自動重試（見 reissueFailedInvoices），
+          但若持續失敗，這是稅務問題，管理者必須知道——不能只埋在付款紀錄表的一欄裡。
+        -->
+        <el-alert
+          v-if="invoiceEnabled && hasFailedInvoice"
+          type="warning"
+          show-icon
+          :closable="false"
+          title="有發票開立失敗"
+        >
+          <span class="text-xs">
+            有付款成功、但電子發票尚未開立成功的紀錄（見下方付款紀錄的「發票號碼」欄）。系統會自動重試；若持續失敗，請聯繫我們協助處理。
+          </span>
+        </el-alert>
+
         <div v-if="planView" class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
@@ -126,6 +142,7 @@
               <el-table-column v-if="invoiceEnabled" label="發票號碼" min-width="110">
                 <template #default="{ row }">
                   <span v-if="row.invoiceNumber" class="billing-order-no">{{ row.invoiceNumber }}</span>
+                  <el-tag v-else-if="row.invoiceStatus === 'failed'" type="danger" size="small">開立失敗</el-tag>
                   <span v-else class="text-xs text-muted">{{ invoiceStatusLabel(row.invoiceStatus) }}</span>
                 </template>
               </el-table-column>
@@ -217,6 +234,11 @@ interface OrderRow {
   invoiceStatus?: 'issued' | 'failed' | 'skipped' | null
 }
 const orders = ref<OrderRow[]>([])
+
+/** 有付款成功、但發票開立失敗的紀錄 → 頁首顯示警示（稅務問題，要看得到）。 */
+const hasFailedInvoice = computed(() =>
+  orders.value.some(o => o.status === 'paid' && o.invoiceStatus === 'failed'),
+)
 
 // ── 自動續訂 ──────────────────────────────────────────────
 /** 下次扣款日 = 本期到期日的隔天（藍新在錨定日當天扣款）。 */

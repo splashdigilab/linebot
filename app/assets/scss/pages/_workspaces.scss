@@ -98,6 +98,52 @@
   }
 }
 
+/* ── 迎賓頁三岔選項 ─────────────────────────────────────── */
+.ws-empty-lead {
+  margin: 0.25rem 0 0.15rem;
+}
+
+.ws-welcome-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-base);
+}
+
+/* 主要出口（我想開始使用）：綠框凸顯，這是最高意願的路 */
+.ws-welcome-opt--primary {
+  border-color: var(--brand-green);
+  background: var(--brand-green-wash, rgba(22, 163, 74, 0.06));
+}
+
+.ws-welcome-opt__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.ws-welcome-opt__title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.ws-welcome-opt__desc {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* 受邀成員選項內的信箱框：撐滿卡片寬度 */
+.ws-welcome-opt .ws-empty-email {
+  margin-top: 0.15rem;
+}
+
 /* 組織分組列表 */
 .ws-groups {
   display: flex;

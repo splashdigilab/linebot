@@ -13,32 +13,48 @@
       </div>
 
       <!--
-        沒有任何存取權限時的畫面。
+        沒有任何存取權限時的迎賓頁（三岔路，不是死路）。
 
-        會走到這裡的人，多半不是「權限出錯」，而是**照著首頁的登入按鈕走進來的潛在客戶**——
-        目前系統是邀請制，他本來就不會有帳號。所以這裡不該是一句錯誤訊息，而該是一個出口：
-          ① 誠實說明目前是邀請制（降低他「是不是我做錯了什麼」的困惑）
-          ② 顯示他登入用的信箱並可一鍵複製 —— 同事要邀請他，需要的就是這個字串，
-             而他自己往往不知道剛剛是用哪個 Google 帳號登入的
-          ③ 給一個真的出口（預約 Demo / 聯繫我們），把流量變成 lead 而不是彈跳率
+        會走到這裡的人分三種，過去只服務到第二種：
+          ① 想開始使用的新客 —— 走進登入卻無處可去。給他一個「開始使用」的主要出口，
+             一鍵用登入信箱加入候補（自助開通精靈上線前的過渡；上線後改導精靈）。
+          ② 被團隊邀請、但管理員還沒加到他的成員 —— 顯示登入信箱＋複製，交給管理員邀請。
+          ③ 想先了解 / 企業需求 —— 導到聯繫我們 / 預約 Demo。
 
-        刻意**不放購買按鈕**：他還沒有官方帳號、沒接 LINE、沒看過機器人回過話，
-        而我們賣的是「每月 AI 回覆則數」——等於叫一個還沒有車的人先買油。
+        刻意**不放購買按鈕**：他還沒有官方帳號、沒接 LINE，而我們賣「每月 AI 回覆則數」，
+        等於叫還沒有車的人先買油。導購靠「先免費把車開回家」，不靠在這裡塞結帳。
       -->
       <template v-else-if="groupedWorkspaces.length === 0">
         <div class="ws-select-empty">
-          <p class="ws-empty-title">還沒有可管理的官方帳號</p>
-          <p class="text-xs text-muted">本系統目前採邀請制。請團隊的管理員用下面這個信箱邀請你加入。</p>
+          <p class="ws-empty-title">歡迎使用{{ brandName }}</p>
+          <p class="text-xs text-muted ws-empty-lead">選一個最符合你狀況的方式繼續：</p>
 
-          <div class="ws-empty-email">
-            <span class="ws-empty-email-value">{{ userEmail || '（讀取中…）' }}</span>
-            <el-button v-if="userEmail" size="small" text @click="copyEmail">
-              {{ emailCopied ? '已複製' : '複製' }}
-            </el-button>
+          <!-- ① 想開始使用 → 自助開通精靈（建立自己的組織＋第一個帳號＋免費方案） -->
+          <div class="ws-welcome-opt ws-welcome-opt--primary">
+            <div class="ws-welcome-opt__body">
+              <div class="ws-welcome-opt__title">我想開始使用</div>
+              <div class="ws-welcome-opt__desc">建立你自己的官方帳號空間，免費方案不需綁卡。</div>
+            </div>
+            <el-button type="primary" @click="startOnboarding">開始使用</el-button>
           </div>
 
+          <!-- ② 受邀成員 → 提供信箱給管理員邀請 -->
+          <div class="ws-welcome-opt">
+            <div class="ws-welcome-opt__body">
+              <div class="ws-welcome-opt__title">我是被邀請加入團隊的</div>
+              <div class="ws-welcome-opt__desc">把下面這個信箱給你的管理員，請他邀請你加入。</div>
+              <div class="ws-empty-email">
+                <span class="ws-empty-email-value">{{ userEmail || '（讀取中…）' }}</span>
+                <el-button v-if="userEmail" size="small" text @click="copyEmail">
+                  {{ emailCopied ? '已複製' : '複製' }}
+                </el-button>
+              </div>
+            </div>
+          </div>
+
+          <!-- ③ 想先了解 / 企業需求 -->
           <p v-if="contactHref" class="text-xs text-muted">
-            還不是客戶？
+            想先了解或有企業需求？
             <a :href="contactHref" target="_blank" rel="noopener" class="ws-empty-contact">聯繫我們 / 預約 Demo →</a>
           </p>
         </div>
@@ -180,6 +196,14 @@ const contact = String(config.public.supportContact ?? '').trim()
 const contactHref = contact
   ? (contact.startsWith('http') ? contact : `mailto:${contact}`)
   : ''
+// 品牌名走 runtimeConfig（多租戶可覆寫），不寫死租戶名
+const brandName = String(config.public.brandName ?? '').trim() || 'MYFEEL'
+
+// ── 「我想開始使用」→ 自助開通精靈 ───────────────────────────
+// 帶去 /admin/onboarding 讓他自己建立組織＋第一個帳號（免費方案），不再撞牆。
+function startOnboarding() {
+  navigateTo('/admin/onboarding')
+}
 
 async function copyEmail() {
   if (!userEmail.value) return

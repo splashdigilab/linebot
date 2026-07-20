@@ -107,6 +107,23 @@ export async function requireSuperAdmin(event: H3Event) {
 }
 
 /**
+ * 只要求「已登入」，不綁定任何 workspace / org。回傳 uid + 正規化 email + token。
+ *
+ * 給「此刻還沒有任何權限」的登入者用——目前唯一情境是自助開通（self-serve）：
+ * 使用者剛用 Google 登入、還沒有組織也沒有 workspace，要據此建立第一個。
+ * email 一律正規化為小寫（與 orgMembers 儲存/查詢一致）。
+ */
+export async function requireAuth(event: H3Event) {
+  const token = await verifyToken(event)
+  return {
+    uid: token.uid,
+    email: token.email?.trim().toLowerCase() ?? null,
+    token,
+    isSuperAdmin: isSuperAdmin(token),
+  }
+}
+
+/**
  * 組織層權限守衛（email-based）：super admin 直接放行，否則需為該 org 的 orgMembers.admin。
  * 用於「建立官方帳號 / 查組織配額」等組織級操作——這類操作跨越單一 workspace，
  * 不走 requireWorkspaceAccess。組織停用檢查交由呼叫端視情況處理。

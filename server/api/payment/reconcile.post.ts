@@ -1,6 +1,7 @@
 import { runPaymentReconcile } from '~~/server/utils/payment'
 import { periodConfigFrom } from '~~/server/utils/newebpay-period'
 import { invoiceKeysFromConfig, reissueFailedInvoices } from '~~/server/utils/invoice'
+import { sendDueBillingEmails } from '~~/server/utils/billing-emails'
 
 /**
  * POST /api/payment/reconcile — 每日續期對帳（由排程觸發）。
@@ -25,5 +26,7 @@ export default defineEventHandler(async (event) => {
   const result = await runPaymentReconcile(new Date(), undefined, periodConfigFrom(cfg))
   // 順便補開之前失敗的發票（ezPay 短暫故障不該讓那批發票永久遺失）
   const invoices = await reissueFailedInvoices(invoiceKeysFromConfig(cfg))
-  return { ok: true, ...result, invoices }
+  // 續扣前提醒 + 額度快用完/已用完通知（未設定 SES 時內部直接略過，零成本）
+  const emails = await sendDueBillingEmails(new Date())
+  return { ok: true, ...result, invoices, emails }
 })

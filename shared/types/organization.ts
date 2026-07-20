@@ -23,6 +23,11 @@ export interface OrganizationDoc {
   ownerEmail?: string
   /** Firebase uid；若擁有者尚未註冊則可能缺省 */
   ownerId?: string
+  /**
+   * 建立來源。`self_serve` = 使用者從自助開通精靈建立（見 /api/onboarding/self-serve）。
+   * 缺省 = super admin 手動建立。用於自助防濫用查詢（每個 uid 最多一個自助組織）。
+   */
+  createdVia?: 'self_serve'
   disabled?: boolean
   /**
    * 這個組織能建立幾個官方帳號。未設 → `DEFAULT_MAX_WORKSPACES_PER_ORG`。

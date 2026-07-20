@@ -123,6 +123,19 @@ export default defineNuxtConfig({
     ezpayInvoiceApiUrl: process.env.EZPAY_INVOICE_API_URL ?? '',
     /** 對外 HTTPS 原點（金流 Notify/Return 導回用）；與 clickTrackingBaseUrl 同源 */
     appBaseUrl: appPublicBaseUrl,
+    /**
+     * 交易通知信（AWS SES）。付款收據、扣款失敗、續扣提醒、額度用完會寄到客戶的帳務信箱。
+     *
+     * ⚠️ 三個都要設齊才會真的寄信（見 isEmailConfigured）：
+     *   - EMAIL_FROM：寄件人（**必須是 SES 已驗證的網域／信箱**，否則 SES 會拒寄），
+     *     可帶顯示名稱，例：`MYFEEL <noreply@yourdomain.com>`
+     *   - AWS_SES_REGION：SES 所在區域（例 ap-northeast-1）
+     *   憑證由 Amplify 執行角色 / 環境自動解析（SDK 預設鏈），不放這裡。
+     *   未設定 → 全部寄信變 no-op（只 log），金流／排程流程照常不受影響。
+     */
+    emailFrom: process.env.EMAIL_FROM ?? '',
+    emailReplyTo: process.env.EMAIL_REPLY_TO ?? '',
+    awsSesRegion: process.env.AWS_SES_REGION ?? process.env.AWS_REGION ?? '',
 
     // Public (exposed to client)
     public: {

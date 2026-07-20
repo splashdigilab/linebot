@@ -249,6 +249,12 @@
   .lp-price__intro { color: var(--ink-2); font-size: 1.04rem; max-width: 48ch; margin-top: 16px; }
   .lp-price__intro b { color: var(--ink); }
   .lp-plans { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 42px; }
+  /* 直接吃 shared/billing/plans.ts 的多方案：自動排版、緊湊卡片 */
+  .lp-plans--catalog { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; align-items: stretch; }
+  .lp-plans--catalog .lp-plan { padding: 26px 22px; }
+  .lp-plans--catalog .lp-plan__price { font-size: 1.7rem; }
+  .lp-plans--catalog .lp-plan__list { gap: 10px; padding-top: 16px; margin-bottom: 20px; }
+  .lp-plans--catalog .lp-plan__list li { font-size: 0.9rem; }
   .lp-plan { position: relative; background: var(--paper); border: 1px solid var(--hair); border-radius: var(--r-xl); padding: 34px 32px; box-shadow: var(--sh-soft); display: flex; flex-direction: column; }
   .lp-plan--pro { border: 2px solid var(--g); box-shadow: var(--sh-card); }
   .lp-plan__ribbon { position: absolute; top: -13px; right: 28px; font-size: 0.72rem; font-weight: 800; letter-spacing: 0.04em; background: var(--g); color: #fff; padding: 5px 14px; border-radius: var(--radius-pill); box-shadow: var(--sh-green); }
@@ -299,7 +305,11 @@
   .lp-input:focus { outline: none; border-color: var(--g); box-shadow: 0 0 0 3px var(--g-wash); }
   select.lp-input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2371757b' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 36px; }
   .lp-form .lp-btn { margin-top: 6px; }
+  .lp-form .lp-btn[disabled] { opacity: 0.6; cursor: default; }
   .lp-form__hint { text-align: center; margin-top: 14px; font-size: 0.8rem; color: var(--ink-soft); }
+  .lp-form__err { margin: 4px 0 0; font-size: 0.85rem; color: #d33; }
+  /* honeypot：把欄位藏起來（不用 display:none，部分機器人會略過 none 的欄位） */
+  .lp-hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
   .lp-form__ok { text-align: center; padding: 26px 8px; }
   .lp-form__ok .big { width: 60px; height: 60px; border-radius: 50%; background: var(--g); color: #fff; display: grid; place-items: center; font-size: 1.7rem; font-weight: 800; margin: 0 auto 18px; box-shadow: var(--sh-green); }
   .lp-form__ok h4 { margin: 0 0 8px; font-size: 1.3rem; font-weight: 800; }
