@@ -263,13 +263,12 @@ export async function enterModule(
   // system_notice never counts as initial handler
   if (!hasInitial && moduleType !== 'system_notice') {
     updates.initialModuleType = moduleType
-    if (moduleType === 'live_agent') {
-      updates.initialHandler = 'human'
-      updates.currentHandler = 'human'
-    } else {
-      updates.initialHandler = 'bot'
-      updates.currentHandler = 'bot'
-    }
+    const handler: InitialHandler =
+      moduleType === 'live_agent' ? 'human'
+        : moduleType === 'ai' ? 'ai'
+          : 'bot'
+    updates.initialHandler = handler
+    updates.currentHandler = handler
   }
 
   // Status transitions
@@ -278,8 +277,9 @@ export async function enterModule(
     if (session.status !== 'human_handling') {
       updates.status = 'pending_human'
     }
-  } else if (moduleType === 'welcome' || moduleType === 'bot_flow') {
-    updates.currentHandler = 'bot'
+  } else if (moduleType === 'welcome' || moduleType === 'bot_flow' || moduleType === 'ai') {
+    // AI 與罐頭流程一樣屬「自動處理」，狀態歸 bot_handling（沒有獨立的 ai_handling 狀態）
+    updates.currentHandler = moduleType === 'ai' ? 'ai' : 'bot'
     if (session.status === 'open') {
       updates.status = 'bot_handling'
     }

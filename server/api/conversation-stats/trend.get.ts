@@ -49,11 +49,12 @@ export default defineEventHandler(async (event): Promise<{ buckets: TrendBucket[
 
     const key = bucketKey(ts, granularity)
     if (!bucketMap.has(key)) {
-      bucketMap.set(key, { date: key, total: 0, bot: 0, human: 0, unhandled: 0, handoff: 0, closed: 0 })
+      bucketMap.set(key, { date: key, total: 0, bot: 0, ai: 0, human: 0, unhandled: 0, handoff: 0, closed: 0 })
     }
     const bucket = bucketMap.get(key)!
     bucket.total++
     if (s.initialHandler === 'bot') bucket.bot++
+    else if (s.initialHandler === 'ai') bucket.ai++
     else if (s.initialHandler === 'human') bucket.human++
     else bucket.unhandled++
     if (s.hasHandoff) bucket.handoff++

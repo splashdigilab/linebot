@@ -1,5 +1,5 @@
-export type ModuleType = 'welcome' | 'bot_flow' | 'system_notice' | 'live_agent'
-export type InitialHandler = 'bot' | 'human' | 'unhandled'
+export type ModuleType = 'welcome' | 'bot_flow' | 'system_notice' | 'live_agent' | 'ai'
+export type InitialHandler = 'bot' | 'ai' | 'human' | 'unhandled'
 export type ConversationStatus =
   | 'open'
   | 'bot_handling'
@@ -50,8 +50,13 @@ export interface ConversationEventDoc {
 export interface KpiResult {
   total: number
   botHandled: number
+  aiHandled: number
   humanHandled: number
   unhandled: number
+  /** 機器人首接、但之後仍轉真人的會話數（機器人沒能獨立收尾）。用來對抗「機器人首接 = 已解決」的高估 */
+  botEscalated: number
+  /** AI 首接、但之後仍轉真人的會話數 */
+  aiEscalated: number
   handoffCount: number
   handoffRate: number
   closedCount: number
@@ -64,6 +69,7 @@ export interface TrendBucket {
   date: string
   total: number
   bot: number
+  ai: number
   human: number
   unhandled: number
   handoff: number
@@ -83,6 +89,7 @@ export const MODULE_TYPE_LABELS: Record<ModuleType, string> = {
   bot_flow: '機器人流程',
   system_notice: '系統通知',
   live_agent: '真人客服',
+  ai: 'AI 客服',
 }
 
 export const STATUS_LABELS: Record<ConversationStatus, string> = {
@@ -95,6 +102,7 @@ export const STATUS_LABELS: Record<ConversationStatus, string> = {
 
 export const INITIAL_HANDLER_LABELS: Record<InitialHandler, string> = {
   bot: '機器人首接',
+  ai: 'AI 首接',
   human: '真人首接',
   unhandled: '未首接',
 }

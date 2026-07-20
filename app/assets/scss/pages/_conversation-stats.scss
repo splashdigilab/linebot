@@ -17,6 +17,15 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem 0.75rem;
+}
+
+/* 篩選分群：區間（快捷+自訂）為一組、動作鈕為一組，換行時整組一起換不散落 */
+.conv-stats-filter-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
 }
 
@@ -40,6 +49,10 @@
   color: var(--el-color-primary);
 }
 
+.conv-stats-kpi-card--ai .stat-value {
+  color: #3b82f6;
+}
+
 .conv-stats-kpi-card--human .stat-value {
   color: var(--el-color-success);
 }
@@ -54,4 +67,250 @@
 
 .conv-stats-kpi-card--closed .stat-value {
   color: var(--el-text-color-secondary);
+}
+
+/* ── 首接類型分段配色（長條 + 圖例共用）──────────────────── */
+$seg-bot: #16a34a;
+$seg-ai: #2563eb;
+$seg-human: #9333ea;
+$seg-unhandled: #e8912d;
+
+/* ── Hero（總會話）＋ 較上期 ────────────────────────────── */
+.conv-stats-hero {
+  height: 100%;
+}
+
+.conv-stats-hero-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.conv-stats-hero-value {
+  font-size: 2.4rem;
+  line-height: 1.1;
+}
+
+.conv-stats-delta {
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.conv-stats-delta.is-up {
+  color: var(--el-color-success);
+  background: color-mix(in srgb, var(--el-color-success) 12%, transparent);
+}
+
+.conv-stats-delta.is-down {
+  color: var(--el-color-danger);
+  background: color-mix(in srgb, var(--el-color-danger) 12%, transparent);
+}
+
+.conv-stats-delta.is-flat {
+  color: var(--el-text-color-secondary);
+  background: var(--el-fill-color-light);
+}
+
+.conv-stats-info {
+  font-size: 0.72rem;
+  color: var(--el-text-color-placeholder);
+}
+
+.conv-stats-kpi-card.is-clickable {
+  cursor: pointer;
+  transition: transform 0.08s ease;
+}
+
+.conv-stats-kpi-card.is-clickable:hover {
+  transform: translateY(-1px);
+}
+
+/* 第一排卡片等高：el-col 撐滿該行，卡片再撐滿 el-col */
+.conv-stats-page .el-row {
+  align-items: stretch;
+}
+
+.conv-stats-kpi-card {
+  height: 100%;
+  box-sizing: border-box;
+}
+
+
+/* ── 首接類型堆疊長條 ───────────────────────────────────── */
+.conv-seg-bar {
+  display: flex;
+  width: 100%;
+  height: 22px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--el-fill-color-light);
+}
+
+.conv-seg-bar--empty {
+  opacity: 0.6;
+}
+
+.conv-seg {
+  height: 100%;
+  min-width: 2px;
+  transition: filter 0.1s ease;
+}
+
+.conv-seg.is-clickable {
+  cursor: pointer;
+}
+
+.conv-seg.is-clickable:hover {
+  filter: brightness(1.08);
+}
+
+.conv-seg.seg-bot,
+.conv-seg-dot.seg-bot { background: $seg-bot; }
+.conv-seg.seg-ai,
+.conv-seg-dot.seg-ai { background: $seg-ai; }
+.conv-seg.seg-human,
+.conv-seg-dot.seg-human { background: $seg-human; }
+.conv-seg.seg-unhandled,
+.conv-seg-dot.seg-unhandled { background: $seg-unhandled; }
+
+/* ── 圖例 ───────────────────────────────────────────────── */
+.conv-seg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin-top: 0.75rem;
+}
+
+.conv-seg-legend-item {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--el-text-color-primary);
+}
+
+.conv-seg-legend-item.is-clickable {
+  cursor: pointer;
+}
+
+.conv-seg-legend-item.is-clickable:hover .conv-seg-legend-label {
+  text-decoration: underline;
+}
+
+.conv-seg-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  align-self: center;
+  flex: none;
+}
+
+.conv-seg-legend-label {
+  font-size: 0.85rem;
+}
+
+.conv-seg-legend-num {
+  font-weight: 600;
+}
+
+.conv-seg-legend-pct {
+  font-size: 0.78rem;
+  color: var(--el-text-color-secondary);
+}
+
+.conv-seg-legend-esc {
+  font-size: 0.72rem;
+  color: var(--el-color-warning);
+}
+
+/* ── 趨勢折線圖（純 SVG）────────────────────────────────── */
+.conv-trend-chart {
+  width: 100%;
+}
+
+.conv-trend-svg {
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+  display: block;
+}
+
+.conv-trend-area {
+  fill: color-mix(in srgb, var(--el-color-primary) 14%, transparent);
+  stroke: none;
+}
+
+.conv-trend-line {
+  fill: none;
+  stroke: var(--el-color-primary);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.conv-trend-dot {
+  fill: var(--el-color-primary);
+}
+
+.conv-trend-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.conv-trend-detail {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--el-border-color-lighter);
+}
+
+.conv-detail-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.3rem 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--el-color-primary);
+  cursor: pointer;
+}
+
+.conv-detail-toggle:hover {
+  text-decoration: underline;
+}
+
+.conv-detail-chevron {
+  width: 0;
+  height: 0;
+  border-left: 5px solid currentColor;
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform 0.15s ease;
+}
+
+.conv-detail-toggle.is-open .conv-detail-chevron {
+  transform: rotate(90deg);
+}
+
+.conv-detail-table {
+  margin-top: 0.6rem;
+}
+
+/* ── 空狀態 ─────────────────────────────────────────────── */
+.conv-stats-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1.5rem 0;
 }

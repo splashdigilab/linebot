@@ -2587,6 +2587,13 @@ async function tryAiFallback(params: {
       await replyMessage(replyToken, [msg], workspaceId)
       saveOutgoingConversationMessagesByWorkspace(lineUserId, [msg], workspaceId)
         .catch(e => console.error('[ai-fallback] save outgoing error:', e))
+      // 登記「AI 首接」：AI 真的自動回覆了客人才算（草稿模式客人沒收到、不算首接）。
+      // 非阻塞——與 bot_flow 自動回覆同慣例（先送客人回覆，統計背景補記）。
+      if (sessionId) {
+        enterModule(sessionId, lineUserId, 'ai', undefined, workspaceId).catch(e =>
+          console.error('[ai-fallback] enterModule(ai) error:', e),
+        )
+      }
     }
     await writeAiMeta(fsUserDocId, {
       lastDecision: 'answered',

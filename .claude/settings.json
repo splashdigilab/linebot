@@ -57,7 +57,10 @@
       "Bash(node scratch-inspect-lead.mjs)",
       "Bash(curl -sf -o /dev/null http://localhost:3003/)",
       "Bash(curl -sf -o /dev/null http://localhost:3004/)",
-      "Bash(node scratch-selfserve-e2e.mjs http://localhost:3003)"
+      "Bash(node scratch-selfserve-e2e.mjs http://localhost:3003)",
+      "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs_out.css --no-source-map)",
+      "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs5.css --no-source-map)",
+      "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs7.css --no-source-map)"
     ],
     "additionalDirectories": [
       "/Users/kevin/.claude",

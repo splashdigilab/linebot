@@ -2299,6 +2299,10 @@ onMounted(() => {
   if (typeof document !== 'undefined')
     savedDocumentTitle.value = document.title
   hydrateConvLastRead()
+  // 從統計頁下鑽帶進來的分頁（?tab=open/bot_handling/pending_human/closed…）
+  const qTab = String(route.query.tab || '')
+  if (qTab && STATUS_TABS.some(t => t.value === qTab))
+    activeTab.value = qTab as TabValue
   loadList(true)
   loadSupportPresets()
   listPollTimer = setInterval(() => {
