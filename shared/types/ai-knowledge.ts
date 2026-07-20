@@ -241,6 +241,16 @@ export interface AiUsageDoc {
   importOutputTokens?: number
   /** AI answered 後 30 分鐘內客人又被轉真人 — 回答品質 proxy */
   answeredThenHandoffs?: number
+  /**
+   * 測試對話（playground「重演」/ 內部測試）花掉的 token，**獨立記帳、不併入上方真客人 token**。
+   * 用途：成本報表能把「真客人成本」與「測試成本」分開，每對話成本不被測試灌高。
+   * 測試不計 invocations/answered/handoffs（見 answerWithAi isTest），故這裡只有 token 分項。
+   */
+  testInputTokens?: number
+  testOutputTokens?: number
+  testEmbeddingTokens?: number
+  /** 知識庫建索引 embedding（reindex / bulk-create / 逐卡）；屬建置成本，與客人查詢 embedding 分開 */
+  buildEmbeddingTokens?: number
   updatedAt: Timestamp | FieldValue
 }
 

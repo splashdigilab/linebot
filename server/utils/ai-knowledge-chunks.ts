@@ -312,7 +312,8 @@ export async function runIndexOnChunk(
     })
     if (workspaceId) {
       // fire-and-forget：記帳失敗不影響索引結果（recordAiUsage 內部已吞錯）
-      void recordAiUsage(workspaceId, { embeddingTokens }, db)
+      // 建索引 embedding 屬「建置成本」，記到 buildEmbeddingTokens（不進客人對話成本）
+      void recordAiUsage(workspaceId, { buildEmbeddingTokens: embeddingTokens }, db)
     }
     return { id: chunkId, status: 'indexed', embeddingTokens }
   }
@@ -555,7 +556,7 @@ export async function retryStuckChunks(
 
   // 每個 workspace 記一次帳(排程跨租戶,不能混在同一份文件)
   for (const [ws, tokens] of tokensByWorkspace) {
-    if (tokens > 0) await recordAiUsage(ws, { embeddingTokens: tokens }, db)
+    if (tokens > 0) await recordAiUsage(ws, { buildEmbeddingTokens: tokens }, db)
   }
 
   return { scanned: docs.length, retried: seen.size - skippedPermanent, indexed, failed, skippedPermanent }

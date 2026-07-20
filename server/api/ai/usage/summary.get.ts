@@ -67,6 +67,11 @@ export default defineEventHandler(async (event) => {
     embeddingTokens: 0,
     importInputTokens: 0,
     importOutputTokens: 0,
+    conversationTokens: 0,
+    buildTokens: 0,
+    buildCostUsd: 0,
+    testTokens: 0,
+    testCostUsd: 0,
     autoReplyRate: 0,
     handoffRate: 0,
     disambiguationRate: 0,
@@ -87,11 +92,29 @@ export default defineEventHandler(async (event) => {
   const embeddingTokens = Number(data.embeddingTokens ?? 0)
   const importInputTokens = Number(data.importInputTokens ?? 0)
   const importOutputTokens = Number(data.importOutputTokens ?? 0)
+  const buildEmbeddingTokens = Number(data.buildEmbeddingTokens ?? 0)
+  // 測試對話（playground 重演）的 token 獨立記帳；成本另計、不併進真客人成本與每對話成本。
+  const testInputTokens = Number(data.testInputTokens ?? 0)
+  const testOutputTokens = Number(data.testOutputTokens ?? 0)
+  const testEmbeddingTokens = Number(data.testEmbeddingTokens ?? 0)
 
-  const cost
-    = (inputTokens / 1_000_000) * GEMINI_FLASH_INPUT_USD_PER_M
-    + (outputTokens / 1_000_000) * GEMINI_FLASH_OUTPUT_USD_PER_M
-    + (embeddingTokens / 1_000_000) * GEMINI_EMBED_USD_PER_M
+  const usd = (input: number, output: number, embed: number) =>
+    (input / 1_000_000) * GEMINI_FLASH_INPUT_USD_PER_M
+    + (output / 1_000_000) * GEMINI_FLASH_OUTPUT_USD_PER_M
+    + (embed / 1_000_000) * GEMINI_EMBED_USD_PER_M
+
+  // ── 依「用途」把成本拆三桶（見用量頁：客人對話才是 headline，其餘不灌進每對話成本）──
+  // 匯入 input/output 是 input/output 的子集（記帳時兩邊都寫），故對話量要把它減掉；
+  // 建索引 embedding 已改記 buildEmbeddingTokens，故 embeddingTokens 現在≈只剩客人查詢向量。
+  const convInputTokens = Math.max(0, inputTokens - importInputTokens)
+  const convOutputTokens = Math.max(0, outputTokens - importOutputTokens)
+  const convEmbeddingTokens = embeddingTokens
+  const conversationTokens = convInputTokens + convOutputTokens + convEmbeddingTokens
+  const buildTokens = importInputTokens + importOutputTokens + buildEmbeddingTokens
+
+  const cost = usd(convInputTokens, convOutputTokens, convEmbeddingTokens) // 客人對話 = headline
+  const buildCost = usd(importInputTokens, importOutputTokens, buildEmbeddingTokens) // 知識庫建置/整理
+  const testCost = usd(testInputTokens, testOutputTokens, testEmbeddingTokens) // 後台測試
 
   return {
     period,
@@ -109,9 +132,16 @@ export default defineEventHandler(async (event) => {
     embeddingTokens,
     importInputTokens,
     importOutputTokens,
+    // 三桶用途拆分：客人對話（headline）/ 知識庫建置 / 後台測試
+    conversationTokens,
+    buildTokens,
+    buildCostUsd: Number(buildCost.toFixed(4)),
+    testTokens: testInputTokens + testOutputTokens + testEmbeddingTokens,
+    testCostUsd: Number(testCost.toFixed(4)),
     autoReplyRate: invocations ? answered / invocations : 0,
     handoffRate: invocations ? handoffs / invocations : 0,
     disambiguationRate: invocations ? disambiguations / invocations : 0,
+    // estimatedCostUsd / perConversationUsd 只算「客人對話」——建置與測試不灌進來
     estimatedCostUsd: Number(cost.toFixed(4)),
     perConversationUsd: invocations ? Number((cost / invocations).toFixed(4)) : 0,
     pricing: PRICING,

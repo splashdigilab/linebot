@@ -150,7 +150,7 @@ export default defineEventHandler(async (event) => {
 
   // 整批一次記帳
   if (totalEmbeddingTokens > 0) {
-    await recordAiUsage(workspaceId, { embeddingTokens: totalEmbeddingTokens })
+    await recordAiUsage(workspaceId, { buildEmbeddingTokens: totalEmbeddingTokens })
   }
 
   const indexed = results.filter(r => r.status === 'indexed').length

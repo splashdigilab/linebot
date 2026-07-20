@@ -81,6 +81,19 @@ export interface UsageDelta {
   importOutputTokens?: number
   /** AI answered 後 30 分鐘內客人又被轉真人 — 品質 proxy（回答沒解決問題） */
   answeredThenHandoffs?: number
+  /**
+   * 測試對話（playground / 內部測試）的 token —— 獨立記帳，不併進上方真客人 token。
+   * 讓成本報表能把真客人與測試分開；測試不計次數/率，故只有 token 分項。
+   */
+  testInputTokens?: number
+  testOutputTokens?: number
+  testEmbeddingTokens?: number
+  /**
+   * 知識庫「建索引」的 embedding（reindex / bulk-create / 逐卡 index）——屬「建置成本」，
+   * 跟客人查詢的 query embedding 分開記。不算進客人對話成本，但仍是工作區真實花費
+   * （故仍計入 token 護欄 getCurrentMonthTokens）。切卡/整理的 LLM 花費另由 importInput/OutputTokens 記。
+   */
+  buildEmbeddingTokens?: number
 }
 
 /**
@@ -115,6 +128,10 @@ export async function recordAiUsage(
   if (delta.importInputTokens) updates.importInputTokens = FieldValue.increment(delta.importInputTokens)
   if (delta.importOutputTokens) updates.importOutputTokens = FieldValue.increment(delta.importOutputTokens)
   if (delta.answeredThenHandoffs) updates.answeredThenHandoffs = FieldValue.increment(delta.answeredThenHandoffs)
+  if (delta.testInputTokens) updates.testInputTokens = FieldValue.increment(delta.testInputTokens)
+  if (delta.testOutputTokens) updates.testOutputTokens = FieldValue.increment(delta.testOutputTokens)
+  if (delta.testEmbeddingTokens) updates.testEmbeddingTokens = FieldValue.increment(delta.testEmbeddingTokens)
+  if (delta.buildEmbeddingTokens) updates.buildEmbeddingTokens = FieldValue.increment(delta.buildEmbeddingTokens)
 
   try {
     await Promise.all([ref.set(updates, { merge: true }), quotaWrite])
@@ -140,5 +157,7 @@ export async function getCurrentMonthTokens(
   const snap = await ref.get()
   if (!snap.exists) return 0
   const data = snap.data() as Partial<AiUsageDoc>
-  return Number(data?.inputTokens ?? 0) + Number(data?.outputTokens ?? 0) + Number(data?.embeddingTokens ?? 0)
+  // 建索引 embedding 已改記 buildEmbeddingTokens；仍是真實花費，token 護欄要算回來（測試 test* 不算）。
+  return Number(data?.inputTokens ?? 0) + Number(data?.outputTokens ?? 0)
+    + Number(data?.embeddingTokens ?? 0) + Number(data?.buildEmbeddingTokens ?? 0)
 }

@@ -66,6 +66,12 @@ export interface AnswerInput {
   /** Followup 模式：客人點按鈕後重跑，不要再計 invocation */
   isFollowup?: boolean
   /**
+   * 測試模式（playground「重演」/ 內部 /api/ai/answer）：只記 token（測試真的花了 Gemini 的錢），
+   * 但**不記** invocations/answered/handoffs/disambiguations、不進率、也不消耗/不受 quota 阻擋。
+   * 目的：「用量 / 監控」的品質指標與額度只反映真實客服，管理員測試不灌水（比照 isFollowup 的 tokens-only）。
+   */
+  isTest?: boolean
+  /**
    * handler 已用 routeMessage（同一 prompt 家族）分類過時帶入：不再呼叫 classifyIntent，
    * 每則訊息省一次 flash-lite（延遲 ~0.5–1s + token）。
    * 注意：這份分類的 token 已由 handler 記帳，answerWithAi 內不重複計。
@@ -969,17 +975,27 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   const db = getDb()
   const settings = await getAiSettings(workspaceId, db)
 
-  // 記帳統一出口：token 一律入帳（followup 重跑也真實花了錢，不記會讓月用量低估、quota 可被繞過），
-  // 計數欄位（invocations/answered/handoffs/disambiguations）只在非 followup 記——
-  // 客人點反問按鈕的重跑不該讓次數灌水。
+  // 記帳統一出口：token 一律入帳（followup 重跑 / 測試都真實花了錢，不記會讓月用量低估、quota 可被繞過），
+  // 計數欄位（invocations/answered/handoffs/disambiguations）只在「非 followup 且非測試」記——
+  // 客人點反問按鈕的重跑、以及管理員 playground 測試，都不該讓次數與品質率灌水。
+  const recordTokensOnly = input.isFollowup || input.isTest
   const record = (delta: UsageDelta): Promise<void> => {
-    if (!input.isFollowup) return recordAiUsage(workspaceId, delta, db)
+    if (!recordTokensOnly) return recordAiUsage(workspaceId, delta, db)
     const tokensOnly: UsageDelta = {}
-    if (delta.inputTokens) tokensOnly.inputTokens = delta.inputTokens
-    if (delta.outputTokens) tokensOnly.outputTokens = delta.outputTokens
-    if (delta.embeddingTokens) tokensOnly.embeddingTokens = delta.embeddingTokens
-    if (delta.importInputTokens) tokensOnly.importInputTokens = delta.importInputTokens
-    if (delta.importOutputTokens) tokensOnly.importOutputTokens = delta.importOutputTokens
+    if (input.isTest) {
+      // 測試：token 導到獨立的 test* 欄位——真客人成本與每對話成本都不含測試，但仍看得到測試花了多少。
+      if (delta.inputTokens) tokensOnly.testInputTokens = delta.inputTokens
+      if (delta.outputTokens) tokensOnly.testOutputTokens = delta.outputTokens
+      if (delta.embeddingTokens) tokensOnly.testEmbeddingTokens = delta.embeddingTokens
+    }
+    else {
+      // followup：真客人點按鈕的重跑，是真實成本 → 記進真客人 token，只是不再計次數。
+      if (delta.inputTokens) tokensOnly.inputTokens = delta.inputTokens
+      if (delta.outputTokens) tokensOnly.outputTokens = delta.outputTokens
+      if (delta.embeddingTokens) tokensOnly.embeddingTokens = delta.embeddingTokens
+      if (delta.importInputTokens) tokensOnly.importInputTokens = delta.importInputTokens
+      if (delta.importOutputTokens) tokensOnly.importOutputTokens = delta.importOutputTokens
+    }
     if (!Object.keys(tokensOnly).length) return Promise.resolve()
     return recordAiUsage(workspaceId, tokensOnly, db)
   }
@@ -1006,7 +1022,9 @@ export async function answerWithAi(input: AnswerInput): Promise<AnswerOutput> {
   let answerModel = settings.answerModel
   const billing = await resolveAnsweredQuota(workspaceId, db)
   const tokenCap = settings.quota.monthlyTokenCap
-  if (!billing.internal) {
+  // 測試呼叫不受額度阻擋（也不消耗額度，見 record 的 tokens-only）：管理員 playground 不該
+  // 因真實客服用完額度而被切斷，測試更不該扣客戶買的則數。
+  if (!billing.internal && !input.isTest) {
     let usage: { answered: number; tokens: number } | null = null
     if (billing.quota != null && billing.periodStart) {
       usage = { answered: await getQuotaAnswered(workspaceId, billing.periodStart, db), tokens: 0 }

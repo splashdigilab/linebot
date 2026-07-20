@@ -41,8 +41,8 @@ export default defineEventHandler(async (event) => {
     const hints = scripts.map(s => ({ id: s.id, name: s.name, hints: triggerHintsOf(s) }))
     route = await routeMessage(query, hints, history).catch(() => null)
     if (route) {
-      // 路由也是一次 LLM 呼叫，跟正式流程一樣要記帳
-      recordAiUsage(workspaceId, { inputTokens: route.inputTokens, outputTokens: route.outputTokens })
+      // 路由也是一次 LLM 呼叫、真的花了錢 → 記帳；但這是 playground 測試，導到 test* 欄位（不併真客人成本）
+      recordAiUsage(workspaceId, { testInputTokens: route.inputTokens, testOutputTokens: route.outputTokens })
         .catch(() => {})
     }
     const routedScriptId = route?.scriptId ?? null
@@ -68,6 +68,8 @@ export default defineEventHandler(async (event) => {
     query,
     history,
     debug: true,
+    // 測試呼叫：只記 token（真花了錢），不記次數/率、不消耗額度——用量監控頁的品質指標只反映真實客服。
+    isTest: true,
     skipDisambiguation: body?.skipDisambiguation === true,
     isFollowup: body?.isFollowup === true,
     // 意圖路由已分類過就重用（與正式流程一致，省一次 flash-lite）；token 上面已記，內部會歸零

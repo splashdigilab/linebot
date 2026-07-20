@@ -71,7 +71,7 @@ export default defineEventHandler(async (event) => {
 
   // 整批一次記帳(見 worker 內註解)
   if (batchEmbeddingTokens > 0) {
-    await recordAiUsage(workspaceId, { embeddingTokens: batchEmbeddingTokens }, db)
+    await recordAiUsage(workspaceId, { buildEmbeddingTokens: batchEmbeddingTokens }, db)
   }
 
   const indexed = results.filter(r => r.status === 'indexed').length
