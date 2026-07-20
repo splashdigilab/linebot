@@ -233,11 +233,14 @@
 }
 
 /* ══════════════════════════════════════════════════════════
-   message-card — all types, unified 380px
+   message-card — 共用卡片外觀。
+   預設「滿版」：其他頁面（設定、用量、推播…）拿它當整寬區塊卡。
+   flow 訊息模組要的是「固定 380px（像手機預覽寬）」——那是 flow 專屬需求，
+   只在 .flow-editor-messages 內生效，不再外洩成全域預設、害每頁都得記得覆寫回滿版
+   （過去 ai-usage 就因為漏了覆寫而整頁塌成 380px）。
 ══════════════════════════════════════════════════════════ */
 .message-card {
-  width: 380px;
-  flex-shrink: 0;
+  width: 100%;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -246,6 +249,12 @@
   flex-direction: column;
   box-shadow: var(--shadow-sm);
   transition: box-shadow 0.15s, opacity 0.15s, transform 0.15s;
+}
+
+/* flow 編輯器的訊息卡：固定 380px、不縮，並排/堆疊都維持手機預覽寬度 */
+.flow-editor-messages .message-card {
+  width: 380px;
+  flex-shrink: 0;
 }
 .message-card:hover    { box-shadow: var(--shadow-md); }
 .message-card.dragging { opacity: 0.35; transform: scale(0.98); }
