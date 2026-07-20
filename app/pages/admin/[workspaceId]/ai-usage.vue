@@ -451,6 +451,10 @@ onMounted(() => loadAll())
 
 <style scoped lang="scss">
 .usage-body {
+  /* width:100% 是關鍵：.usage-body 也是 flex 直向容器（admin-panel-stack），
+     一旦吃 margin:0 auto 又沒給寬度，flex 子項會縮到內容寬 → 整柱塌成 ~280px、
+     max-width 形同虛設。給 100% 才會撐到 960 再置中。 */
+  width: 100%;
   padding: 16px;
   max-width: 960px;
   margin: 0 auto;
@@ -468,7 +472,7 @@ onMounted(() => loadAll())
 
 .usage-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
 }
 
