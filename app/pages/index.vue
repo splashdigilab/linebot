@@ -93,23 +93,23 @@
         </div>
         <div class="lp-cards3">
           <div class="lp-pcard lp-reveal">
-            <div class="lp-pcard__ic">💬</div>
+            <div class="lp-pcard__ic"><el-icon><ChatDotRound /></el-icon></div>
             <h3>客服回不完</h3>
             <p>顧客晚上敲門、假日敲門,漏回一則,可能就少一單。</p>
           </div>
           <div class="lp-pcard lp-reveal">
-            <div class="lp-pcard__ic">🚪</div>
+            <div class="lp-pcard__ic"><el-icon><IconDoor /></el-icon></div>
             <h3>老客默默流失</h3>
             <p>買過一次就再也沒下文,你根本沒空一個一個追回來。</p>
           </div>
           <div class="lp-pcard lp-reveal">
-            <div class="lp-pcard__ic">📣</div>
+            <div class="lp-pcard__ic"><el-icon><Promotion /></el-icon></div>
             <h3>想行銷卻沒人做</h3>
             <p>節慶、上新、回購提醒,每次都想做,每次都沒時間。</p>
           </div>
         </div>
         <div class="lp-note lp-reveal">
-          <span class="q">💭</span>
+          <span class="q"><el-icon><ChatLineRound /></el-icon></span>
           <span>現在你可能是「訊息一則一則手動回、老客靠印象追」——<b>有空才做,沒空就放掉。</b>這正是 AI 該接手的地方。</span>
         </div>
       </div>
@@ -129,9 +129,9 @@
             <h3>接走 8 成日常客服</h3>
             <p class="lp-pillar__lede">疑難排解、產品諮詢、基礎導購,AI 即時回覆。</p>
             <ul class="lp-flist">
-              <li><span class="ic">🧩</span><span><b>腳本</b><small>訂單查詢、退換貨、收資料、條件分支</small></span></li>
-              <li><span class="ic">📚</span><span><b>知識庫客服</b><small>依你上傳的內容回答,不亂編</small></span></li>
-              <li><span class="ic">📊</span><span><b>對話統計 ＋ 一鍵轉真人</b><small>機器人 / 真人分流一目了然</small></span></li>
+              <li><span class="ic"><el-icon><Operation /></el-icon></span><span><b>腳本</b><small>訂單查詢、退換貨、收資料、條件分支</small></span></li>
+              <li><span class="ic"><el-icon><Reading /></el-icon></span><span><b>知識庫客服</b><small>依你上傳的內容回答,不亂編</small></span></li>
+              <li><span class="ic"><el-icon><DataLine /></el-icon></span><span><b>對話統計 ＋ 一鍵轉真人</b><small>機器人 / 真人分流一目了然</small></span></li>
             </ul>
           </div>
           <div class="lp-pillar lp-reveal">
@@ -139,9 +139,9 @@
             <h3>3 招喚醒老客</h3>
             <p class="lp-pillar__lede">興趣再導購、定頻喚醒、節日與重要日主動關心。</p>
             <ul class="lp-flist">
-              <li><span class="ic">📣</span><span><b>分眾推播</b><small>對的訊息,送給對的人</small></span></li>
-              <li><span class="ic">🎯</span><span><b>名單收集</b><small>LIFF 表單 ＋ 標籤,互動變名單</small></span></li>
-              <li><span class="ic">📋</span><span><b>活動貼標 × 成效追蹤</b><small>每檔活動,看得到轉換</small></span></li>
+              <li><span class="ic"><el-icon><Promotion /></el-icon></span><span><b>分眾推播</b><small>對的訊息,送給對的人</small></span></li>
+              <li><span class="ic"><el-icon><Aim /></el-icon></span><span><b>名單收集</b><small>LIFF 表單 ＋ 標籤,互動變名單</small></span></li>
+              <li><span class="ic"><el-icon><Tickets /></el-icon></span><span><b>活動貼標 × 成效追蹤</b><small>每檔活動,看得到轉換</small></span></li>
             </ul>
           </div>
           <div class="lp-pillar lp-pillar--pro lp-reveal">
@@ -149,9 +149,9 @@
             <h3>把買家養成熟客</h3>
             <p class="lp-pillar__lede">客服 × 再行銷長期整合,累積客戶 LTV。</p>
             <ul class="lp-flist">
-              <li><span class="ic">🔗</span><span><b>客服與行銷資料打通</b><small>同一位客人,前後文都在</small></span></li>
-              <li><span class="ic">🏷️</span><span><b>標籤分群</b><small>依行為與興趣自動分眾</small></span></li>
-              <li><span class="ic">🔁</span><span><b>定頻喚醒與客戶重要日<span class="lp-soon">即將推出</span></b><small>該溝通的時機,AI 幫你記得</small></span></li>
+              <li><span class="ic"><el-icon><Connection /></el-icon></span><span><b>客服與行銷資料打通</b><small>同一位客人,前後文都在</small></span></li>
+              <li><span class="ic"><el-icon><PriceTag /></el-icon></span><span><b>標籤分群</b><small>依行為與興趣自動分眾</small></span></li>
+              <li><span class="ic"><el-icon><Refresh /></el-icon></span><span><b>定頻喚醒與客戶重要日<span class="lp-soon">即將推出</span></b><small>該溝通的時機,AI 幫你記得</small></span></li>
             </ul>
           </div>
         </div>
@@ -175,27 +175,27 @@
             <div class="lp-cmp__new"><span class="lp-cmp__mark">M</span>MYFEEL<span class="lp-cmp__tag">最省事</span></div>
           </div>
           <div class="lp-cmp__row">
-            <div class="lp-cmp__dim"><span class="lp-cmp__ic">⚙️</span>開始設定</div>
+            <div class="lp-cmp__dim"><span class="lp-cmp__ic"><el-icon><Setting /></el-icon></span>開始設定</div>
             <div class="lp-cmp__old"><span class="lp-cmp__x">✕</span>從零寫規則、自己拉腳本</div>
             <div class="lp-cmp__new"><span class="lp-cmp__v">✓</span>套用現成範本,逐句改就好</div>
           </div>
           <div class="lp-cmp__row">
-            <div class="lp-cmp__dim"><span class="lp-cmp__ic">💬</span>客服回覆</div>
+            <div class="lp-cmp__dim"><span class="lp-cmp__ic"><el-icon><ChatDotRound /></el-icon></span>客服回覆</div>
             <div class="lp-cmp__old"><span class="lp-cmp__x">✕</span>你自己回,或再接一套客服工具</div>
             <div class="lp-cmp__new"><span class="lp-cmp__v">✓</span>AI 依知識庫即時回,需要時轉真人</div>
           </div>
           <div class="lp-cmp__row">
-            <div class="lp-cmp__dim"><span class="lp-cmp__ic">🔗</span>系統整合</div>
+            <div class="lp-cmp__dim"><span class="lp-cmp__ic"><el-icon><Connection /></el-icon></span>系統整合</div>
             <div class="lp-cmp__old"><span class="lp-cmp__x">✕</span>客服、CRM、行銷各買各的</div>
             <div class="lp-cmp__new"><span class="lp-cmp__v">✓</span>客服 × CRM × 再行銷,一個後台全包</div>
           </div>
           <div class="lp-cmp__row">
-            <div class="lp-cmp__dim"><span class="lp-cmp__ic">🎯</span>回答準確度</div>
+            <div class="lp-cmp__dim"><span class="lp-cmp__ic"><el-icon><Aim /></el-icon></span>回答準確度</div>
             <div class="lp-cmp__old"><span class="lp-cmp__x">✕</span>罐頭關鍵字,常答非所問</div>
             <div class="lp-cmp__new"><span class="lp-cmp__v">✓</span>依你上傳的內容回答,不亂編</div>
           </div>
           <div class="lp-cmp__row">
-            <div class="lp-cmp__dim"><span class="lp-cmp__ic">⏱️</span>多久能上線</div>
+            <div class="lp-cmp__dim"><span class="lp-cmp__ic"><el-icon><Timer /></el-icon></span>多久能上線</div>
             <div class="lp-cmp__old"><span class="lp-cmp__x">✕</span>曠日費時,要先接一堆設定</div>
             <div class="lp-cmp__new"><span class="lp-cmp__v">✓</span>15 分鐘接上你的 LINE 官方帳號</div>
           </div>
@@ -203,7 +203,7 @@
 
         <div class="lp-roadmap lp-reveal">
           <div class="lp-roadmap__top">
-            <span class="lp-roadmap__badge">🔜 即將推出</span>
+            <span class="lp-roadmap__badge">即將推出</span>
             <h3>接下來,AI 從「幫你設定」變成「主動幫你經營」</h3>
           </div>
           <div class="lp-roadmap__grid">
@@ -429,6 +429,8 @@
 
 <script setup lang="ts">
 import { BILLING_PLAN_ORDER, BILLING_PLANS, type BillingPlan, type BillingPlanId } from '~~/shared/billing/plans'
+import { Aim, ChatDotRound, ChatLineRound, Connection, DataLine, Operation, PriceTag, Promotion, Reading, Refresh, Setting, Tickets, Timer } from '@element-plus/icons-vue'
+import IconDoor from '~/components/icons/IconDoor.vue'
 
 definePageMeta({ layout: false })
 
