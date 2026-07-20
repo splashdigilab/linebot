@@ -22,7 +22,7 @@
         aria-label="教學助理"
       >
         <header class="ta-panel__head">
-          <div class="ta-panel__avatar"><el-icon><Compass /></el-icon></div>
+          <div class="ta-panel__avatar"><el-icon><IconRobot /></el-icon></div>
           <div class="ta-panel__head-meta">
             <div class="ta-panel__name">教學小幫手</div>
             <div class="ta-panel__status"><span class="ta-dot" />線上</div>
@@ -36,7 +36,7 @@
 
           <!-- agent 訊息泡泡：依真實設定狀態講白話文 -->
           <div class="ta-msg">
-            <div class="ta-msg__avatar"><el-icon><Compass /></el-icon></div>
+            <div class="ta-msg__avatar"><el-icon><IconRobot /></el-icon></div>
             <div class="ta-msg__bubble" aria-live="polite">
               <p>嗨{{ userName ? `，${userName}` : '' }}</p>
               <p>{{ agentLine }}</p>
@@ -163,7 +163,7 @@
       :aria-label="panelOpen ? '關閉教學助理' : '開啟教學助理'"
       @click="onFabClick"
     >
-      <span class="ta-fab__icon"><el-icon><component :is="panelOpen ? Close : Compass" /></el-icon></span>
+      <span class="ta-fab__icon"><el-icon><component :is="panelOpen ? Close : IconRobot" /></el-icon></span>
       <span v-if="!panelOpen && !allRequiredDone" class="ta-fab__pulse" aria-hidden="true" />
       <span
         v-if="!panelOpen && incompleteRequired.length"
@@ -212,7 +212,8 @@
 
 <script setup lang="ts">
 import type { ResolvedCapability } from '~/composables/useSetupStatus'
-import { Close, Compass, View } from '@element-plus/icons-vue'
+import { Close, View } from '@element-plus/icons-vue'
+import IconRobot from '~/components/icons/IconRobot.vue'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
 
 const { user } = useAuth()
