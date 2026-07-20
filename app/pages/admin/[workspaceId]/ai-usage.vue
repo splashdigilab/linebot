@@ -88,6 +88,10 @@
                 </p>
               </template>
               <p v-else class="usage-hint">此方案為客製額度，無固定則數上限。</p>
+              <!-- 雙時間軸提醒：額度按「續約日」算一期，和上方報表的月份不是同一個區間，避免日期兜不起來被誤會 -->
+              <p v-if="planQuota.currentPeriodStart" class="usage-hint usage-hint--muted">
+                額度以「續約日」為一期（{{ quotaPeriodLabel }}），和上方報表選的月份不是同一個區間。
+              </p>
             </div>
           </div>
 
@@ -128,11 +132,19 @@
                       <span class="usage-leg__v">{{ formatNumber(summary?.answered) }}</span>
                       <span class="usage-leg__pct">{{ formatPercent(summary?.autoReplyRate) }}</span>
                     </div>
-                    <div class="usage-leg usage-leg--handoff">
+                    <div
+                      class="usage-leg usage-leg--handoff"
+                      :class="{ 'usage-leg--link': (summary?.handoffs ?? 0) > 0 }"
+                      :role="(summary?.handoffs ?? 0) > 0 ? 'button' : undefined"
+                      :tabindex="(summary?.handoffs ?? 0) > 0 ? 0 : undefined"
+                      @click="(summary?.handoffs ?? 0) > 0 && scrollToHandoffs()"
+                      @keydown.enter="(summary?.handoffs ?? 0) > 0 && scrollToHandoffs()"
+                    >
                       <span class="usage-leg__dot" />
                       <span class="usage-leg__k">轉給真人</span>
                       <span class="usage-leg__v">{{ formatNumber(summary?.handoffs) }}</span>
                       <span class="usage-leg__pct">{{ formatPercent(summary?.handoffRate) }}</span>
+                      <span v-if="(summary?.handoffs ?? 0) > 0" class="usage-leg__go">查看 ↓</span>
                     </div>
                     <div class="usage-leg usage-leg--clarify">
                       <span class="usage-leg__dot" />
@@ -242,7 +254,7 @@
         </div>
 
         <!-- ── 低信心 / 轉真人案例 ──────────────── -->
-        <div class="message-card usage-card" data-tour="usg-cases">
+        <div ref="handoffCard" class="message-card usage-card" data-tour="usg-cases">
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="section-title">近期轉真人案例</span>
@@ -422,6 +434,13 @@ const aiStatus = computed(() => {
 })
 function goSettings() {
   router.push(`/admin/${workspaceId.value}/ai-settings`)
+}
+
+// F7 下鑽：hero 的「轉給真人」可點，捲到同頁下方的轉真人清單（同頁、同不分月份口徑，
+// 不會有「月份 KPI vs 清單」對不上的問題）。
+const handoffCard = ref<HTMLElement | null>(null)
+function scrollToHandoffs() {
+  handoffCard.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
 
 // 近 3 個月趨勢：有任何一個月有量才畫圖，否則顯示「資料不足」空狀態（剛上線/剛清空時）。
@@ -622,414 +641,3 @@ async function resolveHandoff(userId: string) {
 
 onMounted(() => loadAll())
 </script>
-
-<style scoped lang="scss">
-.usage-body {
-  /* width:100% 是關鍵：.usage-body 也是 flex 直向容器（admin-panel-stack），
-     一旦吃 margin:0 auto 又沒給寬度，flex 子項會縮到內容寬 → 整柱塌成 ~280px、
-     max-width 形同虛設。給 100% 才會撐到 960 再置中。 */
-  width: 100%;
-  padding: 16px;
-  max-width: 960px;
-  margin: 0 auto;
-}
-
-.usage-card {
-  margin-bottom: 16px;
-}
-
-/* 頂端 AI 狀態列：運作中=綠、草稿=琥珀、未啟用=灰。顏色帶語意，一眼判斷 AI 有沒有在跑 */
-.usage-status {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  border-radius: 10px;
-  margin-bottom: 16px;
-  border: 1px solid var(--border);
-  background: var(--bg-surface);
-
-  &__dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    flex: none;
-    background: var(--text-muted);
-  }
-  &__body {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    flex: 1;
-    min-width: 0;
-  }
-  &__title {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--text-primary);
-  }
-  &__desc {
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
-  }
-
-  &--on {
-    background: var(--brand-green-wash);
-    border-color: rgba(6, 199, 85, 0.3);
-
-    .usage-status__dot {
-      background: var(--brand-green);
-      box-shadow: 0 0 0 4px rgba(6, 199, 85, 0.18);
-    }
-  }
-  &--draft {
-    background: #fdf6e9;
-    border-color: rgba(217, 154, 43, 0.35);
-
-    .usage-status__dot { background: #d99a2b; }
-  }
-  &--off {
-    background: var(--el-fill-color-light);
-
-    .usage-status__dot { background: var(--text-muted); }
-  }
-}
-
-.usage-loading {
-  display: flex;
-  justify-content: center;
-  padding: 24px;
-}
-
-.usage-trend-chart {
-  width: 100%;
-  height: 240px;
-}
-
-/* ── Hero：AI 介入 = 答完 + 轉真人 + 反問（分母一致、相加成整體） ── */
-.usage-hero {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-.usage-hero__head {
-  display: flex;
-  align-items: flex-end;
-  gap: 12px;
-}
-.usage-hero__num {
-  font-size: 40px;
-  font-weight: 750;
-  line-height: 0.95;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-  color: var(--text-primary);
-}
-.usage-hero__label {
-  font-size: 12px;
-  line-height: 1.35;
-  color: var(--el-text-color-secondary);
-  padding-bottom: 4px;
-
-  b { color: var(--text-primary); font-weight: 600; }
-}
-
-/* 分段長條：顏色帶語意——答完＝綠（自助成功）、轉真人＝藍（正常交接、非壞事）、反問＝琥珀 */
-.usage-segbar {
-  display: flex;
-  height: 26px;
-  border-radius: 7px;
-  overflow: hidden;
-  background: var(--el-fill-color, #f0f2f5);
-}
-.usage-seg {
-  display: block;
-  height: 100%;
-  transition: width 0.3s ease;
-
-  &--answered { background: var(--brand-green-deep); }
-  &--handoff  { background: #5b7a9d; }
-  &--clarify  { background: #d99a2b; }
-}
-
-.usage-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 24px;
-}
-.usage-leg {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
-
-  &__dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 2px;
-    align-self: center;
-    flex: none;
-  }
-  &__k {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
-  }
-  &__info {
-    font-size: 12px;
-    color: var(--text-muted);
-    cursor: help;
-  }
-  &__v {
-    font-size: 18px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-  }
-  &__pct {
-    font-size: 12px;
-    color: var(--text-muted);
-    font-variant-numeric: tabular-nums;
-  }
-
-  &--answered { .usage-leg__dot { background: var(--brand-green-deep); } .usage-leg__v { color: var(--brand-green-text); } }
-  &--handoff  { .usage-leg__dot { background: #5b7a9d; } .usage-leg__v { color: #3f5a78; } }
-  &--clarify  { .usage-leg__dot { background: #d99a2b; } .usage-leg__v { color: #b45309; } }
-}
-
-/* ── 次要指標：品質 proxy + 成本；數字依門檻上色（見 metricTone） ── */
-.usage-substats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-  margin-top: 4px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
-}
-.usage-substat {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-
-  &__label {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
-  }
-  &__info {
-    font-size: 13px;
-    color: var(--text-muted);
-    cursor: help;
-  }
-  &__value {
-    font-size: 22px;
-    font-weight: 700;
-    line-height: 1.15;
-    font-variant-numeric: tabular-nums;
-    color: var(--text-primary);
-
-    &.is-good { color: var(--brand-green-text); }
-    &.is-warn { color: #b45309; }
-    &.is-bad  { color: #b91c1c; }
-  }
-  &__sub {
-    font-size: 11px;
-    color: var(--el-text-color-secondary);
-  }
-}
-
-/* 進階區的 AI 品質指標（答後仍轉真人）：一行，數字依門檻上色 */
-.usage-adv-quality {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding-bottom: 12px;
-  margin-bottom: 8px;
-  border-bottom: 1px solid var(--el-fill-color-light);
-
-  &__k {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-  &__v {
-    font-size: 18px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
-
-    &.is-good { color: var(--brand-green-text); }
-    &.is-warn { color: #b45309; }
-    &.is-bad  { color: #b91c1c; }
-  }
-  &__s {
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
-  }
-}
-
-/* 成本三桶：客人對話 / 知識庫建置 / 後台測試 —— 依用途拆分，數字靠右對齊成一欄 */
-.usage-cost-split {
-  display: flex;
-  flex-direction: column;
-}
-
-.usage-cost-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 9px 0;
-  font-size: 13px;
-  border-bottom: 1px solid var(--el-fill-color-light);
-
-  &__dot {
-    width: 9px;
-    height: 9px;
-    border-radius: 2px;
-    flex: none;
-
-    &--conv { background: var(--brand-green-deep); }
-    &--build { background: #8a6fb0; }
-    &--test { background: #b0783f; }
-  }
-  &__k {
-    font-weight: 600;
-    color: var(--text-primary);
-    min-width: 80px;
-  }
-  &__tok {
-    flex: 1;
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
-    font-variant-numeric: tabular-nums;
-  }
-  &__cost {
-    font-weight: 700;
-    color: var(--text-primary);
-    font-variant-numeric: tabular-nums;
-  }
-}
-
-.usage-cost-total {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding-top: 10px;
-  margin-top: 4px;
-  font-size: 13px;
-  color: var(--el-text-color-secondary);
-
-  strong {
-    font-size: 15px;
-    color: var(--text-primary);
-    font-variant-numeric: tabular-nums;
-  }
-}
-
-.usage-hint {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  margin: 8px 0 0;
-}
-
-.usage-empty {
-  padding: 24px;
-  text-align: center;
-  color: var(--el-text-color-secondary);
-  font-style: italic;
-}
-
-/* 「已清空」而非「沒資料」：正向框 + 下一步，並說明此清單與上方本月次數計數不同 */
-.usage-empty--good {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 18px;
-  text-align: left;
-  font-style: normal;
-  background: var(--brand-green-wash);
-  border: 1px solid rgba(6, 199, 85, 0.3);
-  border-radius: 8px;
-}
-.usage-empty__icon {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: var(--brand-green);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 700;
-  flex: none;
-}
-.usage-empty__title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-.usage-empty__desc {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  margin-top: 2px;
-}
-
-/* 篩選列改放卡片內（不擠在標題）；與清單之間留一條分隔 */
-.usage-handoff-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-  padding-bottom: 12px;
-  margin-bottom: 4px;
-  border-bottom: 1px solid var(--el-fill-color-light);
-}
-
-.usage-handoff-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.usage-handoff-row {
-  padding: 10px 12px;
-  background: var(--el-fill-color-light);
-  border-radius: 6px;
-  border-left: 3px solid var(--el-color-warning);
-
-  &--resolved {
-    opacity: 0.65;
-    border-left-color: var(--el-border-color);
-  }
-}
-
-.usage-handoff-meta {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.usage-handoff-query {
-  font-size: 13px;
-  margin-bottom: 4px;
-}
-
-.usage-handoff-user {
-  font-weight: 600;
-  color: var(--el-text-color-secondary);
-}
-
-.usage-handoff-sources {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  margin-bottom: 6px;
-}
-
-.usage-handoff-actions {
-  display: flex;
-  gap: 6px;
-}
-</style>
