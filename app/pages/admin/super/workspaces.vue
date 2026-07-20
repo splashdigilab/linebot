@@ -38,12 +38,12 @@
               </el-table-column>
               <el-table-column label="計費方案" min-width="150">
                 <template #default="{ row }">
-                  <template v-if="row.subscription">
-                    <span class="text-sm">{{ planName(row.subscription.planId) }}</span>
-                    <el-tag :type="statusTagType(row.subscription.status)" size="small" style="margin-left: 6px">
+                  <div v-if="row.subscription" style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap">
+                    <el-tag :type="statusTagType(row.subscription.status)" size="small">
                       {{ statusLabel(row.subscription.status) }}
                     </el-tag>
-                  </template>
+                    <span class="text-sm">{{ planName(row.subscription.planId) }}</span>
+                  </div>
                   <span v-else class="text-xs text-muted">未開通</span>
                 </template>
               </el-table-column>
