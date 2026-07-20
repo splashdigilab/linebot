@@ -109,13 +109,13 @@
               <div class="usage-hero">
                 <div class="usage-hero__head">
                   <strong class="usage-hero__num">{{ formatNumber(summary?.invocations) }}</strong>
-                  <span class="usage-hero__label">次 <b>AI 介入</b><br>本期間 AI 出手的總次數</span>
+                  <span class="usage-hero__label">則 <b>客人訊息</b><br>這個月 AI 幫你處理的則數</span>
                 </div>
                 <template v-if="(summary?.invocations ?? 0) > 0">
                   <div
                     class="usage-segbar"
                     role="img"
-                    :aria-label="`答完 ${summary?.answered}、轉真人 ${summary?.handoffs}、反問 ${summary?.disambiguations}`"
+                    :aria-label="`自己答完 ${summary?.answered}、轉給真人 ${summary?.handoffs}、先問清楚 ${summary?.disambiguations}`"
                   >
                     <span class="usage-seg usage-seg--answered" :style="{ width: `${segPct.answered}%` }" />
                     <span class="usage-seg usage-seg--handoff" :style="{ width: `${segPct.handoff}%` }" />
@@ -124,21 +124,21 @@
                   <div class="usage-legend">
                     <div class="usage-leg usage-leg--answered">
                       <span class="usage-leg__dot" />
-                      <span class="usage-leg__k">答完</span>
+                      <span class="usage-leg__k">自己答完</span>
                       <span class="usage-leg__v">{{ formatNumber(summary?.answered) }}</span>
                       <span class="usage-leg__pct">{{ formatPercent(summary?.autoReplyRate) }}</span>
                     </div>
                     <div class="usage-leg usage-leg--handoff">
                       <span class="usage-leg__dot" />
-                      <span class="usage-leg__k">轉真人</span>
+                      <span class="usage-leg__k">轉給真人</span>
                       <span class="usage-leg__v">{{ formatNumber(summary?.handoffs) }}</span>
                       <span class="usage-leg__pct">{{ formatPercent(summary?.handoffRate) }}</span>
                     </div>
                     <div class="usage-leg usage-leg--clarify">
                       <span class="usage-leg__dot" />
                       <span class="usage-leg__k">
-                        反問澄清
-                        <el-tooltip placement="top" content="AI 先問客人「要哪一個」才作答；偏高通常代表知識卡標題太相近，或可到設定調整反問門檻">
+                        先問清楚
+                        <el-tooltip placement="top" content="AI 先問客人「你是要哪一個」再回答。偏高通常代表知識卡標題太相近。">
                           <el-icon class="usage-leg__info"><InfoFilled /></el-icon>
                         </el-tooltip>
                       </span>
@@ -147,31 +147,21 @@
                     </div>
                   </div>
                 </template>
-                <div v-else class="usage-empty">本期間 AI 尚未出手</div>
+                <div v-else class="usage-empty">這個月 AI 還沒有處理任何訊息</div>
               </div>
 
-              <!-- 次要指標：品質 proxy + 成本（標籤不寫死「本月」——月份可切到過去） -->
+              <!-- 一般人只留「花多少」，用台幣白話；細節（品質指標/三桶）收進下方「進階」 -->
               <div class="usage-substats">
                 <div class="usage-substat">
                   <span class="usage-substat__label">
-                    答後仍轉真人
-                    <el-tooltip placement="top" content="AI 回答後客人還是要找真人，可視為「沒答到重點」，越低越好">
+                    這個月 AI 花費
+                    <el-tooltip placement="top" content="只算跟客人對話的部分。整理知識庫、後台測試的花費另計，在下方「進階」。金額為依 Gemini 公開價估算的參考值，實際以 Google 帳單為準。">
                       <el-icon class="usage-substat__info"><InfoFilled /></el-icon>
                     </el-tooltip>
                   </span>
-                  <strong class="usage-substat__value" :class="metricTone('answeredThenHandoff', summary?.answeredThenHandoffRate)">{{ formatPercent(summary?.answeredThenHandoffRate) }}</strong>
-                  <span class="usage-substat__sub">{{ formatNumber(summary?.answeredThenHandoffs) }} 次</span>
-                </div>
-                <div class="usage-substat">
-                  <span class="usage-substat__label">
-                    AI 成本
-                    <el-tooltip placement="top" content="只計「客人對話」。知識庫建置（匯入 / 建索引）與 playground 測試的花費，都在下方「用量明細」分開列，不含在此、也不影響每對話成本">
-                      <el-icon class="usage-substat__info"><InfoFilled /></el-icon>
-                    </el-tooltip>
-                  </span>
-                  <strong class="usage-substat__value">${{ summary?.estimatedCostUsd?.toFixed(2) ?? '0.00' }}</strong>
+                  <strong class="usage-substat__value">約 NT${{ formatNumber(twd(summary?.estimatedCostUsd)) }}</strong>
                   <span class="usage-substat__sub">
-                    每對話約 ${{ summary?.perConversationUsd?.toFixed(4) ?? '0.0000' }} USD<template v-if="((summary?.buildCostUsd ?? 0) + (summary?.testCostUsd ?? 0)) > 0"> · 建置 / 測試另計，見明細</template>
+                    跟客人對話的花費<template v-if="((summary?.buildCostUsd ?? 0) + (summary?.testCostUsd ?? 0)) > 0"> · 建置 / 測試另計，見進階</template>
                   </span>
                 </div>
               </div>
@@ -179,49 +169,74 @@
           </div>
         </div>
 
-        <!-- ── Token breakdown（技術明細，預設收合：老闆在乎成本不在乎 token） ── -->
+        <!-- ── 近 3 個月趨勢：讓「監控」看得出變好還變差，不只是單月快照 ── -->
         <div class="message-card usage-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="section-title">用量明細（Token）</span>
-              <span class="text-xs text-muted">成本估算的技術依據</span>
+              <span class="section-title">近 3 個月趨勢</span>
+              <span class="text-xs text-muted">自己答完 vs 轉給真人</span>
             </div>
-            <el-button text size="small" @click="tokenOpen = !tokenOpen">
-              {{ tokenOpen ? '收合' : '展開技術明細' }}
-              <el-icon class="el-icon--right"><component :is="tokenOpen ? ArrowUp : ArrowDown" /></el-icon>
+          </div>
+          <div class="card-section-stack">
+            <div v-if="loadingTrend && !trend.length" class="usage-loading"><div class="spinner" /></div>
+            <ClientOnly v-else-if="trendHasData">
+              <VChart class="usage-trend-chart" :option="trendOption" autoresize />
+              <template #fallback><div class="usage-loading"><div class="spinner" /></div></template>
+            </ClientOnly>
+            <div v-else class="usage-empty">還沒有足夠資料能看趨勢，AI 開始服務客人後這裡就會長出來。</div>
+          </div>
+        </div>
+
+        <!-- ── 進階 / 技術細節（預設收合：一般老闆不用看；要細節的人展開） ── -->
+        <div class="message-card usage-card">
+          <div class="message-card-header">
+            <div class="card-header-main">
+              <span class="section-title">進階 / 技術細節</span>
+              <span class="text-xs text-muted">成本組成、AI 品質指標</span>
+            </div>
+            <el-button text size="small" @click="advancedOpen = !advancedOpen">
+              {{ advancedOpen ? '收合' : '展開' }}
+              <el-icon class="el-icon--right"><component :is="advancedOpen ? ArrowUp : ArrowDown" /></el-icon>
             </el-button>
           </div>
-          <div v-show="tokenOpen" class="card-section-stack">
-            <!-- 依「用途」把花費拆三桶：客人對話才是上方「AI 成本」；建置與測試各自獨立、不灌進每對話成本 -->
+          <div v-show="advancedOpen" class="card-section-stack">
+            <!-- AI 品質指標（從主畫面移下來，避免一般人被術語干擾） -->
+            <div class="usage-adv-quality">
+              <span class="usage-adv-quality__k">答後仍轉真人</span>
+              <strong class="usage-adv-quality__v" :class="metricTone('answeredThenHandoff', summary?.answeredThenHandoffRate)">{{ formatPercent(summary?.answeredThenHandoffRate) }}</strong>
+              <span class="usage-adv-quality__s">{{ formatNumber(summary?.answeredThenHandoffs) }} 次 · AI 答完客人還是要找人，越低越好</span>
+            </div>
+
+            <!-- 成本依用途拆三桶（台幣）：客人對話才是上方花費；建置與測試各自獨立 -->
             <div class="usage-cost-split">
               <div class="usage-cost-row">
                 <span class="usage-cost-row__dot usage-cost-row__dot--conv" />
                 <span class="usage-cost-row__k">客人對話</span>
                 <span class="usage-cost-row__tok">{{ formatNumber(summary?.conversationTokens) }} tokens</span>
-                <strong class="usage-cost-row__cost">${{ (summary?.estimatedCostUsd ?? 0).toFixed(2) }}</strong>
+                <strong class="usage-cost-row__cost">約 NT${{ formatNumber(twd(summary?.estimatedCostUsd)) }}</strong>
               </div>
               <div class="usage-cost-row">
                 <span class="usage-cost-row__dot usage-cost-row__dot--build" />
                 <span class="usage-cost-row__k">知識庫建置</span>
                 <span class="usage-cost-row__tok">{{ formatNumber(summary?.buildTokens) }} tokens</span>
-                <strong class="usage-cost-row__cost">${{ (summary?.buildCostUsd ?? 0).toFixed(2) }}</strong>
+                <strong class="usage-cost-row__cost">約 NT${{ formatNumber(twd(summary?.buildCostUsd)) }}</strong>
               </div>
               <div class="usage-cost-row">
                 <span class="usage-cost-row__dot usage-cost-row__dot--test" />
                 <span class="usage-cost-row__k">後台測試</span>
                 <span class="usage-cost-row__tok">{{ formatNumber(summary?.testTokens) }} tokens</span>
-                <strong class="usage-cost-row__cost">${{ (summary?.testCostUsd ?? 0).toFixed(2) }}</strong>
+                <strong class="usage-cost-row__cost">約 NT${{ formatNumber(twd(summary?.testCostUsd)) }}</strong>
               </div>
               <div class="usage-cost-total">
                 <span>合計 · 工作區總花費</span>
-                <strong>${{ totalCostUsd.toFixed(2) }}</strong>
+                <strong>約 NT${{ formatNumber(twd(totalCostUsd)) }}</strong>
               </div>
             </div>
             <p class="usage-hint">
-              成本依「用途」拆三塊：<strong>客人對話</strong>＝跟真客人來回問答（上方「AI 成本」就是這桶）；<strong>知識庫建置</strong>＝匯入、切卡、建索引，屬一次性 / 偶爾的花費，不是每次對話都有；<strong>後台測試</strong>＝你在 playground「重演」試打，不計入客人成本。
+              成本依「用途」拆三塊：<strong>客人對話</strong>＝跟真客人來回問答（上方「這個月 AI 花費」就是這桶）；<strong>知識庫建置</strong>＝匯入、切卡、建索引，屬一次性 / 偶爾的花費，不是每次對話都有；<strong>後台測試</strong>＝你在 playground「重演」試打，不計入客人成本。
             </p>
             <p class="usage-hint">
-              金額是依 Gemini Flash 公開價格估算的<strong>偏高參考值</strong>（部分呼叫實際走更便宜的 Flash-Lite）<template v-if="pricing">，每 100 萬用量：送入 ${{ pricing.inputPerM }} / 產生 ${{ pricing.outputPerM }} / 搜尋 ${{ pricing.embedPerM }}</template>。實際費用以 Google 帳單為準。
+              金額依 Gemini 公開價估算（USD 約 ×32 換台幣）的<strong>偏高參考值</strong><template v-if="pricing">，每 100 萬用量：送入 ${{ pricing.inputPerM }} / 產生 ${{ pricing.outputPerM }} / 搜尋 ${{ pricing.embedPerM }} USD</template>。實際費用以 Google 帳單為準。
             </p>
           </div>
         </div>
@@ -267,7 +282,7 @@
                 <div class="usage-handoff-meta">
                   <span :class="reasonBadgeClass(row.handoffReason)">{{ reasonLabel(row.handoffReason) }}</span>
                   <span v-if="row.resolved" class="badge badge-gray">已處理</span>
-                  <span class="text-xs text-muted">信心 {{ row.lastConfidence.toFixed(2) }} · {{ formatTime(row.updatedAtMs) }}</span>
+                  <span class="text-xs text-muted"><template v-if="advancedOpen">信心 {{ row.lastConfidence.toFixed(2) }} · </template>{{ formatTime(row.updatedAtMs) }}</span>
                 </div>
                 <div class="usage-handoff-query">
                   <span class="usage-handoff-user">{{ row.displayName || '匿名客人' }}：</span>
@@ -279,7 +294,7 @@
                 <div class="usage-handoff-actions">
                   <el-button :icon="ChatDotRound" size="small" plain @click="goConversation(row.userId)">開對話</el-button>
                   <el-button :icon="Upload" size="small" type="primary" plain @click="goAddKnowledge(row.lastQuery)">補知識</el-button>
-                  <el-button size="small" plain @click="goPlayground(row.lastQuery)">▶ 重演</el-button>
+                  <el-button v-if="advancedOpen" size="small" plain @click="goPlayground(row.lastQuery)">▶ 重演</el-button>
                   <el-button v-if="!row.resolved" size="small" type="success" plain :loading="resolvingUserId === row.userId" @click="resolveHandoff(row.userId)">✓ 已處理</el-button>
                 </div>
               </div>
@@ -304,7 +319,7 @@ const router = useRouter()
 const { showToast } = useAdminToast()
 
 // 用量明細（Token）預設收合：一般人只看成本，需要技術數字才展開
-const tokenOpen = ref(false)
+const advancedOpen = ref(false)
 
 interface Summary {
   period: string
@@ -357,10 +372,20 @@ interface HandoffRow {
   updatedAtMs: number
 }
 
+interface TrendPoint {
+  period: string
+  label: string
+  invocations: number
+  answered: number
+  handoffs: number
+}
+
 const summary = ref<Summary | null>(null)
 const handoffs = ref<HandoffRow[]>([])
+const trend = ref<TrendPoint[]>([])
 const loading = ref(false)
 const loadingHandoffs = ref(false)
+const loadingTrend = ref(false)
 const reasonFilter = ref<'' | HandoffReason>('')
 const showResolved = ref(false)
 
@@ -398,6 +423,29 @@ const aiStatus = computed(() => {
 function goSettings() {
   router.push(`/admin/${workspaceId.value}/ai-settings`)
 }
+
+// 近 3 個月趨勢：有任何一個月有量才畫圖，否則顯示「資料不足」空狀態（剛上線/剛清空時）。
+const trendHasData = computed(() => trend.value.some(p => p.invocations > 0))
+const trendOption = computed(() => {
+  const t = trend.value
+  return {
+    color: ['#05b24c', '#5b7a9d'],
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { bottom: 0, icon: 'roundRect', itemWidth: 14, itemHeight: 8, data: ['自己答完', '轉給真人'] },
+    grid: { left: 8, right: 12, top: 22, bottom: 34, containLabel: true },
+    xAxis: { type: 'category', data: t.map(p => p.label), axisTick: { alignWithLabel: true } },
+    yAxis: {
+      type: 'value',
+      minInterval: 1,
+      max: (v: { max: number }) => Math.max(1, Math.ceil((v.max || 1) * 1.15)),
+      splitLine: { lineStyle: { type: 'dashed' } },
+    },
+    series: [
+      { name: '自己答完', type: 'bar', barMaxWidth: 34, data: t.map(p => p.answered), label: { show: true, position: 'top', fontSize: 11 } },
+      { name: '轉給真人', type: 'bar', barMaxWidth: 34, data: t.map(p => p.handoffs), label: { show: true, position: 'top', fontSize: 11 } },
+    ],
+  }
+})
 
 // 三桶成本相加＝工作區總花費（客人對話 + 知識庫建置 + 後台測試）
 const totalCostUsd = computed(() => {
@@ -475,8 +523,21 @@ async function loadHandoffs() {
   }
 }
 
+async function loadTrend() {
+  loadingTrend.value = true
+  try {
+    trend.value = await apiFetch<TrendPoint[]>('/api/ai/usage/trend?months=3')
+  }
+  catch {
+    trend.value = []
+  }
+  finally {
+    loadingTrend.value = false
+  }
+}
+
 async function loadAll() {
-  await Promise.all([loadSummary(), loadHandoffs()])
+  await Promise.all([loadSummary(), loadHandoffs(), loadTrend()])
 }
 
 // ── Format helpers ────────────────────────────────────────
@@ -485,6 +546,11 @@ function formatNumber(n?: number | null) {
 }
 function formatPercent(n?: number | null) {
   return `${Math.round((n ?? 0) * 100)}%`
+}
+// 成本用台幣白話呈現：USD × 匯率（粗估，實際以 Google 帳單為準，故四捨五入到整數即可）
+const USD_TO_TWD = 32
+function twd(usd?: number | null) {
+  return Math.round((usd ?? 0) * USD_TO_TWD)
 }
 
 /**
@@ -635,6 +701,11 @@ onMounted(() => loadAll())
   padding: 24px;
 }
 
+.usage-trend-chart {
+  width: 100%;
+  height: 240px;
+}
+
 /* ── Hero：AI 介入 = 答完 + 轉真人 + 反問（分母一致、相加成整體） ── */
 .usage-hero {
   display: flex;
@@ -765,6 +836,35 @@ onMounted(() => loadAll())
   }
   &__sub {
     font-size: 11px;
+    color: var(--el-text-color-secondary);
+  }
+}
+
+/* 進階區的 AI 品質指標（答後仍轉真人）：一行，數字依門檻上色 */
+.usage-adv-quality {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding-bottom: 12px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--el-fill-color-light);
+
+  &__k {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  &__v {
+    font-size: 18px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+
+    &.is-good { color: var(--brand-green-text); }
+    &.is-warn { color: #b45309; }
+    &.is-bad  { color: #b91c1c; }
+  }
+  &__s {
+    font-size: 12px;
     color: var(--el-text-color-secondary);
   }
 }

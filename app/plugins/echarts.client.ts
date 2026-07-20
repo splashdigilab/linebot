@@ -2,7 +2,7 @@
 // 避免把整包 ECharts 打進 bundle。頁面用 <ClientOnly><VChart …/></ClientOnly> 呼叫。
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
-import { LineChart } from 'echarts/charts'
+import { LineChart, BarChart } from 'echarts/charts'
 import {
   GridComponent,
   TooltipComponent,
@@ -16,6 +16,7 @@ export default defineNuxtPlugin((nuxtApp) => {
   use([
     CanvasRenderer,
     LineChart,
+    BarChart,
     GridComponent,
     TooltipComponent,
     LegendComponent,
