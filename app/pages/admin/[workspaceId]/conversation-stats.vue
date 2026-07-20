@@ -4,15 +4,10 @@
       <AdminSoloPageHeading
         field-label="統計"
         title="客服對話統計"
-        caption="依日期區間檢視會話量、首接類型分佈、轉真人與結案；趨勢可看圖表並匯出 CSV。"
+        caption="依日期查看新增對話數、由誰先接手、轉真人與結案比例；下方趨勢圖可匯出 CSV。"
       />
       <div class="conv-stats-header-actions admin-header-actions" data-tour="cs-filter">
-        <div class="conv-stats-filter-group">
-          <el-radio-group v-model="rangePreset" size="small" @change="onPresetChange">
-            <el-radio-button value="7">近 7 天</el-radio-button>
-            <el-radio-button value="30">近 30 天</el-radio-button>
-            <el-radio-button value="90">近 90 天</el-radio-button>
-          </el-radio-group>
+        <div class="conv-stats-filter-row">
           <el-date-picker
             v-model="dateRange"
             type="daterange"
@@ -23,11 +18,16 @@
             size="small"
             @change="onRangeChange"
           />
-        </div>
-        <div class="conv-stats-filter-group">
-          <el-tooltip content="重整" placement="top">
-            <el-button size="small" :icon="Refresh" circle :loading="loading" aria-label="重整" @click="loadAll" />
+          <el-tooltip content="重新整理" placement="top">
+            <el-button size="small" :icon="Refresh" circle :loading="loading" aria-label="重新整理" @click="loadAll" />
           </el-tooltip>
+        </div>
+        <div class="conv-stats-filter-row">
+          <el-radio-group v-model="rangePreset" size="small" @change="onPresetChange">
+            <el-radio-button value="7">近 7 天</el-radio-button>
+            <el-radio-button value="30">近 30 天</el-radio-button>
+            <el-radio-button value="90">近 90 天</el-radio-button>
+          </el-radio-group>
           <el-button size="small" type="primary" plain :icon="Download" :disabled="!trend.buckets.length" @click="exportCsv">匯出 CSV</el-button>
         </div>
       </div>
@@ -49,7 +49,7 @@
                   <div class="stat-label">總新增會話</div>
                   <div class="conv-stats-hero-row">
                     <span class="stat-value conv-stats-hero-value">{{ kpi.total }}</span>
-                    <el-tooltip v-if="deltaLabel" content="與前一個等長區間相比的會話量增減" placement="top">
+                    <el-tooltip v-if="deltaLabel" content="跟前一段同樣長度的期間相比，對話數增加或減少" placement="top">
                       <span class="conv-stats-delta" :class="deltaClass">{{ deltaLabel }}</span>
                     </el-tooltip>
                   </div>
@@ -131,7 +131,7 @@
                     <span class="conv-seg-legend-label">{{ seg.label }}</span>
                     <span class="conv-seg-legend-num">{{ seg.value }}</span>
                     <span class="conv-seg-legend-pct">{{ pct(seg.value, kpi.total) }}</span>
-                    <span v-if="seg.escalated" class="conv-seg-legend-esc">升級真人 {{ seg.escalated }}</span>
+                    <span v-if="seg.escalated" class="conv-seg-legend-esc">其中後來轉真人 {{ seg.escalated }}</span>
                   </button>
                 </el-tooltip>
               </div>
@@ -144,7 +144,7 @@
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="section-title">趨勢</span>
-              <span class="text-xs text-muted">每期會話量與組成（點圖例可開關）</span>
+              <span class="text-xs text-muted">各期新增對話數與組成（點下方圖例可開關線條）</span>
             </div>
             <el-select
               v-model="granularity"

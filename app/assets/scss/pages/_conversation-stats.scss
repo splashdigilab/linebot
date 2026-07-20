@@ -15,17 +15,18 @@
 
 .conv-stats-header-actions {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.5rem 0.75rem;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  width: fit-content;
+  margin-left: auto;
 }
 
-/* 篩選分群：區間（快捷+自訂）為一組、動作鈕為一組，換行時整組一起換不散落 */
-.conv-stats-filter-group {
+/* 篩選兩行：第一行日期+重整、第二行快捷區間+匯出；兩行等寬、左右對齊 */
+.conv-stats-filter-row {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
+  justify-content: space-between;
   gap: 0.5rem;
 }
 
@@ -55,9 +56,14 @@
   flex-direction: column;
 }
 
-/* 三張卡的底部說明列推到最底、對齊 */
-.conv-stats-kpi-foot {
+/* 數字底部對齊：把「數字＋說明」整組推到卡片底部。
+   說明列為單行、高度一致，故三張卡的數字底邊與說明列都會對齊。 */
+.conv-stats-kpi-body > .stat-value,
+.conv-stats-hero-row {
   margin-top: auto;
+}
+
+.conv-stats-kpi-foot {
   padding-top: 0.25rem;
 }
 

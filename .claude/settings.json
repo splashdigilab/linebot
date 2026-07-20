@@ -64,7 +64,9 @@
       "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs8.css --no-source-map)",
       "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs9.css --no-source-map)",
       "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs10.css --no-source-map)",
-      "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs13.css --no-source-map)"
+      "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs13.css --no-source-map)",
+      "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs14.css --no-source-map)",
+      "Edit(/.claude/skills/ui-review/**)"
     ],
     "additionalDirectories": [
       "/Users/kevin/.claude",

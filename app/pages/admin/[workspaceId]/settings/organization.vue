@@ -4,7 +4,7 @@
       <AdminSoloPageHeading
         field-label="設定"
         title="組織與 LINE"
-        caption="組織與官方帳號名稱；以及 LINE OA 憑證、LIFF 與 Webhook。預設 LIFF 必填；Token／Secret 第一次要貼，存過後以黑點顯示，點黑點可改。"
+        caption="設定你的組織與 LINE 官方帳號，以及連上 LINE 需要的資料。Token、Secret 只有第一次要貼；存好後會自動隱藏，要換再點一下就能重填。"
       />
       <div class="flex gap-2 admin-header-actions">
         <el-button :loading="loading" @click="reloadAll">重新載入</el-button>
@@ -20,19 +20,18 @@
               <span class="section-title">組織與官方帳號</span>
             </div>
           </div>
-          <div class="card-section-stack card-section-stack--relaxed-summary">
-            <div class="admin-field-group">
-              <AdminFieldLabel text="組織名稱" tight />
-              <div class="text-sm">{{ organizationNameDisplay }}</div>
-            </div>
-            <div class="admin-field-group">
-              <AdminFieldLabel text="官方帳號名稱" tight />
-              <div class="text-sm">{{ officialAccountDisplayName }}</div>
-            </div>
-            <div class="admin-field-group">
-              <AdminFieldLabel text="你的角色" tight />
-              <el-tag :type="roleTagType(currentRole)">{{ roleLabel(currentRole) }}</el-tag>
-            </div>
+          <div class="card-section-stack">
+            <dl class="ls-kv">
+              <dt>組織名稱</dt>
+              <dd>{{ organizationNameDisplay }}</dd>
+              <dt>官方帳號名稱</dt>
+              <dd>{{ officialAccountDisplayName }}</dd>
+              <dt>你的角色</dt>
+              <dd>
+                <el-tag :type="roleTagType(currentRole)" :effect="roleTagEffect(currentRole)">{{ roleLabel(currentRole) }}</el-tag>
+              </dd>
+            </dl>
+            <p class="ls-kv-note">以上名稱為顯示用；需變更請洽平台管理員。</p>
           </div>
         </div>
 
@@ -42,7 +41,7 @@
               <span class="section-title">目前方案</span>
               <span class="text-xs text-muted">{{ planView.name }}</span>
             </div>
-            <el-button size="small" @click="upgradeOpen = true">升級方案</el-button>
+            <el-button size="small" @click="upgradeOpen = true">{{ planState.limit == null ? '查看方案' : '升級方案' }}</el-button>
           </div>
           <div class="card-section-stack">
             <template v-if="planState.limit != null">
@@ -69,13 +68,11 @@
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="section-title">LINE 憑證與 Webhook</span>
+              <span class="section-title">LINE 憑證、LIFF 與 Webhook</span>
             </div>
           </div>
           <div class="card-section-stack">
-            <p class="ar-section-hint">
-              請到 LINE Developers → Messaging API 複製貼上。
-            </p>
+            <p class="ls-subgroup">LIFF（活動頁）</p>
             <div class="admin-field-group" data-tour="org-liff">
               <AdminFieldLabel text="預設 LIFF（必填）" tight />
               <el-input
@@ -85,7 +82,7 @@
               <p class="text-xs text-muted">活動沒填 LIFF 時會用這一組。</p>
             </div>
             <p class="ar-section-hint">
-              在 LINE Developers 建立／編輯<strong>同一個</strong> LIFF 時，Endpoint URL 要填下方的「活動 LIFF 頁」網址，<strong>不要</strong>填 Webhook 那組（結尾是 <code>/webhook</code>），不然客人點活動連結會打不開、看到錯誤頁。
+              這個 LIFF 的 Endpoint URL 要填下方的「活動 LIFF 頁」網址，<strong>別填成 Webhook 那組</strong>，不然客人會打不開。
             </p>
             <div v-if="suggestedLiffEndpointUrl" class="admin-field-group">
               <AdminFieldLabel text="活動 LIFF 頁（貼到 LINE Developers → 該 LIFF 的 Endpoint URL）" tight />
@@ -94,6 +91,10 @@
                 <el-button @click="copyLiffEndpointUrl">複製</el-button>
               </div>
             </div>
+            <p class="ls-subgroup">LINE 憑證</p>
+            <p class="ar-section-hint">
+              請到 LINE Developers → Messaging API 複製貼上。
+            </p>
             <div class="admin-field-group" data-tour="org-token">
               <AdminFieldLabel text="Channel Access Token（必填）" tight />
               <div
@@ -106,7 +107,7 @@
                 @keydown.enter.prevent="revealAccessToken"
               >
                 <span class="ls-cred-mask-dots" aria-hidden="true">{{ maskDots }}</span>
-                <span v-if="meta.channelAccessTokenSuffix" class="ls-cred-mask-suffix">末四碼 {{ meta.channelAccessTokenSuffix }}</span>
+                <span v-if="meta.channelAccessTokenSuffix" class="ls-cred-mask-suffix">尾碼 {{ meta.channelAccessTokenSuffix }}</span>
                 <span class="ls-cred-mask-hint">已儲存（內容隱藏），點此變更</span>
               </div>
               <el-input
@@ -132,7 +133,7 @@
                 @keydown.enter.prevent="revealSecret"
               >
                 <span class="ls-cred-mask-dots" aria-hidden="true">{{ maskDots }}</span>
-                <span v-if="meta.channelSecretSuffix" class="ls-cred-mask-suffix">末四碼 {{ meta.channelSecretSuffix }}</span>
+                <span v-if="meta.channelSecretSuffix" class="ls-cred-mask-suffix">尾碼 {{ meta.channelSecretSuffix }}</span>
                 <span class="ls-cred-mask-hint">已儲存（內容隱藏），點此變更</span>
               </div>
               <el-input
@@ -151,17 +152,16 @@
               尚未在此頁存過憑證，請貼上 Token、Secret 後按儲存。
             </div>
 
-            <hr class="divider">
-
+            <p class="ls-subgroup">Webhook（收訊息）</p>
             <p class="ar-section-hint">
-              到
+              把下面的網址貼到
               <a
                 href="https://developers.line.biz/console/"
                 target="_blank"
                 rel="noopener noreferrer"
                 class="ar-link"
               >LINE Developers</a>
-              → Messaging API → Webhook URL 貼下面這個網址（要 https 開頭、外面連得到）。這裡的 Channel Secret 要跟上面填的同一組。如果按「測試連線」失敗，多半是 Channel Secret 兩邊填得不一樣。
+              → Messaging API 的 Webhook URL（要 https、外面連得到）。測試失敗多半是 Channel Secret 兩邊沒填成同一組。
             </p>
             <div class="admin-field-group" data-tour="org-webhook">
               <AdminFieldLabel text="Webhook 網址（複製貼到 LINE）" tight />
@@ -171,59 +171,33 @@
               </div>
               <p v-else class="text-xs text-muted">開啟本頁後會自動帶入。</p>
             </div>
+            <p class="ls-subgroup">檢查連線</p>
             <div class="admin-field-group" data-tour="org-verify">
-              <AdminFieldLabel text="測試有沒有通" tight />
               <div class="flex flex-wrap gap-2">
-                <el-button :loading="verifyingWebhook" type="primary" plain @click="verifyWebhook(true)">
+                <el-button
+                  :loading="verifyingWebhook"
+                  :disabled="testDisabled"
+                  type="primary"
+                  plain
+                  @click="verifyWebhook(true)"
+                >
                   測試連線
                 </el-button>
-                <el-button :loading="verifyingWebhook" @click="verifyWebhook(false)">
-                  只看登記網址
-                </el-button>
               </div>
-              <p class="text-xs text-muted">會用上面填的 Channel Access Token 去問 LINE。測試次數有限，別連續猛按。</p>
+              <p v-if="testDisabledReason" class="text-xs text-warning">{{ testDisabledReason }}</p>
+              <p v-else class="text-xs text-muted">按一下，LINE 會真的送一則測試訊息，確認「LINE 那邊填的網址」現在收得到（不是這頁的網址）。次數有限，別連續猛按。</p>
             </div>
-            <div v-if="webhookVerifyResult" class="admin-field-group">
-              <AdminFieldLabel text="結果" tight />
-              <div class="flex flex-col gap-1 text-sm">
-                <template v-if="!webhookVerifyResult.getOk">
-                  <p class="text-danger">{{ webhookVerifyResult.getMessage }}</p>
-                </template>
-                <template v-else>
-                  <p><strong>LINE 後台登記的網址：</strong>{{ webhookVerifyResult.lineEndpoint || '—' }}</p>
-                  <p>
-                    <strong>有沒有開 Webhook：</strong>
-                    {{ webhookVerifyResult.lineActive ? '有（會收訊息）' : '沒開（收不到）' }}
-                  </p>
-                  <p v-if="webhookVerifyResult.urlMatchesCompare === true" class="text-success">
-                    跟上面「Webhook 網址」一樣。
-                  </p>
-                  <p v-else-if="webhookVerifyResult.urlMatchesCompare === false" class="text-warning">
-                    跟上面「Webhook 網址」不一樣；若 API 本來就架在別台再說，否則請改 LINE 後台。
-                  </p>
-                  <template v-if="!webhookVerifyResult.testSkipped">
-                    <template v-if="webhookVerifyResult.testError">
-                      <p class="text-danger">{{ webhookVerifyResult.testError }}</p>
-                    </template>
-                    <template v-else-if="webhookVerifyResult.test">
-                      <p v-if="webhookVerifyResult.test.success" class="text-success">
-                        測試 OK，LINE 連得到你的網站。
-                      </p>
-                      <p v-else class="text-danger">
-                        測試失敗：{{ webhookVerifyResult.test.reason || '—' }}
-                        <span v-if="webhookVerifyResult.test.detail">（{{ webhookVerifyResult.test.detail }}）</span>
-                        <span v-if="webhookVerifyResult.test.statusCode != null"> HTTP {{ webhookVerifyResult.test.statusCode }}</span>
-                      </p>
-                      <p
-                        v-if="!webhookVerifyResult.test.success && webhookVerifyResult.test.statusCode === 401"
-                        class="ar-section-hint"
-                      >
-                        LINE 有連上你的網站，但<strong>認證沒過、被系統擋下來</strong>。請確認本頁存的 Channel Secret 跟 LINE Developers → Messaging API 的 Channel secret 是<strong>同一組</strong>。Channel Secret 填錯、沒存到，都會卡在這一步。
-                      </p>
-                    </template>
-                  </template>
-                  <p v-else class="text-muted text-xs">這次沒跑測試。</p>
-                </template>
+            <div v-if="webhookVerifyResult && webhookStatusBadge" class="admin-field-group">
+              <AdminFieldLabel text="LINE 目前狀態" tight />
+              <div class="ls-status" :class="`ls-status--${webhookStatusBadge.tone}`">
+                <p class="ls-status-title">{{ webhookStatusBadge.text }}</p>
+                <p class="ls-status-hint">{{ webhookStatusBadge.hint }}</p>
+                <p
+                  v-if="webhookVerifyResult.getOk && webhookVerifyResult.lineEndpoint"
+                  class="ls-status-detail"
+                >
+                  LINE 那邊填的網址：<span class="ls-status-url">{{ webhookVerifyResult.lineEndpoint }}</span>
+                </p>
               </div>
             </div>
 
@@ -303,10 +277,15 @@ function roleLabel(role: WorkspaceMemberRole | null) {
 }
 
 function roleTagType(role: WorkspaceMemberRole | null) {
-  if (role === 'owner') return 'danger'
+  if (role === 'owner') return 'primary'
   if (role === 'admin') return 'warning'
   if (role === 'agent') return 'success'
   return 'info'
+}
+
+// 擁有者用實心品牌色標籤，與其他淺色標籤（尤其客服的 success 綠）明顯區隔，避免兩綠相混
+function roleTagEffect(role: WorkspaceMemberRole | null) {
+  return role === 'owner' ? 'dark' : 'light'
 }
 
 /** 暫時隱藏「清除已儲存的憑證」區塊；改為 true 即可顯示 */
@@ -333,13 +312,22 @@ const form = ref({
   channelSecret: '',
 })
 
-const { markClean, confirmLeaveIfDirty } = useUnsavedChanges({
+const { hasUnsavedChanges, markClean, confirmLeaveIfDirty } = useUnsavedChanges({
   getSnapshot: () => ({
     defaultLiffId: form.value.defaultLiffId.trim(),
     channelAccessToken: form.value.channelAccessToken.trim(),
     channelSecret: form.value.channelSecret.trim(),
   }),
 })
+
+// 測試打的是「已儲存」的憑證（後端讀 Firestore），不是表單裡剛打的字。
+// 所以還沒存過、或有未儲存變更時先擋住，免得測到舊資料、拿到誤導的結果。
+const testDisabledReason = computed(() => {
+  if (!meta.value.channelAccessTokenConfigured) return '先填好並儲存 Token、Secret，才能測試。'
+  if (hasUnsavedChanges.value) return '有還沒儲存的變更 —— 先按「儲存」再測試（測試用的是已儲存的內容）。'
+  return ''
+})
+const testDisabled = computed(() => testDisabledReason.value !== '')
 
 const maskDots = '••••••••••••'
 
@@ -445,8 +433,39 @@ type SaveWorkspaceResponse = {
 const webhookVerifyResult = ref<WebhookVerifyResult | null>(null)
 const verifyingWebhook = ref(false)
 
-async function verifyWebhook(runTest: boolean) {
-  verifyingWebhook.value = true
+// 一眼結論：徽章下結論、hint 用一句白話說「怎麼辦」。嚴重度優先序＝測試失敗 > 沒開/不一致 > 正常。
+const webhookStatusBadge = computed<{ text: string, tone: 'success' | 'warning' | 'danger', hint: string } | null>(() => {
+  const r = webhookVerifyResult.value
+  if (!r) return null
+  if (!r.getOk)
+    return { text: '✕ 問不到狀態', tone: 'danger', hint: r.getMessage || '目前問不到 LINE，稍後再試，或確認 Token 是否正確。' }
+  if (!r.testSkipped && (r.testError || (r.test && !r.test.success))) {
+    const is401 = r.test?.statusCode === 401
+    return {
+      text: '✕ 測試沒過',
+      tone: 'danger',
+      hint: is401
+        ? 'LINE 連到你的系統了，但被擋下來 —— 多半是這頁的 Channel Secret 跟 LINE 後台不是同一組，重貼一次再存。'
+        : 'LINE 連你的系統時失敗了。確認網址對外連得到、開頭是 https。',
+    }
+  }
+  if (r.lineActive === false)
+    return { text: '⚠ Webhook 沒開', tone: 'warning', hint: 'LINE 後台的 Webhook 開關沒打開，這樣收不到訊息 —— 到 LINE Developers 把它打開。' }
+  if (r.urlMatchesCompare === false)
+    return { text: '⚠ 網址不一致', tone: 'warning', hint: 'LINE 那邊填的網址，跟這頁的「Webhook 網址」不一樣。你的系統本來就放在別的網址就沒關係；不然把這頁的網址貼到 LINE 後台。' }
+  if (!r.testSkipped && r.test?.success)
+    return { text: '✓ 一切正常', tone: 'success', hint: 'LINE 連得到你的系統，訊息收發沒問題。' }
+  return { text: '✓ 看起來正常', tone: 'success', hint: '想再確認的話，按上方「測試連線」實跑一次。' }
+})
+
+/**
+ * 查 LINE 上的 webhook 狀態；runTest=true 會多打一發「測試派送」（有次數上限）。
+ * silent=true 用於進頁時被動帶出登記狀態（免費 GET）：不跳 toast、不顯示按鈕 loading，
+ * 且只在成功時才填結果面板，查失敗就靜靜略過、別在載入時嚇人。
+ */
+async function verifyWebhook(runTest: boolean, opts: { silent?: boolean } = {}) {
+  const silent = opts.silent === true
+  if (!silent) verifyingWebhook.value = true
   webhookVerifyResult.value = null
   try {
     const token = await getBearer()
@@ -459,6 +478,10 @@ async function verifyWebhook(runTest: boolean) {
         runTest,
       },
     })
+    if (silent) {
+      if (data.getOk) webhookVerifyResult.value = data
+      return
+    }
     webhookVerifyResult.value = data
     if (data.getOk && runTest && !data.testSkipped && data.test?.success) {
       showToast('Webhook 串接驗證通過', 'success')
@@ -470,17 +493,18 @@ async function verifyWebhook(runTest: boolean) {
       showToast('無法完成測試，請查看下方說明', 'error')
     }
     else if (data.getOk) {
-      showToast(runTest ? '查詢完成' : '已取得 LINE 登記網址', 'success')
+      showToast('查詢完成', 'success')
     }
     else {
       showToast(data.getMessage || '查詢失敗', 'error')
     }
   }
   catch (e: any) {
-    showToast(e?.data?.statusMessage || e?.data?.message || e?.message || '驗證請求失敗', 'error')
+    if (!silent)
+      showToast(e?.data?.statusMessage || e?.data?.message || e?.message || '驗證請求失敗', 'error')
   }
   finally {
-    verifyingWebhook.value = false
+    if (!silent) verifyingWebhook.value = false
   }
 }
 
@@ -615,5 +639,8 @@ onMounted(async () => {
   // workspaceList 由 layout (default.vue) 的 onMounted 負責載入；此頁只需載入 LINE 憑證 meta
   loadPlanSummary().catch(() => {})
   await load()
+  // 已設定憑證才靜默帶出 LINE 登記狀態（免費 GET、不佔測試次數、不跳 toast）
+  if (meta.value.channelAccessTokenConfigured)
+    verifyWebhook(false, { silent: true }).catch(() => {})
 })
 </script>

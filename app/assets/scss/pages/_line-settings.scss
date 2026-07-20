@@ -12,7 +12,8 @@
   padding: 0.35rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: var(--el-border-radius-base, 4px);
-  background: var(--bg-elevated, #fff);
+  /* 與上方 el-input 同一底色，讓「已儲存」讀起來是同一種欄位的一個狀態（原本 --bg-elevated 偏灰） */
+  background: var(--el-fill-blank, #fff);
   cursor: pointer;
   line-height: 1.4;
 }
@@ -39,11 +40,109 @@
   flex-basis: 100%;
 }
 
-/* 組織與官方帳號唯讀區：欄位間與標題／內文間距略鬆（沿用全站 --space-form-field-gap） */
-.card-section-stack.card-section-stack--relaxed-summary {
-  gap: var(--space-form-field-gap);
+/* 組織與官方帳號：唯讀資訊用對齊的鍵／值格線，不要用表單欄位堆疊（看起來像空表單） */
+.ls-kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.8rem 1.75rem;
+  align-items: center;
+  margin: 0;
 }
 
-.card-section-stack.card-section-stack--relaxed-summary .admin-field-group {
-  gap: 0.5rem;
+.ls-kv dt {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-muted);
 }
+
+.ls-kv dd {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--el-text-color-primary);
+}
+
+.ls-kv-note {
+  margin: 0.5rem 0 0;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/*
+ * 憑證卡內的小分組抬頭（LIFF 頁面／LINE 憑證／Webhook 串接）。
+ * 做成「帶標題的分隔線」：上緣一條細線 + muted 小標，跟一般欄位標題明顯區隔；
+ * 三個群組邊界一致（都靠這條線），不再混用 <hr>。第一個抬頭緊接卡首，不畫線。
+ */
+.ls-subgroup {
+  margin: 0.85rem 0 0.15rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border);
+  /* 抬頭要「壓得住」它管的欄位標題（0.8rem/600/secondary）：同色、略大、加粗、加字距，
+     再靠上緣細線標示分組；避免群組標題反而比欄位標題還輕。 */
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.ls-subgroup:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+/* ── LINE 目前狀態：做成 callout 面板（左側色條 + 淡色底），把散落的文字收成一個單元 ── */
+.ls-status {
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border-left: 3px solid var(--border);
+}
+
+.ls-status--success {
+  background: var(--el-color-success-light-9);
+  border-left-color: var(--el-color-success);
+}
+
+.ls-status--warning {
+  background: var(--el-color-warning-light-9);
+  border-left-color: var(--el-color-warning);
+}
+
+.ls-status--danger {
+  background: var(--el-color-danger-light-9);
+  border-left-color: var(--el-color-danger);
+}
+
+/* 結論標題：一眼定調，顏色跟著狀態走 */
+.ls-status-title {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.ls-status--success .ls-status-title { color: var(--el-color-success); }
+.ls-status--warning .ls-status-title { color: var(--el-color-warning); }
+.ls-status--danger .ls-status-title { color: var(--el-color-danger); }
+
+/* 白話說明：一般人真正要讀的一句話，用主要文字色、給足行高 */
+.ls-status-hint {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--el-text-color-primary);
+}
+
+/* 技術資訊：登記網址等，退到次要 */
+.ls-status-detail {
+  margin: 0.45rem 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.ls-status-url {
+  font-family: ui-monospace, monospace;
+  word-break: break-all;
+}
+

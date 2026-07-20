@@ -36,7 +36,7 @@
               </el-table-column>
               <el-table-column label="角色" width="120">
                 <template #default="{ row }">
-                  <el-tag :type="roleTagType(row.role)" size="small">{{ roleLabel(row.role) }}</el-tag>
+                  <el-tag :type="roleTagType(row.role)" :effect="roleTagEffect(row.role)" size="small">{{ roleLabel(row.role) }}</el-tag>
                 </template>
               </el-table-column>
               <el-table-column v-if="canManageSettings" label="操作" width="160" align="right">
@@ -113,10 +113,15 @@ const ROLE_LABELS: Record<string, string> = {
 
 function roleLabel(role: string) { return ROLE_LABELS[role] ?? role }
 function roleTagType(role: string) {
-  if (role === 'owner' || role === 'org_owner') return 'danger'
+  if (role === 'owner' || role === 'org_owner') return 'primary'
   if (role === 'admin' || role === 'org_admin') return 'warning'
   if (role === 'agent') return 'success'
   return 'info'
+}
+
+// 擁有者用實心品牌色標籤，與其他淺色標籤區隔（與組織設定頁一致）
+function roleTagEffect(role: string) {
+  return role === 'owner' || role === 'org_owner' ? 'dark' : 'light'
 }
 
 function openInvite() {
