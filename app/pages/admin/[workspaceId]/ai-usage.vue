@@ -58,7 +58,8 @@
               </div>
               <div class="plan-card-head-actions">
                 <span v-if="planQuota.currentPeriodEnd" class="text-xs text-muted">{{ planQuota.currentPeriodEnd }} 續期</span>
-                <el-button size="small" @click="upgradeDialogOpen = true">升級方案</el-button>
+                <!-- 無固定則數上限（客製/內部方案）打不到額度，升級對他沒意義 → 不顯示，避免噪音 -->
+                <el-button v-if="quotaLimit != null" size="small" @click="upgradeDialogOpen = true">升級方案</el-button>
               </div>
             </div>
             <div class="card-section-stack">
@@ -130,22 +131,27 @@
                 <span class="usage-kpi__sub">{{ formatNumber(summary?.disambiguations) }} 次反問</span>
               </div>
               <div class="usage-kpi">
-                <span class="usage-kpi__label">每對話成本</span>
-                <strong class="usage-kpi__value">${{ summary?.perConversationUsd?.toFixed(4) ?? '0.0000' }}</strong>
-                <span class="usage-kpi__sub">本月 ${{ summary?.estimatedCostUsd?.toFixed(2) ?? '0.00' }} USD</span>
+                <span class="usage-kpi__label">本月 AI 成本</span>
+                <strong class="usage-kpi__value">${{ summary?.estimatedCostUsd?.toFixed(2) ?? '0.00' }}</strong>
+                <span class="usage-kpi__sub">每對話約 ${{ summary?.perConversationUsd?.toFixed(4) ?? '0.0000' }} USD</span>
               </div>
             </div>
           </div>
         </div>
 
-        <!-- ── Token breakdown ─────────────────── -->
+        <!-- ── Token breakdown（技術明細，預設收合：老闆在乎成本不在乎 token） ── -->
         <div class="message-card usage-card">
           <div class="message-card-header">
             <div class="card-header-main">
               <span class="section-title">用量明細（Token）</span>
+              <span class="text-xs text-muted">成本估算的技術依據</span>
             </div>
+            <el-button text size="small" @click="tokenOpen = !tokenOpen">
+              {{ tokenOpen ? '收合' : '展開技術明細' }}
+              <el-icon class="el-icon--right"><component :is="tokenOpen ? ArrowUp : ArrowDown" /></el-icon>
+            </el-button>
           </div>
-          <div class="card-section-stack">
+          <div v-show="tokenOpen" class="card-section-stack">
             <div class="usage-tokens">
               <div class="usage-token-row">
                 <span class="text-muted">Input</span>
@@ -230,7 +236,7 @@
 </template>
 
 <script setup lang="ts">
-import { ChatDotRound, InfoFilled, Refresh, Upload } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, ChatDotRound, InfoFilled, Refresh, Upload } from '@element-plus/icons-vue'
 import { HANDOFF_REASON_LABELS, type HandoffReason } from '~~/shared/types/ai-knowledge'
 import { useAdminToast } from '~~/app/composables/useAdminToast'
 import { derivePlanState } from '~~/shared/billing/plan-state'
@@ -240,6 +246,9 @@ definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
 const { apiFetch, workspaceId } = useWorkspace()
 const router = useRouter()
 const { showToast } = useAdminToast()
+
+// 用量明細（Token）預設收合：一般人只看成本，需要技術數字才展開
+const tokenOpen = ref(false)
 
 interface Summary {
   period: string
