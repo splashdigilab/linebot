@@ -27,11 +27,12 @@ export async function respondImagemapImage(event: H3Event, imageUrl: string): Pr
   }
 
   const contentType = upstream.headers.get('content-type') || 'image/png'
-  const cacheControl = upstream.headers.get('cache-control') || 'public, max-age=3600'
   const arrayBuffer = await upstream.arrayBuffer()
   const headers = new Headers()
   headers.set('content-type', contentType)
-  headers.set('cache-control', cacheControl)
+  // URL 帶簽章 token、同一 URL 內容不變,讓 LINE 手機端與 CDN 長期快取
+  // （30 天,與 token 桶期一致）;快取命中時同一張圖第二次起免重新下載。
+  headers.set('cache-control', 'public, max-age=2592000, immutable')
   headers.set('content-length', String(arrayBuffer.byteLength))
   headers.set('x-line-imagemap-proxy', '1')
 

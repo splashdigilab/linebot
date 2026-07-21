@@ -1,6 +1,12 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
-const TOKEN_TTL_MS = 60 * 24 * 60 * 60 * 1000 // 60 天
+/**
+ * 有效期以 30 天為一桶、對齊固定紀元:同一張圖在同一桶內簽出完全相同的 token。
+ * exp 若用「當下 + TTL」會每毫秒都不同 → 每次發送的 baseUrl 都不同,LINE 手機端
+ * 與 CDN 的快取全部失效,同一張圖每次觸發都重新下載(圖文訊息秒數級延遲的主因)。
+ * exp 取「下下個桶界」,保證任一時點簽出的 token 至少還有 30 天、至多 60 天壽命。
+ */
+const TOKEN_BUCKET_MS = 30 * 24 * 60 * 60 * 1000
 
 type Payload = { u: string; exp: number }
 
@@ -10,7 +16,7 @@ function signPayload(payload: string, secret: string) {
 
 /** 產生給 Imagemap baseUrl 用的 token（LINE 會以 baseUrl + 寬度數字請求圖檔） */
 export function createImagemapImageToken(imageUrl: string, secret: string): string {
-  const exp = Date.now() + TOKEN_TTL_MS
+  const exp = (Math.floor(Date.now() / TOKEN_BUCKET_MS) + 2) * TOKEN_BUCKET_MS
   const body: Payload = { u: imageUrl, exp }
   const json = JSON.stringify(body)
   const sig = signPayload(json, secret)
