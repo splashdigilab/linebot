@@ -150,7 +150,7 @@ export interface PayuniTradeResult {
  *   2. 再解密 EncryptInfo 取出交易明細
  * 任一步失敗一律回 null（呼叫端據此拒絕、不得開通）。
  */
-export function verifyAndDecryptNotify(
+export function verifyAndDecryptPayuniNotify(
   encryptInfo: string,
   hashInfo: string,
   keys: PayuniKeys,

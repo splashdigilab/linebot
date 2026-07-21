@@ -6,7 +6,7 @@ import {
   encodeEncryptInfo,
   encrypt,
   makeHashInfo,
-  verifyAndDecryptNotify,
+  verifyAndDecryptPayuniNotify,
   verifyHashInfo,
 } from './payuni'
 
@@ -42,7 +42,7 @@ describe('AES-256-GCM 往返', () => {
     const enc = encrypt({ Timestamp: 1700000000 }, KEYS)
     const combined = Buffer.from(enc, 'hex').toString('utf8')
     expect(combined).toContain(':::')
-    const [ctB64, tagB64] = combined.split(':::')
+    const [ctB64, tagB64] = combined.split(':::') as [string, string]
     // 兩段都是合法 base64
     expect(Buffer.from(ctB64, 'base64').toString('base64')).toBe(ctB64)
     expect(Buffer.from(tagB64, 'base64')).toHaveLength(16) // GCM tag 16 bytes
@@ -90,17 +90,17 @@ describe('buildUppForm', () => {
   })
 })
 
-describe('verifyAndDecryptNotify(模擬 PAYUNi 回傳)', () => {
+describe('verifyAndDecryptPayuniNotify(模擬 PAYUNi 回傳)', () => {
   it('驗簽 + 解密成功回交易明細', () => {
     const result = { Status: 'SUCCESS', MerID: 'ABC', MerTradeNo: 'NP1', TradeNo: 'UNI123', TradeAmt: '499' }
     const enc = encrypt(result, KEYS)
     const hash = makeHashInfo(enc, KEYS)
-    expect(verifyAndDecryptNotify(enc, hash, KEYS)).toMatchObject(result)
+    expect(verifyAndDecryptPayuniNotify(enc, hash, KEYS)).toMatchObject(result)
   })
 
   it('簽章不符一律回 null(不得開通)', () => {
     const enc = encrypt({ Status: 'SUCCESS' }, KEYS)
-    expect(verifyAndDecryptNotify(enc, 'DEADBEEF', KEYS)).toBeNull()
+    expect(verifyAndDecryptPayuniNotify(enc, 'DEADBEEF', KEYS)).toBeNull()
   })
 })
 

@@ -2052,7 +2052,7 @@ async function handleIncomingText(
       if (replyToken) {
         if (rule.action.type === 'module') {
           // 回覆組裝期間先顯示「輸入中…」，訊息送達時動畫自動消失（fire-and-forget）
-          showLoadingAnimation(lineUserId, wid, 5).catch(() => {})
+          showLoadingAnimation(lineUserId, wid, 10).catch(() => {})
           const { flow, hydrated: hydratedMessages } = await flowHydrateTask
           if (flow) {
             const lineMessages = buildLineMessages(
@@ -2126,7 +2126,7 @@ async function runScriptStart(
 
   if (matched) {
     // 腳本啟動要先寫入使用者狀態才回覆，期間先顯示「輸入中…」（fire-and-forget）
-    showLoadingAnimation(lineUserId, workspaceId, 5).catch(() => {})
+    showLoadingAnimation(lineUserId, workspaceId, 10).catch(() => {})
   }
 
   // 2) 沒命中 → 統一意圖路由（一次 LLM 呼叫，由 LLM 理解意圖+優先序決定走哪條腳本或交給 AI）。
@@ -2857,10 +2857,6 @@ export async function handlePostbackEvent(
   if (!workspaceId) throw createError({ statusCode: 400, statusMessage: 'workspaceId is required in handlePostbackEvent' })
 
   const postbackTs = typeof event.timestamp === 'number' ? event.timestamp : undefined
-  bumpConversationPeerActivity(userId, postbackTs, workspaceId).catch(e =>
-    console.error('[conv] bump lastPeerActivityAt (postback):', e),
-  )
-
   const data = event.postback.data
 
   // Parse synchronously upfront so we can preload the right async data in parallel
@@ -2900,6 +2896,11 @@ export async function handlePostbackEvent(
     console.log('[webhook] duplicate postback event skipped')
     return
   }
+
+  // 「對方最後活動」時間（供推定已讀）在確認非重送後才更新，避免 redelivery 重寫
+  bumpConversationPeerActivity(userId, postbackTs, workspaceId).catch(e =>
+    console.error('[conv] bump lastPeerActivityAt (postback):', e),
+  )
 
   // shouldSuppress is a near-instant cache hit after ensureConversationSession syncs sessionStatusById
   const suppressBotAutomationPostback = sessionId
@@ -2964,6 +2965,10 @@ export async function handlePostbackEvent(
   // Handle direct module trigger (flow + hydrated messages already fetched in parallel above)
   if (trigger.moduleId && !suppressBotAutomationPostback) {
     const moduleId = trigger.moduleId
+    // 圖文選單觸發模組：回覆組裝／送出期間先顯示「輸入中…」給即時回饋（fire-and-forget，
+    // 送出訊息即自動消失）。冷啟動的等待發生在本 handler 執行之前，動畫無法遮蓋；
+    // 這裡遮的是暖實例下讀取／組裝／LINE 送出的那段延遲。
+    if (event.replyToken) showLoadingAnimation(userId, workspaceId, 10).catch(() => {})
     if (trigger.tagIds.length > 0) {
       addTagsToUser(lineUserFirestoreDocId(userId, workspaceId), trigger.tagIds, 'system', `postback:${moduleId}`, workspaceId)
         .catch(e => console.error('[tagging] module postback tagging failed:', e))
