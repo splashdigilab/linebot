@@ -30,6 +30,19 @@
   align-items: center;
 }
 
+/* 動作列間距一律 0.5rem：markup 混用了 .gap-1(0.5)/.gap-2(1rem)，這裡用
+   `div.` 提升 specificity 壓過那兩個 utility，讓所有頁（含 solo 頁）間距一致。 */
+div.admin-header-actions {
+  gap: 0.5rem;
+
+  /* 關鍵：清掉 Element Plus 對相鄰 el-button 追加的 margin-left:12px。
+     否則「按鈕↔按鈕」會多 12px、但「按鈕↔el-dropdown(⋯)」沒有 → 間距不齊。
+     清掉後間距只由 gap 決定，任何組合都一致。 */
+  .el-button + .el-button {
+    margin-left: 0;
+  }
+}
+
 .admin-badge-xs {
   font-size: 0.6rem;
 }

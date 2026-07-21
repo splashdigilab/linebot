@@ -58,7 +58,7 @@
         @enter="submitForm"
       />
       <div class="flex gap-2 admin-header-actions">
-        <el-button v-if="canOperate && !isCreating && selectedRule" type="danger" @click="deleteRule">
+        <el-button v-if="canOperate && !isCreating && selectedRule" :icon="Delete" type="danger" @click="deleteRule">
           刪除
         </el-button>
         <el-button @click="cancelEdit">取消</el-button>
@@ -227,7 +227,7 @@
 
 
 <script setup lang="ts">
-import { Lightning, Plus } from '@element-plus/icons-vue'
+import { Delete, Lightning, Plus } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import {
   AUTO_REPLY_COOLDOWN_OPTIONS,

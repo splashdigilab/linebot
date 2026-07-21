@@ -1,0 +1,211 @@
+/* 知識庫來源頁（knowledge/sources）
+   從 index.vue 的 <style scoped> 搬出（房規：樣式放 partial）。
+   注意：資料夾／側欄折疊類（.src-folder-*、.src-row--in-folder、.src-unfolder-zone、
+   .folder-*）不在這裡——它們是 flow + sources 共用，定義在 _flow.scss（全域）。 */
+
+/* ─── Orphan migration banner ───────────────────── */
+.src-orphan-banner {
+  margin: 10px 12px;
+  padding: 10px 12px;
+  background: var(--el-color-warning-light-9);
+  border-left: 3px solid var(--el-color-warning);
+  border-radius: 4px;
+  font-size: 13px;
+}
+.src-orphan-msg { margin: 0 0 4px; }
+.src-orphan-hint {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  line-height: 1.5;
+}
+
+/* 表頭 caption：類型（＋網址）一行，過長截斷 */
+.src-header-caption {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 640px;
+
+  a { color: inherit; text-decoration: underline; }
+}
+
+.src-section-card { margin-bottom: 0; } /* gap 由 .admin-panel-stack 控制 */
+.src-section-hint { font-size: 12px; color: var(--el-text-color-secondary); margin: 0 0 8px; }
+
+.src-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  > div {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 12px;
+    background: var(--el-fill-color-light);
+    border-radius: 4px;
+  }
+}
+.src-label {
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+  margin-bottom: 2px;
+}
+.src-failure {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: var(--el-color-danger-light-9);
+  color: var(--el-color-danger);
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.src-settings-actions { margin-top: 8px; }
+
+.src-chunk-list { display: flex; flex-direction: column; gap: 6px; }
+.src-chunk-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+}
+.src-chunk-body { flex: 1; min-width: 0; }
+.src-chunk-main { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.src-chunk-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.src-chunk-lock { font-size: 12px; }
+.src-chunk-warn {
+  font-size: 11px;
+  color: var(--el-color-warning);
+  background: var(--el-color-warning-light-9);
+  padding: 1px 6px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.src-chunk-preview {
+  margin: 2px 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.src-chunk-meta { font-size: 12px; color: var(--el-text-color-secondary); }
+.src-chunk-loading { display: flex; justify-content: center; padding: 16px; }
+
+.diff-unchanged-note { display: flex; align-items: center; gap: 4px; margin: 0 0 8px; }
+
+.src-outdated-alert { margin-bottom: 12px; }
+
+/* ─── Diff modal ────────────────────────────────── */
+.diff-body {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+.diff-summary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0 16px;
+}
+.diff-summary-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  background: var(--el-fill-color);
+  &--add { background: var(--el-color-success-light-9); color: var(--el-color-success); }
+  &--mod { background: var(--el-color-warning-light-9); color: var(--el-color-warning); }
+  &--rem { background: var(--el-color-danger-light-9); color: var(--el-color-danger); }
+  &--same { color: var(--el-text-color-secondary); }
+}
+
+.diff-entries { display: flex; flex-direction: column; gap: 12px; }
+.diff-entry {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--el-bg-color);
+  &--new { border-left: 3px solid var(--el-color-success); }
+  &--modified { border-left: 3px solid var(--el-color-warning); }
+  &--removed { border-left: 3px solid var(--el-color-danger); }
+  &--unchanged { opacity: 0.6; }
+}
+
+.diff-entry-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.diff-entry-kind { font-size: 12px; font-weight: 600; }
+.diff-entry-title { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+.diff-entry-lock { font-size: 12px; color: var(--el-text-color-secondary); }
+
+.diff-entry-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 8px;
+}
+.diff-col {
+  padding: 8px 10px;
+  border-radius: 4px;
+  &--old { background: var(--el-color-danger-light-9); }
+  &--new { background: var(--el-color-success-light-9); }
+}
+.diff-col-head { font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--el-text-color-secondary); }
+.diff-col pre, .diff-entry-single pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: 12px;
+  line-height: 1.5;
+  font-family: inherit;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.diff-entry-single {
+  margin-top: 8px;
+  padding: 8px 10px;
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+}
+
+.diff-entry-actions { margin-top: 10px; }
+
+/* ─── Chunk edit / create modal ─────────────────── */
+.chunk-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.chunk-status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chunk-status-failure {
+  font-size: 12px;
+  color: var(--el-color-danger);
+}
+
+.chunk-normalize-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.chunk-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.chunk-tag { margin: 0; }
+
+/* chunk 編輯 modal 的 footer（.folder-footer 版本在 _flow.scss） */
+.chunk-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+.chunk-footer-right { display: flex; gap: 8px; }

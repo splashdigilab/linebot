@@ -396,8 +396,6 @@ body.is-resizing-split {
    破壞性動作（刪除）安靜外框，不與主要動作互搶顏色。
    放共用層 → 所有編輯頁（flow / campaigns / richmenu / broadcasts…）一致。 */
 .split-editor-header .admin-header-actions {
-  gap: 0.5rem;
-
   .el-button {
     transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, color 0.15s;
   }
@@ -424,14 +422,13 @@ body.is-resizing-split {
     }
   }
 
-  /* 破壞性動作（刪除）：平時安靜的文字紅、不搶主要動作；hover 才轉實心紅提示
-     並跟其餘動作拉開一點距離，降低誤按。 */
+  /* 破壞性動作（刪除）：明確是「按鈕」但退居次要——淡紅底＋淡紅框＋紅字，
+     不與主要動作搶實心色；hover 才轉實心紅提示，降低誤按。 */
   .el-button--danger {
-    background: transparent;
-    border-color: transparent;
+    background: var(--el-color-danger-light-9, #fef0f0);
+    border-color: var(--el-color-danger-light-5, #fab6b6);
     color: var(--el-color-danger);
     box-shadow: none;
-    margin-right: 0.25rem;
 
     &:hover,
     &:focus {

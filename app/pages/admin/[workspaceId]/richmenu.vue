@@ -11,7 +11,7 @@
       </div>
       <div v-else-if="!menus.length" class="split-sidebar-empty">
         <span>尚無圖文選單</span>
-        <el-button size="small" type="primary" plain @click="openCreate">立即建立</el-button>
+        <el-button size="small" type="primary" plain @click="openCreate">立即新增</el-button>
       </div>
       <div v-else ref="listEl" class="split-list" @scroll.passive="onSidebarListScroll">
         <AdminSplitListItem
@@ -38,7 +38,7 @@
       <el-icon class="empty-icon"><Grid /></el-icon>
       <h3>選擇一個圖文選單開始編輯</h3>
       <p>或點擊左側「新增」建立新的圖文選單</p>
-      <el-button type="primary" @click="openCreate">建立圖文選單</el-button>
+      <el-button type="primary" @click="openCreate">新增圖文選單</el-button>
     </template>
 
     <template #editor-header>
@@ -51,7 +51,7 @@
         :is-creating="isCreating"
       />
       <div class="flex gap-1 admin-header-actions">
-        <el-button v-if="!isCreating && selectedMenu" type="danger" @click="deleteMenu">
+        <el-button v-if="!isCreating && selectedMenu" :icon="Delete" type="danger" @click="deleteMenu">
           刪除
         </el-button>
         <el-button @click="cancelEdit">取消</el-button>
@@ -193,7 +193,7 @@
 </template>
 
 <script setup lang="ts">
-import { Grid, Plus } from '@element-plus/icons-vue'
+import { Delete, Grid, Plus } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import {
   IMAGE_MAX_BYTES,

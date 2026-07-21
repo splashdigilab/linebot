@@ -9,7 +9,7 @@
             <el-button :icon="FolderAdd" size="small" plain @click="createFlowFolderPrompt" />
           </el-tooltip>
           <el-tooltip content="新增模組" placement="bottom" :show-after="300">
-            <el-button :icon="Plus" type="primary" size="small" plain data-tour="flow-new" @click="openCreate" />
+            <el-button :icon="Plus" type="primary" size="small" data-tour="flow-new" @click="openCreate">新增</el-button>
           </el-tooltip>
         </div>
       </AdminOperateGate>
@@ -23,7 +23,7 @@
       <div v-else-if="!flows.length" class="split-sidebar-empty">
         <span>尚無模組</span>
         <AdminOperateGate>
-          <el-button size="small" type="primary" plain @click="openCreate">立即建立</el-button>
+          <el-button size="small" type="primary" plain @click="openCreate">立即新增</el-button>
         </AdminOperateGate>
       </div>
       <div v-else ref="listEl" class="split-list" @scroll.passive="onSidebarListScroll">
@@ -172,7 +172,7 @@
       <h3>選擇一個模組開始編輯</h3>
       <p>或點擊左側「新增」建立一個全新的回覆模組</p>
       <AdminOperateGate>
-        <el-button type="primary" @click="openCreate">建立模組</el-button>
+        <el-button type="primary" @click="openCreate">新增模組</el-button>
       </AdminOperateGate>
     </template>
 
@@ -208,19 +208,37 @@
         </template>
       </div>
       <div class="flex gap-1 admin-header-actions">
-        <AdminOperateGate>
-          <el-button v-if="!isCreating && selectedFlow && !isSystemFlow" type="danger" @click="deleteFlow">
-            刪除
-          </el-button>
-          <el-button v-if="!isCreating && selectedFlow" :loading="duplicating" @click="duplicateFlow">
-            複製
-          </el-button>
-        </AdminOperateGate>
         <el-button @click="cancelEdit">取消</el-button>
         <AdminOperateGate>
           <el-button type="primary" :loading="saving" @click="submitForm">
             {{ isCreating ? '建立模組' : '儲存變更' }}
           </el-button>
+        </AdminOperateGate>
+        <AdminOperateGate>
+          <el-dropdown
+            v-if="!isCreating && selectedFlow"
+            trigger="click"
+            placement="bottom-end"
+            @command="onHeaderCommand"
+          >
+            <el-button class="flow-more-btn" :icon="MoreFilled" aria-label="更多動作" />
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="duplicate" :disabled="duplicating" :icon="CopyDocument">
+                  複製
+                </el-dropdown-item>
+                <el-dropdown-item
+                  v-if="!isSystemFlow"
+                  command="delete"
+                  divided
+                  :icon="Delete"
+                  class="flow-more-item--danger"
+                >
+                  刪除
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
         </AdminOperateGate>
       </div>
     </template>
@@ -1087,7 +1105,7 @@
 
 
 <script setup lang="ts">
-import { Connection, EditPen, Folder, FolderAdd, Plus } from '@element-plus/icons-vue'
+import { Connection, CopyDocument, Delete, EditPen, Folder, FolderAdd, MoreFilled, Plus } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import {
   SLOT_LABELS as ACTION_SLOT_LABELS,
@@ -2369,6 +2387,12 @@ async function submitForm() {
   } finally {
     saving.value = false
   }
+}
+
+// 右上「⋯」選單：複製 / 刪除
+function onHeaderCommand(cmd: string | number | object) {
+  if (cmd === 'duplicate') void duplicateFlow()
+  else if (cmd === 'delete') void deleteFlow()
 }
 
 async function deleteFlow() {

@@ -13,7 +13,7 @@
       </div>
       <div v-else-if="!broadcasts.length" class="split-sidebar-empty">
         <span>尚無推播</span>
-        <el-button v-if="canOperate" size="small" type="primary" plain @click="openCreate">立即建立</el-button>
+        <el-button v-if="canOperate" size="small" type="primary" plain @click="openCreate">立即新增</el-button>
       </div>
       <div v-else ref="listEl" class="split-list" @scroll.passive="onSidebarListScroll">
         <AdminSplitListItem
@@ -42,7 +42,7 @@
       <el-icon class="empty-icon"><Promotion /></el-icon>
       <h3>選擇一則推播來查看或編輯</h3>
       <p>或點擊左側「新增」建立新推播</p>
-      <el-button v-if="canOperate" type="primary" @click="openCreate">建立推播</el-button>
+      <el-button v-if="canOperate" type="primary" @click="openCreate">新增推播</el-button>
     </template>
 
     <!-- ── Editor Header ── -->

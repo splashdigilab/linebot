@@ -53,7 +53,7 @@
         @enter="submitForm"
       />
       <div class="flex gap-2 admin-header-actions">
-        <el-button v-if="canOperate && !isCreating && selectedPreset" type="danger" @click="deletePreset">
+        <el-button v-if="canOperate && !isCreating && selectedPreset" :icon="Delete" type="danger" @click="deletePreset">
           刪除
         </el-button>
         <el-button @click="cancelEdit">取消</el-button>
@@ -161,7 +161,7 @@
 </template>
 
 <script setup lang="ts">
-import { Box, Plus } from '@element-plus/icons-vue'
+import { Box, Delete, Plus } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 import { normalizeAutoReplyAction, normalizeAutoReplyTagging } from '~~/shared/auto-reply-rule'
 import {

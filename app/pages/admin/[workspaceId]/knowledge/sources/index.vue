@@ -175,19 +175,26 @@
 
     <!-- ── Editor Header ── -->
     <template #editor-header>
-      <div class="src-header">
-        <div class="src-header-main">
-          <span class="src-type-emoji">{{ typeEmoji(selectedSource?.type) }}</span>
-          <div class="src-header-text">
-            <h2 class="src-header-title">{{ selectedSource?.name || '(未命名來源)' }}</h2>
-            <p v-if="selectedSource?.url" class="src-header-url">
-              <a :href="selectedSource.url" target="_blank" rel="noopener">{{ selectedSource.url }}</a>
-            </p>
-          </div>
+      <div class="admin-flex-1">
+        <AdminFieldLabel text="來源名稱" tight />
+        <div class="admin-title-row">
+          <el-input
+            v-if="canEditSources"
+            v-model="nameDraft"
+            size="large"
+            class="admin-title-input"
+            placeholder="輸入來源名稱..."
+            maxlength="200"
+            @keydown.enter.prevent="commitName"
+            @blur="commitName"
+          />
+          <span v-else class="split-editor-title">{{ selectedSource?.name || '(未命名來源)' }}</span>
         </div>
+        <p class="text-sm text-muted admin-subtext src-header-caption">
+          {{ typeEmoji(selectedSource?.type) }}<template v-if="selectedSource?.url"> · <a :href="selectedSource.url" target="_blank" rel="noopener">{{ selectedSource.url }}</a></template>
+        </p>
       </div>
       <div v-if="canEditSources" class="flex gap-1 admin-header-actions">
-        <el-button :icon="EditPen" plain @click="renameSource">重新命名</el-button>
         <el-button
           v-if="selectedSource?.type === 'url'"
           type="primary"
@@ -208,7 +215,7 @@
         >
           立即同步
         </el-button>
-        <el-button type="danger" plain :loading="deleting" @click="deleteSource">
+        <el-button :icon="Delete" type="danger" plain :loading="deleting" @click="deleteSource">
           刪除
         </el-button>
       </div>
@@ -625,7 +632,7 @@
 </template>
 
 <script setup lang="ts">
-import { EditPen, Folder, FolderAdd, FolderOpened, Lock, Refresh, Upload } from '@element-plus/icons-vue'
+import { Delete, EditPen, Folder, FolderAdd, FolderOpened, Lock, Refresh, Upload } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 
 definePageMeta({ middleware: ['auth', 'ai-feature'], layout: 'default' })
@@ -1361,28 +1368,30 @@ async function migrateOrphans() {
 }
 
 // ── 重新命名（用 ElMessageBox.prompt） ───────────────
-async function renameSource() {
-  if (!selectedSource.value) return
-  const current = selectedSource.value.name
+// 名稱直接在表頭 inline 編輯（跟其他編輯頁一致）：Enter 或失焦即存。
+// selectedSource 是唯讀 computed，故用 nameDraft 暫存，並隨選取的來源同步。
+const nameDraft = ref('')
+watch(() => selectedSource.value?.name, (n) => { nameDraft.value = n ?? '' }, { immediate: true })
+
+let savingName = false
+async function commitName() {
+  const current = selectedSource.value?.name ?? ''
+  const next = nameDraft.value.trim()
+  if (savingName) return
+  if (!next || next === current) { nameDraft.value = current; return }  // 空或沒變 → 還原、不打 API
+  if (next.length > 200) { showToast('名稱長度需 1–200 字', 'warning'); nameDraft.value = current; return }
+  savingName = true
   try {
-    const { value } = await ElMessageBox.prompt('輸入新名稱：', '重新命名來源', {
-      confirmButtonText: '儲存',
-      cancelButtonText: '取消',
-      inputValue: current,
-      inputPattern: /^.{1,200}$/,
-      inputErrorMessage: '名稱長度需 1–200 字',
-    })
-    const newName = String(value ?? '').trim()
-    if (!newName || newName === current) return
-    await apiFetch(`/api/ai/sources/${selectedId.value}`, {
-      method: 'PUT',
-      body: { name: newName },
-    })
+    await apiFetch(`/api/ai/sources/${selectedId.value}`, { method: 'PUT', body: { name: next } })
     showToast('已重新命名', 'success')
     await loadSources()
     if (selectedId.value) await loadSourceDetail(selectedId.value)
   }
-  catch { /* 使用者取消 */ }
+  catch {
+    nameDraft.value = current  // 失敗還原
+    showToast('重新命名失敗', 'error')
+  }
+  finally { savingName = false }
 }
 
 // ── 新增手寫卡片 ─────────────────────────────────────
@@ -1666,351 +1675,3 @@ async function openChunkById(chunkId: string) {
   }
 }
 </script>
-
-<style scoped lang="scss">
-
-// ─── Orphan migration banner ─────────────────────
-.src-orphan-banner {
-  margin: 10px 12px;
-  padding: 10px 12px;
-  background: var(--el-color-warning-light-9);
-  border-left: 3px solid var(--el-color-warning);
-  border-radius: 4px;
-  font-size: 13px;
-}
-.src-orphan-msg { margin: 0 0 4px; }
-.src-orphan-hint {
-  margin: 0 0 8px;
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  line-height: 1.5;
-}
-
-// ─── Folder headers — 群組標題感（比 row 重、有底色、跟上方有間距） ───
-.src-folder-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 0.5rem 0.625rem;
-  margin-top: 0.5rem; /* 跟上方未分類 / 上一個資料夾拉出間距 */
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  outline: 2px solid transparent;
-  outline-offset: -2px;
-  font-size: 0.875rem;
-  font-weight: 700; /* 比 row 的 500-600 更重 */
-  color: var(--text-primary);
-  background: var(--bg-surface); /* 抬升一階，跟列表底色區別 */
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.15s, border-color 0.15s, outline-color 0.15s;
-
-  &:hover {
-    background: var(--bg-hover);
-    border-color: var(--text-muted);
-  }
-  /* 拖曳目標 highlight：對齊 .flow-sidebar-row--drag-over */
-  &--drop {
-    outline-color: var(--color-line);
-    border-color: var(--color-line);
-  }
-}
-
-/* ─── 資料夾內的卡片 — 縮排 + 左側 guide line ───
-   讓「在資料夾內」跟「未分類」一眼就分得出來 */
-.src-row--in-folder {
-  margin-left: 0.875rem;
-  position: relative;
-
-  &::before {
-    content: '';
-    position: absolute;
-    left: -0.5rem;
-    top: 0;
-    bottom: 0;
-    width: 2px;
-    border-radius: 1px;
-    background: var(--border);
-  }
-  /* hover 時 guide line 稍微亮一點 */
-  &:hover::before {
-    background: var(--text-muted);
-  }
-}
-.src-folder-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.src-folder-arrow {
-  display: inline-block;
-  width: 12px;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-}
-.src-folder-count {
-  font-size: 0.75rem;
-  font-weight: 400;
-  color: var(--text-muted);
-}
-.src-folder-actions {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  flex-shrink: 0;
-}
-/* 永遠可見的小 icon 按鈕（沿用 .drag-handle 的 opacity 模式） */
-.src-folder-icon-btn {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  padding: 2px 4px;
-  font-size: 0.875rem;
-  border-radius: 4px;
-  opacity: 0.5;
-  color: var(--text-muted);
-  transition: opacity 0.15s, background 0.15s, color 0.15s;
-
-  &:hover {
-    opacity: 1;
-    color: var(--text-secondary);
-    background: var(--bg-surface);
-  }
-}
-.src-folder-empty {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  padding: 4px 0.75rem 6px 1.75rem;
-}
-
-/* 「移出資料夾」drop zone — 只在拖曳中才顯示，平時為 0 高度 */
-.src-unfolder-zone {
-  margin: 6px 0;
-  padding: 8px 12px;
-  border: 1px dashed var(--text-muted);
-  border-radius: var(--radius-md);
-  text-align: center;
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  background: var(--bg-surface);
-  outline: 2px solid transparent;
-  outline-offset: -2px;
-  transition: outline-color 0.15s, background 0.15s;
-
-  &--drop {
-    outline-color: var(--color-line);
-    background: var(--bg-hover);
-    color: var(--text-secondary);
-  }
-}
-
-.src-header {
-  flex: 1;
-  min-width: 0;
-}
-.src-header-main { display: flex; gap: 12px; align-items: center; }
-.src-type-emoji { font-size: 28px; }
-.src-header-title { margin: 0; font-size: 17px; }
-.src-header-url { margin: 2px 0 0; font-size: 12px; color: var(--el-text-color-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 600px;
-  a { color: inherit; }
-}
-
-.src-section-card { margin-bottom: 0; } // gap 由 .admin-panel-stack 控制
-.src-section-hint { font-size: 12px; color: var(--el-text-color-secondary); margin: 0 0 8px; }
-
-.src-info-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-  > div {
-    display: flex;
-    flex-direction: column;
-    padding: 8px 12px;
-    background: var(--el-fill-color-light);
-    border-radius: 4px;
-  }
-}
-.src-label {
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-  margin-bottom: 2px;
-}
-.src-failure {
-  margin: 8px 0 0;
-  padding: 8px 10px;
-  background: var(--el-color-danger-light-9);
-  color: var(--el-color-danger);
-  border-radius: 4px;
-  font-size: 13px;
-}
-
-.src-settings-actions { margin-top: 8px; }
-
-.src-chunk-list { display: flex; flex-direction: column; gap: 6px; }
-.src-chunk-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 12px;
-  background: var(--el-fill-color-light);
-  border-radius: 4px;
-}
-.src-chunk-body { flex: 1; min-width: 0; }
-.src-chunk-main { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.src-chunk-title { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.src-chunk-lock { font-size: 12px; }
-.src-chunk-warn {
-  font-size: 11px;
-  color: var(--el-color-warning);
-  background: var(--el-color-warning-light-9);
-  padding: 1px 6px;
-  border-radius: 4px;
-  white-space: nowrap;
-}
-.src-chunk-preview {
-  margin: 2px 0;
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.src-chunk-meta { font-size: 12px; color: var(--el-text-color-secondary); }
-.src-chunk-loading { display: flex; justify-content: center; padding: 16px; }
-
-.diff-unchanged-note { display: flex; align-items: center; gap: 4px; margin: 0 0 8px; }
-
-.src-outdated-alert { margin-bottom: 12px; }
-
-// ─── Diff modal ──────────────────────────────────
-.diff-body {
-  max-height: 70vh;
-  overflow-y: auto;
-}
-.diff-summary {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin: 10px 0 16px;
-}
-.diff-summary-chip {
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  background: var(--el-fill-color);
-  &--add { background: var(--el-color-success-light-9); color: var(--el-color-success); }
-  &--mod { background: var(--el-color-warning-light-9); color: var(--el-color-warning); }
-  &--rem { background: var(--el-color-danger-light-9); color: var(--el-color-danger); }
-  &--same { color: var(--el-text-color-secondary); }
-}
-
-.diff-entries { display: flex; flex-direction: column; gap: 12px; }
-.diff-entry {
-  border: 1px solid var(--el-border-color-lighter);
-  border-radius: 6px;
-  padding: 10px 12px;
-  background: var(--el-bg-color);
-  &--new { border-left: 3px solid var(--el-color-success); }
-  &--modified { border-left: 3px solid var(--el-color-warning); }
-  &--removed { border-left: 3px solid var(--el-color-danger); }
-  &--unchanged { opacity: 0.6; }
-}
-
-.diff-entry-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.diff-entry-kind { font-size: 12px; font-weight: 600; }
-.diff-entry-title { flex: 1; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
-.diff-entry-lock { font-size: 12px; color: var(--el-text-color-secondary); }
-
-.diff-entry-cols {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-  margin-top: 8px;
-}
-.diff-col {
-  padding: 8px 10px;
-  border-radius: 4px;
-  &--old { background: var(--el-color-danger-light-9); }
-  &--new { background: var(--el-color-success-light-9); }
-}
-.diff-col-head { font-size: 11px; font-weight: 600; margin-bottom: 4px; color: var(--el-text-color-secondary); }
-.diff-col pre, .diff-entry-single pre {
-  margin: 0;
-  white-space: pre-wrap;
-  font-size: 12px;
-  line-height: 1.5;
-  font-family: inherit;
-  max-height: 200px;
-  overflow-y: auto;
-}
-.diff-entry-single {
-  margin-top: 8px;
-  padding: 8px 10px;
-  background: var(--el-fill-color-light);
-  border-radius: 4px;
-}
-
-.diff-entry-actions { margin-top: 10px; }
-
-// ─── Chunk edit / create modal ────────────────────
-.chunk-form {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.chunk-status-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.chunk-status-failure {
-  font-size: 12px;
-  color: var(--el-color-danger);
-}
-
-.chunk-normalize-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-}
-
-.chunk-tag-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-.chunk-tag { margin: 0; }
-
-.chunk-footer,
-.folder-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-.chunk-footer-right,
-.folder-footer-right { display: flex; gap: 8px; }
-
-.folder-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-.folder-form-hint {
-  margin: 0;
-  font-size: 12px;
-  line-height: 1.6;
-  color: var(--el-text-color-secondary);
-}
-</style>

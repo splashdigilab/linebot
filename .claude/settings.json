@@ -74,7 +74,8 @@
     ],
     "additionalDirectories": [
       "/Users/kevin/.claude",
-      "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]"
+      "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]",
+      "/Users/kevin/Documents/Github/linebot/app/pages/admin/[workspaceId]/knowledge/sources"
     ]
   }
 }

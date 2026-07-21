@@ -56,7 +56,7 @@
         @enter="submitForm"
       />
       <div class="flex gap-2 admin-header-actions">
-        <el-button v-if="canOperate && !isCreating && selectedCampaign" type="danger" @click="deleteCampaign">
+        <el-button v-if="canOperate && !isCreating && selectedCampaign" :icon="Delete" type="danger" @click="deleteCampaign">
           刪除
         </el-button>
         <el-button @click="cancelEdit">取消</el-button>
@@ -262,7 +262,7 @@
 </template>
 
 <script setup lang="ts">
-import { Plus, Tickets } from '@element-plus/icons-vue'
+import { Delete, Plus, Tickets } from '@element-plus/icons-vue'
 import { ElMessageBox } from 'element-plus'
 definePageMeta({ middleware: 'auth', layout: 'default' })
 

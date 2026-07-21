@@ -7,7 +7,7 @@
         caption="建立與管理會員標籤，用於分眾推播"
       />
       <div class="flex gap-1 admin-header-actions">
-        <el-button v-if="canOperate" :icon="Plus" type="primary" data-tour="tag-new" @click="openCreate">新增標籤</el-button>
+        <el-button v-if="canOperate" :icon="Plus" type="primary" size="small" data-tour="tag-new" @click="openCreate">新增</el-button>
       </div>
     </template>
 
