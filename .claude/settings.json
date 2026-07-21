@@ -70,7 +70,10 @@
       "Bash(cd /Users/kevin/Documents/Github/linebot *)",
       "Bash(pkill -f \"remote-debugging-port=9333\")",
       "Bash(npx nuxt *)",
-      "Bash(pkill -f \"remote-debugging-port=9337\")"
+      "Bash(pkill -f \"remote-debugging-port=9337\")",
+      "WebFetch(domain:docs.payuni.com.tw)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(gh api *)"
     ],
     "additionalDirectories": [
       "/Users/kevin/.claude",

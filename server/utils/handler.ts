@@ -612,6 +612,29 @@ async function loadActiveAutoReplyRules(workspaceId: string): Promise<AutoReplyR
   return rules
 }
 
+/**
+ * 預熱單一 workspace 的機器人自動化快取（自動回覆規則、腳本、AI 設定、
+ * 模組規則指到的 flow＋圖文訊息快照）。給 /api/warmup 的定時 ping 用：
+ * Lambda 執行個體與 in-memory 快取一起保溫，客人觸發模組時就走全快取路徑。
+ */
+export async function warmWorkspaceAutomationCaches(workspaceId: string): Promise<void> {
+  const [rules] = await Promise.all([
+    loadActiveAutoReplyRules(workspaceId).catch(() => [] as AutoReplyRuleShape[]),
+    loadActiveScripts(workspaceId).catch(() => []),
+    getAiSettings(workspaceId).catch(() => null),
+  ])
+  const moduleIds = [...new Set(
+    rules
+      .filter(r => r.action.type === 'module' && r.action.moduleId)
+      .map(r => (r.action as { moduleId: string }).moduleId),
+  )].slice(0, 30)
+  await Promise.all(moduleIds.map(id =>
+    getFlowByModuleId(id)
+      .then(f => (f ? hydrateRichMessageRefs(f.messages as any[]) : null))
+      .catch(() => null),
+  ))
+}
+
 async function matchAutoReplyRule(
   inputText: string,
   workspaceId: string,
@@ -1668,7 +1691,7 @@ export async function renderModuleToLineMessages(
 
 export async function handleMessageEvent(
   event: webhook.MessageEvent,
-  options: { requestOrigin?: string; workspaceId: string },
+  options: { requestOrigin?: string; workspaceId: string; dedupClaim?: Promise<boolean> },
 ): Promise<void> {
   const userId = event.source?.userId
   if (!userId) return
@@ -1676,28 +1699,42 @@ export async function handleMessageEvent(
   if (!workspaceId) throw createError({ statusCode: 400, statusMessage: 'workspaceId is required in handleMessageEvent' })
 
   const lineEventTimestampMs = typeof event.timestamp === 'number' ? event.timestamp : undefined
+  const dedupClaim = options.dedupClaim ?? Promise.resolve(true)
 
   if (event.message.type === 'text') {
     const textContent = (event.message as webhook.TextMessageContent).text
-    saveConversationMessage(userId, 'incoming', textContent, {
-      messageType: 'text',
-      payload: { type: 'text', text: textContent },
-      lineEventTimestampMs,
-    }, workspaceId).catch(e => console.error('[conv] save error:', e))
 
-    // Run session, user data, and rules cache warm-up all in parallel.
+    // Run session, user data, cache warm-ups, and the dedup claim all in parallel.
+    // The claim (a Firestore write) is awaited before any side effect below; the
+    // preloads are reads / idempotent so running them on a redelivery is harmless.
     // preloadedUser is passed to handleIncomingText so it skips the ensureUser call inside.
-    const [sessionId, preloadedUser] = await Promise.all([
+    const [sessionId, preloadedUser, , , isFirstDelivery] = await Promise.all([
       ensureConversationSession(userId, workspaceId).catch((e) => {
         console.error('[session] ensureConversationSession error:', e)
         return null
       }),
       ensureUser(userId, undefined, workspaceId).catch(() => null),
       loadActiveAutoReplyRules(workspaceId).catch(() => []),  // warm cache; result discarded
+      getAiSettings(workspaceId).catch(() => null),           // warm cache; result discarded
+      dedupClaim,
     ])
+    if (!isFirstDelivery) {
+      console.log('[webhook] duplicate message event skipped')
+      return
+    }
+
+    saveConversationMessage(userId, 'incoming', textContent, {
+      messageType: 'text',
+      payload: { type: 'text', text: textContent },
+      lineEventTimestampMs,
+    }, workspaceId).catch(e => console.error('[conv] save error:', e))
 
     await handleIncomingText(userId, textContent, event.replyToken, options, preloadedUser, sessionId, workspaceId)
   } else {
+    if (!(await dedupClaim)) {
+      console.log('[webhook] duplicate message event skipped')
+      return
+    }
     const typeLabel = event.message.type === 'image' ? '[圖片]'
       : event.message.type === 'video' ? '[影片]'
       : event.message.type === 'audio' ? '[語音]'
@@ -1990,6 +2027,18 @@ async function handleIncomingText(
       return
     }
     if (rule) {
+      // 模組回覆所需的 flow＋圖文訊息預載與冷卻交易並行（純讀取，冷卻沒搶到也無副作用）。
+      // 冷卻沒搶到會提早 return 而不 await 此 promise，故錯誤要在這裡收掉以免 unhandled rejection。
+      const flowHydrateTask: Promise<{ flow: FlowDoc | null; hydrated: any[] }> =
+        rule.action.type === 'module' && rule.action.moduleId
+          ? getFlowByModuleId(rule.action.moduleId).then(async f =>
+              f ? { flow: f, hydrated: await hydrateRichMessageRefs(f.messages as any[]) } : { flow: null, hydrated: [] })
+            .catch((e) => {
+              console.error('[autoReply] flow preload failed:', e)
+              return { flow: null, hydrated: [] }
+            })
+          : Promise.resolve({ flow: null, hydrated: [] })
+
       // 冷卻規則：原子性地確認並寫入冷卻；並行請求中只有第一則能取得鎖
       const canTrigger = await claimAutoReplyCooldown(fsUserDocId, rule)
       if (!canTrigger) return
@@ -2002,9 +2051,10 @@ async function handleIncomingText(
 
       if (replyToken) {
         if (rule.action.type === 'module') {
-          const flow = await getFlowByModuleId(rule.action.moduleId)
+          // 回覆組裝期間先顯示「輸入中…」，訊息送達時動畫自動消失（fire-and-forget）
+          showLoadingAnimation(lineUserId, wid, 5).catch(() => {})
+          const { flow, hydrated: hydratedMessages } = await flowHydrateTask
           if (flow) {
-            const hydratedMessages = await hydrateRichMessageRefs(flow.messages as any[])
             const lineMessages = buildLineMessages(
               hydratedMessages,
               userAttributes,
@@ -2074,10 +2124,21 @@ async function runScriptStart(
   let matched = scripts.find(s => matchesScriptKeywords(s, textContent)) ?? null
   let route: RouteResult | null = null
 
+  if (matched) {
+    // 腳本啟動要先寫入使用者狀態才回覆，期間先顯示「輸入中…」（fire-and-forget）
+    showLoadingAnimation(lineUserId, workspaceId, 5).catch(() => {})
+  }
+
   // 2) 沒命中 → 統一意圖路由（一次 LLM 呼叫，由 LLM 理解意圖+優先序決定走哪條腳本或交給 AI）。
   //    取代舊的「每條腳本各自比語意向量」：敏感情境(退款/法律…)不會被腳本攔截、相近意圖不會誤觸。
   //    route 會回傳給 caller：沒命中腳本時 tryAiFallback 重用這份分類，不再重複呼叫 LLM。
   if (!matched) {
+    // 意圖路由是一次 LLM 呼叫（1~3 秒起跳），先給「輸入中…」即時回饋。
+    // 草稿模式下路由可能落到 AI（不回客人），顯示動畫反而誤導，故略過。
+    const settings = await getAiSettings(workspaceId).catch(() => null)
+    if (settings && settings.replyMode !== 'draft') {
+      showLoadingAnimation(lineUserId, workspaceId, 20).catch(() => {})
+    }
     const hints = scripts.map(s => ({ id: s.id, name: s.name, hints: triggerHints(s) }))
     const history = getHistory ? await getHistory().catch(() => [] as AiChatTurn[]) : []
     route = await routeMessage(textContent, hints, history).catch((e) => {
@@ -2787,7 +2848,7 @@ async function writeAiMeta(
 
 export async function handlePostbackEvent(
   event: webhook.PostbackEvent,
-  options: { requestOrigin?: string; workspaceId: string },
+  options: { requestOrigin?: string; workspaceId: string; dedupClaim?: Promise<boolean> },
 ): Promise<void> {
   console.log('[handlePostbackEvent] event received:', JSON.stringify(event).slice(0, 300))
   const userId = event.source?.userId
@@ -2820,7 +2881,9 @@ export async function handlePostbackEvent(
       ? loadActiveAutoReplyRules(workspaceId).then(() => ({ flow: null, hydrated: [] }))
       : Promise.resolve({ flow: null, hydrated: [] })
 
-  const [{ channelSecret }, sessionId, preloadedUserData, { flow: preloadedFlow, hydrated: preloadedHydrated }] = await Promise.all([
+  // Dedup claim（Firestore 寫入）與預載並行；預載皆為讀取／冪等，redelivery 重跑無害。
+  // 貼標／回覆等副作用都在 claim 確認之後才會發生。
+  const [{ channelSecret }, sessionId, preloadedUserData, { flow: preloadedFlow, hydrated: preloadedHydrated }, isFirstDelivery] = await Promise.all([
     getLineWorkspaceCredentials(workspaceId),
     ensureConversationSession(userId, workspaceId).catch((e) => {
       console.error('[session] postback session error:', e)
@@ -2831,7 +2894,12 @@ export async function handlePostbackEvent(
       return null
     }),
     flowHydrateTask,
+    options.dedupClaim ?? Promise.resolve(true),
   ])
+  if (!isFirstDelivery) {
+    console.log('[webhook] duplicate postback event skipped')
+    return
+  }
 
   // shouldSuppress is a near-instant cache hit after ensureConversationSession syncs sessionStatusById
   const suppressBotAutomationPostback = sessionId

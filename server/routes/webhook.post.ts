@@ -76,18 +76,21 @@ export default defineEventHandler(async (event) => {
 
   console.log('[webhook] received', payload.events.length, 'event(s):', payload.events.map(e => e.type))
   const tasks = payload.events.map(async (e) => {
+    const startedAt = Date.now()
     try {
-      // 冪等去重：LINE redelivery（逾時重送）同一 webhookEventId 只處理一次
-      const isFirstDelivery = await claimWebhookEvent(matchedWorkspaceId, (e as { webhookEventId?: string }).webhookEventId)
-      if (!isFirstDelivery) {
-        console.log('[webhook] duplicate event skipped:', e.type, (e as { webhookEventId?: string }).webhookEventId)
-        return
-      }
+      // 冪等去重：LINE redelivery（逾時重送）同一 webhookEventId 只處理一次。
+      // message／postback 把 promise 傳進 handler，與資料預載並行（handler 會在
+      // 任何副作用（存訊息／貼標／回覆）之前 await 它）；其餘事件維持先 await。
+      const dedupClaim = claimWebhookEvent(matchedWorkspaceId, (e as { webhookEventId?: string }).webhookEventId)
       if (e.type === 'message') {
-        await handleMessageEvent(e as webhook.MessageEvent, { requestOrigin, workspaceId: matchedWorkspaceId })
+        await handleMessageEvent(e as webhook.MessageEvent, { requestOrigin, workspaceId: matchedWorkspaceId, dedupClaim })
       }
       else if (e.type === 'postback') {
-        await handlePostbackEvent(e as webhook.PostbackEvent, { requestOrigin, workspaceId: matchedWorkspaceId })
+        await handlePostbackEvent(e as webhook.PostbackEvent, { requestOrigin, workspaceId: matchedWorkspaceId, dedupClaim })
+      }
+      else if (!(await dedupClaim)) {
+        console.log('[webhook] duplicate event skipped:', e.type, (e as { webhookEventId?: string }).webhookEventId)
+        return
       }
       else if (e.type === 'follow') {
         const userId = (e as webhook.FollowEvent).source?.userId
@@ -100,6 +103,10 @@ export default defineEventHandler(async (event) => {
     }
     catch (err) {
       console.error('[webhook] event error:', err)
+    }
+    finally {
+      // 觀測回覆延遲用：CloudWatch 搜 "[webhook] handled" 即可看冷／熱路徑耗時分布
+      console.log('[webhook] handled', e.type, 'in', Date.now() - startedAt, 'ms')
     }
   })
 
