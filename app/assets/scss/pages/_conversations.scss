@@ -17,11 +17,11 @@
   .conv-status-tabs {
     display: flex;
     align-items: center;
+    flex-wrap: wrap; // 窄清單欄放不下三顆篩選時換行,不要橫向裁切掉「真人處理」
     gap: 0.35rem;
     padding: 0.65rem 0.75rem 0.55rem;
     border-bottom: 1px solid var(--border);
     flex-shrink: 0;
-    overflow-x: auto;
   }
 
   .conv-status-tab {
@@ -202,7 +202,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.65rem;
-    background: var(--bg-base);
+    background: var(--chat-pane-bg); // 與 AI 試答頁共用（core/_variables.scss Chat 區）
   }
 
   .conv-bubble-row {
@@ -222,7 +222,7 @@
     display: inline-flex;
     align-items: flex-end;
     gap: 0.35rem;
-    max-width: min(84%, 680px);
+    max-width: var(--chat-bubble-max); // 與 AI 試答頁 .pg-bubble 共用同一組 token
   }
 
   .conv-bubble {
@@ -249,7 +249,7 @@
   .conv-bubble-wrap.outgoing.is-media {
     flex-direction: column;
     gap: 0.26rem;
-    max-width: min(92%, 760px);
+    max-width: var(--chat-bubble-max-wide);
   }
 
   .conv-bubble-wrap.outgoing.is-structured,

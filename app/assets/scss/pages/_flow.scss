@@ -130,6 +130,20 @@
   padding-top: 2px;
 }
 
+/* 一般模組的類型下拉前，補一個小標，讓人知道那顆下拉在選什麼 */
+.flow-module-meta__label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* flow 專屬：在「模組類型」設定與右側動作列之間加一條分隔線，
+   讓「設定」與「動作」一眼分兩組。用相鄰選擇器 → 只有 flow 有 .flow-module-meta，
+   不會外洩到其他編輯頁。 */
+.flow-module-meta + .admin-header-actions {
+  border-left: 1px solid var(--border);
+  padding-left: 0.75rem;
+}
+
 .flow-editor-title {
   font-size: 1.1rem;
   font-weight: 700;
@@ -158,17 +172,13 @@
   margin: 0;
 }
 
-/* 左編輯／右即時預覽 兩欄 */
-.fem-split {
+/* 工具列在最上方（整寬），其下才是「卡片區 | 預覽面板」兩欄。
+   → 預覽貼在卡片區(.fem-rail)旁邊，不再頂到上面那排按鈕。
+   預覽是一片到底的側邊面板，面板自己的左邊界＝唯一的分隔，不再另外畫線。 */
+.fem-body-row {
   display: flex;
-  gap: 1rem;
-  height: 100%;
-  min-height: 0;
-}
-.fem-split > .flow-editor-messages {
   flex: 1;
-  min-width: 0;
-  width: auto;
+  min-height: 0;
 }
 
 /* ─── Toolbar (fixed, non-scrolling) ─────────────────── */
@@ -207,14 +217,15 @@
 /* ─── Vertical card rail (scrollable) ─────────────────── */
 .fem-rail {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 1.25rem;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;   /* vertical stack */
   gap: 1rem;
-  align-items: flex-start;  /* left-align cards */
+  align-items: flex-start;  /* 內容靠左：一條固定左邊界，卡片好掃、與工具列對齊 */
 }
 
 /* Empty placeholder */
@@ -472,7 +483,9 @@
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
-  align-self: stretch;   /* fill full rail width */
+  align-self: flex-start;   /* 靠左，與一般卡片共用左邊界 */
+  width: 100%;
+  max-width: 880px;         /* 封頂成一欄；子卡超出時在區塊內橫向捲動 */
   min-width: 0;
 }
 .carousel-block.dragging { opacity: 0.35; transform: scale(0.98); }
@@ -585,6 +598,8 @@
   transition: box-shadow 0.15s, opacity 0.15s, transform 0.15s;
 }
 
+/* 靜態 hover 回饋：與主卡一致（原本子卡只有拖曳態會變化，滑過沒反應） */
+.carousel-sub-card:hover { box-shadow: var(--shadow-md); }
 .carousel-sub-card.col-dragging { opacity: 0.35; transform: scale(0.98); }
 .carousel-sub-card.col-drag-over {
   border-color: var(--color-line);
@@ -636,11 +651,11 @@
   gap: 0.5rem;
 }
 
-/* Inline 圖文訊息：與 message-card 同寬，不撐滿整條 rail */
+/* Inline 圖文訊息：跟著置中欄，不再撐滿整條 rail */
 .flow-rich-message-areas {
   width: 100%;
-  max-width: none;
-  align-self: stretch;
+  max-width: 880px;
+  align-self: flex-start;
   flex-shrink: 0;
 }
 

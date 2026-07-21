@@ -1,10 +1,26 @@
 /* ── Flow 訊息即時預覽（仿 LINE 聊天外觀；機器人訊息＝左側 incoming）──── */
+/* 一片到底的側邊預覽面板：單一左邊界＋淡底＝唯一的分隔（不再另外畫線）。
+   手機預覽卡片放在面板裡、用柔和陰影浮起，不跟面板邊界互相打架。 */
 .fmp {
-  width: 340px;
+  width: 372px;
   flex-shrink: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
+  padding: 1rem;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border);
+}
+
+/* 顯示／隱藏預覽：滑入＋淡入，避免硬切造成突兀 */
+.fmp-enter-active,
+.fmp-leave-active {
+  transition: opacity 0.22s ease, transform 0.22s ease;
+}
+.fmp-enter-from,
+.fmp-leave-to {
+  opacity: 0;
+  transform: translateX(16px);
 }
 
 .fmp-frame {
@@ -16,6 +32,7 @@
   border-radius: var(--radius-lg);
   background: var(--bg-surface);
   overflow: hidden;
+  box-shadow: var(--shadow-md);   /* 手機預覽從面板上浮起 */
 }
 
 /* LINE 風聊天標題列（品牌綠，像真的在跟這個官方帳號聊天） */

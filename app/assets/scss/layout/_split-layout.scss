@@ -391,6 +391,57 @@ body.is-resizing-split {
   color: var(--text-primary);
 }
 
+/* ── 編輯頁右上動作列 ──────────────────────────────────────
+   讓工具列有層次：主要動作跳出、次要動作（複製／取消）退居背景、
+   破壞性動作（刪除）安靜外框，不與主要動作互搶顏色。
+   放共用層 → 所有編輯頁（flow / campaigns / richmenu / broadcasts…）一致。 */
+.split-editor-header .admin-header-actions {
+  gap: 0.5rem;
+
+  .el-button {
+    transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, color 0.15s;
+  }
+
+  /* 次要動作：安靜的中性外框，hover 才浮上來 */
+  .el-button--default {
+    color: var(--text-secondary);
+    border-color: var(--border);
+    background: var(--bg-surface);
+
+    &:hover {
+      color: var(--text-primary);
+      border-color: var(--text-muted);
+      background: var(--bg-hover);
+    }
+  }
+
+  /* 主要動作：唯一的實心彩色，加一點陰影，明確就是「按這顆」 */
+  .el-button--primary {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.14);
+
+    &:hover {
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.18);
+    }
+  }
+
+  /* 破壞性動作（刪除）：平時安靜的文字紅、不搶主要動作；hover 才轉實心紅提示
+     並跟其餘動作拉開一點距離，降低誤按。 */
+  .el-button--danger {
+    background: transparent;
+    border-color: transparent;
+    color: var(--el-color-danger);
+    box-shadow: none;
+    margin-right: 0.25rem;
+
+    &:hover,
+    &:focus {
+      background: var(--el-color-danger);
+      border-color: var(--el-color-danger);
+      color: #fff;
+    }
+  }
+}
+
 .split-editor-body {
   flex: 1;
   min-height: 0;

@@ -66,7 +66,11 @@
       "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs10.css --no-source-map)",
       "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs13.css --no-source-map)",
       "Bash(npx --yes sass app/assets/scss/pages/_conversation-stats.scss /tmp/_cs14.css --no-source-map)",
-      "Edit(/.claude/skills/ui-review/**)"
+      "Edit(/.claude/skills/ui-review/**)",
+      "Bash(cd /Users/kevin/Documents/Github/linebot *)",
+      "Bash(pkill -f \"remote-debugging-port=9333\")",
+      "Bash(npx nuxt *)",
+      "Bash(pkill -f \"remote-debugging-port=9337\")"
     ],
     "additionalDirectories": [
       "/Users/kevin/.claude",

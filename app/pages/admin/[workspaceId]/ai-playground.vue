@@ -29,10 +29,28 @@
 
         <!-- ── 對話歷史 ─────────────────────── -->
         <div ref="historyEl" class="pg-chat" data-tour="pg-chat">
-          <p v-if="!history.length" class="pg-chat-empty">
-            在下方輸入測試問題，AI 會以「真實 LINE 對話」的方式回應。<br>
-            遇到模糊問題會反問並出按鈕，可點選模擬客人回答。
-          </p>
+          <div v-if="!history.length" class="pg-empty">
+            <div class="pg-empty-badge">💬</div>
+            <h3 class="pg-empty-title">輸入問題，看 AI 會怎麼回</h3>
+            <p class="pg-empty-desc">
+              AI 會用「真實 LINE 對話」的方式回應，遇到模糊問題會反問，<br>
+              你可以點按鈕模擬客人回答。
+            </p>
+            <div class="pg-empty-suggest">
+              <div class="pg-empty-suggest-label">試試這些問題</div>
+              <button
+                v-for="ex in exampleQuestions"
+                :key="ex"
+                type="button"
+                class="pg-suggest-card"
+                :disabled="running"
+                @click="tryExample(ex)"
+              >
+                <span class="pg-suggest-text">{{ ex }}</span>
+                <span class="pg-suggest-arrow" aria-hidden="true">→</span>
+              </button>
+            </div>
+          </div>
 
           <template v-for="(turn, idx) in history" :key="idx">
             <!-- 客人訊息 -->
@@ -48,7 +66,7 @@
                 <!-- 腳本觸發：正式 LINE 會由腳本接手，不跑 AI -->
                 <div v-if="turn.result.scriptTrigger" class="pg-script-trigger">
                   <div class="pg-bubble-head">
-                    <span class="badge badge-blue">觸發腳本</span>
+                    <span class="badge badge-purple">觸發腳本</span>
                     <span class="text-xs text-muted">{{ turn.result.scriptTrigger.mode === 'semantic' ? '看意思命中' : '關鍵字命中' }}</span>
                   </div>
                   <p class="pg-script-name">會啟動腳本：<strong>{{ turn.result.scriptTrigger.name }}</strong></p>
@@ -145,10 +163,10 @@
 
                 <div class="pg-meta-row">
                   <span class="pg-meta">
-                    信心：<strong>{{ turn.result.confidence.toFixed(2) }}</strong>
+                    信心：<strong>{{ pct(turn.result.confidence) }}</strong>
                   </span>
                   <span class="pg-meta text-muted">
-                    （{{ relevantThresholdLabel(turn.result) }} {{ relevantThreshold(turn.result).toFixed(2) }}）
+                    （{{ relevantThresholdLabel(turn.result) }} {{ pct(relevantThreshold(turn.result)) }}）
                   </span>
                   <span class="pg-meta text-muted">
                     · 命中 {{ turn.result.sources.length }} 張卡
@@ -284,7 +302,12 @@ function relevantThreshold(r: AiResult) {
 }
 
 function relevantThresholdLabel(r: AiResult) {
-  return r.handoffReason === 'no_grounding' ? 'Grounding 門檻' : '信心門檻'
+  return r.handoffReason === 'no_grounding' ? '知識相關度門檻' : '信心門檻'
+}
+
+/** 信心/門檻對外一律用百分比呈現（0.75 → 75%），比原始小數好懂 */
+function pct(n: number) {
+  return `${Math.round(n * 100)}%`
 }
 
 async function scrollToBottom() {
@@ -368,6 +391,15 @@ async function run() {
   await send(text)
 }
 
+// 空狀態的範例問題：都是通用客服提問（不綁特定租戶/產品），點一下直接送出、馬上看 AI 怎麼回。
+// 三題刻意涵蓋不同結果：一般問答、營業資訊、明確要真人 → 讓第一次用的人看到各種回應樣態。
+const exampleQuestions = ['退費要多久才會收到？', '你們的營業時間是？', '我想找真人客服']
+
+async function tryExample(q: string) {
+  if (running.value) return
+  await send(q)
+}
+
 async function pickOption(title: string) {
   // 模擬客人點按鈕：跟 LINE handler 一樣帶 skipDisambiguation + isFollowup
   await send(title, { skipDisambiguation: true, isFollowup: true })
@@ -435,222 +467,3 @@ onMounted(() => {
   if (q) query.value = q
 })
 </script>
-
-<style scoped lang="scss">
-.pg-body {
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  max-width: 900px;
-  margin: 0 auto;
-  padding: 16px;
-  box-sizing: border-box;
-}
-
-.pg-disabled-alert {
-  margin-bottom: 12px;
-}
-
-// ─ 對話歷史 ──────────────────────────────
-.pg-chat {
-  flex: 1;
-  overflow-y: auto;
-  padding: 8px 4px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.pg-chat-empty {
-  text-align: center;
-  color: var(--el-text-color-secondary);
-  padding: 40px 16px;
-  line-height: 1.8;
-}
-
-.pg-msg {
-  display: flex;
-  &--user { justify-content: flex-end; }
-  &--ai   { justify-content: flex-start; }
-}
-
-.pg-bubble {
-  max-width: 80%;
-  padding: 10px 14px;
-  border-radius: 12px;
-  line-height: 1.6;
-  word-break: break-word;
-  white-space: pre-wrap;
-
-  &--user {
-    background: var(--el-color-primary-light-8);
-    color: var(--el-text-color-primary);
-    border-bottom-right-radius: 4px;
-  }
-  &--ai {
-    background: var(--el-fill-color-light);
-    border: 1px solid var(--el-border-color-lighter);
-    border-bottom-left-radius: 4px;
-    max-width: 92%;
-  }
-}
-
-.pg-bubble-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.pg-bubble-details {
-  margin-top: 12px;
-  padding-top: 10px;
-  border-top: 1px dashed var(--el-border-color-lighter);
-}
-
-// ─ 答案 / 反問 / handoff 區塊 ──────────────
-.pg-answer {
-  padding: 10px 12px;
-  background: var(--el-color-success-light-9);
-  border-left: 3px solid var(--el-color-success);
-  border-radius: 4px;
-}
-
-.pg-handoff-notice {
-  padding: 10px 12px;
-  background: var(--el-color-warning-light-9);
-  border-left: 3px solid var(--el-color-warning);
-  border-radius: 4px;
-
-  p { margin: 0 0 4px; &:last-child { margin: 0; } }
-}
-
-.pg-llm-error {
-  padding: 10px 12px;
-  background: var(--el-color-danger-light-9);
-  border-left: 3px solid var(--el-color-danger);
-  border-radius: 4px;
-
-  p { margin: 0 0 4px; &:last-child { margin: 0; } }
-  code {
-    background: rgba(0, 0, 0, 0.05);
-    padding: 1px 4px;
-    border-radius: 3px;
-    font-size: 12px;
-  }
-}
-
-.pg-llm-error-actions {
-  margin-top: 8px;
-}
-
-.pg-skipped {
-  padding: 10px 12px;
-  background: var(--el-fill-color);
-  border-left: 3px solid var(--el-text-color-disabled);
-  border-radius: 4px;
-  color: var(--el-text-color-secondary);
-
-  p { margin: 0 0 4px; &:last-child { margin: 0; } }
-}
-
-.pg-disambiguate {
-  padding: 10px 12px;
-  background: var(--el-color-info-light-9);
-  border-left: 3px solid var(--el-color-info);
-  border-radius: 4px;
-}
-
-.pg-clarification {
-  margin: 0 0 8px;
-  font-weight: 500;
-}
-
-.pg-option-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 4px;
-}
-
-.pg-options-note {
-  margin: 6px 0 0;
-}
-
-.pg-meta-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 6px 10px;
-  margin-top: 8px;
-  font-size: 12px;
-}
-
-.pg-meta strong {
-  font-size: 14px;
-}
-
-.pg-expand-toggle {
-  margin-left: auto;
-}
-
-// ─ sources & debug ──────────────────────────
-.pg-sources {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.pg-source-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
-  background: var(--el-fill-color);
-  border-radius: 4px;
-  font-size: 13px;
-}
-
-.pg-source-rank {
-  font-weight: 600;
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-  min-width: 22px;
-}
-
-.pg-source-title { flex: 1; font-weight: 500; }
-.pg-source-score { color: var(--el-text-color-secondary); font-size: 12px; }
-
-.pg-debug {
-  margin-top: 10px;
-  summary { cursor: pointer; font-size: 12px; color: var(--el-text-color-secondary); }
-}
-
-.pg-debug-pre {
-  margin-top: 6px;
-  background: var(--el-fill-color-darker);
-  padding: 10px;
-  border-radius: 4px;
-  white-space: pre-wrap;
-  font-size: 11px;
-  line-height: 1.5;
-  max-height: 360px;
-  overflow-y: auto;
-}
-
-// ─ 輸入區（sticky 底部）─────────────────────
-.pg-composer {
-  position: sticky;
-  bottom: 0;
-  background: var(--el-bg-color);
-  padding-top: 10px;
-  margin-top: 8px;
-  border-top: 1px solid var(--el-border-color-lighter);
-}
-
-.pg-composer-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-</style>

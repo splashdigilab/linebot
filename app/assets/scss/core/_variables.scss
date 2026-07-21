@@ -25,6 +25,12 @@
   --bg-hover: #e5e7eb;
   --bg-glass: rgba(255, 255, 255, 0.8);
 
+  /* Chat — 對話串（對話頁 .conv-*）與 AI 試答（.pg-*）共用的訊息幾何。
+     單一維護來源：兩頁都吃這組變數，改易讀寬度/底色只需改這裡，避免逐頁自刻 drift。 */
+  --chat-pane-bg: var(--bg-base);          /* 訊息區灰底 */
+  --chat-bubble-max: min(84%, 680px);      /* 一般泡泡易讀上限 */
+  --chat-bubble-max-wide: min(92%, 760px); /* 結構化/媒體訊息上限 */
+
   /* Text */
   --text-primary: #111827;
   --text-secondary: #4b5563;

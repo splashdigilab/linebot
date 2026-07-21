@@ -187,20 +187,25 @@
         :is-creating="isCreating"
       />
       <div v-if="selectedFlow || isCreating" class="flow-module-meta" data-tour="flow-type">
-        <el-tag v-if="isSystemFlow" type="warning" size="small" disable-transitions>系統模組</el-tag>
         <!-- System modules: type is locked, show label only -->
-        <el-tag v-if="isSystemFlow" size="small" disable-transitions>
-          {{ MODULE_TYPE_LABELS[form.moduleType] ?? '機器人流程' }}
-        </el-tag>
-        <!-- Regular modules (create or edit): show selector -->
-        <el-select v-else v-model="form.moduleType" size="small" style="width: 130px">
-          <el-option
-            v-for="t in WORKSPACE_FLOW_MODULE_TYPES"
-            :key="t"
-            :label="MODULE_TYPE_LABELS[t]"
-            :value="t"
-          />
-        </el-select>
+        <template v-if="isSystemFlow">
+          <el-tag type="warning" size="small" disable-transitions>系統模組</el-tag>
+          <el-tag size="small" disable-transitions>
+            {{ MODULE_TYPE_LABELS[form.moduleType] ?? '機器人流程' }}
+          </el-tag>
+        </template>
+        <!-- Regular modules (create or edit): labelled selector -->
+        <template v-else>
+          <span class="flow-module-meta__label">模組類型</span>
+          <el-select v-model="form.moduleType" size="small" style="width: 130px">
+            <el-option
+              v-for="t in WORKSPACE_FLOW_MODULE_TYPES"
+              :key="t"
+              :label="MODULE_TYPE_LABELS[t]"
+              :value="t"
+            />
+          </el-select>
+        </template>
       </div>
       <div class="flex gap-1 admin-header-actions">
         <AdminOperateGate>
@@ -210,38 +215,58 @@
           <el-button v-if="!isCreating && selectedFlow" :loading="duplicating" @click="duplicateFlow">
             複製
           </el-button>
+        </AdminOperateGate>
+        <el-button @click="cancelEdit">取消</el-button>
+        <AdminOperateGate>
           <el-button type="primary" :loading="saving" @click="submitForm">
             {{ isCreating ? '建立模組' : '儲存變更' }}
           </el-button>
         </AdminOperateGate>
-        <el-button @click="cancelEdit">取消</el-button>
       </div>
     </template>
 
     <!-- ── Editor Body ── -->
     <template #editor-body>
-      <div class="fem-split">
       <div class="flow-editor-messages">
-        <!-- Sticky header -->
+        <!-- Sticky header（整寬，橫跨卡片區與預覽之上） -->
         <div class="fem-header" data-tour="flow-messages">
           <AdminPanelTitle tag="span" text="回覆訊息" tight />
           <div class="msg-type-btns">
-            <el-button size="small" data-tour="fmt-text" @click="addMessage('text')">＋ 文字</el-button>
-            <el-button size="small" data-tour="fmt-image" @click="addMessage('image')">＋ 圖片</el-button>
-            <el-button size="small" data-tour="fmt-video" @click="addMessage('video')">＋ 影片</el-button>
-            <el-button size="small" data-tour="fmt-rich" @click="addMessage('richMessage')">＋ 圖文訊息</el-button>
-            <el-button size="small" data-tour="fmt-carousel" @click="addMessage('flexImageCarousel')">＋ 輪播訊息</el-button>
-            <el-button v-if="showLegacyCarousel" size="small" @click="addMessage('carousel')">＋ 輪播（舊）</el-button>
-            <el-button v-if="showLegacyImageCarousel" size="small" @click="addMessage('imageCarousel')">＋ 圖片輪播</el-button>
-            <el-button size="small" data-tour="fmt-quick" @click="addMessage('quickReply')">＋ 快速回覆</el-button>
-            <el-button v-if="showUserInput" size="small" data-tour="fmt-userinput" @click="addMessage('userInput')">＋ 用戶輸入</el-button>
+            <el-tooltip content="純文字回覆，可再加最多 4 顆按鈕" placement="bottom" :show-after="300">
+              <el-button size="small" data-tour="fmt-text" @click="addMessage('text')">＋ 文字</el-button>
+            </el-tooltip>
+            <el-tooltip content="傳一張圖片給客人" placement="bottom" :show-after="300">
+              <el-button size="small" data-tour="fmt-image" @click="addMessage('image')">＋ 圖片</el-button>
+            </el-tooltip>
+            <el-tooltip content="傳一段影片（檔案最大 5 MB）" placement="bottom" :show-after="300">
+              <el-button size="small" data-tour="fmt-video" @click="addMessage('video')">＋ 影片</el-button>
+            </el-tooltip>
+            <el-tooltip content="一張大圖，圖上可切出多個可點區塊" placement="bottom" :show-after="300">
+              <el-button size="small" data-tour="fmt-rich" @click="addMessage('richMessage')">＋ 圖文訊息</el-button>
+            </el-tooltip>
+            <el-tooltip content="多張卡片左右滑，每張可放圖片、標題、內文與按鈕" placement="bottom" :show-after="300">
+              <el-button size="small" data-tour="fmt-carousel" @click="addMessage('flexImageCarousel')">＋ 輪播訊息</el-button>
+            </el-tooltip>
+            <el-tooltip v-if="showLegacyCarousel" content="舊版多卡左右滑，建議改用「輪播訊息」" placement="bottom" :show-after="300">
+              <el-button size="small" @click="addMessage('carousel')">＋ 輪播（舊）</el-button>
+            </el-tooltip>
+            <el-tooltip v-if="showLegacyImageCarousel" content="整排純圖片左右滑，點圖可觸發動作" placement="bottom" :show-after="300">
+              <el-button size="small" @click="addMessage('imageCarousel')">＋ 圖片輪播</el-button>
+            </el-tooltip>
+            <el-tooltip content="訊息下方一排可點的小按鈕，客人點一下就送出" placement="bottom" :show-after="300">
+              <el-button size="small" data-tour="fmt-quick" @click="addMessage('quickReply')">＋ 快速回覆</el-button>
+            </el-tooltip>
+            <el-tooltip v-if="showUserInput" content="向客人提問並收集回覆（例：電話、Email）" placement="bottom" :show-after="300">
+              <el-button size="small" data-tour="fmt-userinput" @click="addMessage('userInput')">＋ 用戶輸入</el-button>
+            </el-tooltip>
             <el-button class="fem-preview-toggle" size="small" @click="previewOpen = !previewOpen">
               {{ previewOpen ? '隱藏預覽' : '顯示預覽' }}
             </el-button>
           </div>
         </div>
 
-        <!-- Card rail (horizontal scroll) -->
+        <!-- 卡片區 | 即時預覽（兩欄，都在工具列下方） -->
+        <div class="fem-body-row">
         <div class="fem-rail" data-tour="flow-rail">
           <div v-if="!form.messages.length" class="fem-empty">
             <span>尚無訊息</span>
@@ -1000,8 +1025,10 @@
           </template>
           <!-- End rail -->
           </div>
+          <Transition name="fmp">
+            <FlowMessagePreview v-if="previewOpen" :messages="form.messages" :rich-messages="richMessages" :oa-name="currentWorkspaceName" />
+          </Transition>
         </div>
-        <FlowMessagePreview v-if="previewOpen" :messages="form.messages" :rich-messages="richMessages" :oa-name="currentWorkspaceName" />
       </div>
 
     </template>
@@ -1310,7 +1337,7 @@ const MSG_META: Record<string, { label: string; badge: string }> = {
   video:         { label: '影片訊息', badge: 'badge-gray'   },
   richMessage:   { label: '圖文訊息', badge: 'badge-green'  },
   richMessageRef:{ label: '圖文訊息(舊)', badge: 'badge-green'  },
-  carousel:      { label: '輪播訊息', badge: 'badge-green'  },
+  carousel:      { label: '輪播（舊）', badge: 'badge-green'  },
   imageCarousel:     { label: '圖片輪播',      badge: 'badge-gray'   },
   flexImageCarousel: { label: '輪播訊息', badge: 'badge-purple' },
   quickReply:    { label: '快速回覆', badge: 'badge-purple' },
