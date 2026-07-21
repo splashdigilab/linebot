@@ -40,7 +40,8 @@ import { answerWithAi, routeMessage, summarizeHandoffContext, type AiChatTurn, t
 import { getAiSettings } from './ai-settings'
 import { recordAiUsage } from './ai-usage'
 import { notifyHandoffToStaff } from './ai-handoff-notify'
-import { detectSensitiveTopic, type AiConversationMeta, type HandoffReason } from '~~/shared/types/ai-knowledge'
+import { detectSensitiveTopic, DEFAULT_DND_REPLY, type AiConversationMeta, type HandoffReason } from '~~/shared/types/ai-knowledge'
+import { isServiceHoursDnd } from '~~/shared/time'
 import { matchesScriptKeywords, type ActiveScriptState, type ScriptDoc } from '~~/shared/types/ai-script'
 import { advanceScript, loadActiveScripts, startScript } from './ai-scripts'
 import {
@@ -2095,7 +2096,9 @@ async function runScriptStart(
 
   const result = await startScript(matched, fsUserDocId, userAttributes)
   invalidateUserDocCache(fsUserDocId)
-  await sendScriptReply(result.replyText, replyToken, lineUserId, workspaceId, result.quickReplies)
+  const dndReply = await dndScriptHandoffReply(result, workspaceId)
+  if (dndReply) await sendScriptReply(dndReply, replyToken, lineUserId, workspaceId)
+  else await sendScriptReply(result.replyText, replyToken, lineUserId, workspaceId, result.quickReplies)
   if (result.finished && result.thenHandoff) {
     await triggerHandoff(userAttributes, lineUserId, workspaceId, sessionId, requestOrigin, channelSecret, /*alreadyReplied*/ true)
   }
@@ -2120,11 +2123,27 @@ async function runScriptAdvance(
     // 過期或狀態壞掉 → 不算處理過，讓主流程往下走（rule / AI）
     return false
   }
-  await sendScriptReply(result.replyText, replyToken, lineUserId, workspaceId, result.quickReplies)
+  const dndReply = await dndScriptHandoffReply(result, workspaceId)
+  if (dndReply) await sendScriptReply(dndReply, replyToken, lineUserId, workspaceId)
+  else await sendScriptReply(result.replyText, replyToken, lineUserId, workspaceId, result.quickReplies)
   if (result.finished && result.thenHandoff) {
     await triggerHandoff(userAttributes, lineUserId, workspaceId, sessionId, requestOrigin, channelSecret, true)
   }
   return true
+}
+
+/**
+ * 腳本結束並要轉真人時,若處於勿擾時段,回傳要改送給客人的勿擾訊息（否則 null = 照常送腳本回覆）。
+ * 靜音客服通知由 notifyHandoffToStaff 端統一處理;這裡只負責換掉「客人看到的那則訊息」。
+ */
+async function dndScriptHandoffReply(
+  result: { finished?: boolean; thenHandoff?: boolean },
+  workspaceId: string,
+): Promise<string | null> {
+  if (!(result.finished && result.thenHandoff)) return null
+  const settings = await getAiSettings(workspaceId).catch(() => null)
+  if (!isServiceHoursDnd(settings?.serviceHours)) return null
+  return settings?.serviceHours?.dndReply || DEFAULT_DND_REPLY
 }
 
 async function sendScriptReply(
@@ -2296,14 +2315,24 @@ async function deliverHandoffReply(params: {
 }): Promise<void> {
   const { workspaceId, lineUserId, replyToken, userAttributes, channelSecret, sessionId, requestOrigin } = params
 
-  const liveAgentFlow = await getFlowByModuleId(SYSTEM_MODULE_IDS.live_agent).catch(() => null)
+  // 勿擾時段:轉真人照常發生（session 仍進 live_agent、staff notify 由 notifyHandoffToStaff 端靜音），
+  // 但客人收到的不是「已為您安排專員」而是勿擾訊息（避免承諾「馬上有人」卻整夜沒人）。
+  const settings = await getAiSettings(workspaceId).catch(() => null)
+  const dnd = isServiceHoursDnd(settings?.serviceHours)
+
   let handoffMessages: messagingApi.Message[] = []
-  if (liveAgentFlow) {
-    const hydrated = await hydrateRichMessageRefs(liveAgentFlow.messages as any[])
-    handoffMessages = buildLineMessages(hydrated, userAttributes, requestOrigin, lineUserId, channelSecret)
+  if (dnd) {
+    handoffMessages = [{ type: 'text', text: settings?.serviceHours?.dndReply || DEFAULT_DND_REPLY } as messagingApi.TextMessage]
   }
-  if (handoffMessages.length === 0) {
-    handoffMessages = [{ type: 'text', text: '已為您安排專員，將盡快回覆您 🙇' } as messagingApi.TextMessage]
+  else {
+    const liveAgentFlow = await getFlowByModuleId(SYSTEM_MODULE_IDS.live_agent).catch(() => null)
+    if (liveAgentFlow) {
+      const hydrated = await hydrateRichMessageRefs(liveAgentFlow.messages as any[])
+      handoffMessages = buildLineMessages(hydrated, userAttributes, requestOrigin, lineUserId, channelSecret)
+    }
+    if (handoffMessages.length === 0) {
+      handoffMessages = [{ type: 'text', text: '已為您安排專員，將盡快回覆您 🙇' } as messagingApi.TextMessage]
+    }
   }
 
   if (replyToken) {

@@ -1,8 +1,6 @@
 <template>
-  <div class="layout-wrapper">
-    <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="sidebar-scroll">
+  <AdminShell>
+    <template #sidebar>
         <div class="sidebar-logo">
           <span class="logo-icon"><el-icon color="#fff"><ChatDotRound /></el-icon></span>
           <div>
@@ -81,9 +79,9 @@
             </NuxtLink>
           </template>
         </nav>
-      </div>
+      </template>
 
-      <div class="sidebar-footer">
+      <template #footer>
         <div class="sidebar-footer-user">
           <div class="sidebar-footer-avatar"><el-icon><User /></el-icon></div>
           <div class="sidebar-footer-user-meta">
@@ -96,11 +94,8 @@
         <button class="btn btn-secondary btn-sm w-full" @click="logout">
           <el-icon><SwitchButton /></el-icon> 登出
         </button>
-      </div>
-    </aside>
+      </template>
 
-    <!-- Page Content -->
-    <main class="main-content">
       <div v-if="isViewer" class="admin-viewer-banner" role="status">
         觀察者模式：僅能檢視資料，無法新增、儲存或發送。
       </div>
@@ -108,10 +103,12 @@
            「快沒額度了」不管他人在哪一頁都該知道，而額度用完更是服務中斷。 -->
       <AdminQuotaBanner v-if="workspaceId" />
       <slot />
-    </main>
-    <AdminToastHost />
-    <TutorialAgent v-if="workspaceId" />
-  </div>
+
+      <template #overlay>
+        <AdminToastHost />
+        <TutorialAgent v-if="workspaceId" />
+      </template>
+  </AdminShell>
 </template>
 
 <script setup lang="ts">

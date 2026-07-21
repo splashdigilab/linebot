@@ -452,7 +452,7 @@ const webhookStatusBadge = computed<{ text: string, tone: 'success' | 'warning' 
   if (r.lineActive === false)
     return { text: '⚠ Webhook 沒開', tone: 'warning', hint: 'LINE 後台的 Webhook 開關沒打開，這樣收不到訊息 —— 到 LINE Developers 把它打開。' }
   if (r.urlMatchesCompare === false)
-    return { text: '⚠ 網址不一致', tone: 'warning', hint: 'LINE 那邊填的網址，跟這頁的「Webhook 網址」不一樣。你的系統本來就放在別的網址就沒關係；不然把這頁的網址貼到 LINE 後台。' }
+    return { text: '⚠ 網址不一致', tone: 'warning', hint: 'LINE 那邊填的網址，跟這頁的不一樣。確定 LINE 那邊填的沒錯就不用管；不確定就把這頁的「Webhook 網址」貼到 LINE 後台，或找工程師確認。' }
   if (!r.testSkipped && r.test?.success)
     return { text: '✓ 一切正常', tone: 'success', hint: 'LINE 連得到你的系統，訊息收發沒問題。' }
   return { text: '✓ 看起來正常', tone: 'success', hint: '想再確認的話，按上方「測試連線」實跑一次。' }

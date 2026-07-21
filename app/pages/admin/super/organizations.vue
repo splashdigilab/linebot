@@ -2,7 +2,7 @@
   <AdminSplitLayout solo :is-empty="false">
     <template #editor-header>
       <AdminSoloPageHeading
-        field-label="Super Admin"
+        field-label="超級管理員"
         title="組織管理"
         caption="管理系統中的所有組織、管理員與停用狀態。"
       />
@@ -164,7 +164,7 @@ import { ElMessageBox } from 'element-plus'
 import { DEFAULT_MAX_WORKSPACES_PER_ORG } from '~~/shared/types/organization'
 
 definePageMeta({ middleware: ['auth', 'super-admin'], layout: 'super-admin' })
-useHead({ title: '組織管理 — Super Admin' })
+useHead({ title: '組織管理 — 超級管理員' })
 
 const { apiFetch } = useSuperAdmin()
 const { showToast } = useAdminToast()

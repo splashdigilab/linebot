@@ -1,40 +1,114 @@
 <template>
-  <div class="org-page">
-    <header class="org-head">
-      <div class="org-head-main">
-        <NuxtLink to="/admin/workspaces" class="org-back">← 切換帳號</NuxtLink>
-        <h1>{{ orgName || '組織管理' }}</h1>
-        <p class="org-sub">這個組織底下所有官方帳號的狀態、帳務與管理員</p>
+  <!-- 用共用的 AdminShell（和 default / super-admin 同一套外殼），側欄全部用共用
+       class（logo / sidebar-workspace / nav-item / footer-user），只換內容、不客製樣式，
+       且只放組織層導覽、不露出任何超管選單。 -->
+  <AdminShell>
+    <template #sidebar>
+      <div class="sidebar-logo">
+        <span class="logo-icon"><el-icon color="#fff"><OfficeBuilding /></el-icon></span>
+        <div>
+          <span class="logo-text">{{ orgName || '組織管理' }}</span>
+          <span class="logo-sub">組織管理</span>
+        </div>
       </div>
-      <el-button v-if="!loading" size="small" :loading="refreshing" @click="reloadAll(true)">重新整理</el-button>
-    </header>
+
+      <!-- 切換帳號放側欄上方（和 super/admin 的 sidebar-workspace 同位置），
+           footer 才能只留「你的帳號 + 登出」、位置與其他頁完全一致。 -->
+      <div class="sidebar-workspace">
+        <NuxtLink to="/admin/workspaces" class="ws-sidebar-switch">
+          <span class="ws-sidebar-switch__icon"><el-icon><ChatDotRound /></el-icon></span>
+          <span class="ws-sidebar-switch__main">
+            <span class="ws-sidebar-switch__title">切換帳號</span>
+            <span class="ws-sidebar-switch__sub">選擇其他組織或官方帳號</span>
+          </span>
+          <span class="ws-sidebar-switch__arrow">→</span>
+        </NuxtLink>
+      </div>
+
+      <!-- nav 用和 super/admin 完全相同的 <NuxtLink class="nav-item">，只是切的是 ?tab= -->
+      <nav class="sidebar-nav">
+        <NuxtLink :to="{ query: { ...route.query, tab: 'overview' } }" replace class="nav-item" :class="{ active: tab === 'overview' }">
+          <el-icon class="nav-icon"><DataBoard /></el-icon><span>總覽</span>
+        </NuxtLink>
+        <NuxtLink :to="{ query: { ...route.query, tab: 'billing' } }" replace class="nav-item" :class="{ active: tab === 'billing' }">
+          <el-icon class="nav-icon"><Wallet /></el-icon><span>帳務</span>
+        </NuxtLink>
+        <NuxtLink :to="{ query: { ...route.query, tab: 'members' } }" replace class="nav-item" :class="{ active: tab === 'members' }">
+          <el-icon class="nav-icon"><UserFilled /></el-icon><span>管理員</span>
+        </NuxtLink>
+      </nav>
+    </template>
+
+    <!-- Footer 與 super/admin 完全一致：只有「你的帳號」＋ 登出，位置相同 -->
+    <template #footer>
+      <div class="sidebar-footer-user">
+        <div class="sidebar-footer-avatar"><el-icon><Avatar /></el-icon></div>
+        <div class="sidebar-footer-user-meta">
+          <div class="sidebar-footer-email truncate text-sm font-bold">{{ user?.email ?? '管理員' }}</div>
+          <div class="text-xs text-muted">組織管理員</div>
+        </div>
+      </div>
+      <button class="btn btn-secondary btn-sm w-full" @click="logout">
+        <el-icon><SwitchButton /></el-icon> 登出
+      </button>
+    </template>
 
     <div v-if="loading" class="org-loading">
       <div class="spinner" />
       <span>載入中…</span>
     </div>
 
-    <el-tabs v-else v-model="tab" class="org-tabs">
-      <!-- ── 總覽 ──────────────────────────────────────────── -->
-      <el-tab-pane label="總覽" name="overview">
-        <div class="org-pane">
-          <!-- 摘要：先回答「有沒有事要處理」，再讓他往下看細節 -->
-          <div class="org-stats">
-            <div class="org-stat">
-              <span class="org-stat-num">{{ rows.length }}</span>
-              <span class="org-stat-label">官方帳號</span>
+    <template v-else>
+        <!-- ── 總覽 ──────────────────────────────────────────── -->
+        <div v-show="tab === 'overview'" class="org-pane">
+          <!-- 一張資訊飽滿的組織摘要卡：帳號健康（結論先行）＋ 分段條 ＋ 次要指標。
+               用一張密實的卡，而不是一堆大空框裝很少的內容。 -->
+          <div v-if="rows.length" class="org-summary">
+            <div class="org-summary-top">
+              <div class="org-summary-lead">
+                <span class="org-summary-label">帳號健康</span>
+                <div class="org-hero-headline">
+                  <span class="org-hero-count">{{ rows.length }}</span>
+                  <span class="org-hero-unit">個官方帳號</span>
+                </div>
+              </div>
+              <span class="org-hero-verdict" :class="`is-${healthTone}`">
+                <el-icon>
+                  <CircleCheckFilled v-if="healthTone === 'ok'" />
+                  <WarningFilled v-else />
+                </el-icon>
+                {{ healthVerdict }}
+              </span>
             </div>
-            <div class="org-stat" :class="{ 'is-alert': needsAttention.length > 0 }">
-              <span class="org-stat-num">{{ needsAttention.length }}</span>
-              <span class="org-stat-label">需要處理</span>
+
+            <div class="org-health-bar">
+              <div v-if="okCount" class="org-health-seg seg-ok" :style="{ flexGrow: okCount }" />
+              <div v-if="needsAttention.length" class="org-health-seg seg-alert" :style="{ flexGrow: needsAttention.length }" />
             </div>
-            <div class="org-stat">
-              <span class="org-stat-num">{{ paidCount }}</span>
-              <span class="org-stat-label">付費方案</span>
+            <div class="org-health-legend">
+              <span class="org-health-item"><i class="org-health-dot seg-ok" />運作正常 {{ okCount }}</span>
+              <button
+                v-if="needsAttention.length"
+                type="button"
+                class="org-health-item org-health-item--btn"
+                @click="scrollToAlerts"
+              >
+                <i class="org-health-dot seg-alert" />需要處理 {{ needsAttention.length }} →
+              </button>
+              <span v-else class="org-health-item is-muted"><i class="org-health-dot seg-alert" />需要處理 0</span>
             </div>
-            <div class="org-stat">
-              <span class="org-stat-num">{{ totalAnswered.toLocaleString() }}</span>
-              <span class="org-stat-label">本期 AI 回覆則數</span>
+
+            <div class="org-summary-stats">
+              <div class="org-substat">
+                <span class="org-substat-num">{{ paidCount }}</span>
+                <span class="org-substat-label">付費方案</span>
+              </div>
+              <div class="org-substat">
+                <span class="org-substat-num">{{ totalAnswered.toLocaleString() }}</span>
+                <el-tooltip content="各官方帳號當期計費週期內，AI 自動回覆訊息的則數加總（各帳號週期起算日可能不同）" placement="top">
+                  <span class="org-substat-label org-stat-label--hint">本期 AI 回覆則數</span>
+                </el-tooltip>
+              </div>
             </div>
           </div>
 
@@ -44,7 +118,7 @@
           </div>
 
           <!-- 需要處理的排最前面：管 10 個 OA 的人要的是「哪個出事了」，不是一份名單 -->
-          <div v-else class="org-grid">
+          <div v-else ref="gridRef" class="org-grid">
             <button
               v-for="r in sortedRows"
               :key="r.workspaceId"
@@ -52,52 +126,66 @@
               :class="{ 'is-alert': isAlert(r) }"
               @click="enter(r.workspaceId)"
             >
-              <div class="org-card-head">
-                <span class="org-card-name">{{ r.name }}</span>
-                <el-tag v-if="r.plan" size="small" effect="plain" :type="planTagType(r.plan.id)">
-                  {{ r.plan.name }}
-                </el-tag>
+              <span class="org-card-avatar" :class="{ 'is-alert': isAlert(r) }">{{ r.name.charAt(0) }}</span>
+
+              <div class="org-card-main">
+                <div class="org-card-head">
+                  <span class="org-card-name">{{ r.name }}</span>
+                  <el-tag
+                    v-if="r.plan"
+                    size="small"
+                    effect="plain"
+                    :type="planTagType(r.plan.id)"
+                    :class="{ 'plan-tag--internal': isInternalPlan(r.plan.id) }"
+                  >
+                    {{ r.plan.name }}
+                  </el-tag>
+                </div>
+
+                <div v-if="r.plan?.answeredQuota != null" class="org-card-quota">
+                  <el-progress
+                    :percentage="state(r).percent"
+                    :color="state(r).color"
+                    :stroke-width="6"
+                    :show-text="false"
+                  />
+                  <span class="org-card-quota-text">
+                    本期 {{ r.answered.toLocaleString() }} / {{ r.plan.answeredQuota.toLocaleString() }} 則
+                  </span>
+                </div>
+                <div v-else class="org-card-quota">
+                  <span class="org-card-quota-text">客製額度，無固定上限</span>
+                </div>
+
+                <div class="org-card-flags">
+                  <span v-if="!r.lineConnected" class="org-flag org-flag--warn">尚未接上 LINE</span>
+                  <span v-else-if="state(r).state === 'over'" class="org-flag org-flag--bad">額度已用完，AI 停止回覆</span>
+                  <span v-else-if="state(r).state === 'near'" class="org-flag org-flag--warn">額度即將用完</span>
+                  <span v-else-if="r.plan?.status === 'past_due'" class="org-flag org-flag--warn">扣款未成功</span>
+                  <span v-else class="org-flag org-flag--ok">運作正常</span>
+                </div>
               </div>
 
-              <div v-if="r.plan?.answeredQuota != null" class="org-card-quota">
-                <el-progress
-                  :percentage="state(r).percent"
-                  :color="state(r).color"
-                  :stroke-width="6"
-                  :show-text="false"
-                />
-                <span class="org-card-quota-text">
-                  本期 {{ r.answered.toLocaleString() }} / {{ r.plan.answeredQuota.toLocaleString() }} 則
-                </span>
-              </div>
-              <div v-else class="org-card-quota">
-                <span class="org-card-quota-text">客製額度，無固定上限</span>
-              </div>
-
-              <div class="org-card-flags">
-                <span v-if="!r.lineConnected" class="org-flag org-flag--warn">尚未接上 LINE</span>
-                <span v-else-if="state(r).state === 'over'" class="org-flag org-flag--bad">額度已用完，AI 停止回覆</span>
-                <span v-else-if="state(r).state === 'near'" class="org-flag org-flag--warn">額度即將用完</span>
-                <span v-else-if="r.plan?.status === 'past_due'" class="org-flag org-flag--warn">扣款未成功</span>
-                <span v-else class="org-flag org-flag--ok">運作正常</span>
-              </div>
+              <span class="org-card-arrow" aria-hidden="true">→</span>
             </button>
           </div>
         </div>
-      </el-tab-pane>
-
-      <!-- ── 帳務 ──────────────────────────────────────────── -->
-      <el-tab-pane label="帳務" name="billing">
-        <div class="org-pane">
-          <div class="org-stats">
-            <div class="org-stat">
-              <span class="org-stat-num">NT${{ monthlyTotal.toLocaleString() }}</span>
-              <span class="org-stat-label">下一輪自動扣款總額</span>
+        <!-- ── 帳務 ──────────────────────────────────────────── -->
+        <div v-show="tab === 'billing'" class="org-pane">
+          <div class="org-summary">
+            <div class="org-summary-stats">
+              <div class="org-substat">
+                <span class="org-substat-num">NT${{ monthlyTotal.toLocaleString() }}</span>
+                <span class="org-substat-label">下一輪自動扣款總額</span>
+              </div>
+              <div class="org-substat">
+                <span class="org-substat-num">{{ autoRenewCount }}</span>
+                <span class="org-substat-label">自動續訂中</span>
+              </div>
             </div>
-            <div class="org-stat">
-              <span class="org-stat-num">{{ autoRenewCount }}</span>
-              <span class="org-stat-label">自動續訂中</span>
-            </div>
+            <p v-if="noAutoCharge" class="org-summary-note">
+              目前沒有需自動扣款的項目——底下帳號都不是自動續訂。
+            </p>
           </div>
 
           <div class="message-card ar-section-card">
@@ -113,7 +201,13 @@
                 </el-table-column>
                 <el-table-column label="方案" min-width="80">
                   <template #default="{ row }">
-                    <el-tag v-if="row.plan" size="small" effect="plain" :type="planTagType(row.plan.id)">
+                    <el-tag
+                      v-if="row.plan"
+                      size="small"
+                      effect="plain"
+                      :type="planTagType(row.plan.id)"
+                      :class="{ 'plan-tag--internal': isInternalPlan(row.plan.id) }"
+                    >
                       {{ row.plan.name }}
                     </el-tag>
                   </template>
@@ -205,11 +299,8 @@
             <AdminInvoiceProfileForm v-else v-model="invoiceForm" :fallback-name-hint="orgName" @update:valid="invoiceValid = $event" />
           </div>
         </div>
-      </el-tab-pane>
-
-      <!-- ── 成員 ──────────────────────────────────────────── -->
-      <el-tab-pane label="管理員" name="members">
-        <div class="org-pane">
+        <!-- ── 成員 ──────────────────────────────────────────── -->
+        <div v-show="tab === 'members'" class="org-pane">
           <div class="message-card ar-section-card">
             <div class="message-card-header">
               <div class="card-header-main">
@@ -242,7 +333,7 @@
                     <span class="billing-order-no">{{ row.email }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="" min-width="120">
+                <el-table-column label="身分" min-width="120">
                   <template #default="{ row }">
                     <el-tag v-if="row.isOwner" size="small" type="success" effect="plain">登記擁有者</el-tag>
                     <el-tag v-else-if="row.isSelf" size="small" effect="plain">你自己</el-tag>
@@ -265,14 +356,16 @@
             </div>
           </div>
         </div>
-      </el-tab-pane>
-    </el-tabs>
+      </template>
 
-    <AdminToastHost />
-  </div>
+    <template #overlay>
+      <AdminToastHost />
+    </template>
+  </AdminShell>
 </template>
 
 <script setup lang="ts">
+import { Avatar, ChatDotRound, CircleCheckFilled, DataBoard, OfficeBuilding, SwitchButton, UserFilled, Wallet, WarningFilled } from '@element-plus/icons-vue'
 import { derivePlanState, type PlanView } from '~~/shared/billing/plan-state'
 import { BILLING_PLANS, type BillingPlanId } from '~~/shared/billing/plans'
 import type { PaymentOrderStatus } from '~~/shared/types/payment'
@@ -285,14 +378,15 @@ const route = useRoute()
 const router = useRouter()
 const { getBearer } = useWorkspace()
 const { showToast } = useAdminToast()
+const { user, logout } = useAuth()
 
 const orgId = computed(() => String(route.params.orgId || ''))
-// 分頁狀態同步到 URL（?tab=），重整或分享連結不會掉回總覽
+// 分頁狀態直接以 URL 的 ?tab= 為準（和 super/admin 一樣用連結切換）→ nav 就能用
+// 共用的 <NuxtLink class="nav-item">，不必自刻 <button> 樣式，也不會再有字體/外觀 drift。
 const ORG_TABS = ['overview', 'billing', 'members']
-const initialTab = String(route.query.tab || '')
-const tab = ref(ORG_TABS.includes(initialTab) ? initialTab : 'overview')
-watch(tab, (t) => {
-  router.replace({ query: { ...route.query, tab: t } })
+const tab = computed(() => {
+  const t = String(route.query.tab || '')
+  return ORG_TABS.includes(t) ? t : 'overview'
 })
 
 const config = useRuntimeConfig()
@@ -310,11 +404,16 @@ async function orgFetch<T>(path: string, opts: Record<string, unknown> = {}): Pr
   }) as T
 }
 
-function planTagType(id: string): 'info' | 'success' | 'warning' {
+function planTagType(id: string): 'info' | 'success' {
   const p = BILLING_PLANS[id as BillingPlanId]
   if (!p) return 'info'
-  if (p.internal) return 'warning'
+  // 內部/測試（無限）是平台自家帳號，用中性灰；橘色(warning) 只留給真正的警示（快撞頂／扣款失敗）
+  if (p.internal) return 'info'
   return p.id === 'free' ? 'info' : 'success'
+}
+/** 內部/測試方案 → 套 .plan-tag--internal 暖中性灰（見 _shared.scss） */
+function isInternalPlan(id: string) {
+  return Boolean(BILLING_PLANS[id as BillingPlanId]?.internal)
 }
 function planName(id: string) { return BILLING_PLANS[id as BillingPlanId]?.name ?? id }
 function priceLabel(id?: BillingPlanId) {
@@ -346,7 +445,21 @@ function isAlert(r: OverviewRow): boolean {
 }
 
 const needsAttention = computed(() => rows.value.filter(isAlert))
-const paidCount = computed(() => rows.value.filter(r => r.plan && r.plan.id !== 'free').length)
+const okCount = computed(() => rows.value.length - needsAttention.value.length)
+const healthTone = computed<'ok' | 'alert'>(() => (needsAttention.value.length > 0 ? 'alert' : 'ok'))
+/** hero 的結論句：先講「幾個正常／幾個要處理」，而不是丟一個裸數字。 */
+const healthVerdict = computed(() => {
+  if (!rows.value.length) return ''
+  return needsAttention.value.length === 0
+    ? '全部運作正常'
+    : `${needsAttention.value.length} 個需要處理`
+})
+// 「付費」= 真的產生營收的方案：排除免費層與內部/測試（無限）帳號。
+// 內部方案 id 不是 'free' 但 priceMonthly=0，只看 id !== 'free' 會把內部帳號誤算成付費，
+// 和帳務分頁「月費免費／下一輪扣款 NT$0」自相矛盾。
+const paidCount = computed(() =>
+  rows.value.filter(r => Boolean(r.plan && r.plan.id !== 'free' && !BILLING_PLANS[r.plan.id as BillingPlanId]?.internal)).length,
+)
 const totalAnswered = computed(() => rows.value.reduce((sum, r) => sum + r.answered, 0))
 
 /** 嚴重度排序：AI 已經停止回覆 > 還沒接上線 > 快撞頂 > 正常。 */
@@ -360,6 +473,12 @@ function severity(r: OverviewRow): number {
 const sortedRows = computed(() =>
   [...rows.value].sort((a, b) => severity(b) - severity(a) || a.name.localeCompare(b.name)),
 )
+
+// 點「需要處理」→ 捲到官方帳號列表（已把出事的排最前面）
+const gridRef = ref<HTMLElement>()
+function scrollToAlerts() {
+  gridRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
 
 function enter(workspaceId: string) {
   router.push(`/admin/${workspaceId}/conversation-stats`)
@@ -388,6 +507,8 @@ const monthlyTotal = ref(0)
 const ordersError = ref<string | null>(null)
 
 const autoRenewCount = computed(() => billingRows.value.filter(r => r.plan?.autoRenew).length)
+/** 全為內部/免費或單次付款時，兩個 0 會像沒載入——補一句白話說明「本來就不用扣」。 */
+const noAutoCharge = computed(() => billingRows.value.length > 0 && monthlyTotal.value === 0 && autoRenewCount.value === 0)
 
 /** 續訂狀態要一句話說完，不要讓人自己去拼「autoRenew + cancelAtPeriodEnd + status」。 */
 function renewLabel(r: BillingRow): string {

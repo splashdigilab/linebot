@@ -61,7 +61,7 @@
 
         <NuxtLink v-if="isSuperAdmin" to="/admin/super" class="ws-super-admin-link">
           <el-icon><Setting /></el-icon>
-          <span>Super Admin 後台</span>
+          <span>超級管理員後台</span>
           <span class="ws-item-arrow">→</span>
         </NuxtLink>
         <div class="ws-select-footer">
@@ -90,7 +90,7 @@
                 :title="`在「${group.orgName}」新增官方帳號`"
                 @click="openCreate(group)"
               >
-                +
+                ＋ 新增
               </button>
             </div>
             <div class="ws-group-items">
@@ -110,6 +110,7 @@
                       size="small"
                       effect="plain"
                       class="ws-item-plan-tag"
+                      :class="{ 'plan-tag--internal': isInternalPlan(ws.plan.id) }"
                       :type="planTagType(ws.plan.id)"
                     >
                       {{ ws.plan.name }}
@@ -129,7 +130,7 @@
 
         <NuxtLink v-if="isSuperAdmin" to="/admin/super" class="ws-super-admin-link">
           <el-icon><Setting /></el-icon>
-          <span>Super Admin 後台</span>
+          <span>超級管理員後台</span>
           <span class="ws-item-arrow">→</span>
         </NuxtLink>
 
@@ -238,11 +239,16 @@ const ROLE_LABELS: Record<string, string> = {
 }
 
 /** 方案標籤配色：免費=灰、付費=綠、內部/測試=橘（讓內部帳號一眼可辨）。 */
-function planTagType(id: string): 'info' | 'success' | 'warning' {
+function planTagType(id: string): 'info' | 'success' {
   const p = BILLING_PLANS[id as BillingPlanId]
   if (!p) return 'info'
-  if (p.internal) return 'warning'
+  // 內部/測試（無限）是平台自家帳號，用中性灰；橘色(warning) 只留給真正的警示（快撞頂／扣款失敗）
+  if (p.internal) return 'info'
   return p.id === 'free' ? 'info' : 'success'
+}
+/** 內部/測試方案 → 套 .plan-tag--internal 暖中性灰（見 _shared.scss） */
+function isInternalPlan(id: string) {
+  return Boolean(BILLING_PLANS[id as BillingPlanId]?.internal)
 }
 
 function roleLabel(role: string) {

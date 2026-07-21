@@ -1,52 +1,7 @@
-/* ── 組織總覽（給組織管理員：一次看完底下所有官方帳號的狀態）─────────── */
-
-.org-page {
-  min-height: 100vh;
-  background: var(--bg-base);
-  padding: 2rem 1.5rem 4rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1.5rem;
-  max-width: 1080px;
-  margin: 0 auto;
-}
-
-.org-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
-}
-
-.org-head-main {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-
-  h1 {
-    font-size: 1.35rem;
-    font-weight: 700;
-    margin: 0;
-    color: var(--text-primary);
-  }
-}
-
-.org-back {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-  text-decoration: none;
-
-  &:hover {
-    color: var(--text-primary);
-  }
-}
-
-.org-sub {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-}
+/* ── 組織頁（給組織管理員：一次看完底下所有官方帳號的狀態）─────────────────
+   外殼＋整個側欄都用共用的 AdminShell / .sidebar-* / .nav-item / .sidebar-footer-user
+   （和 default / super-admin 同一套），這裡「不」再客製任何側欄樣式——只客製主內容區。
+   側欄只放組織層導覽、不露出任何超管選單。 */
 
 .org-loading {
   display: flex;
@@ -58,17 +13,15 @@
   font-size: 0.9rem;
 }
 
-/* 分頁：總覽 / 帳務 / 管理員 */
-.org-tabs {
-  :deep(.el-tabs__header) {
-    margin-bottom: 1.25rem;
-  }
-}
-
+/* 內容區：限一個舒適寬度並**置中**——超寬螢幕左右邊距對稱，不再釘左上；
+   1120 讓帳務表格不會被拉太開、總覽 OA 卡剛好排滿一列。一般寬度則自然填滿。 */
 .org-pane {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: var(--space-form-stack-gap);
+  align-self: center;
+  width: 100%;
+  max-width: 1120px;
 }
 
 /* 新增管理員：輸入框吃滿剩餘寬度，按鈕不縮 */
@@ -85,50 +38,201 @@
   }
 }
 
-/* 摘要列：先回答「有沒有事要處理」，再讓他往下看細節 */
-.org-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 0.75rem;
-}
-
-.org-stat {
+/* ── 摘要卡（總覽＋帳務共用）：一張資訊密實的卡，不用一堆大空框裝很少的內容 ──
+   沿用統計頁語彙：結論先行的健康標題、狀態 pill、分段條、卡底次要指標列。 */
+.org-summary {
   background: var(--bg-surface);
-  border: 1px solid var(--border-subtle, #e5e7eb);
-  border-radius: var(--radius-lg, 10px);
-  padding: 1rem 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 1.15rem 1.35rem;
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.85rem;
+  /* 不另外限寬：跟著內容區(.org-pane 置中 1120)滿版，才能與下面的 OA 卡列 /
+     帳務表格「左右邊都對齊」。防拉長交給 .org-pane 的 max-width 統一處理。 */
+}
 
-  /* 「需要處理」不是 0 就變紅：這一格是整頁唯一該搶眼的東西 */
+.org-summary-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.org-summary-lead {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.org-summary-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.org-hero-headline {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.5rem;
+}
+
+.org-hero-count {
+  font-size: 2.1rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.org-hero-unit {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+/* 結論 pill：沿用 conv-stats-delta 的 tinted-pill 語彙 */
+.org-hero-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  white-space: nowrap;
+
+  .el-icon {
+    font-size: 0.95rem;
+  }
+
+  &.is-ok {
+    color: #15803d;
+    background: color-mix(in srgb, #16a34a 12%, transparent);
+  }
+
   &.is-alert {
-    border-color: #f0a6a6;
-    background: #fef6f6;
-
-    .org-stat-num {
-      color: #c0392b;
-    }
+    color: #b45309;
+    background: color-mix(in srgb, #e8912d 16%, transparent);
   }
 }
 
-.org-stat-num {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-  line-height: 1.2;
+/* 健康分段條：沿用 conv-seg-bar，收成細長 pill（不再像整塊色板） */
+.org-health-bar {
+  display: flex;
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--bg-hover);
 }
 
-.org-stat-label {
+.org-health-seg {
+  height: 100%;
+  min-width: 3px;
+
+  &.seg-ok { background: #16a34a; }
+  &.seg-alert { background: #e8912d; }
+}
+
+.org-health-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 1rem;
+}
+
+.org-health-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+
+  &.is-muted {
+    color: var(--text-muted);
+  }
+}
+
+/* 「需要處理」可點：捲到出事的官方帳號 */
+.org-health-item--btn {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  color: #b45309;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.org-health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &.seg-ok { background: #16a34a; }
+  &.seg-alert { background: #e8912d; }
+}
+
+/* 次要指標列：卡底細線之上，橫排數字＋標籤（總覽：付費/回覆；帳務：扣款/續訂） */
+.org-summary-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 2.5rem;
+  padding-top: 0.85rem;
+  border-top: 1px solid var(--border);
+}
+
+/* 帳務摘要卡只有這一列 → 不需要上緣分隔線 */
+.org-summary > .org-summary-stats:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.org-substat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.org-substat-num {
+  font-size: 1.35rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.org-substat-label {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.org-summary-note {
+  margin: 0;
   font-size: 0.78rem;
   color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* 帶說明的指標：虛線底線 + 問號游標，提示可 hover 看口徑 */
+.org-stat-label--hint {
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
 }
 
 .org-empty {
   background: var(--bg-surface);
-  border: 1px dashed var(--border-subtle, #e5e7eb);
-  border-radius: var(--radius-lg, 10px);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
   padding: 3rem 1.5rem;
   text-align: center;
   color: var(--text-muted);
@@ -146,23 +250,30 @@
 .org-card {
   text-align: left;
   background: var(--bg-surface);
-  border: 1px solid var(--border-subtle, #e5e7eb);
-  border-radius: var(--radius-lg, 10px);
-  padding: 1.1rem 1.15rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  padding: 1rem 1.1rem;
   display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0.85rem;
   cursor: pointer;
   transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 
   &:hover {
-    border-color: var(--color-primary, #0f7b54);
-    box-shadow: var(--shadow-md, 0 4px 12px rgb(0 0 0 / 6%));
+    border-color: var(--color-line);
+    box-shadow: var(--shadow-md);
     transform: translateY(-1px);
   }
 
+  &:hover .org-card-arrow {
+    color: var(--color-line);
+    transform: translateX(2px);
+  }
+
   &:focus-visible {
-    outline: 2px solid var(--color-primary, #0f7b54);
+    outline: 2px solid var(--color-line);
     outline-offset: 2px;
   }
 
@@ -172,14 +283,58 @@
   }
 }
 
+/* OA 頭像：帳號名首字，讓每張卡有識別點、不再只是一格空框 */
+.org-card-avatar {
+  flex-shrink: 0;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+  text-transform: uppercase;
+
+  &.is-alert {
+    color: #b45309;
+    background: color-mix(in srgb, #e8912d 15%, transparent);
+  }
+}
+
+.org-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.org-card-arrow {
+  flex-shrink: 0;
+  align-self: center;
+  color: var(--text-muted);
+  font-size: 1rem;
+  transition: color 0.15s, transform 0.15s;
+}
+
 .org-card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
+
+  /* 方案標籤不縮，名稱才是被壓縮的那個（且只在真的太長才 … 截字） */
+  .el-tag {
+    flex-shrink: 0;
+  }
 }
 
 .org-card-name {
+  flex: 1 1 auto;
+  min-width: 0;
   font-weight: 600;
   font-size: 0.95rem;
   color: var(--text-primary);
@@ -191,7 +346,10 @@
 .org-card-quota {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 0.35rem;
+  /* 有額度條與「客製額度」純文字兩種卡片等高，底部狀態列（flags）才會對得齊 */
+  min-height: 2.1rem;
 }
 
 .org-card-quota-text {

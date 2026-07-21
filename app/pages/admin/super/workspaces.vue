@@ -2,7 +2,7 @@
   <AdminSplitLayout solo :is-empty="false">
     <template #editor-header>
       <AdminSoloPageHeading
-        field-label="Super Admin"
+        field-label="超級管理員"
         title="官方帳號管理"
         caption="管理系統中的所有 LINE 官方帳號（Workspace）。"
       />
@@ -179,7 +179,7 @@ import { BILLING_PLANS, BILLING_PLAN_ORDER } from '~~/shared/billing/plans'
 import type { BillingPlanId, SubscriptionStatus } from '~~/shared/billing/plans'
 
 definePageMeta({ middleware: ['auth', 'super-admin'], layout: 'super-admin' })
-useHead({ title: '官方帳號管理 — Super Admin' })
+useHead({ title: '官方帳號管理 — 超級管理員' })
 
 const { apiFetch } = useSuperAdmin()
 const { showToast } = useAdminToast()

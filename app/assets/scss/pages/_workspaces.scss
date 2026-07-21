@@ -26,8 +26,16 @@
   align-items: center;
   gap: 0.75rem;
 
+  /* 綠色圓角徽章底：圖示是白色，沒有底色就會在白卡上隱形（比照 login 的 .logo-circle） */
   .logo-icon {
-    font-size: 2rem;
+    width: 44px;
+    height: 44px;
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg, var(--brand-green), var(--brand-green-deep));
+    display: grid;
+    place-items: center;
+    font-size: 1.4rem;
+    flex-shrink: 0;
   }
 
   h1 {
@@ -151,17 +159,20 @@
   gap: 1.25rem;
 }
 
+/* 組織是主要導覽結構：把組織名做得比帳號名「不弱」，並用細線把分組界線畫清楚。
+   （原本 0.72rem muted uppercase 比底下帳號名還小還淡＝階層倒置；uppercase 對 CJK 也無效） */
 .ws-group-header {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.72rem;
+  font-size: 0.8rem;
   font-weight: 700;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0 0.25rem;
-  margin-bottom: 0.35rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.01em;
+  /* 左右 padding 歸零：組織名／底線／底下卡片外緣共用同一條左右邊界（像素對齊） */
+  padding: 0 0 0.5rem;
+  margin-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
 }
 
 /* 組織後台入口：靠右、低調，但不能藏——管 10 個 OA 的人需要它 */
@@ -183,27 +194,27 @@
   flex: 1;
 }
 
-/* 各 org group 的「+」新增按鈕 */
+/* 各 org group 的「＋ 新增」動作：做成與「組織管理」成對的小文字鈕，
+   而不是無標籤的 20px 方塊（第一次看不知道那個「+」會做什麼） */
 .ws-group-add-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-xs);
+  gap: 0.1rem;
+  border: none;
   background: transparent;
-  color: var(--text-muted);
-  font-size: 0.9rem;
+  padding: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--brand-green-deep);
   line-height: 1;
   cursor: pointer;
-  transition: border-color var(--t-fast), color var(--t-fast), background var(--t-fast);
+  white-space: nowrap;
   flex-shrink: 0;
+  transition: color var(--t-fast);
 
   &:hover {
-    border-color: var(--border-active);
-    color: var(--text-primary);
-    background: var(--bg-elevated);
+    text-decoration: underline;
   }
 }
 

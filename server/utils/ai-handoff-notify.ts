@@ -9,6 +9,7 @@
 import type { messagingApi } from '@line/bot-sdk'
 import { pushMessage } from './line'
 import { getAiSettings } from './ai-settings'
+import { isServiceHoursDnd } from '~~/shared/time'
 import { HANDOFF_REASON_LABELS } from '~~/shared/types/ai-knowledge'
 import type { HandoffReason } from '~~/shared/types/ai-knowledge'
 import { capMapSize } from './bounded-cache'
@@ -35,6 +36,9 @@ export interface HandoffNotifyParams {
 
 export async function notifyHandoffToStaff(params: HandoffNotifyParams): Promise<void> {
   const settings = await getAiSettings(params.workspaceId).catch(() => null)
+  // 勿擾時段內不推播（含腳本/AI 觸發與 SLA 再提醒）：轉真人照常發生,只是不吵客服;
+  // 客服上班回來看「對話」佇列即可。這是所有 handoff 通知的單一收斂點。
+  if (isServiceHoursDnd(settings?.serviceHours)) return
   const cfg = settings?.handoffNotify
   if (!cfg?.enabled || !cfg.lineUserIds.length) return
 

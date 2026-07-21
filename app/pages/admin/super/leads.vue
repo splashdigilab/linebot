@@ -2,7 +2,7 @@
   <AdminSplitLayout solo :is-empty="false">
     <template #editor-header>
       <AdminSoloPageHeading
-        field-label="Super Admin"
+        field-label="超級管理員"
         title="潛在客戶名單"
         caption="落地頁「預約 Demo」與迎賓頁「加入候補」留下的名單，依此跟進與開通。"
       />
@@ -109,7 +109,7 @@
 import { BILLING_PLANS, type BillingPlanId } from '~~/shared/billing/plans'
 
 definePageMeta({ middleware: ['auth', 'super-admin'], layout: 'super-admin' })
-useHead({ title: '潛在客戶名單 — Super Admin' })
+useHead({ title: '潛在客戶名單 — 超級管理員' })
 
 const { apiFetch } = useSuperAdmin()
 const { showToast } = useAdminToast()

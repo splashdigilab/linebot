@@ -94,3 +94,48 @@ export function anchoredPeriod(start: string, anchorDay: number): BillingPeriod 
 export function nextAnchoredPeriod(period: BillingPeriod, anchorDay: number): BillingPeriod {
   return anchoredPeriod(addDays(period.end, 1), anchorDay)
 }
+
+// ── 服務時間 / 勿擾時段（台灣時區）────────────────────────────────────
+
+/** isServiceHoursDnd 需要的最小設定形狀（結構化型別，避免耦合 ai-knowledge）。 */
+export interface ServiceHoursLike {
+  enabled: boolean
+  /** "HH:mm" 台灣時區 */
+  start: string
+  /** "HH:mm" */
+  end: string
+  /** 週六日整天視為勿擾 */
+  weekendOff: boolean
+}
+
+/** "HH:mm" → 午夜起算的分鐘；格式不合回 null。 */
+function hhmmToMinutes(s: string): number | null {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(s ?? '').trim())
+  if (!m) return null
+  const h = Number(m[1])
+  const min = Number(m[2])
+  if (h > 23 || min > 59) return null
+  return h * 60 + min
+}
+
+/**
+ * 現在（台灣時區）是否落在「勿擾時段」＝服務時間之外。
+ * - enabled=false 一律回 false（完全不影響行為）。
+ * - weekendOff 時,台灣時區的週六/週日整天視為勿擾。
+ * - 服務時段支援跨夜（start > end，例如 22:00–06:00）。
+ * - 設定壞掉（start/end 非法）→ 回 false，寧可不擋也不要誤擋正常轉真人。
+ */
+export function isServiceHoursDnd(cfg: ServiceHoursLike | null | undefined, date: Date = new Date()): boolean {
+  if (!cfg?.enabled) return false
+  const t = new Date(date.getTime() + TAIPEI_OFFSET_MS)
+  const dow = t.getUTCDay() // 0=Sun … 6=Sat（已位移為台灣時區）
+  if (cfg.weekendOff && (dow === 0 || dow === 6)) return true
+  const start = hhmmToMinutes(cfg.start)
+  const end = hhmmToMinutes(cfg.end)
+  if (start === null || end === null) return false
+  const nowMin = t.getUTCHours() * 60 + t.getUTCMinutes()
+  const inService = start <= end
+    ? (nowMin >= start && nowMin < end) // 一般 09:00–18:00
+    : (nowMin >= start || nowMin < end) // 跨夜 22:00–06:00
+  return !inService
+}

@@ -107,17 +107,26 @@
             <p class="ai-section-hint">
               決定 AI「多有把握才開口」。拿不準的問題一律轉真人客服,不會亂答。
             </p>
-            <el-radio-group :model-value="activePreset" class="ai-preset-group" @update:model-value="onPresetChange">
-              <el-radio value="strict">
-                嚴格 — 寧可轉真人也不答錯,適合知識庫剛起步
-              </el-radio>
-              <el-radio value="balanced">
-                平衡 — 預設,適合多數情況
-              </el-radio>
-              <el-radio value="loose">
-                寬鬆 — 多答少轉,適合知識庫成熟、答題已穩定
-              </el-radio>
-            </el-radio-group>
+            <div class="ai-preset-cards">
+              <button
+                v-for="p in PRESET_CARDS"
+                :key="p.key"
+                type="button"
+                class="ai-preset-card"
+                :class="{ 'is-active': activePreset === p.key }"
+                :disabled="!canEditSettings"
+                @click="applyPreset(p.key)"
+              >
+                <span class="ai-preset-card__mark" aria-hidden="true" />
+                <span class="ai-preset-card__text">
+                  <span class="ai-preset-card__title">
+                    {{ p.title }}
+                    <span v-if="p.key === 'balanced'" class="ai-preset-card__tag">預設</span>
+                  </span>
+                  <span class="ai-preset-card__desc">{{ p.desc }}</span>
+                </span>
+              </button>
+            </div>
             <p v-if="!activePreset" class="ai-section-hint">
               目前門檻是在「進階調校」手動調整過的組合;點任一風格會覆蓋回預設組合。
             </p>
@@ -132,8 +141,9 @@
             </div>
           </div>
           <div class="card-section-stack">
-            <p class="ai-section-hint">給 AI 的指示:講話口吻、不能說什麼、要怎麼處理特殊狀況。不知道怎麼寫?先套一個範本再改:</p>
-            <div class="flex gap-1 ai-tone-row">
+            <p class="ai-section-hint">給 AI 的指示:講話口吻、不能說什麼、要怎麼處理特殊狀況。不知道怎麼寫?先套下面的範本再改。</p>
+            <div class="ai-tone-row">
+              <span class="ai-tone-label">套用範本</span>
               <el-button size="small" plain :disabled="!canEditSettings" @click="applyToneTemplate('friendly')">親切活潑</el-button>
               <el-button size="small" plain :disabled="!canEditSettings" @click="applyToneTemplate('professional')">專業簡潔</el-button>
               <el-button size="small" plain :disabled="!canEditSettings" @click="applyToneTemplate('warm')">溫暖體貼</el-button>
@@ -143,7 +153,6 @@
               type="textarea"
               :rows="8"
               :maxlength="4000"
-              show-word-limit
               placeholder="例:你是品牌的線上客服,語氣親切簡潔。只根據知識庫內容回答,不確定就轉真人客服…"
             />
           </div>
@@ -234,18 +243,70 @@
                 轉真人後超過此時間仍無人回覆,再推播提醒一次(每場會話只提醒一次)。
               </p>
             </div>
+          </div>
+        </div>
+
+        <!-- ── 服務時間 / 勿擾時段 ─────────────── -->
+        <div class="message-card ai-section-card">
+          <div class="message-card-header">
+            <div class="card-header-main">
+              <span class="section-title">服務時間 / 勿擾時段</span>
+              <span v-if="form.serviceHours.enabled" class="badge badge-green">啟用中</span>
+            </div>
+          </div>
+          <div class="card-section-stack">
+            <p class="ai-section-hint">
+              設定服務時間後,非服務時間內不論腳本或 AI 要轉真人,都<strong>不推播通知客服</strong>(不半夜吵人),改回客人一則「勿擾訊息」。
+              轉真人本身照常發生——客服上班回來在「對話」頁就能接手。時間以台灣時區為準。
+            </p>
             <div class="admin-field-group">
-              <AdminFieldLabel text="真人閒置自動交還機器人(分鐘,0 = 關閉)" tight />
-              <el-input-number
-                v-model="form.handbackIdleMinutes"
-                :min="0"
-                :max="1440"
-                :step="5"
+              <AdminFieldLabel text="啟用服務時間 / 勿擾" tight />
+              <el-switch v-model="form.serviceHours.enabled" active-text="啟用" inactive-text="停用" />
+            </div>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="服務時段(台灣時間)" tight />
+              <div class="ai-hours-row">
+                <el-time-select
+                  v-model="form.serviceHours.start"
+                  start="00:00"
+                  step="00:30"
+                  end="23:30"
+                  placeholder="開始"
+                  :clearable="false"
+                  :disabled="!form.serviceHours.enabled"
+                />
+                <span class="ai-hours-sep">～</span>
+                <el-time-select
+                  v-model="form.serviceHours.end"
+                  start="00:00"
+                  step="00:30"
+                  end="23:30"
+                  placeholder="結束"
+                  :clearable="false"
+                  :disabled="!form.serviceHours.enabled"
+                />
+              </div>
+              <p class="ai-section-hint">此時段以外算「非服務時間」。若結束時間早於開始(例:22:00～06:00)視為跨夜營業。</p>
+            </div>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="週末" tight />
+              <el-switch
+                v-model="form.serviceHours.weekendOff"
+                active-text="週六日整天休息"
+                inactive-text="週末照常服務"
+                :disabled="!form.serviceHours.enabled"
               />
-              <p class="ai-section-hint">
-                真人接手後若超過此時間沒有再回覆,系統自動把會話交還機器人,AI / 自動回覆恢復接手,
-                避免真人忘記收尾時客人後續訊息沒人理。也可在「對話」頁手動點「交還機器人」。
-              </p>
+            </div>
+            <div class="admin-field-group">
+              <AdminFieldLabel text="勿擾時段回覆客人的訊息" tight />
+              <el-input
+                v-model="form.serviceHours.dndReply"
+                type="textarea"
+                :rows="2"
+                :maxlength="500"
+                :disabled="!form.serviceHours.enabled"
+                placeholder="您好,目前非客服服務時間,我們會在服務時間盡快回覆您 🙏"
+              />
             </div>
           </div>
         </div>
@@ -263,6 +324,7 @@
               <el-tag
                 v-for="topic in form.sensitiveTopics"
                 :key="topic"
+                type="warning"
                 :closable="canEditSettings"
                 class="ai-tag"
                 @close="removeSensitive(topic)"
@@ -309,7 +371,6 @@
                   :min="0"
                   :max="1"
                   :step="0.05"
-                  show-stops
                 />
                 <p class="ai-section-hint">低於此門檻 AI 會放棄回答、轉真人客服。建議 0.75 起手,跑兩週後依數據再降。</p>
               </div>
@@ -320,21 +381,11 @@
                   :min="0"
                   :max="1"
                   :step="0.05"
-                  show-stops
                 />
                 <p class="ai-section-hint">
                   AI 找到最接近的那張知識卡,必須夠相關(相關度 ≥ 此值)才准開口回答;不夠相關就轉真人,不硬掰。
                   預設 0.7;如果客人問題常常只差一點點(0.65–0.69)就被擋下來、老是轉真人,可以把它調低一些。
                 </p>
-              </div>
-              <div class="admin-field-group">
-                <AdminFieldLabel :text="`回覆長度上限:${form.replyMaxLen} 字`" tight />
-                <el-slider
-                  v-model="form.replyMaxLen"
-                  :min="50"
-                  :max="1000"
-                  :step="50"
-                />
               </div>
             </div>
           </div>
@@ -367,7 +418,6 @@
                   :max="1"
                   :step="0.05"
                   :disabled="!form.disambiguation.enabled"
-                  show-stops
                 />
                 <p class="ai-section-hint">如果最相關的那張卡相關度太低(低於此值),代表知識庫其實沒有對應內容,就不反問、照一般規則處理。</p>
               </div>
@@ -379,7 +429,6 @@
                   :max="1"
                   :step="0.05"
                   :disabled="!form.disambiguation.enabled"
-                  show-stops
                 />
                 <p class="ai-section-hint">如果最相關的那張卡相關度夠高(高於此值),代表答案很明確,就不反問、直接回答。</p>
               </div>
@@ -399,10 +448,11 @@
                 <el-input-number
                   v-model="form.disambiguation.maxOptions"
                   :min="2"
-                  :max="5"
+                  :max="10"
                   :disabled="!form.disambiguation.enabled"
                   controls-position="right"
                 />
+                <p class="ai-section-hint">AI 反問時最多列幾個按鈕給客人點選。上限 10(對齊 LINE 快速回覆;反問另有一顆「找真人」)。列越多客人越要挑,不見得越好。</p>
               </div>
               <div class="admin-field-group">
                 <AdminFieldLabel text="冷卻時間(分鐘)" tight />
@@ -413,31 +463,43 @@
                   :disabled="!form.disambiguation.enabled"
                   controls-position="right"
                 />
-                <p class="ai-section-hint">同一對話內,反問之間至少間隔多久。設 0 表示不限。</p>
+                <p class="ai-section-hint">同一對話內,兩次反問至少間隔多久,避免 AI 短時間一直反問惹人煩(反問過度是實測最常見的缺陷)。設 0 表示不限。</p>
               </div>
             </div>
           </div>
 
-          <!-- Quota -->
+          <!-- 真人接手 / 交還(進階:接手生命週期的細部行為)-->
           <div class="message-card ai-section-card">
+            <div class="message-card-header">
+              <div class="card-header-main">
+                <span class="section-title">真人接手 / 交還</span>
+              </div>
+            </div>
+            <div class="card-section-stack">
+              <div class="admin-field-group">
+                <AdminFieldLabel text="真人閒置自動交還機器人(分鐘,0 = 關閉)" tight />
+                <el-input-number
+                  v-model="form.handbackIdleMinutes"
+                  :min="0"
+                  :max="1440"
+                  :step="5"
+                />
+                <p class="ai-section-hint">
+                  真人接手後若超過此時間沒有再回覆,系統自動把會話交還機器人,AI / 自動回覆恢復接手,
+                  避免真人忘記收尾時客人後續訊息沒人理。也可在「對話」頁手動點「交還機器人」。
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Quota:已開通方案的帳號用量以「則數」計(見「目前狀態」),token 上限不生效,整段隱藏 -->
+          <div v-if="!planView" class="message-card ai-section-card">
             <div class="message-card-header">
               <div class="card-header-main">
                 <span class="section-title">用量上限</span>
               </div>
             </div>
             <div class="card-section-stack">
-              <el-alert
-                v-if="planView"
-                type="info"
-                :closable="false"
-                show-icon
-                title="此帳號已開通方案，用量以「則數」為上限"
-              >
-                <span class="text-xs">
-                  目前方案「{{ planView.name }}」<template v-if="planState.limit != null">，本月已用 {{ planState.used.toLocaleString() }} / {{ planState.limit.toLocaleString() }} 則</template><template v-else>，無則數上限</template>。
-                  下方的 token 上限<strong>目前不生效</strong>——它只在帳號「未開通方案」時，作為成本失控的保險。
-                </span>
-              </el-alert>
               <div class="admin-field-group">
                 <AdminFieldLabel text="每月用量上限（token）" tight />
                 <el-input-number
@@ -445,18 +507,17 @@
                   :min="0"
                   :max="100000000"
                   :step="100000"
-                  :disabled="!!planView"
                   controls-position="right"
                   class="control-full"
                 />
                 <p class="ai-section-hint">
                   這裡算的是 AI 的總使用量（送進 AI 的、AI 產生的、搜尋知識庫用的都算在內）。設 0 表示不限制。
-                  <template v-if="usageTokens !== null">本月已用 {{ formatTokens(usageTokens) }}。</template>
+                  <template v-if="usageTokens !== null">本月已用 {{ formatTokens(usageTokens) }} tokens。</template>
                 </p>
               </div>
               <div class="admin-field-group">
                 <AdminFieldLabel text="用量超過上限時" tight />
-                <el-radio-group v-model="form.quota.onExceed" :disabled="!!planView">
+                <el-radio-group v-model="form.quota.onExceed">
                   <el-radio value="handoff_all">全部轉真人(保守、推薦)</el-radio>
                   <el-radio value="downgrade_model">改用更省的模型(服務不中斷)</el-radio>
                 </el-radio-group>
@@ -468,7 +529,7 @@
           <div v-if="isSuperAdmin" class="message-card ai-section-card">
             <div class="message-card-header">
               <div class="card-header-main">
-                <span class="section-title">模型</span>
+                <span class="section-title">模型與成本</span>
                 <span class="badge badge-gray">僅系統管理員可見</span>
               </div>
             </div>
@@ -482,6 +543,16 @@
                 <p class="ai-section-hint">
                   Embedding 模型固定為 gemini-embedding-001(768 dim);切換會使所有知識卡索引失效,不開放調整。
                 </p>
+              </div>
+              <div class="admin-field-group">
+                <AdminFieldLabel :text="`回覆長度上限:${form.replyMaxLen} 字`" tight />
+                <el-slider
+                  v-model="form.replyMaxLen"
+                  :min="50"
+                  :max="1000"
+                  :step="50"
+                />
+                <p class="ai-section-hint">AI 會盡量把回覆控制在此字數內,過長會截斷。回覆越長 token 成本越高,故收在此由平台統一控管、一般管理員不開放調整。</p>
               </div>
             </div>
           </div>
@@ -519,6 +590,7 @@ interface FormShape {
   handoffNotify: AiSettingsDoc['handoffNotify']
   handbackIdleMinutes: number
   disambiguation: AiSettingsDoc['disambiguation']
+  serviceHours: AiSettingsDoc['serviceHours']
 }
 
 /** 表單預設值直接取自後端同一份 buildDefaultAiSettings，避免兩份預設漂移（top1Min 0.65 事故的根因） */
@@ -538,6 +610,7 @@ function defaultForm(): FormShape {
     handoffNotify: { ...d.handoffNotify, lineUserIds: [...d.handoffNotify.lineUserIds], displayNames: { ...d.handoffNotify.displayNames } },
     handbackIdleMinutes: d.handbackIdleMinutes,
     disambiguation: { ...d.disambiguation },
+    serviceHours: { ...d.serviceHours },
   }
 }
 
@@ -593,10 +666,12 @@ function applyPreset(name: PresetName) {
   form.value.disambiguation.top1Max = ps.top1Max
 }
 
-// el-radio-group 的 update 事件型別較寬,模板內不能用 as 轉型,包一層
-function onPresetChange(value: string | number | boolean | undefined) {
-  if (value === 'strict' || value === 'balanced' || value === 'loose') applyPreset(value)
-}
+// 三檔風格卡的顯示內容(標題 + 白話說明);「預設」徽章單獨標在平衡上
+const PRESET_CARDS: Array<{ key: PresetName; title: string; desc: string }> = [
+  { key: 'strict', title: '嚴格', desc: '寧可轉真人也不答錯,適合知識庫剛起步' },
+  { key: 'balanced', title: '平衡', desc: '適合多數情況' },
+  { key: 'loose', title: '寬鬆', desc: '多答少轉,適合知識庫成熟、答題已穩定' },
+]
 
 // ── 語氣範本:解決「空白 textarea 不知道寫什麼」 ──────────
 const TONE_TEMPLATES = {
@@ -774,6 +849,7 @@ function applySettings(data: AiSettingsDoc) {
     },
     handbackIdleMinutes: Number(data.handbackIdleMinutes ?? 0),
     disambiguation: { ...data.disambiguation },
+    serviceHours: { ...data.serviceHours },
   }
   // 回填名稱快取,讓已選通知對象的 tag 顯示暱稱
   for (const [uid, name] of Object.entries(data.handoffNotify?.displayNames ?? {})) {
@@ -842,127 +918,3 @@ onMounted(() => {
   checkIsSuperAdmin().catch(() => {})
 })
 </script>
-
-<style scoped lang="scss">
-.ai-section-card {
-  margin-bottom: 0; // gap 由 .admin-panel-stack 控制
-}
-
-.ai-section-hint {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  margin: 0 0 8px;
-}
-
-.ai-preset-group {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 4px;
-}
-
-.ai-tone-row {
-  margin-bottom: 8px;
-}
-
-.ai-advanced-toggle {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 10px 12px;
-  background: transparent;
-  border: 1px dashed var(--el-border-color);
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  color: var(--el-text-color-regular);
-  text-align: left;
-
-  &:hover {
-    background: var(--el-fill-color-light);
-  }
-
-  &__arrow {
-    color: var(--el-text-color-secondary);
-  }
-
-  &__sub {
-    font-size: 12px;
-    color: var(--el-text-color-secondary);
-  }
-}
-
-.ai-tag-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-
-.ai-tag {
-  margin: 0;
-}
-
-.ai-tag-input {
-  width: 140px;
-}
-
-.ai-notify-option-id {
-  float: right;
-  margin-left: 12px;
-  font-size: 11px;
-  color: var(--el-text-color-secondary);
-}
-
-.ai-status-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 4px;
-}
-
-.ai-status-usage {
-  font-size: 13px;
-  color: var(--el-text-color-regular);
-}
-
-.ai-status-link {
-  font-size: 12px;
-  color: var(--el-color-primary);
-  text-decoration: none;
-  white-space: nowrap;
-
-  &:hover { text-decoration: underline; }
-}
-
-.ai-checklist {
-  margin-top: 10px;
-  padding: 10px 12px;
-  background: var(--el-fill-color-light);
-  border-radius: 6px;
-}
-
-.ai-checklist-title {
-  font-weight: 600;
-}
-
-.ai-load-error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 48px 16px;
-  color: var(--el-text-color-secondary);
-}
-
-.ai-check-item {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font-size: 13px;
-  padding: 3px 0;
-  line-height: 1.6;
-}
-</style>

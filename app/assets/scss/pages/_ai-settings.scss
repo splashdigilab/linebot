@@ -1,0 +1,245 @@
+// AI 設定頁（app/pages/admin/[workspaceId]/ai-settings.vue）樣式
+// 房規:樣式放 partial + main.scss @use,不寫在 .vue <style>（見 memory feedback_scss_in_partials）
+// 這些 class 皆為 ai- 前綴、僅此頁使用,全域化無碰撞。
+
+.ai-section-card {
+  margin-bottom: 0; // gap 由 .admin-panel-stack 控制
+}
+
+.ai-section-hint {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin: 0 0 8px;
+}
+
+// 回答風格:三檔可點選卡片(取代扁平 radio 列,提高易讀性與易操作性)
+.ai-preset-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-preset-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 12px 14px;
+  background: var(--el-fill-color-blank);
+  border: 1px solid var(--el-border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+
+  &:hover:not(:disabled) {
+    border-color: var(--el-color-primary-light-5);
+    background: var(--el-fill-color-light);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  &.is-active {
+    border-color: var(--el-color-primary);
+    background: var(--el-color-primary-light-9);
+    box-shadow: inset 0 0 0 1px var(--el-color-primary);
+  }
+}
+
+.ai-preset-card__mark {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border-radius: 50%;
+  border: 2px solid var(--el-border-color-darker);
+  position: relative;
+  transition: border-color 0.15s;
+
+  .ai-preset-card.is-active & {
+    border-color: var(--el-color-primary);
+  }
+
+  .ai-preset-card.is-active &::after {
+    content: "";
+    position: absolute;
+    inset: 2px;
+    border-radius: 50%;
+    background: var(--el-color-primary);
+  }
+}
+
+.ai-preset-card__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ai-preset-card__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+
+  .ai-preset-card.is-active & {
+    color: var(--el-color-primary);
+  }
+}
+
+.ai-preset-card__tag {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--el-fill-color);
+  color: var(--el-text-color-secondary);
+
+  .ai-preset-card.is-active & {
+    background: var(--el-color-primary-light-8);
+    color: var(--el-color-primary);
+  }
+}
+
+.ai-preset-card__desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
+}
+
+.ai-tone-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 8px;
+}
+
+.ai-tone-label {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-right: 2px;
+}
+
+// 服務時段:開始～結束時間選擇器
+.ai-hours-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ai-hours-sep {
+  color: var(--el-text-color-secondary);
+}
+
+.ai-advanced-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px dashed var(--el-border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+  text-align: left;
+
+  &:hover {
+    background: var(--el-fill-color-light);
+  }
+
+  &__arrow {
+    color: var(--el-text-color-secondary);
+  }
+
+  &__sub {
+    font-size: 12px;
+    color: var(--el-text-color-secondary);
+  }
+}
+
+.ai-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.ai-tag {
+  margin: 0;
+}
+
+.ai-tag-input {
+  width: 140px;
+}
+
+.ai-notify-option-id {
+  float: right;
+  margin-left: 12px;
+  font-size: 11px;
+  color: var(--el-text-color-secondary);
+}
+
+.ai-status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.ai-status-usage {
+  font-size: 13px;
+  color: var(--el-text-color-regular);
+}
+
+.ai-status-link {
+  font-size: 12px;
+  color: var(--el-color-primary);
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover { text-decoration: underline; }
+}
+
+.ai-checklist {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: var(--el-fill-color-light);
+  border-radius: 6px;
+}
+
+.ai-checklist-title {
+  font-weight: 600;
+}
+
+.ai-load-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 48px 16px;
+  color: var(--el-text-color-secondary);
+}
+
+.ai-check-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  padding: 3px 0;
+  line-height: 1.6;
+}
+
+// 動作連結靠右對齊成一欄,不隨文字長度浮動
+.ai-check-item .ai-status-link {
+  margin-left: auto;
+  padding-left: 12px;
+}

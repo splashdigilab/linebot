@@ -2,6 +2,14 @@
   flex: 1;
 }
 
+/* 內部/測試（無限）方案標籤：改用 app 自己的暖中性灰，取代 EP info 的冷灰
+   （避免在小尺寸看起來偏藍）。跨頁一致：組織頁＋帳號選擇頁共用。 */
+.plan-tag--internal {
+  --el-tag-bg-color: var(--bg-elevated);
+  --el-tag-border-color: var(--border);
+  --el-tag-text-color: var(--text-secondary);
+}
+
 .admin-title-row {
   display: flex;
   align-items: center;

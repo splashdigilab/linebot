@@ -17,6 +17,7 @@ import {
   DEFAULT_DISAMBIGUATION_MAX_SPREAD,
   DEFAULT_DISAMBIGUATION_TOP1_MAX,
   DEFAULT_DISAMBIGUATION_TOP1_MIN,
+  DEFAULT_DND_REPLY,
   DEFAULT_GROUNDING_SIMILARITY_THRESHOLD,
   DEFAULT_HANDBACK_IDLE_MINUTES,
   DEFAULT_MONTHLY_TOKEN_CAP,
@@ -139,8 +140,23 @@ export function normalizeAiSettings(raw: any): AiSettingsDoc {
         top1Max,
         // 上限 0.3 與前端 slider 一致：spread 是「前兩張卡分數差」，>0.3 沒有實務意義
         maxSpread: clampNumber(raw?.disambiguation?.maxSpread, 0, 0.3, DEFAULT_DISAMBIGUATION_MAX_SPREAD),
-        maxOptions: Math.round(clampNumber(raw?.disambiguation?.maxOptions, 2, 5, DEFAULT_DISAMBIGUATION_MAX_OPTIONS)),
+        // 上限 10：對齊 LINE Quick Reply 慣例（MAX_QUICK_REPLY_OPTIONS；反問另加 1 顆「找真人」仍 ≤ 13 硬限）
+        maxOptions: Math.round(clampNumber(raw?.disambiguation?.maxOptions, 2, 10, DEFAULT_DISAMBIGUATION_MAX_OPTIONS)),
         cooldownMinutes: Math.round(clampNumber(raw?.disambiguation?.cooldownMinutes, 0, 1440, DEFAULT_DISAMBIGUATION_COOLDOWN_MINUTES)),
+      }
+    })(),
+    serviceHours: (() => {
+      const sh = raw?.serviceHours
+      // "HH:mm" 驗證：格式不合就退回預設,避免壞值讓 isServiceHoursDnd 判錯
+      const validHHmm = (v: unknown, fallback: string) =>
+        (typeof v === 'string' && /^([01]?\d|2[0-3]):[0-5]\d$/.test(v.trim())) ? v.trim() : fallback
+      const reply = typeof sh?.dndReply === 'string' && sh.dndReply.trim() ? sh.dndReply.trim().slice(0, 500) : DEFAULT_DND_REPLY
+      return {
+        enabled: sh?.enabled === true,
+        start: validHHmm(sh?.start, '09:00'),
+        end: validHHmm(sh?.end, '18:00'),
+        weekendOff: typeof sh?.weekendOff === 'boolean' ? sh.weekendOff : true,
+        dndReply: reply,
       }
     })(),
     updatedAt: raw?.updatedAt ?? FieldValue.serverTimestamp(),
@@ -164,6 +180,7 @@ export async function setAiSettings(
     // 深合併：partial 只帶部分子欄位（如 { enabled }）時，其餘門檻要保留工作區現值,
     // 否則 normalize 會把缺欄位重設回出廠預設（top1Min 0.65 事故的同型結構）
     disambiguation: { ...current.disambiguation, ...(partial.disambiguation ?? {}) },
+    serviceHours: { ...current.serviceHours, ...(partial.serviceHours ?? {}) },
   })
   await db.collection(AI_SETTINGS_COLLECTION).doc(workspaceId).set({
     ...merged,

@@ -2,9 +2,9 @@
   <AdminSplitLayout solo :is-empty="false">
     <template #editor-header>
       <AdminSoloPageHeading
-        field-label="Super Admin"
-        title="Super Admin 管理"
-        caption="搜尋使用者並管理 Super Admin 權限。"
+        field-label="超級管理員"
+        title="超級管理員"
+        caption="搜尋使用者並管理超級管理員權限。"
       />
     </template>
 
@@ -13,7 +13,7 @@
         <div class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="section-title">目前的 Super Admin</span>
+              <span class="section-title">目前的超級管理員</span>
             </div>
             <span class="text-xs text-muted">共 {{ admins.length }} 筆</span>
           </div>
@@ -22,7 +22,7 @@
               v-loading="loadingList"
               :data="admins"
               size="small"
-              empty-text="尚無登記於清單的 Super Admin（可於下方搜尋後授予或補登記）"
+              empty-text="尚無登記於清單的超級管理員（可於下方搜尋後授予或補登記）"
             >
               <el-table-column label="使用者" min-width="220">
                 <template #default="{ row }">
@@ -87,7 +87,7 @@
               </div>
               <div class="sa-user-actions">
                 <el-tag :type="foundUser.isSuperAdmin ? 'danger' : 'info'" size="small">
-                  {{ foundUser.isSuperAdmin ? 'Super Admin' : '一般使用者' }}
+                  {{ foundUser.isSuperAdmin ? '超級管理員' : '一般使用者' }}
                 </el-tag>
                 <el-tag v-if="foundUser.disabled" type="warning" size="small">帳號停用</el-tag>
                 <el-button
@@ -98,7 +98,7 @@
                   :loading="acting"
                   @click="grantSuperAdmin"
                 >
-                  授予 Super Admin
+                  授予超級管理員
                 </el-button>
                 <template v-else>
                   <el-button
@@ -118,7 +118,7 @@
                     :loading="acting"
                     @click="revokeByUid(foundUser.uid, foundUser.email)"
                   >
-                    撤銷 Super Admin
+                    撤銷超級管理員
                   </el-button>
                 </template>
               </div>
@@ -127,7 +127,7 @@
         </div>
 
         <div class="admin-alert admin-alert--warn">
-          <strong>注意：</strong>Super Admin 授予/撤銷後，該使用者需要重新登入才能生效（Firebase ID token 需刷新）。
+          <strong>注意：</strong>超級管理員授予/撤銷後，該使用者需要重新登入才能生效（Firebase ID token 需刷新）。
         </div>
       </div>
     </template>
@@ -137,7 +137,7 @@
 <script setup lang="ts">
 import { ElMessageBox } from 'element-plus'
 definePageMeta({ middleware: ['auth', 'super-admin'], layout: 'super-admin' })
-useHead({ title: 'Super Admin 管理 — Super Admin' })
+useHead({ title: '超級管理員權限 — 超級管理員' })
 
 const { apiFetch } = useSuperAdmin()
 const { showToast } = useAdminToast()
@@ -185,10 +185,10 @@ async function grantSuperAdmin() {
   if (!foundUser.value) return
   const already = foundUser.value.isSuperAdmin
   const msg = already
-    ? `「${foundUser.value.email}」已是 Super Admin，補登記到清單？`
-    : `確定授予「${foundUser.value.email}」Super Admin 權限？`
+    ? `「${foundUser.value.email}」已是超級管理員，補登記到清單？`
+    : `確定授予「${foundUser.value.email}」超級管理員權限？`
   try {
-    await ElMessageBox.confirm(msg, '授予 Super Admin', {
+    await ElMessageBox.confirm(msg, '授予超級管理員', {
       confirmButtonText: already ? '補登記' : '授予',
       cancelButtonText: '取消',
       confirmButtonClass: 'el-button--danger',
@@ -199,7 +199,7 @@ async function grantSuperAdmin() {
   acting.value = true
   try {
     await apiFetch(`/api/admin/super/users/${foundUser.value.uid}/super-admin`, { method: 'POST' })
-    showToast(already ? '已補登記到清單' : '已授予 Super Admin', 'success')
+    showToast(already ? '已補登記到清單' : '已授予超級管理員', 'success')
     foundUser.value = { ...foundUser.value, isSuperAdmin: true, inIndex: true }
     await loadAdmins()
   } catch (e: any) {
@@ -211,7 +211,7 @@ async function grantSuperAdmin() {
 
 async function revokeByUid(uid: string, email: string) {
   try {
-    await ElMessageBox.confirm(`確定撤銷「${email || uid}」的 Super Admin 權限？`, '撤銷確認', {
+    await ElMessageBox.confirm(`確定撤銷「${email || uid}」的超級管理員權限？`, '撤銷確認', {
       confirmButtonText: '撤銷',
       cancelButtonText: '取消',
       confirmButtonClass: 'el-button--danger',
@@ -222,7 +222,7 @@ async function revokeByUid(uid: string, email: string) {
   acting.value = true
   try {
     await apiFetch(`/api/admin/super/users/${uid}/super-admin`, { method: 'DELETE' })
-    showToast('已撤銷 Super Admin', 'success')
+    showToast('已撤銷超級管理員', 'success')
     if (foundUser.value?.uid === uid) {
       foundUser.value = { ...foundUser.value, isSuperAdmin: false, inIndex: false }
     }

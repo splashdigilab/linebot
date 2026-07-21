@@ -211,6 +211,21 @@ export interface AiSettingsDoc {
     /** 同一對話內，反問之間的冷卻時間（分鐘） */
     cooldownMinutes: number
   }
+  /**
+   * 服務時間 / 勿擾時段（台灣時區）。只影響「轉真人」：勿擾時段內轉真人時不通知客服、
+   * 改回客人一則勿擾訊息（腳本 bot 與 AI 觸發的轉真人都吃）。enabled=false 時完全不影響行為。
+   */
+  serviceHours: {
+    enabled: boolean
+    /** 服務時段起（"HH:mm"，台灣時區） */
+    start: string
+    /** 服務時段迄（"HH:mm"） */
+    end: string
+    /** 週六、週日整天視為勿擾 */
+    weekendOff: boolean
+    /** 勿擾時段回覆客人的訊息 */
+    dndReply: string
+  }
   updatedAt: Timestamp | FieldValue
 }
 
@@ -374,8 +389,13 @@ export const DEFAULT_DISAMBIGUATION_ENABLED = true
 export const DEFAULT_DISAMBIGUATION_TOP1_MIN = 0.70
 export const DEFAULT_DISAMBIGUATION_TOP1_MAX = 0.78
 export const DEFAULT_DISAMBIGUATION_MAX_SPREAD = 0.05
-export const DEFAULT_DISAMBIGUATION_MAX_OPTIONS = 3
-export const DEFAULT_DISAMBIGUATION_COOLDOWN_MINUTES = 5
+// 10：對齊 LINE Quick Reply 慣例上限（MAX_QUICK_REPLY_OPTIONS=10；反問另加 1 顆「找真人」，10+1 仍 ≤ 13 硬限）。
+// 預設放到最寬鬆，讓 AI 反問時盡量把相關卡都列出來，不因選項數被截。
+/** 勿擾時段預設回覆客人的訊息（服務時間之外轉真人時使用） */
+export const DEFAULT_DND_REPLY = '您好,目前非客服服務時間,我們會在服務時間盡快回覆您 🙏'
+export const DEFAULT_DISAMBIGUATION_MAX_OPTIONS = 10
+// 0：預設不設冷卻（同對話可連續反問）。注意這少了「反問過度」的防線，若日後又出現過度反問可調回。
+export const DEFAULT_DISAMBIGUATION_COOLDOWN_MINUTES = 0
 
 /** 預設月度 token 上限 */
 export const DEFAULT_MONTHLY_TOKEN_CAP = 1_000_000
@@ -481,6 +501,13 @@ export function buildDefaultAiSettings(): Omit<AiSettingsDoc, 'updatedAt'> {
       maxSpread: DEFAULT_DISAMBIGUATION_MAX_SPREAD,
       maxOptions: DEFAULT_DISAMBIGUATION_MAX_OPTIONS,
       cooldownMinutes: DEFAULT_DISAMBIGUATION_COOLDOWN_MINUTES,
+    },
+    serviceHours: {
+      enabled: false, // 預設關閉:不影響任何轉真人行為,要用才開
+      start: '09:00',
+      end: '18:00',
+      weekendOff: true,
+      dndReply: DEFAULT_DND_REPLY,
     },
   }
 }

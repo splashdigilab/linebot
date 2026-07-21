@@ -44,13 +44,45 @@
 }
 
 .split-sidebar {
-  width: 240px;
+  width: 240px;          /* 預設值；實際寬度由 AdminSplitLayout inline style 綁定並可拖曳 */
   flex-shrink: 0;
   border-right: 1px solid var(--border);
   background: var(--bg-surface);
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* 側欄與編輯區之間的拖曳把手：疊在 1px 分隔線上，本身不佔版面寬度 */
+.split-resizer {
+  flex: 0 0 auto;
+  width: 7px;
+  margin: 0 -4px 0 -3px;   /* 淨佔 0px，浮在接縫上 */
+  position: relative;
+  z-index: 2;
+  cursor: col-resize;
+  background: transparent;
+  transition: background 0.15s;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0 3px;
+    border-radius: 999px;
+    background: transparent;
+    transition: background 0.15s;
+  }
+
+  &:hover::after,
+  &.is-active::after {
+    background: var(--color-line);
+  }
+}
+
+/* 拖曳中：全頁面禁選字並維持左右調整游標 */
+body.is-resizing-split {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .split-sidebar-header {

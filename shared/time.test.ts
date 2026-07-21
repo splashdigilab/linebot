@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addDays, anchoredPeriod, dayOfDate, nextAnchoredPeriod, normalizeAnchorDay, taipeiDate, taipeiYyyyMm } from './time'
+import { addDays, anchoredPeriod, dayOfDate, isServiceHoursDnd, nextAnchoredPeriod, normalizeAnchorDay, taipeiDate, taipeiYyyyMm } from './time'
 
 describe('taipeiYyyyMm（成本報表的月結桶）', () => {
   it('月中:UTC 與台灣同月', () => {
@@ -85,5 +85,53 @@ describe('nextAnchoredPeriod（續期）', () => {
       p = next
     }
     expect(p.start).toBe('2027-07-28') // 一年後仍回到錨定日
+  })
+})
+
+describe('isServiceHoursDnd（服務時間 / 勿擾時段，台灣時區）', () => {
+  // 2026-07-20 是週一；07-18 週六、07-19 週日。日期以 UTC 給，函式會 +8 轉台灣。
+  const svc = { enabled: true, start: '09:00', end: '18:00', weekendOff: true }
+
+  it('關閉時一律回 false（不影響任何行為）', () => {
+    const off = { ...svc, enabled: false }
+    expect(isServiceHoursDnd(off, new Date('2026-07-20T20:00:00Z'))).toBe(false) // 台灣 04:00 深夜也不擋
+    expect(isServiceHoursDnd(null)).toBe(false)
+    expect(isServiceHoursDnd(undefined)).toBe(false)
+  })
+
+  it('平日服務時段內 → 非勿擾', () => {
+    // UTC 02:00 = 台灣週一 10:00
+    expect(isServiceHoursDnd(svc, new Date('2026-07-20T02:00:00Z'))).toBe(false)
+  })
+
+  it('平日服務時段後 → 勿擾', () => {
+    // UTC 12:00 = 台灣週一 20:00
+    expect(isServiceHoursDnd(svc, new Date('2026-07-20T12:00:00Z'))).toBe(true)
+  })
+
+  it('平日開店前 → 勿擾（跨 UTC 日：UTC 週日 23:00 = 台灣週一 07:00）', () => {
+    expect(isServiceHoursDnd(svc, new Date('2026-07-19T23:00:00Z'))).toBe(true)
+  })
+
+  it('週末休息時，週六整天勿擾（即使落在時段內）', () => {
+    // UTC 02:00 = 台灣週六 10:00
+    expect(isServiceHoursDnd(svc, new Date('2026-07-18T02:00:00Z'))).toBe(true)
+  })
+
+  it('週末不休息時，週六時段內 → 非勿擾', () => {
+    const noWeekend = { ...svc, weekendOff: false }
+    expect(isServiceHoursDnd(noWeekend, new Date('2026-07-18T02:00:00Z'))).toBe(false)
+  })
+
+  it('跨夜時段 22:00–06:00：深夜在服務中、白天才勿擾', () => {
+    const overnight = { enabled: true, start: '22:00', end: '06:00', weekendOff: false }
+    expect(isServiceHoursDnd(overnight, new Date('2026-07-20T15:00:00Z'))).toBe(false) // 台灣週一 23:00 服務中
+    expect(isServiceHoursDnd(overnight, new Date('2026-07-19T19:00:00Z'))).toBe(false) // 台灣週一 03:00 服務中
+    expect(isServiceHoursDnd(overnight, new Date('2026-07-20T04:00:00Z'))).toBe(true) // 台灣週一 12:00 勿擾
+  })
+
+  it('設定壞掉（時間格式非法）→ 回 false，寧可不擋', () => {
+    const bad = { enabled: true, start: '25:99', end: '18:00', weekendOff: false }
+    expect(isServiceHoursDnd(bad, new Date('2026-07-20T12:00:00Z'))).toBe(false)
   })
 })
