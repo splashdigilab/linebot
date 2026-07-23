@@ -1,4 +1,5 @@
 import { runDueScheduledBroadcasts } from '~~/server/utils/run-due-scheduled-broadcasts'
+import { assertCronAuthorized } from '~~/server/utils/cron-auth'
 
 /**
  * POST /api/broadcast/trigger-scheduled
@@ -20,25 +21,6 @@ import { runDueScheduledBroadcasts } from '~~/server/utils/run-due-scheduled-bro
  * }
  */
 export default defineEventHandler(async (event) => {
-  // ── 身分驗證 ──────────────────────────────────────────────────────
-  const runtimeConfig = useRuntimeConfig()
-  const cronSecret = String(runtimeConfig.cronSecret || '').trim()
-  const headerSecret = String(getHeader(event, 'x-cron-secret') || '').trim()
-
-  if (cronSecret) {
-    if (headerSecret !== cronSecret) {
-      throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
-    }
-  }
-  else {
-    // 未設定 CRON_SECRET 時只允許 localhost 呼叫
-    const forwarded = getHeader(event, 'x-forwarded-for') || ''
-    const host = getHeader(event, 'host') || ''
-    const isLocal = forwarded === '' && (host.startsWith('localhost') || host.startsWith('127.'))
-    if (!isLocal) {
-      throw createError({ statusCode: 403, statusMessage: 'CRON_SECRET not configured; only localhost allowed' })
-    }
-  }
-
+  assertCronAuthorized(event)
   return await runDueScheduledBroadcasts()
 })

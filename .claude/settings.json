@@ -73,7 +73,12 @@
       "Bash(pkill -f \"remote-debugging-port=9337\")",
       "WebFetch(domain:docs.payuni.com.tw)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(gh api *)"
+      "Bash(gh api *)",
+      "Bash(aws sts *)",
+      "Bash(gcloud auth *)",
+      "Bash(gcloud config *)",
+      "Bash(gcloud services *)",
+      "Bash(gcloud scheduler *)"
     ],
     "additionalDirectories": [
       "/Users/kevin/.claude",

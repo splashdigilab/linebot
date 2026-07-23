@@ -1,5 +1,6 @@
 import { listWorkspaceLineCredentials } from '~~/server/utils/line-workspace-credentials'
 import { warmWorkspaceAutomationCaches } from '~~/server/utils/handler'
+import { assertCronAuthorized } from '~~/server/utils/cron-auth'
 
 /**
  * GET /api/warmup
@@ -14,23 +15,7 @@ import { warmWorkspaceAutomationCaches } from '~~/server/utils/handler'
  * 且與環境變數 CRON_SECRET 相符；未設定 CRON_SECRET 時僅允許 localhost。
  */
 export default defineEventHandler(async (event) => {
-  const runtimeConfig = useRuntimeConfig()
-  const cronSecret = String(runtimeConfig.cronSecret || '').trim()
-  const headerSecret = String(getHeader(event, 'x-cron-secret') || '').trim()
-
-  if (cronSecret) {
-    if (headerSecret !== cronSecret) {
-      throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
-    }
-  }
-  else {
-    const forwarded = getHeader(event, 'x-forwarded-for') || ''
-    const host = getHeader(event, 'host') || ''
-    const isLocal = forwarded === '' && (host.startsWith('localhost') || host.startsWith('127.'))
-    if (!isLocal) {
-      throw createError({ statusCode: 403, statusMessage: 'CRON_SECRET not configured; only localhost allowed' })
-    }
-  }
+  assertCronAuthorized(event)
 
   const startedAt = Date.now()
   const workspaces = await listWorkspaceLineCredentials()
