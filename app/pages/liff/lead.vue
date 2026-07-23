@@ -103,6 +103,8 @@ function loadConfigCache(): { liffId: string; lineOaBasicId: string } | null {
 }
 function saveConfigCache(cfg: { liffId: string; lineOaBasicId: string }) {
   if (typeof localStorage === 'undefined') return
+  // API 沒帶 workspaceId 時會回空值——寫入會蓋掉原本有效的快取，一律略過
+  if (!cfg.liffId && !cfg.lineOaBasicId) return
   try { localStorage.setItem(CFG_KEY, JSON.stringify({ ...cfg, cachedAt: Date.now() })) } catch {}
 }
 
@@ -218,12 +220,19 @@ async function tryOpenInLineAppBeforeInit(liffId: string) {
   const deepLinkUrl = buildLineAppOpenUrl(liffId)
   if (!deepLinkUrl) return
 
-  const beforeHidden = document.hidden
   window.location.href = deepLinkUrl
 
-  // If LINE app can't be opened, page stays visible and continues web LIFF flow.
-  await new Promise(resolve => setTimeout(resolve, 800))
-  if (!beforeHidden && !document.hidden) return
+  // LINE app 有裝：頁面會轉背景（visibilitychange），立即放行不用等滿。
+  // 沒裝：等 450ms 後照常走 web LIFF 流程（等太久只是拖慢沒有 LINE app 的使用者）。
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(done, 450)
+    function done() {
+      clearTimeout(timer)
+      document.removeEventListener('visibilitychange', done)
+      resolve()
+    }
+    document.addEventListener('visibilitychange', done)
+  })
 }
 
 onMounted(async () => {

@@ -4,6 +4,7 @@ import { createError } from 'h3'
 import { getDb } from './firebase'
 import { replyMessage, pushMessage, getUserProfile, linkRichMenuIdToUser, showLoadingAnimation } from './line'
 import { getLineWorkspaceCredentials } from './line-workspace-credentials'
+import { resolveLineOaBasicId } from './line-oa-basic-id'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import {
   encodeTriggerMessage,
@@ -622,6 +623,8 @@ export async function warmWorkspaceAutomationCaches(workspaceId: string): Promis
     loadActiveAutoReplyRules(workspaceId).catch(() => [] as AutoReplyRuleShape[]),
     loadActiveScripts(workspaceId).catch(() => []),
     getAiSettings(workspaceId).catch(() => null),
+    // 活動入口（/api/liff/claim・config）會查 OA basicId；一併保溫（快取 24h）
+    resolveLineOaBasicId(workspaceId).catch(() => ''),
   ])
   const moduleIds = [...new Set(
     rules

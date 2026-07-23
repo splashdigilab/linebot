@@ -91,21 +91,30 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'rawToken and accessToken are required' })
   }
 
-  // userId 一律以 LINE 驗證結果為準，不信任 client 自報（防冒用他人身分兌換／觸發推播）
-  const verifiedUser = await verifyLiffAccessToken(accessToken)
-  const lineUserId = verifiedUser.userId
-
   const tokenHash = createHash('sha256').update(rawToken).digest('hex')
   const db = getDb()
 
-  const sharedSnap = await db.collection('leadClaims')
-    .where('tokenHash', '==', tokenHash)
-    .where('sharedEntry', '==', true)
-    .limit(1)
-    .get()
+  // userId 一律以 LINE 驗證結果為準，不信任 client 自報（防冒用他人身分兌換／觸發推播）。
+  // token 驗證（LINE API）與 tokenHash 查詢（Firestore）互不依賴，並行省一次往返。
+  const [verifiedUser, sharedSnap] = await Promise.all([
+    verifyLiffAccessToken(accessToken),
+    db.collection('leadClaims')
+      .where('tokenHash', '==', tokenHash)
+      .where('sharedEntry', '==', true)
+      .limit(1)
+      .get(),
+  ])
+  const lineUserId = verifiedUser.userId
 
   let claimData: DocumentData
   let claimRef: DocumentReference
+  let followProfile: Awaited<ReturnType<typeof getUserProfile>> = null
+  let lineOaBasicId = ''
+  /** 已在並行預載時完成好友／basicId 查詢（shared 路徑）；legacy 路徑仍需自查 */
+  let sideLookupsDone = false
+  /** shared 路徑：與 claimed 狀態合併寫入的內容（新列＝完整文件、既有列＝模板 patch） */
+  let sharedWritePayload: DocumentData | null = null
+
   if (!sharedSnap.empty) {
     const templateSnap = sharedSnap.docs[0]
     if (!templateSnap) {
@@ -126,18 +135,29 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    // 使用者 claim 列、好友狀態、OA basicId 互不依賴 → 並行（皆純讀取，後續才寫入）
+    const templateWorkspaceId = String(templateData?.workspaceId || '').trim()
     const userRef = db.collection('leadClaims').doc(sharedUserClaimDocId(campaignId, lineUserId))
-    const userSnap = await userRef.get()
+    const [userSnap, profileRes, basicIdRes] = await Promise.all([
+      userRef.get(),
+      getUserProfile(lineUserId, templateWorkspaceId).catch(() => null),
+      resolveLineOaBasicId(templateWorkspaceId).catch(() => ''),
+    ])
+    followProfile = profileRes
+    lineOaBasicId = basicIdRes
+    sideLookupsDone = true
+
     claimRef = userRef
     if (!userSnap.exists) {
       const newDoc = buildUserClaimFromTemplate(templateData, templateSnap.ref, lineUserId)
-      await userRef.set(newDoc)
+      sharedWritePayload = newDoc
       claimData = newDoc
     }
     else {
       // 同一使用者重複進入時，需同步最新活動模板，避免沿用舊的觸發設定。
+      // patch 不在這裡先寫——下方與 claimed 狀態合併成單一一次寫入。
       const patch = buildUserClaimTemplatePatch(templateData, templateSnap.ref)
-      await userRef.set(patch, { merge: true })
+      sharedWritePayload = patch
       claimData = { ...userSnap.data()!, ...patch }
     }
   }
@@ -184,7 +204,6 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 409, statusMessage: 'Token already claimed by another user' })
   }
 
-  // 並行：Firestore 更新 + 查詢是否已加好友（兩者互不依賴）
   const claimWorkspaceId = String(claim.workspaceId || '').trim()
   if (!claimWorkspaceId) {
     throw createError({ statusCode: 409, statusMessage: 'Claim missing workspaceId' })
@@ -195,20 +214,32 @@ export default defineEventHandler(async (event) => {
     .then(c => warnOnLiffChannelMismatch(verifiedUser, c.defaultLiffId, 'liff/claim'))
     .catch(() => {})
 
-  const [, followProfile] = await Promise.all([
-    docRef.update({
-      lineUserId,
-      status: 'claimed',
-      claimedAt: FieldValue.serverTimestamp(),
-      appliedAt: null,
-    }),
-    getUserProfile(lineUserId, claimWorkspaceId),
-  ])
+  // claimed 狀態寫入（shared 路徑：模板 patch／新列內容與 claimed 合併成單一寫入）
+  const claimedWrite = docRef.set({
+    ...(sharedWritePayload ?? {}),
+    lineUserId,
+    status: 'claimed',
+    claimedAt: FieldValue.serverTimestamp(),
+    appliedAt: null,
+  }, { merge: true })
+
+  if (sideLookupsDone) {
+    await claimedWrite
+  }
+  else {
+    // legacy 路徑：寫入與好友／basicId 查詢並行
+    const [, profileRes, basicIdRes] = await Promise.all([
+      claimedWrite,
+      getUserProfile(lineUserId, claimWorkspaceId).catch(() => null),
+      resolveLineOaBasicId(claimWorkspaceId).catch(() => ''),
+    ])
+    followProfile = profileRes
+    lineOaBasicId = basicIdRes
+  }
 
   // 若使用者已加好友，標記為 immediatelyApplied（樂觀）
   // 實際貼標與模組推播由前端背景呼叫 /api/liff/apply 完成，避免 LINE pushMessage API 阻塞回應
   const immediatelyApplied = !!followProfile
-  const lineOaBasicId = await resolveLineOaBasicId(claimWorkspaceId).catch(() => '')
 
   const redirectUrl = String(claim.redirectUrl || '').trim() || undefined
 

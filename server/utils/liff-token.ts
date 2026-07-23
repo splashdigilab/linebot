@@ -30,12 +30,19 @@ export async function verifyLiffAccessToken(accessToken: string): Promise<Verifi
     throw createError({ statusCode: 401, statusMessage: 'LIFF access token is required' })
   }
 
+  // 兩個 LINE 端點互不依賴，並行呼叫省一次網路往返；判定順序仍是先 verify 後 profile
+  const [verifySettled, profileSettled] = await Promise.allSettled([
+    fetch(`${LINE_API_BASE}/oauth2/v2.1/verify?access_token=${encodeURIComponent(token)}`),
+    fetch(`${LINE_API_BASE}/v2/profile`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }),
+  ])
+
   // 1. token 有效性（LINE 官方 verify 端點要求 access_token 走 query string）
   let clientId = ''
   try {
-    const verifyRes = await fetch(
-      `${LINE_API_BASE}/oauth2/v2.1/verify?access_token=${encodeURIComponent(token)}`,
-    )
+    if (verifySettled.status === 'rejected') throw verifySettled.reason
+    const verifyRes = verifySettled.value
     const verifyData = await verifyRes.json().catch(() => ({})) as {
       client_id?: string
       expires_in?: number
@@ -57,9 +64,8 @@ export async function verifyLiffAccessToken(accessToken: string): Promise<Verifi
 
   // 2. 以 token 取得真實 profile（userId 不信任 client 自報）
   try {
-    const profileRes = await fetch(`${LINE_API_BASE}/v2/profile`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    if (profileSettled.status === 'rejected') throw profileSettled.reason
+    const profileRes = profileSettled.value
     if (!profileRes.ok) {
       throw createError({ statusCode: 401, statusMessage: 'Invalid LIFF access token (profile)' })
     }

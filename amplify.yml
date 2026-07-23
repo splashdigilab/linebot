@@ -9,6 +9,8 @@ frontend:
         - npm run test:unit
         - npm run typecheck
         - npm run build
+        # 活動入口頁(/liff/lead)註冊成 Amplify 靜態路由,免 Lambda 冷啟動直出
+        - node scripts/patch-amplify-manifest.mjs
   artifacts:
     baseDirectory: .output
     files:
