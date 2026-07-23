@@ -14,11 +14,6 @@ export default defineNuxtConfig({
 
   nitro: {
     preset: 'aws-amplify',
-    // 產出 liff/lead.html（而非 liff/lead/index.html）：Amplify 靜態層才能以
-    // 「路徑 + .html」解析無副檔名網址，讓活動入口頁不經 Lambda、免冷啟動直出
-    prerender: {
-      autoSubfolderIndex: false,
-    },
     experimental: {
       tasks: true,
     },
@@ -51,9 +46,6 @@ export default defineNuxtConfig({
   routeRules: {
     '/admin/**': { ssr: false },
     '/liff/**': { ssr: false },
-    // 活動入口頁：build 時就產出 SPA 殼（scripts/patch-amplify-manifest.mjs 會把它
-    // 註冊成 Amplify 靜態路由），第一屏 spinner 不用等 Lambda 冷啟動
-    '/liff/lead': { ssr: false, prerender: true },
   },
 
   vite: {
