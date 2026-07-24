@@ -27,6 +27,7 @@ export default defineEventHandler(async (event) => {
         amount: o.amount,
         status: o.status,
         paymentType: o.paymentType ?? null,
+        failReason: o.failReason ?? null,
         createdAt: toMs(o.createdAt),
         paidAt: toMs(o.paidAt),
         invoiceNumber: o.invoiceNumber ?? null,

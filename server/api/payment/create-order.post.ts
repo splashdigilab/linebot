@@ -2,15 +2,15 @@ import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import { BILLING_PLAN_ORDER, getBillingPlan } from '~~/shared/billing/plans'
 import type { BillingPlanId } from '~~/shared/billing/plans'
-import { buildTradeInfo, makeTradeSha } from '~~/server/utils/newebpay'
-import { createPendingOrder, findRecentPendingOrder, newMerchantOrderNo } from '~~/server/utils/payment'
+import { PAYUNI_ENDPOINTS, buildUppForm, resolvePayuniEnv } from '~~/server/utils/payuni'
+import { createPendingOrder, findRecentPendingOrder, newMerchantOrderNo, supersedePendingOrders } from '~~/server/utils/payment'
 import type { WorkspaceDoc } from '~~/shared/types/organization'
 
 /**
  * POST /api/payment/create-order
  * body: { workspaceId, planId }
  *
- * 建立一筆 pending 訂單,回傳藍新 MPG 自動送出表單所需欄位。
+ * 建立一筆 pending 訂單,回傳 PAYUNi 統一金流 整合式支付頁(UPP)自動送出表單所需欄位。
  * 金額由後端依方案表決定(不信前端傳值);免費 / 客製方案不支援線上結帳。
  * 需 admin(帳號管理員 / 組織管理員 / super admin)。
  */
@@ -28,9 +28,9 @@ export default defineEventHandler(async (event) => {
   }
 
   const config = useRuntimeConfig(event)
-  const merchantId = String(config.newebpayMerchantId || '').trim()
+  const merchantId = String(config.payuniMerchantId || '').trim()
   const base = String(config.appBaseUrl || '').trim().replace(/\/$/, '')
-  if (!merchantId || !config.newebpayHashKey || !config.newebpayHashIV) {
+  if (!merchantId || !config.payuniHashKey || !config.payuniHashIV) {
     throw createError({ statusCode: 500, statusMessage: '金流尚未設定' })
   }
   if (!base) {
@@ -42,38 +42,37 @@ export default defineEventHandler(async (event) => {
   if (!wsSnap.exists) throw createError({ statusCode: 404, statusMessage: '找不到此官方帳號' })
   const organizationId = (wsSnap.data() as WorkspaceDoc).organizationId ?? null
 
-  // 去重:同帳號同方案近 30 分鐘內已有 pending 訂單 → 沿用同一單號(藍新端亦擋重複付款),
-  // 避免連點兩下 / 雙分頁重複扣款。
+  // 去重:同帳號同方案近 30 分鐘內已有 pending 訂單 → 沿用同一單號(連點/雙分頁不重複扣款)。
   const existing = await findRecentPendingOrder(workspaceId, planId, new Date(), db)
+  // 作廢此帳號其它待付款(換方案/放棄的舊單) → 帳單頁只留一筆進行中;保留要沿用的 existing。
+  await supersedePendingOrders(workspaceId, existing?.merchantOrderNo ?? null, db)
   const amount = existing?.amount ?? plan.priceMonthly
   const merchantOrderNo = existing?.merchantOrderNo ?? newMerchantOrderNo(new Date())
   if (!existing) {
     await createPendingOrder({ merchantOrderNo, workspaceId, organizationId, planId, amount, createdBy: uid }, db)
   }
 
-  const keys = { hashKey: String(config.newebpayHashKey), hashIV: String(config.newebpayHashIV) }
-  const params: Record<string, string | number> = {
-    MerchantID: merchantId,
-    RespondType: 'JSON',
-    TimeStamp: Math.floor(Date.now() / 1000),
-    Version: '2.0',
-    MerchantOrderNo: merchantOrderNo,
-    Amt: amount,
-    ItemDesc: `${plan.name}方案(1 個月)`,
-    NotifyURL: `${base}/newebpay/notify`,
-    ReturnURL: `${base}/newebpay/return?ws=${encodeURIComponent(workspaceId)}&no=${merchantOrderNo}`,
+  const keys = { merKey: String(config.payuniHashKey), merIV: String(config.payuniHashIV) }
+  const encryptInfo: Record<string, string | number> = {
+    MerID: merchantId,
+    MerTradeNo: merchantOrderNo,
+    TradeAmt: amount,
+    Timestamp: Math.floor(Date.now() / 1000),
+    ProdDesc: `${plan.name}方案(1 個月)`,
+    NotifyURL: `${base}/payuni/notify`,
+    ReturnURL: `${base}/payuni/return?ws=${encodeURIComponent(workspaceId)}&no=${merchantOrderNo}`,
   }
   const email = String(token.email || '').trim()
-  if (email) params.Email = email
+  if (email) encryptInfo.UsrMail = email
 
-  const tradeInfo = buildTradeInfo(params, keys)
-  const tradeSha = makeTradeSha(tradeInfo, keys)
+  const env = resolvePayuniEnv(config.payuniEnv)
+  const fields = buildUppForm(encryptInfo, keys)
 
-  // 前端據此建 hidden form 自動 POST 到 action
+  // 前端據此建 hidden form 自動 POST 到 action（fields = { MerID, Version, EncryptInfo, HashInfo }）
   return {
     merchantOrderNo,
-    action: String(config.newebpayApiUrl || '').trim(),
+    action: PAYUNI_ENDPOINTS[env],
     method: 'POST',
-    fields: { MerchantID: merchantId, TradeInfo: tradeInfo, TradeSha: tradeSha, Version: '2.0' },
+    fields,
   }
 })

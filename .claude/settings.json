@@ -78,7 +78,13 @@
       "Bash(gcloud auth *)",
       "Bash(gcloud config *)",
       "Bash(gcloud services *)",
-      "Bash(gcloud scheduler *)"
+      "Bash(gcloud scheduler *)",
+      "Bash(node backlog-report.tmp.mjs .env_myfeel)",
+      "Bash(node backlog-report.tmp.mjs .env_splash)",
+      "Bash(K=KO9qtyN6sUVNzG6fSvqoILwwF2sOY8dr V=BPLnoBRlDdXio7CQ node -e ' *)",
+      "WebFetch(domain:docs.wpbrewer.com)",
+      "WebFetch(domain:www.payuni.com.tw)",
+      "WebFetch(domain:help.qdm.tw)"
     ],
     "additionalDirectories": [
       "/Users/kevin/.claude",

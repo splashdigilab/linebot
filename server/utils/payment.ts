@@ -148,6 +148,7 @@ export async function createPendingOrder(
     periodNo: null,
     tradeNo: null,
     paymentType: null,
+    failReason: null,
     periodStart: null,
     periodEnd: null,
     createdBy: order.createdBy ?? null,
@@ -167,6 +168,68 @@ export async function getOrder(
 ): Promise<PaymentOrderDoc | null> {
   const snap = await db.collection(PAYMENT_ORDERS_COLLECTION).doc(merchantOrderNo).get()
   return snap.exists ? (snap.data() as PaymentOrderDoc) : null
+}
+
+/**
+ * 作廢此帳號「其它還在 pending 的訂單」（留下 keepOrderNo 那筆）。
+ * 建新單 / 沿用單前呼叫 → 帳單頁**永遠只有一筆進行中的待付款**,一次解決「繼續付款堆一排」
+ * 與「換方案 A→B 留兩筆」（keepOrderNo 傳沿用的舊單號,沒有沿用就傳 null 全清）。
+ * 誤殺客戶隨後才付款的舊單也沒關係:settlePaidOrder 對「expired + 已付款」仍會復活開通
+ * （見該函式,收了錢就得給服務）。查詢沿用 (workspaceId, createdAt) 既有索引;失敗安全跳過。
+ */
+export async function supersedePendingOrders(
+  workspaceId: string,
+  keepOrderNo: string | null,
+  db: Firestore = getDb(),
+): Promise<number> {
+  try {
+    const snap = await db.collection(PAYMENT_ORDERS_COLLECTION)
+      .where('workspaceId', '==', workspaceId)
+      .orderBy('createdAt', 'desc')
+      .limit(30)
+      .get()
+    const batch = db.batch()
+    let n = 0
+    for (const d of snap.docs) {
+      const o = d.data() as PaymentOrderDoc
+      if (o.status !== 'pending' || o.merchantOrderNo === keepOrderNo) continue
+      batch.update(d.ref, { status: 'expired' as PaymentOrderStatus, updatedAt: FieldValue.serverTimestamp() })
+      n++
+    }
+    if (n > 0) await batch.commit()
+    return n
+  }
+  catch (e) {
+    console.warn('[payment] supersedePendingOrders failed (skip):', e)
+    return 0
+  }
+}
+
+/** 列出 pending 訂單（主動查單對帳用）。limit 上限避免 backlog 一次撈爆 + 對閘道打太多查詢。 */
+export async function getPendingOrders(db: Firestore = getDb(), limit = 200): Promise<PaymentOrderDoc[]> {
+  const snap = await db.collection(PAYMENT_ORDERS_COLLECTION).where('status', '==', 'pending').limit(limit).get()
+  return snap.docs.map(d => d.data() as PaymentOrderDoc)
+}
+
+/**
+ * 作廢一筆「自己帳號」的 pending 訂單（使用者在帳單頁按「取消」）。
+ * transaction 內先確認歸屬與現況:不是自己的擋掉、已非 pending 也擋掉（避免作廢已付款的單）。
+ */
+export async function voidPendingOrder(
+  merchantOrderNo: string,
+  workspaceId: string,
+  db: Firestore = getDb(),
+): Promise<'voided' | 'not_pending' | 'not_found' | 'forbidden'> {
+  const ref = db.collection(PAYMENT_ORDERS_COLLECTION).doc(merchantOrderNo)
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref)
+    if (!snap.exists) return 'not_found'
+    const o = snap.data() as PaymentOrderDoc
+    if (o.workspaceId !== workspaceId) return 'forbidden'
+    if (o.status !== 'pending') return 'not_pending'
+    tx.update(ref, { status: 'expired' as PaymentOrderStatus, updatedAt: FieldValue.serverTimestamp() })
+    return 'voided'
+  })
 }
 
 /** 建單去重視窗:同帳號同方案在此時間內的 pending 訂單會被沿用,避免連點重複扣款。 */
@@ -234,6 +297,8 @@ export async function settlePaidOrder(
     paid: boolean
     tradeNo?: string | null
     paymentType?: string | null
+    /** 付款失敗時的原因（PAYUNi Message）；標記 failed 時一併寫入供帳單頁顯示 */
+    failReason?: string | null
     /** Notify 回傳的付款金額；與訂單金額不符則標記失敗、不開通（防竄改） */
     amount?: number
     /** 定期定額委託單號（首期 Notify 回傳）；有值 → 訂閱開啟自動續訂 */
@@ -249,9 +314,11 @@ export async function settlePaidOrder(
     const snap = await tx.get(orderRef)
     if (!snap.exists) return { outcome: 'unknown' }
     const order = snap.data() as PaymentOrderDoc
-    if (order.status !== 'pending') {
-      // 已結算過（redelivery）→ 冪等跳過。但仍回報 supersedes（僅限先前真的開通的 paid 單）,
-      // 讓「首次開通成功、終止舊委託卻失敗」的情況能在藍新重送時補做終止（終止冪等）。
+    // 冪等 / 終態保護：
+    // - paid  → 一律跳過（redelivery）。仍回報 supersedes（僅先前真的開通的 paid 單）,
+    //           讓「首次開通成功、終止舊委託卻失敗」能在重送時補做終止（終止冪等）。
+    // - failed → 跳過（視為終態決標,不因後續回拋反覆改）。
+    if (order.status === 'paid' || order.status === 'failed') {
       return {
         outcome: 'already',
         workspaceId: order.workspaceId,
@@ -261,6 +328,12 @@ export async function settlePaidOrder(
           : {}),
       }
     }
+    // 逾期單：**這次確認已付款才復活開通**——收了錢就得給服務（例:建單時自動作廢舊
+    // 待付款後,客戶隔一會兒才在舊付款頁完成付款）。非付款成功的 expired 一律跳過。
+    if (order.status === 'expired' && !input.paid) {
+      return { outcome: 'already', workspaceId: order.workspaceId, planId: order.planId }
+    }
+    // 到此：status === 'pending',或（expired && paid）→ 往下結算開通
 
     // 讀現有訂閱（續訂堆疊 + 保留 quotaOverride 用）;Firestore 要求所有讀在所有寫之前
     const wsRef = db.collection('workspaces').doc(order.workspaceId)
@@ -278,13 +351,13 @@ export async function settlePaidOrder(
     }
 
     if (!input.paid) {
-      tx.update(orderRef, { ...base, status: 'failed' as PaymentOrderStatus })
+      tx.update(orderRef, { ...base, status: 'failed' as PaymentOrderStatus, failReason: input.failReason ?? '付款未成功' })
       return { outcome: 'settled', workspaceId: order.workspaceId, planId: order.planId }
     }
 
     if (input.amount != null && input.amount !== order.amount) {
       // 付款金額與建單金額不符（疑似竄改）→ 不開通,標記失敗
-      tx.update(orderRef, { ...base, status: 'failed' as PaymentOrderStatus })
+      tx.update(orderRef, { ...base, status: 'failed' as PaymentOrderStatus, failReason: `金額不符（應付 NT$${order.amount}）` })
       return { outcome: 'settled', workspaceId: order.workspaceId, planId: order.planId, amountMismatch: true }
     }
 
@@ -467,8 +540,12 @@ export async function settleRecurringAuth(
 
 // ── 每日續期對帳（reconcile）────────────────────────────────────────
 
-/** pending 訂單保留天數:放寬到 4 天以涵蓋 ATM/超商繳費期,逾期才視為 expired（純清理）。 */
-const STALE_PENDING_MS = 4 * 24 * 60 * 60 * 1000
+/**
+ * pending 訂單「無人聞問」多久算逾期（reconcile 純清理）。信用卡即時付款,3 小時綽綽有餘。
+ * ⚠️ 未來若開 ATM／超商代碼（繳費碼可用數天），要改成按 kind 給更長 TTL,否則會把「還能繳」的
+ *    單提早標逾期。就算標了,客戶事後真的繳費,settlePaidOrder 對「expired + 已付款」仍會復活開通。
+ */
+const STALE_PENDING_MS = 3 * 60 * 60 * 1000
 
 /**
  * 每日對帳：① 過期的訂閱 → 滾到當期（免費層補回額度；付費方案沒續費則降回免費）

@@ -184,6 +184,24 @@ describe('settlePaidOrder', () => {
     expect(db._store.get('workspaces/ws1')).toBeUndefined()
   })
 
+  it('逾期單 + 這次確認已付款 → 復活開通（自動作廢後客戶才付款也不漏單、不吞錢）', async () => {
+    const db = makeDb({ 'paymentOrders/NP1': pendingOrder({ status: 'expired' }) }) as any
+    const r = await settlePaidOrder({ merchantOrderNo: 'NP1', paid: true, amount: 499, tradeNo: 'T9', now: JUL28 }, db)
+
+    expect(r.outcome).toBe('settled')
+    expect(db._store.get('paymentOrders/NP1').status).toBe('paid')
+    expect(db._store.get('workspaces/ws1').subscription).toMatchObject({ planId: 'lite', status: 'active' })
+  })
+
+  it('逾期單 + 非付款成功 → 跳過、不動（不把 expired 改成 failed）', async () => {
+    const db = makeDb({ 'paymentOrders/NP1': pendingOrder({ status: 'expired' }) }) as any
+    const r = await settlePaidOrder({ merchantOrderNo: 'NP1', paid: false, now: JUL28 }, db)
+
+    expect(r.outcome).toBe('already')
+    expect(db._store.get('paymentOrders/NP1').status).toBe('expired')
+    expect(db._store.get('workspaces/ws1')).toBeUndefined()
+  })
+
   it('已結算（redelivery）→ 冪等跳過、不覆蓋', async () => {
     const db = makeDb({ 'paymentOrders/NP1': pendingOrder({ status: 'paid', tradeNo: 'ORIG' }) }) as any
     const r = await settlePaidOrder({ merchantOrderNo: 'NP1', paid: true, tradeNo: 'DUP', now: JUL28 }, db)

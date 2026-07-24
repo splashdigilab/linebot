@@ -1,12 +1,41 @@
 # 待辦清單（依優先順序）
 
-> 最後更新：2026-07-15（已完成：額度升級提示、組織後台（總覽／帳務／管理員）、發票搬組織層、死路頁改造、OA 數量上限）
+> 最後更新：2026-07-24（金流改用 PAYUNi 統一金流；Stage 1 沙盒付款頁實測通過）
 > 排序原則：**先排「有前置時間、你不動它就一直卡著」的事**，再排「不做會扣錯錢」的，
 > 再排「服務已付費客戶」的，最後才是成長與商業完整性。
 
 ---
 
-## 🚨 第 0 順位 — 今天就送出（不是工程工作，但不送就全卡住）
+## 🔄 金流已改用 PAYUNi 統一金流（2026-07-24）
+
+原本整套是藍新 NewebPay；改用 PAYUNi（AES-256-GCM / EncryptInfo / HashInfo，與藍新不相容）。
+**帳本、開通、發票、對帳、帳單 UI 全部沿用**，只換了加密＋欄位＋端點。藍新程式全數保留但未接線。
+
+**已完成（未 commit）**
+- `server/utils/payuni.ts` 加解密/簽章 + `payuni.test.ts`（20 綠）；create-order 改走 PAYUNi UPP；
+  `routes/payuni/{notify,return}`；`paymentEnabled` 改吃 `PAYUNI_*`；App 文案改「統一金流 PAYUNi」。
+- **Stage 1 實測通過**：沙盒付款頁正常開出、資料全對 → 加密位元組相容。
+- **P0-1 查單對帳**：reconcile 先對每筆 pending 打 PAYUNi `trade/query`，已付就走 Notify 同一條開通路徑
+  （`payuni-fulfill.ts` 共用）；避免「漏接 Notify → 收了錢沒開通 → 被誤判逾期」。
+- **P0-3 待付款可續/可取消**：帳單頁 pending 列加「繼續付款 / 取消」（`void-order` 端點）。
+- **付款紀錄優化（2026-07-24）**：① 建新單前自動作廢此帳號 >30 分的舊待付款（`expireStalePendingOrders`）→ 帳單頁只留一筆進行中的待付款，不再堆一排。② **「逾期但這次確認已付款」仍復活開通**（settlePaidOrder 補洞，收了錢就得給服務，不吞錢）。③ 帳單頁預設只顯示已付款＋進行中待付款＋失敗，**只把已逾期收進「查看全部」**。
+- **付款失敗 UX（P1-5，2026-07-24）**：失敗訂單顯示原因（`failReason` = PAYUNi Message／金額不符）＋ 一鍵「重新付款」。P1-4「繼續付款語意」已由 P0-1 解決（畫面只剩一筆進行中）。
+- **P2 清理/自動化（2026-07-24）**：① `payment-reconcile-tick` middleware（見待驗清單 #3）② `expireStalePendingOrders`→ **`supersedePendingOrders`**（建單前作廢其它 pending，含**換方案 A→B**，帳單頁永遠一筆進行中；`keepOrderNo` 保留沿用的舊單）③ 逾期門檻 **4 天→3 小時**（信用卡即時付款；未來開 ATM/超商要按 kind 放長；P0-2 保底）。
+
+**還沒做 / 待驗（依優先）**
+1. [x] ✅ **Notify → 自動開通（模擬實測通過 2026-07-24）**：用真沙盒金鑰造合法 Notify 打本機（linebot dev 在 **:3001**，3000 被別的專案占）→ 訂單 paid、OA free→lite、冪等全對（寫進 linebot-e8dda 真 Firestore）。**真實刷卡的 Notify 尚未實收**（卡在測試卡；但格式與 handler 已用模擬證明）。
+2. [x] ✅ **`trade/query` 對真實 PAYUNi 沙盒驗證通過**：urlencoded 就通、HashInfo 驗簽過、可解密。**修掉 bug**：查單外層 Status 是 QUERY 碼非 SUCCESS → 新增 `isTradePaid`（reconcile 用它、且只在已付款才 settle，不會把等付款的 pending 誤標 failed）。⚠️ 尚未對「真的已付款」的單查過（確認 paid 分支欄位仍是 TradeStatus）。
+3. [x] ✅ **對帳會自動跑了（2026-07-24）**：抽 `runBillingReconcile` 共用；新增 `payment-reconcile-tick` middleware（正式環境有 API 流量時每 30 分順便跑，dev 不跑，全程冪等）→ 不靠外部排程也會對帳。外部 EventBridge/Cloud Scheduler 打 `/api/payment/reconcile`（帶 `X-Cron-Secret`）仍可接為更穩的主排程（選配）。
+4. [ ] **P1 自動續訂（定期定額）**：現在只有單次付款 → 一個月後降免費、要手動再刷。PAYUNi 信用卡約定扣款。留存/營收命脈。
+5. [ ] **P1 電子發票接哪家（決策）**：目前指向 ezPay（另一家、另申請）。PAYUNi 自帶電子發票 → 建議改用 PAYUNi（同一家、共用底座）。
+6. [~] **P1 付款失敗 UX / 收據信**：失敗原因顯示 + 一鍵重新付款 ✅（2026-07-24）；**收據/通知信（SES）已寫未開**（要 `EMAIL_FROM` + 驗證網域 + 出 sandbox）待做。
+7. [~] **P2 其餘**：✅ **super admin 金流總覽**（`/admin/super/payments`：本月營收/成交/待付款摘要 + 近 200 筆跨 OA 明細）、✅ **清藍新殘留續訂路徑**（`recurringEnabled` 一律 false，前端不再可能走到藍新 `create-subscription`）。⬜ 退款流程（PAYUNi `trade/close`，會動錢、建議連真實金流一起測）、期中升降級 proration（配自動續訂一起做）、含稅/未稅對齊（問會計）。
+
+詳見記憶 `payuni-switch`。
+
+---
+
+## 🚨 第 0 順位 —（★已被上面 PAYUNi 段取代，保留備查）今天就送出（不是工程工作，但不送就全卡住）
 
 藍新與 ezPay 都是**申請制**，送件到開通有數天到數週的前置時間。這幾件事本身花不到一小時，
 但你晚一天送，整個收款上線就晚一天。**先送件，再回來寫程式。**

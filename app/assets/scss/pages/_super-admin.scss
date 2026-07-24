@@ -122,3 +122,29 @@
 .ws-sa-select-error .el-select__wrapper {
   box-shadow: 0 0 0 1px var(--color-error) inset;
 }
+
+/* 金流總覽：本月摘要（營收 / 成交 / 待付款） */
+.sa-pay-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem 2.5rem;
+}
+
+.sa-pay-stat__label {
+  font-size: 0.78rem;
+  color: var(--color-text-secondary, #6b7280);
+}
+
+.sa-pay-stat__value {
+  margin-top: 0.15rem;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--color-text-primary, #111827);
+}
+
+/* 金流總覽：訂單編號等寬字，方便對帳 */
+.sa-pay-order-no {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  color: #4b5563;
+}

@@ -73,7 +73,7 @@
   gap: 12px;
 }
 
-/* 帳單頁：藍新導回後的結果提示（說明文字 + 輪詢狀態／重新整理鈕同一列） */
+/* 帳單頁：金流導回後的結果提示（說明文字 + 輪詢狀態／重新整理鈕同一列） */
 .billing-return-body {
   display: flex;
   align-items: center;
@@ -81,7 +81,7 @@
   gap: 12px;
 }
 
-/* 帳單頁：付款紀錄的訂單編號（等寬字，方便跟藍新對帳／報給客服） */
+/* 帳單頁：付款紀錄的訂單編號（等寬字，方便跟金流對帳／報給客服） */
 /* 初次載入時的方案骨架：避免付費客戶在資料到位前先看到「尚未開通」 */
 .billing-plan-loading {
   display: flex;
@@ -96,6 +96,14 @@
   font-size: 12px;
   color: #4b5563;
   letter-spacing: 0.01em;
+}
+
+/* 帳單頁：付款失敗原因（狀態標籤下方的紅字，讓客戶/客服一眼看到為什麼沒扣成功） */
+.billing-fail-reason {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--el-color-danger);
 }
 
 /* 帳單頁：「沿用組織的發票設定」摘要列。

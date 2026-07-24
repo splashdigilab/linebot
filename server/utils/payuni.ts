@@ -28,6 +28,26 @@ export const PAYUNI_ENDPOINTS = {
   prod: 'https://api.payuni.com.tw/api/upp',
 } as const
 
+/** PAYUNi 交易查詢（trade/query）端點——主動對帳:漏接 Notify 時拿回真實付款狀態。 */
+export const PAYUNI_QUERY_ENDPOINTS = {
+  test: 'https://sandbox-api.payuni.com.tw/api/trade/query',
+  prod: 'https://api.payuni.com.tw/api/trade/query',
+} as const
+
+/**
+ * 把 PAYUNI_ENV 正規化成 'test' | 'prod'。
+ * ⚠️ **不要**用 `=== 'prod'` 硬比：`production`/`PROD`/前後空白 都該算正式,否則正式環境一個
+ *    小拼字就靜默把真客戶導到沙盒、刷不到錢。無法識別的值**保守用 test 並警告**（寧可測試站
+ *    也不要拿設定錯的環境去真的扣客戶錢）。
+ */
+export function resolvePayuniEnv(raw: unknown): 'test' | 'prod' {
+  const v = String(raw ?? '').trim().toLowerCase()
+  if (['prod', 'production', 'live', 'core'].includes(v)) return 'prod'
+  if (['test', 'sandbox', 'dev', 'staging', ''].includes(v)) return 'test'
+  console.warn(`[payuni] 無法識別的 PAYUNI_ENV="${String(raw)}",保守用 test（沙盒）。正式請設 PAYUNI_ENV=prod`)
+  return 'test'
+}
+
 /** PAYUNi 特店金鑰(每租戶各一組)。Hash Key 須 32 碼、IV Key 須 16 碼。 */
 export interface PayuniKeys {
   /** 商店 Hash Key（AES-256 金鑰，32 bytes） */
@@ -125,22 +145,72 @@ export function buildUppForm(
   }
 }
 
-/** PAYUNi Notify／Return 解密後的交易結果（僅列開通會用到的欄位；其餘保留）。 */
+/**
+ * PAYUNi Notify／Return **解密後**的交易結果（僅列開通會用到的欄位；其餘保留）。
+ * ⚠️ 判斷是否付款成功看的是這裡的 `TradeStatus`,不是外層回傳的 `Status`——
+ *    外層 Status 只代表「API 回應正常」,錢有沒有進來要看 TradeStatus（見 isPayuniPaid）。
+ */
 export interface PayuniTradeResult {
-  /** SUCCESS = 付款成功 */
-  Status?: string
   MerID?: string
   /** 我方送出的商店訂單編號（帳本冪等鍵） */
   MerTradeNo?: string
-  /** PAYUNi 端交易序號 */
+  /** PAYUNi 端交易序號（UNi 序號） */
   TradeNo?: string
   /** 交易金額 */
   TradeAmt?: string
-  /** 付款方式（如 CREDIT） */
+  /** 交易狀態：'0'待付款 · '1'已付款 · '2'付款失敗 · '3'付款取消 */
+  TradeStatus?: string
+  /** 付款方式代碼：'1'=信用卡… */
   PaymentType?: string
+  /** 錯誤／狀態訊息 */
+  Message?: string
   /** 授權時間 */
   PayTime?: string
   [k: string]: string | undefined
+}
+
+/** PAYUNi 付款方式代碼 → 對齊帳單頁既有標籤（payTypeLabel 認得的 token）。未知碼原樣保留。 */
+const PAYUNI_PAYMENT_TYPE: Record<string, string> = {
+  1: 'CREDIT', // 信用卡
+}
+export function payuniPaymentType(code?: string | null): string | null {
+  if (!code) return null
+  return PAYUNI_PAYMENT_TYPE[String(code)] ?? String(code)
+}
+
+/**
+ * 交易本身是否已付款——只看解密後的 `TradeStatus === '1'`（已付款）。
+ * ⚠️ **查單對帳（trade/query）用這支**,不能用 isPayuniPaid:查單回傳的外層 Status 是查詢碼
+ *    （如 QUERY03001「查無訂單」/查到時另有代碼）,**不是** Notify 的 'SUCCESS';用 isPayuniPaid
+ *    會把「查到的已付款單」誤判成沒付。查無訂單時解密結果沒有 TradeStatus → 這裡回 false（安全）。
+ */
+export function isTradePaid(result: PayuniTradeResult | null): boolean {
+  return String(result?.TradeStatus ?? '') === '1'
+}
+
+/**
+ * 這筆 **Notify／Return** 是否代表「付款成功」。
+ * 兩層都要成立（比藍新多一層）：外層 `Status` 是 SUCCESS/OK（API 正常）
+ * 且解密後 `TradeStatus === '1'`（已付款）。任一不成立都不得開通。
+ */
+export function isPayuniPaid(outerStatus: string, result: PayuniTradeResult | null): boolean {
+  const apiOk = ['SUCCESS', 'OK'].includes(String(outerStatus || '').trim().toUpperCase())
+  return apiOk && isTradePaid(result)
+}
+
+/**
+ * 組交易查詢（trade/query）的 POST 欄位:以商店訂單編號 MerTradeNo 查一筆交易現況。
+ * 與 buildUppForm 同一套簽章,只是內層 encryptInfo 帶查詢欄位。回傳格式與 Notify 相同
+ * （{ Status, EncryptInfo, HashInfo }）→ 用 verifyAndDecryptPayuniNotify 解、isPayuniPaid 判定。
+ */
+export function buildTradeQuery(
+  merchantId: string,
+  merchantOrderNo: string,
+  keys: PayuniKeys,
+  timestamp: number,
+  version = '1.0',
+): PayuniUppForm {
+  return buildUppForm({ MerID: merchantId, MerTradeNo: merchantOrderNo, Timestamp: timestamp }, keys, version)
 }
 
 /**

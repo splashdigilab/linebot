@@ -1,11 +1,16 @@
 import { createHash } from 'crypto'
 import { describe, expect, it } from 'vitest'
 import {
+  buildTradeQuery,
   buildUppForm,
   decrypt,
   encodeEncryptInfo,
   encrypt,
+  isPayuniPaid,
+  isTradePaid,
   makeHashInfo,
+  payuniPaymentType,
+  resolvePayuniEnv,
   verifyAndDecryptPayuniNotify,
   verifyHashInfo,
 } from './payuni'
@@ -76,6 +81,20 @@ describe('HashInfo 簽章', () => {
   })
 })
 
+describe('buildTradeQuery(交易查詢)', () => {
+  it('簽章正確,內層帶 MerID/MerTradeNo/Timestamp,回傳與 UPP 同形狀', () => {
+    const q = buildTradeQuery('S076820628', 'NP1', KEYS, 1700000000)
+    expect(q.MerID).toBe('S076820628')
+    expect(q.Version).toBe('1.0')
+    expect(verifyHashInfo(q.EncryptInfo, q.HashInfo, KEYS)).toBe(true)
+    expect(decrypt(q.EncryptInfo, KEYS)).toEqual({
+      MerID: 'S076820628',
+      MerTradeNo: 'NP1',
+      Timestamp: '1700000000',
+    })
+  })
+})
+
 describe('buildUppForm', () => {
   it('產出四個 POST 欄位,HashInfo 對得上 EncryptInfo', () => {
     const form = buildUppForm(
@@ -107,5 +126,62 @@ describe('verifyAndDecryptPayuniNotify(模擬 PAYUNi 回傳)', () => {
 describe('encodeEncryptInfo', () => {
   it('串成 x-www-form-urlencoded query', () => {
     expect(encodeEncryptInfo({ a: 1, b: 'x y' })).toBe('a=1&b=x+y')
+  })
+})
+
+describe('isTradePaid(查單對帳:只看 TradeStatus)', () => {
+  it('TradeStatus=1 → 已付款,不管外層狀態', () => {
+    expect(isTradePaid({ TradeStatus: '1' })).toBe(true)
+  })
+  it('查無訂單(無 TradeStatus)/未付/失敗 → false', () => {
+    expect(isTradePaid({ Message: '查無符合訂單資料' })).toBe(false) // 查單 not-found 解密結果
+    expect(isTradePaid({ TradeStatus: '0' })).toBe(false)
+    expect(isTradePaid({ TradeStatus: '2' })).toBe(false)
+    expect(isTradePaid(null)).toBe(false)
+  })
+})
+
+describe('isPayuniPaid(兩層成功判定)', () => {
+  it('外層 Status=SUCCESS 且 TradeStatus=1 → 付款成功', () => {
+    expect(isPayuniPaid('SUCCESS', { TradeStatus: '1' })).toBe(true)
+    expect(isPayuniPaid('OK', { TradeStatus: '1' })).toBe(true)
+  })
+  it('外層 SUCCESS 但 TradeStatus 非 1（待付款/失敗/取消）→ 不算成功', () => {
+    expect(isPayuniPaid('SUCCESS', { TradeStatus: '0' })).toBe(false)
+    expect(isPayuniPaid('SUCCESS', { TradeStatus: '2' })).toBe(false)
+    expect(isPayuniPaid('SUCCESS', { TradeStatus: '3' })).toBe(false)
+  })
+  it('外層非 SUCCESS → 一律不算成功(就算 TradeStatus=1)', () => {
+    expect(isPayuniPaid('ERROR', { TradeStatus: '1' })).toBe(false)
+    expect(isPayuniPaid('', { TradeStatus: '1' })).toBe(false)
+  })
+  it('result 為 null 不炸,回 false', () => {
+    expect(isPayuniPaid('SUCCESS', null)).toBe(false)
+  })
+})
+
+describe('resolvePayuniEnv(別讓拼字把正式導到沙盒)', () => {
+  it('各種正式寫法都算 prod', () => {
+    for (const v of ['prod', 'production', 'PROD', 'Production', ' prod ', 'live', 'core']) {
+      expect(resolvePayuniEnv(v)).toBe('prod')
+    }
+  })
+  it('測試/空值算 test', () => {
+    for (const v of ['test', 'sandbox', 'dev', 'staging', '', undefined, null]) {
+      expect(resolvePayuniEnv(v)).toBe('test')
+    }
+  })
+  it('無法識別的值保守用 test（不拿設定錯的環境去扣真客戶）', () => {
+    expect(resolvePayuniEnv('prd')).toBe('test')
+    expect(resolvePayuniEnv('xyz')).toBe('test')
+  })
+})
+
+describe('payuniPaymentType', () => {
+  it("'1' → CREDIT(對齊帳單頁 payTypeLabel);未知碼原樣保留;空值 null", () => {
+    expect(payuniPaymentType('1')).toBe('CREDIT')
+    expect(payuniPaymentType('9')).toBe('9')
+    expect(payuniPaymentType('')).toBeNull()
+    expect(payuniPaymentType(null)).toBeNull()
   })
 })

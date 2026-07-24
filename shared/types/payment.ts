@@ -53,6 +53,8 @@ export interface PaymentOrderDoc {
   tradeNo?: string | null
   /** 付款方式（CREDIT / VACC / CVS…；Notify 回傳） */
   paymentType?: string | null
+  /** 付款失敗原因（PAYUNi 回傳的 Message 或「金額不符」等）；顯示在帳單頁供客戶/客服排查 */
+  failReason?: string | null
   /** 成功開通的本期起訖（YYYY-MM-DD，與訂閱一致） */
   periodStart?: string | null
   periodEnd?: string | null

@@ -4,7 +4,7 @@
       <AdminSoloPageHeading
         field-label="設定"
         title="訂閱與付款"
-        caption="查看目前方案與付款紀錄,或升級／續訂方案(付款由藍新金流處理)。"
+        caption="查看目前方案與付款紀錄,或升級／續訂方案(付款由統一金流 PAYUNi 處理)。"
       />
       <div class="flex gap-2 admin-header-actions">
         <el-button :loading="loading" @click="reloadAll">重新載入</el-button>
@@ -119,9 +119,17 @@
             <div class="card-header-main">
               <span class="section-title">付款紀錄</span>
             </div>
+            <el-button
+              v-if="hiddenOrderCount > 0 || showAllOrders"
+              size="small"
+              text
+              @click="showAllOrders = !showAllOrders"
+            >
+              {{ showAllOrders ? '只顯示重要' : `查看全部（含 ${hiddenOrderCount} 筆已逾期）` }}
+            </el-button>
           </div>
           <div class="card-section-stack">
-            <el-table :data="orders" size="small" empty-text="尚無付款紀錄">
+            <el-table :data="visibleOrders" size="small" empty-text="尚無付款紀錄">
               <el-table-column label="日期" min-width="140">
                 <template #default="{ row }">{{ fmtTime(row.createdAt) }}</template>
               </el-table-column>
@@ -134,9 +142,10 @@
               <el-table-column label="付款方式" min-width="90">
                 <template #default="{ row }">{{ payTypeLabel(row.paymentType) }}</template>
               </el-table-column>
-              <el-table-column label="狀態" min-width="80">
+              <el-table-column label="狀態" min-width="90">
                 <template #default="{ row }">
                   <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+                  <span v-if="row.status === 'failed' && row.failReason" class="billing-fail-reason">{{ row.failReason }}</span>
                 </template>
               </el-table-column>
               <el-table-column v-if="invoiceEnabled" label="發票號碼" min-width="110">
@@ -149,6 +158,23 @@
               <el-table-column label="訂單編號" min-width="170">
                 <template #default="{ row }">
                   <span class="billing-order-no">{{ row.merchantOrderNo }}</span>
+                </template>
+              </el-table-column>
+              <el-table-column label="操作" min-width="140">
+                <template #default="{ row }">
+                  <template v-if="row.status === 'pending'">
+                    <el-button size="small" type="primary" link :loading="actingOrder === row.merchantOrderNo" @click="resumePayment(row)">繼續付款</el-button>
+                    <el-button size="small" type="info" link :loading="actingOrder === row.merchantOrderNo" @click="cancelOrder(row)">取消</el-button>
+                  </template>
+                  <el-button
+                    v-else-if="row.status === 'failed'"
+                    size="small"
+                    type="primary"
+                    link
+                    :loading="actingOrder === row.merchantOrderNo"
+                    @click="resumePayment(row)"
+                  >重新付款</el-button>
+                  <span v-else class="text-xs text-muted">—</span>
                 </template>
               </el-table-column>
             </el-table>
@@ -228,6 +254,7 @@ interface OrderRow {
   amount: number
   status: PaymentOrderStatus
   paymentType: string | null
+  failReason?: string | null
   createdAt: number | null
   paidAt: number | null
   invoiceNumber?: string | null
@@ -239,6 +266,13 @@ const orders = ref<OrderRow[]>([])
 const hasFailedInvoice = computed(() =>
   orders.value.some(o => o.status === 'paid' && o.invoiceStatus === 'failed'),
 )
+
+// 帳單頁預設隱藏「已逾期」的放棄舊單（噪音）;已付款/進行中/失敗都留著（失敗要看得到原因+能重試）。
+const showAllOrders = ref(false)
+const visibleOrders = computed(() =>
+  showAllOrders.value ? orders.value : orders.value.filter(o => o.status !== 'expired'),
+)
+const hiddenOrderCount = computed(() => orders.value.length - visibleOrders.value.length)
 
 // ── 自動續訂 ──────────────────────────────────────────────
 /** 下次扣款日 = 本期到期日的隔天（藍新在錨定日當天扣款）。 */
@@ -346,7 +380,7 @@ function statusType(s: PaymentOrderStatus): 'success' | 'danger' | 'warning' | '
 }
 function planName(id: string) { return BILLING_PLANS[id as keyof typeof BILLING_PLANS]?.name ?? id }
 
-// 藍新付款方式代碼 → 看得懂的中文（對帳/客服問起來時用得到）
+// 付款方式代碼 → 看得懂的中文（對帳/客服問起來時用得到）
 const PAY_TYPE_LABEL: Record<string, string> = {
   CREDIT: '信用卡',
   VACC: 'ATM 轉帳',
@@ -362,7 +396,7 @@ function fmtTime(ms: number | null) {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-// 藍新導回帶的 ?order=;顯示付款結果(真正開通以 server→server 的 notify 為準,可能稍慢於導回)
+// 金流導回帶的 ?order=;顯示付款結果(真正開通以 server→server 的 notify 為準,可能稍慢於導回)
 const returnedOrder = computed(() => {
   const no = String(route.query.order || '').trim()
   if (!no) return null
@@ -403,6 +437,53 @@ function pollReturnedOrder() {
 async function loadOrders() {
   try { orders.value = await apiFetch<OrderRow[]>('/api/payment/orders') }
   catch { orders.value = [] }
+}
+
+// ── 待付款訂單:繼續付款 / 取消 ──────────────────────────────
+// submitToGateway 由 useGatewayCheckout composable 自動 import（與升級對話框共用）
+const actingOrder = ref('')
+
+/** 待付款訂單「繼續付款」:重新建單（30 分內沿用同單號）→ 導回 PAYUNi 付款頁。 */
+async function resumePayment(row: OrderRow) {
+  actingOrder.value = row.merchantOrderNo
+  const overlay = ElLoading.service({ lock: true, text: '正在前往 PAYUNi 安全付款頁面…' })
+  try {
+    const res = await apiFetch<{ action: string; fields: Record<string, string> }>('/api/payment/create-order', {
+      method: 'POST',
+      body: { planId: row.planId, workspaceId: route.params.workspaceId },
+    })
+    if (!res.action) throw new Error('金流尚未設定')
+    submitToGateway(res.action, res.fields)
+    // 送出後瀏覽器即導向付款頁；overlay 保持到頁面離開為止
+  }
+  catch (e: any) {
+    overlay.close()
+    actingOrder.value = ''
+    showToast(e?.data?.statusMessage || e?.message || '建立訂單失敗', 'error')
+  }
+}
+
+/** 待付款訂單「取消」:作廢這筆 pending（標記逾期）→ 從清單移除。 */
+async function cancelOrder(row: OrderRow) {
+  try {
+    await ElMessageBox.confirm(`確定取消這筆待付款訂單（${row.merchantOrderNo}）嗎？`, '取消訂單', {
+      confirmButtonText: '取消訂單', cancelButtonText: '再想想', type: 'warning',
+    })
+  }
+  catch { return }
+
+  actingOrder.value = row.merchantOrderNo
+  try {
+    await apiFetch('/api/payment/void-order', { method: 'POST', body: { merchantOrderNo: row.merchantOrderNo } })
+    showToast('已取消該筆訂單', 'success')
+    await loadOrders()
+  }
+  catch (e: any) {
+    showToast(e?.data?.statusMessage || '取消失敗', 'error')
+  }
+  finally {
+    actingOrder.value = ''
+  }
 }
 
 async function loadInvoiceProfile() {

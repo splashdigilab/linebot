@@ -101,6 +101,16 @@ export default defineNuxtConfig({
     newebpayHashIV: process.env.NEWEBPAY_HASH_IV ?? '',
     newebpayApiUrl: process.env.NEWEBPAY_API_URL ?? 'https://ccore.newebpay.com/MPG/mpg_gateway',
     /**
+     * PAYUNi 統一金流 整合式支付頁（UPP）特店設定（每租戶各一組；private，勿放 public）。
+     * 加密與藍新不同（AES-256-GCM）。三把金鑰都設好 → paymentEnabled 才為 true。
+     * PAYUNI_ENV=test 走 sandbox-api.payuni.com.tw、prod 走 api.payuni.com.tw（見 payuni.ts）。
+     * Hash Key 固定 32 碼、IV Key 固定 16 碼（長度不符後端會直接報錯）。
+     */
+    payuniMerchantId: process.env.PAYUNI_MERCHANT_ID ?? '',
+    payuniHashKey: process.env.PAYUNI_HASH_KEY ?? '',
+    payuniHashIV: process.env.PAYUNI_HASH_IV ?? '',
+    payuniEnv: process.env.PAYUNI_ENV ?? 'test',
+    /**
      * 信用卡定期定額（自動續訂）。與 MPG 共用同一組特店金鑰,只是換一支端點。
      * ⚠️ 定期定額是**申請制**——要先在藍新特店後台啟用「定期定額支付工具」才會通;
      *    未啟用時把 NEWEBPAY_PERIOD_ENABLED 留白,結帳會退回一次性付款,不會壞掉。
@@ -150,25 +160,23 @@ export default defineNuxtConfig({
       /** 門面／登入頁顯示的品牌名（多租戶：各 deployment 可用 PUBLIC_BRAND_NAME 覆寫）。預設沿用 landing 的 MYFEEL。 */
       brandName: process.env.PUBLIC_BRAND_NAME ?? 'MYFEEL',
       /**
-       * 線上付款是否已開通（藍新三把金鑰都設好才為 true）。
+       * 線上付款是否已開通（PAYUNi 統一金流 三把金鑰都設好才為 true）。
        * 只是布林值、不含任何金鑰內容；前端據此決定結帳鈕能不能按，
        * 避免金流未設定時按下去只拿到 500「金流尚未設定」。
+       * ⚠️ build 時計算：金鑰設好後要重新 build/部署才會變 true。
        */
       paymentEnabled: Boolean(
-        process.env.NEWEBPAY_MERCHANT_ID
-        && process.env.NEWEBPAY_HASH_KEY
-        && process.env.NEWEBPAY_HASH_IV,
+        process.env.PAYUNI_MERCHANT_ID
+        && process.env.PAYUNI_HASH_KEY
+        && process.env.PAYUNI_HASH_IV,
       ),
       /**
        * 結帳是否走「自動續訂」（定期定額委託）而非一次性付款。
-       * 前端據此決定確認文案（「每月自動扣款」vs「單次付款」）與是否顯示取消訂閱按鈕。
+       * ⚠️ 目前**一律 false**：已改用 PAYUNi 單次付款,PAYUNi 的定期定額（信用卡約定扣款）尚未實作。
+       *    留 false 確保前端**不會走到藍新那條殘留的 `create-subscription` 路徑**（那是藍新、金鑰也沒設,
+       *    一觸即壞）。等 PAYUNi 定期定額做好,再改成由 PAYUNI_PERIOD 之類旗標計算並接 PAYUNi 委託。
        */
-      recurringEnabled: Boolean(
-        process.env.NEWEBPAY_MERCHANT_ID
-        && process.env.NEWEBPAY_HASH_KEY
-        && process.env.NEWEBPAY_HASH_IV
-        && process.env.NEWEBPAY_PERIOD_ENABLED === 'true',
-      ),
+      recurringEnabled: false,
       /** 電子發票是否已開通（前端據此顯示／隱藏「發票資訊」設定卡）。四個值缺一不可。 */
       invoiceEnabled: Boolean(
         process.env.EZPAY_INVOICE_MERCHANT_ID

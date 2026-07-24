@@ -1,17 +1,13 @@
-import { runPaymentReconcile } from '~~/server/utils/payment'
-import { periodConfigFrom } from '~~/server/utils/newebpay-period'
-import { invoiceKeysFromConfig, reissueFailedInvoices } from '~~/server/utils/invoice'
-import { sendDueBillingEmails } from '~~/server/utils/billing-emails'
+import { runBillingReconcile } from '~~/server/utils/run-billing-reconcile'
 
 /**
- * POST /api/payment/reconcile — 每日續期對帳（由排程觸發）。
- * ① 過期訂閱 → 滾到當期（付費沒續費則降回免費）② 卡住的 pending 訂單 → expired。
+ * POST /api/payment/reconcile — 計費對帳（由排程 / 手動觸發）。
+ * 內容見 runBillingReconcile（查單補開通、過期滾期降級、清逾時 pending、補發票、通知信）。
  *
- * Amplify 不跑 scheduledTasks,故用外部排程（EventBridge）每日帶 X-Cron-Secret
- * 打此端點,與 /api/broadcast/trigger-scheduled 同一保護模式。
+ * Amplify 不跑 scheduledTasks,故：① 外部排程（EventBridge / Cloud Scheduler）帶 X-Cron-Secret 打此端點,
+ * ② 另有 payment-reconcile-tick middleware「有 API 流量時順便跑」當保險（見該檔）。
  *
- * ⚠️ 這支排程只是把週期落地成資料。額度重置與到期降級的正確性不依賴它——
- *    每次讀訂閱都會就地推算當期（見 shared/billing/period.ts）。
+ * ⚠️ 這支只是把週期落地成資料。額度重置與到期降級的正確性不依賴它——每次讀訂閱都會就地推算當期。
  */
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
@@ -21,12 +17,6 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
   }
 
-  const cfg = config as unknown as Record<string, unknown>
-  // 降級時要能終止藍新委託（不然客戶服務被降級、卡卻繼續被扣）
-  const result = await runPaymentReconcile(new Date(), undefined, periodConfigFrom(cfg))
-  // 順便補開之前失敗的發票（ezPay 短暫故障不該讓那批發票永久遺失）
-  const invoices = await reissueFailedInvoices(invoiceKeysFromConfig(cfg))
-  // 續扣前提醒 + 額度快用完/已用完通知（未設定 SES 時內部直接略過，零成本）
-  const emails = await sendDueBillingEmails(new Date())
-  return { ok: true, ...result, invoices, emails }
+  const result = await runBillingReconcile(config as unknown as Record<string, unknown>, new Date())
+  return { ok: true, ...result }
 })

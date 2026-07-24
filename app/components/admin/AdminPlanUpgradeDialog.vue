@@ -54,7 +54,7 @@
     </div>
     <div class="plan-upgrade-foot">
       <span class="text-xs text-muted">
-        方案以「官方帳號」為單位各自計價，額度不跨帳號共用。付款由藍新金流處理。
+        方案以「官方帳號」為單位各自計價，額度不跨帳號共用。付款由統一金流 PAYUNi 處理。
         <template v-if="recurringEnabled">每月自動續扣，可隨時取消，取消後用到本期結束。</template>
       </span>
     </div>
@@ -82,7 +82,7 @@ const { getBearer, workspaceId } = useWorkspace()
 const { showToast } = useAdminToast()
 
 const config = useRuntimeConfig()
-/** 藍新金鑰都設好才允許結帳；否則按下去只會拿到 500「金流尚未設定」。 */
+/** PAYUNi 金鑰都設好才允許結帳；否則按下去只會拿到 500「金流尚未設定」。 */
 const paymentEnabled = Boolean(config.public.paymentEnabled)
 /**
  * 定期定額（自動續訂）是否已在藍新特店開通。開通 → 走委託、每月自動扣款；
@@ -120,7 +120,7 @@ async function checkout(p: BillingPlan) {
     : `將以 NT$${price} ${action}「${p.name}」方案（單次付款、一個月）。`
   try {
     await ElMessageBox.confirm(
-      `${terms}接著前往藍新金流的安全付款頁面完成付款。`,
+      `${terms}接著前往統一金流 PAYUNi 的安全付款頁面完成付款。`,
       `確認${action}方案`,
       {
         confirmButtonText: recurringEnabled ? '前往付款並開始訂閱' : '前往付款',
@@ -135,7 +135,7 @@ async function checkout(p: BillingPlan) {
 
   checkoutLoading.value = p.id
   // 導向外部金流中間會有一段空白，給明確過場提示，不要讓畫面像當掉
-  const overlay = ElLoading.service({ lock: true, text: '正在前往藍新安全付款頁面…' })
+  const overlay = ElLoading.service({ lock: true, text: '正在前往 PAYUNi 安全付款頁面…' })
   try {
     const token = await getBearer()
     const endpoint = recurringEnabled ? '/api/payment/create-subscription' : '/api/payment/create-order'
@@ -146,7 +146,7 @@ async function checkout(p: BillingPlan) {
     })
     if (!res.action) throw new Error('金流尚未設定')
     submitToGateway(res.action, res.fields)
-    // 送出後瀏覽器即導向藍新付款頁；overlay 保持到頁面離開為止
+    // 送出後瀏覽器即導向 PAYUNi 付款頁；overlay 保持到頁面離開為止
   }
   catch (e: any) {
     overlay.close()
@@ -155,21 +155,7 @@ async function checkout(p: BillingPlan) {
   }
 }
 
-/** 動態建 hidden form 自動 POST 到藍新 MPG 付款頁。 */
-function submitToGateway(action: string, fields: Record<string, string>) {
-  const form = document.createElement('form')
-  form.method = 'POST'
-  form.action = action
-  for (const [k, v] of Object.entries(fields)) {
-    const input = document.createElement('input')
-    input.type = 'hidden'
-    input.name = k
-    input.value = String(v)
-    form.appendChild(input)
-  }
-  document.body.appendChild(form)
-  form.submit()
-}
+// submitToGateway 由 useGatewayCheckout composable 自動 import（與帳單頁共用）
 
 function quotaLabel(p: BillingPlan): string {
   if (p.answeredQuota == null) return '客製額度'
