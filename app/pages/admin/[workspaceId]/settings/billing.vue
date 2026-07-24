@@ -26,6 +26,9 @@
             <el-button v-else-if="returnedOrder.pending" size="small" :loading="loading" @click="reloadAll">
               重新整理
             </el-button>
+            <el-button v-else-if="returnedOrder.retry" size="small" type="primary" @click="upgradeOpen = true">
+              重新選擇方案
+            </el-button>
           </div>
         </el-alert>
 
@@ -48,8 +51,10 @@
         <div v-if="planView" class="message-card ar-section-card">
           <div class="message-card-header">
             <div class="card-header-main">
-              <span class="section-title">目前方案</span>
-              <span class="text-xs text-muted">{{ planView.name }}</span>
+              <div class="billing-plan-head">
+                <span class="billing-plan-head__label">目前方案</span>
+                <span class="billing-plan-head__name">{{ planView.name }}</span>
+              </div>
             </div>
             <el-button size="small" type="primary" @click="upgradeOpen = true">升級 / 續訂</el-button>
           </div>
@@ -125,7 +130,7 @@
               text
               @click="showAllOrders = !showAllOrders"
             >
-              {{ showAllOrders ? '只顯示重要' : `查看全部（含 ${hiddenOrderCount} 筆已逾期）` }}
+              {{ showAllOrders ? '只顯示重要' : `查看全部（含 ${hiddenOrderCount} 筆已逾期/失敗）` }}
             </el-button>
           </div>
           <div class="card-section-stack">
@@ -145,7 +150,7 @@
               <el-table-column label="狀態" min-width="90">
                 <template #default="{ row }">
                   <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
-                  <span v-if="row.status === 'failed' && row.failReason" class="billing-fail-reason">{{ row.failReason }}</span>
+                  <span v-if="row.status === 'failed' && row.failReason" class="billing-fail-reason">{{ failReasonText(row.failReason) }}</span>
                 </template>
               </el-table-column>
               <el-table-column v-if="invoiceEnabled" label="發票號碼" min-width="110">
@@ -157,7 +162,7 @@
               </el-table-column>
               <el-table-column label="訂單編號" min-width="170">
                 <template #default="{ row }">
-                  <span class="billing-order-no">{{ row.merchantOrderNo }}</span>
+                  <span class="billing-order-no" title="對帳／客服查詢用">{{ row.merchantOrderNo }}</span>
                 </template>
               </el-table-column>
               <el-table-column label="操作" min-width="140">
@@ -267,11 +272,22 @@ const hasFailedInvoice = computed(() =>
   orders.value.some(o => o.status === 'paid' && o.invoiceStatus === 'failed'),
 )
 
-// 帳單頁預設隱藏「已逾期」的放棄舊單（噪音）;已付款/進行中/失敗都留著（失敗要看得到原因+能重試）。
+// 帳單頁預設只留「重要的」：已付款 + 進行中的待付款 + **最新一筆**失敗（可重試）。
+// 逾期（放棄的舊單）與**較舊的失敗**（重試留下的）收進「查看全部」,避免一長串噪音。
+// orders 已是新到舊排序,所以第一筆遇到的 failed 是最新的 → 留、其餘 failed 收起。
 const showAllOrders = ref(false)
-const visibleOrders = computed(() =>
-  showAllOrders.value ? orders.value : orders.value.filter(o => o.status !== 'expired'),
-)
+const visibleOrders = computed(() => {
+  if (showAllOrders.value) return orders.value
+  let failedSeen = false
+  return orders.value.filter((o: OrderRow) => {
+    if (o.status === 'expired') return false
+    if (o.status === 'failed') {
+      if (failedSeen) return false
+      failedSeen = true
+    }
+    return true
+  })
+})
 const hiddenOrderCount = computed(() => orders.value.length - visibleOrders.value.length)
 
 // ── 自動續訂 ──────────────────────────────────────────────
@@ -389,6 +405,12 @@ const PAY_TYPE_LABEL: Record<string, string> = {
   BARCODE: '超商條碼',
 }
 function payTypeLabel(t: string | null) { return t ? (PAY_TYPE_LABEL[t] ?? t) : '—' }
+
+// 失敗原因白話化:PAYUNi 的「授權失敗」對一般人不好懂 → 補白話;其餘（金額不符…）已夠白話,原樣顯示。
+const FAIL_REASON_PLAIN: Record<string, string> = {
+  授權失敗: '卡片未通過（銀行未核准這筆交易）',
+}
+function failReasonText(r: string | null | undefined) { return r ? (FAIL_REASON_PLAIN[r] ?? r) : '' }
 function fmtTime(ms: number | null) {
   if (!ms) return '—'
   const d = new Date(ms)
@@ -401,11 +423,12 @@ const returnedOrder = computed(() => {
   const no = String(route.query.order || '').trim()
   if (!no) return null
   const o = orders.value.find(r => r.merchantOrderNo === no)
-  if (!o) return { title: '付款處理中', type: 'info' as const, desc: '若剛完成付款，款項確認後方案會自動更新。', pending: true }
-  if (o.status === 'paid') return { title: '付款完成，方案已開通', type: 'success' as const, desc: `訂單 ${no}`, pending: false }
-  if (o.status === 'failed') return { title: '這筆付款未成功', type: 'error' as const, desc: '未扣款或已取消，可重新選擇方案結帳。', pending: false }
-  if (o.status === 'expired') return { title: '這筆訂單已逾期', type: 'info' as const, desc: '可重新選擇方案結帳。', pending: false }
-  return { title: '付款處理中', type: 'warning' as const, desc: '款項確認後方案會自動更新。', pending: true }
+  if (!o) return { title: '付款處理中', type: 'info' as const, desc: '若剛完成付款，款項確認後方案會自動更新。', pending: true, retry: false }
+  if (o.status === 'paid') return { title: '付款完成，方案已開通', type: 'success' as const, desc: `訂單 ${no}`, pending: false, retry: false }
+  // 失敗時帶上這筆的真實原因（授權失敗…），別只講「未扣款或已取消」讓人猜。
+  if (o.status === 'failed') return { title: '這筆付款未成功', type: 'error' as const, desc: `${o.failReason ? `${failReasonText(o.failReason)}，` : ''}可重新選擇方案結帳。`, pending: false, retry: true }
+  if (o.status === 'expired') return { title: '這筆訂單已逾期', type: 'info' as const, desc: '可重新選擇方案結帳。', pending: false, retry: true }
+  return { title: '付款處理中', type: 'warning' as const, desc: '款項確認後方案會自動更新。', pending: true, retry: false }
 })
 
 // 導回時 Notify 常常還沒送達 → 短暫輪詢直到訂單結案（最多 ~32s），使用者不必自己按重新載入。

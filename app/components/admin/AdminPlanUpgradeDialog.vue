@@ -113,14 +113,18 @@ async function checkout(p: BillingPlan) {
   // 帶去外部金流扣款。
   const action = planAction(p)
   const price = (p.priceMonthly ?? 0).toLocaleString()
+  const quota = quotaLabel(p) // 重述拿到什麼（每月 X 則），讓人確認價值,不只看到金額
   // 自動續訂是「授權往後每個月都扣」，這件事必須在按下去之前講清楚——事後才發現
   // 被持續扣款是最容易變成客訴與爭議款的。
   const terms = recurringEnabled
-    ? `將以 NT$${price}/月 ${action}「${p.name}」方案，立即開通一個月，之後每月自動扣款。可隨時取消，取消後服務用到本期結束。`
-    : `將以 NT$${price} ${action}「${p.name}」方案（單次付款、一個月）。`
+    ? `將以 NT$${price}/月 ${action}「${p.name}」方案（${quota}），立即開通一個月，之後每月自動扣款。可隨時取消，取消後服務用到本期結束。`
+    : `將以 NT$${price} ${action}「${p.name}」方案（${quota}・單次付款、一個月）。`
+  // 降級無比例折抵：立即生效、目前方案剩餘天數不折抵——按下去前必須講清楚,否則使用者會
+  // 「付了錢還虧掉剩餘天數」而不自知。
+  const downgradeWarn = action === '降級' ? '⚠️ 降級會立即生效，且目前方案剩餘天數不折抵。' : ''
   try {
     await ElMessageBox.confirm(
-      `${terms}接著前往統一金流 PAYUNi 的安全付款頁面完成付款。`,
+      `${downgradeWarn}${terms}接著前往統一金流 PAYUNi 的安全付款頁面完成付款。`,
       `確認${action}方案`,
       {
         confirmButtonText: recurringEnabled ? '前往付款並開始訂閱' : '前往付款',

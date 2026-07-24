@@ -50,6 +50,8 @@
   .pu-price {
     font-weight: 600;
     white-space: nowrap;
+    min-width: 84px; /* 固定寬右對齊 → 跨列價格一柱到底，好掃 */
+    text-align: right;
   }
 
   .pu-info {
@@ -96,6 +98,24 @@
   font-size: 12px;
   color: #4b5563;
   letter-spacing: 0.01em;
+}
+
+/* 帳單頁：「目前方案」卡把方案名做成主角（名稱大而深，「目前方案」退為小標籤） */
+.billing-plan-head {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.billing-plan-head__label {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.billing-plan-head__name {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #111827;
 }
 
 /* 帳單頁：付款失敗原因（狀態標籤下方的紅字，讓客戶/客服一眼看到為什麼沒扣成功） */
