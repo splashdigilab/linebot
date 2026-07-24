@@ -49,6 +49,11 @@ export default defineNuxtConfig({
   },
 
   vite: {
+    // 本機用 ngrok tunnel 測金流 Notify 時,dev server 需放行 ngrok host（否則回 403 Blocked request）。
+    // 只影響 dev,且限 ngrok 網域;正式部署不吃這段。
+    server: {
+      allowedHosts: ['.ngrok-free.dev', '.ngrok-free.app', '.ngrok.io'],
+    },
     css: {
       preprocessorOptions: {
         scss: {

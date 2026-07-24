@@ -12,6 +12,18 @@ import { fulfillPayuniTrade } from '~~/server/utils/payuni-fulfill'
  * 內容無法解析」時回非 200(這些重送也不會變好,但可留痕供修)。
  */
 export default defineEventHandler(async (event) => {
+  // ── [TEMP DEBUG] 擷取真實 PAYUNi Notify 原始內容(第一次確認格式用,驗完務必移除)──
+  try {
+    const raw = await readRawBody(event).catch(() => undefined)
+    const parsed = await readBody(event).catch(() => undefined)
+    const fs = await import('node:fs')
+    fs.appendFileSync(
+      '/private/tmp/claude-501/-Users-kevin-Documents-Github-linebot/8f963c0b-ca5c-45cb-846b-0d0800c03304/scratchpad/payuni-notify-raw.log',
+      `\n=== ${new Date().toISOString()} ===\nRAW: ${raw}\nPARSED: ${JSON.stringify(parsed)}\n`,
+    )
+  }
+  catch (e) { console.error('[payuni:notify] debug capture failed', e) }
+
   const config = useRuntimeConfig(event)
   const keys = { merKey: String(config.payuniHashKey || ''), merIV: String(config.payuniHashIV || '') }
   if (!keys.merKey || !keys.merIV) {

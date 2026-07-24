@@ -12,7 +12,7 @@
  */
 import { getDb } from './firebase'
 import { getPendingOrders } from './payment'
-import { PAYUNI_QUERY_ENDPOINTS, buildTradeQuery, isTradePaid, resolvePayuniEnv, verifyAndDecryptPayuniNotify, type PayuniKeys } from './payuni'
+import { PAYUNI_QUERY_ENDPOINTS, buildTradeQuery, isQueryTradePaid, parsePayuniQueryResult, resolvePayuniEnv, verifyAndDecryptPayuniNotify, type PayuniKeys } from './payuni'
 import { fulfillPayuniTrade } from './payuni-fulfill'
 import type { PaymentOrderDoc } from '~~/shared/types/payment'
 
@@ -57,10 +57,12 @@ export async function reconcilePayuniPending(
       const enc = String(resp?.EncryptInfo || '')
       const hash = String(resp?.HashInfo || '')
       if (!enc || !hash) return false
-      const result = verifyAndDecryptPayuniNotify(enc, hash, keys)
+      // 查單回傳是巢狀 Result[0][...],格式與 Notify 不同 → 先攤平,再用「查單語意」判付款。
+      const decrypted = verifyAndDecryptPayuniNotify(enc, hash, keys)
+      const result = parsePayuniQueryResult(decrypted as Record<string, string | undefined> | null)
       // **只在 PAYUNi 確認已付款時補開通**;未付／查無訂單 → 留著讓它照時間到期,
       // 絕不能把還在等付款的 pending 丟給 settle(paid=false) 誤標成 failed。
-      if (!result || !isTradePaid(result)) return false
+      if (!isQueryTradePaid(result)) return false
       const r = await fulfillPayuniTrade(true, result, config)
       return r.outcome === 'settled'
     }

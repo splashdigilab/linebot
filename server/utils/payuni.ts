@@ -199,6 +199,33 @@ export function isPayuniPaid(outerStatus: string, result: PayuniTradeResult | nu
 }
 
 /**
+ * 把 **trade/query 解密後**的結果攤平成扁平交易欄位。
+ * ⚠️ 查單回傳與 Notify **格式不同**:查單是 PHP http_build_query 出來的巢狀
+ *    `Result[0][MerTradeNo]` / `Result[0][TradeStatus]` …（實測確認）,Notify 則是扁平的。
+ *    這裡把第一筆 `Result[0][X]` 攤平成 `{ X: value }`,好用同一套下游邏輯。查無訂單時
+ *    解密結果沒有 Result[0] 欄位 → 回空物件（下游判定不會誤開通）。
+ */
+export function parsePayuniQueryResult(decrypted: Record<string, string | undefined> | null): PayuniTradeResult {
+  const out: PayuniTradeResult = {}
+  if (!decrypted) return out
+  for (const [k, v] of Object.entries(decrypted)) {
+    const m = k.match(/^Result\[0\]\[(\w+)\]$/)
+    if (m && m[1]) out[m[1]] = v
+  }
+  return out
+}
+
+/**
+ * **查單（trade/query）語意**下這筆是否已付款。
+ * ⚠️ 查單的 `TradeStatus` 代碼**與 Notify 不同**——實測「已付款」在查單是 `'2'`（Notify 是 '1'）。
+ *    另要求有 `PaymentDay`（實際付款時間）當第二道保險,避免誤判。此代碼以實測交易為準,
+ *    上線前建議對 PAYUNi 官方文件再確認一次。
+ */
+export function isQueryTradePaid(result: PayuniTradeResult): boolean {
+  return String(result.TradeStatus ?? '') === '2' && !!String(result.PaymentDay ?? '').trim()
+}
+
+/**
  * 組交易查詢（trade/query）的 POST 欄位:以商店訂單編號 MerTradeNo 查一筆交易現況。
  * 與 buildUppForm 同一套簽章,只是內層 encryptInfo 帶查詢欄位。回傳格式與 Notify 相同
  * （{ Status, EncryptInfo, HashInfo }）→ 用 verifyAndDecryptPayuniNotify 解、isPayuniPaid 判定。

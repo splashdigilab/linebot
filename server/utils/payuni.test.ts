@@ -7,8 +7,10 @@ import {
   encodeEncryptInfo,
   encrypt,
   isPayuniPaid,
+  isQueryTradePaid,
   isTradePaid,
   makeHashInfo,
+  parsePayuniQueryResult,
   payuniPaymentType,
   resolvePayuniEnv,
   verifyAndDecryptPayuniNotify,
@@ -157,6 +159,38 @@ describe('isPayuniPaid(兩層成功判定)', () => {
   })
   it('result 為 null 不炸,回 false', () => {
     expect(isPayuniPaid('SUCCESS', null)).toBe(false)
+  })
+})
+
+describe('parsePayuniQueryResult + isQueryTradePaid（真實查單格式:巢狀 Result[0]、已付款 TradeStatus=2）', () => {
+  // 取自對 PAYUNi 沙盒真實已付款單 NP260724073140RSJ 的 trade/query 回傳
+  const paidQuery = {
+    Status: 'SUCCESS', Message: '查詢成功',
+    'Result[0][MerTradeNo]': 'NP260724073140RSJ',
+    'Result[0][TradeNo]': '1784878344667576446',
+    'Result[0][TradeAmt]': '499',
+    'Result[0][TradeStatus]': '2',
+    'Result[0][PaymentType]': '1',
+    'Result[0][PaymentDay]': '2026-07-24 15:32:25',
+  }
+  it('攤平巢狀 Result[0][X] → 扁平欄位', () => {
+    expect(parsePayuniQueryResult(paidQuery)).toMatchObject({
+      MerTradeNo: 'NP260724073140RSJ', TradeNo: '1784878344667576446', TradeAmt: '499',
+      TradeStatus: '2', PaymentType: '1', PaymentDay: '2026-07-24 15:32:25',
+    })
+  })
+  it('查單已付款 = TradeStatus 2 + 有 PaymentDay（可餵給 fulfillPayuniTrade 開通）', () => {
+    expect(isQueryTradePaid(parsePayuniQueryResult(paidQuery))).toBe(true)
+  })
+  it('查無訂單（沒有 Result[0]）→ 攤平成空、判為未付,不誤開通', () => {
+    const notFound = { Status: 'QUERY03001', Message: '查無符合訂單資料', MerTradeNo: 'NP1' }
+    expect(parsePayuniQueryResult(notFound)).toEqual({})
+    expect(isQueryTradePaid(parsePayuniQueryResult(notFound))).toBe(false)
+  })
+  it('待付款 / 沒 PaymentDay → 未付,不會誤開通', () => {
+    expect(isQueryTradePaid({ TradeStatus: '1', PaymentDay: '' })).toBe(false)
+    expect(isQueryTradePaid({ TradeStatus: '2' })).toBe(false)
+    expect(isQueryTradePaid(parsePayuniQueryResult(null))).toBe(false)
   })
 })
 
