@@ -17,7 +17,6 @@ import { invalidateWorkspaceSubscriptionCache } from './billing'
 import { addDays, dayOfDate, taipeiDate } from '~~/shared/time'
 import { isSelfServePaidPlan, type BillingPlanId, type WorkspaceSubscription } from '~~/shared/billing/plans'
 import { anchorDayOf, confirmRenewal, newSubscription, rollSubscriptionToCurrentPeriod } from '~~/shared/billing/period'
-import { terminatePeriodMandate, type PeriodMandateConfig } from './newebpay-period'
 import type { WorkspaceDoc } from '~~/shared/types/organization'
 import type { PaymentOrderDoc, PaymentOrderKind, PaymentOrderStatus } from '~~/shared/types/payment'
 
@@ -561,8 +560,11 @@ const STALE_PENDING_MS = 3 * 60 * 60 * 1000
 export async function runPaymentReconcile(
   now: Date = new Date(),
   db: Firestore = getDb(),
-  /** 降級時用來終止藍新委託；未提供則只寫資料庫（單元測試用）。 */
-  periodCfg?: PeriodMandateConfig | null,
+  /**
+   * 降級時用來終止金流委託（PAYUNi 續期）的 callback；未提供則只寫資料庫（單元測試用）。
+   * gateway-agnostic:呼叫端注入實際的終止實作（見 run-billing-reconcile）。
+   */
+  terminatePeriod?: ((periodNo: string, periodOrderNo: string | null) => Promise<{ ok: boolean; code?: string; message?: string }>) | null,
 ): Promise<{ renewed: number; downgraded: number; terminated: number; expiredOrders: number }> {
   const today = taipeiDate(now)
 
@@ -576,10 +578,10 @@ export async function runPaymentReconcile(
     const rolled = rollSubscriptionToCurrentPeriod(sub, today)
     if (!rolled.changed) continue
 
-    // 降級（沒續費 / 寬限期滿）→ 藍新那張委託還活著,還會扣客戶的卡。
+    // 降級（沒續費 / 寬限期滿）→ 金流那張委託還活著,還會扣客戶的卡。
     // 我方都不給付費方案了,就必須主動把它停掉——否則客戶會「服務被降級、錢照扣」。
-    if (rolled.downgraded && rolled.sub.periodNo && rolled.sub.periodOrderNo && periodCfg) {
-      const t = await terminatePeriodMandate(rolled.sub.periodOrderNo, rolled.sub.periodNo, periodCfg)
+    if (rolled.downgraded && rolled.sub.periodNo && terminatePeriod) {
+      const t = await terminatePeriod(rolled.sub.periodNo, rolled.sub.periodOrderNo ?? null)
       if (t.ok) {
         delete rolled.sub.periodNo
         delete rolled.sub.periodOrderNo

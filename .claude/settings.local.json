@@ -3,7 +3,19 @@
     "allow": [
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('scripts',{}\\), indent=2\\)\\)\")",
       "Bash(ngrok config *)",
-      "Bash(nohup ngrok http 3001 --log=stdout)"
+      "Bash(nohup ngrok http 3001 --log=stdout)",
+      "Bash(pkill -f \"ngrok http 3001\")",
+      "Bash(gh api *)",
+      "Bash(cd /Users/kevin/Documents/Github/linebot; echo \"=== appPublicBaseUrl / fallback 定義 ===\"; sed -n '/appPublicBaseUrl/,/^$/p' nuxt.config.ts | head -30; echo; echo \"=== PUBLIC_FAQ_TEMPLATE_SHEET_URL 用途 ===\"; grep -rn \"PUBLIC_FAQ_TEMPLATE_SHEET_URL\\\\|faqTemplateSheetUrl\" --include=\"*.ts\" --include=\"*.vue\" server app nuxt.config.ts | head)",
+      "WebFetch(domain:docs.payuni.com.tw)",
+      "WebFetch(domain:www.payuni.com.tw)",
+      "WebFetch(domain:docs.wpsite.pro)",
+      "Bash(K=KO9qtyN6sUVNzG6fSvqoILwwF2sOY8dr V=BPLnoBRlDdXio7CQ M=S076820628 node -e ' *)",
+      "Bash(git -C /Users/kevin/Documents/Github/linebot branch --show-current)",
+      "Bash(git rev-list *)",
+      "Bash(node \"/private/tmp/claude-501/-Users-kevin-Documents-Github-linebot/8f963c0b-ca5c-45cb-846b-0d0800c03304/scratchpad/clean-debug-period.cjs\")",
+      "Bash(git -C /Users/kevin/Documents/Github/linebot branch -a)",
+      "Bash(git -C /Users/kevin/Documents/Github/linebot remote -v)"
     ]
   }
 }

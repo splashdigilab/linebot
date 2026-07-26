@@ -85,7 +85,7 @@ const config = useRuntimeConfig()
 /** PAYUNi 金鑰都設好才允許結帳；否則按下去只會拿到 500「金流尚未設定」。 */
 const paymentEnabled = Boolean(config.public.paymentEnabled)
 /**
- * 定期定額（自動續訂）是否已在藍新特店開通。開通 → 走委託、每月自動扣款；
+ * 定期定額（自動續訂）是否已開通（PAYUNi 續期收款）。開通 → 走委託、每月自動扣款；
  * 未開通 → 退回單次付款（客戶每個月要自己回來刷一次），兩條路的 UI 文案不同。
  */
 const recurringEnabled = Boolean(config.public.recurringEnabled)

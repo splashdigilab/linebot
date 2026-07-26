@@ -161,3 +161,25 @@
   padding-top: 4px;
   border-top: 1px solid #f0f2f5;
 }
+
+/* 續訂狀態列的操作區（更新信用卡 + 取消訂閱並排，不被撐開） */
+.billing-renew-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+/* past_due 警示內文：說明 + 顯眼的「更新信用卡」入口（卡片過期是最大流失來源，
+   一定要給得出去的動作，不能只是一句「請確認信用卡」的死路）。 */
+.billing-pastdue-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+
+  .el-button {
+    flex: none; /* inline 按鈕別被 flex 撐成滿版 */
+  }
+}

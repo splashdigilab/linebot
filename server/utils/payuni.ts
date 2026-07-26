@@ -34,6 +34,28 @@ export const PAYUNI_QUERY_ENDPOINTS = {
   prod: 'https://api.payuni.com.tw/api/trade/query',
 } as const
 
+/** PAYUNi 續期收款（定期扣款）支付頁端點——建立信用卡約定扣款委託。 */
+export const PAYUNI_PERIOD_ENDPOINTS = {
+  test: 'https://sandbox-api.payuni.com.tw/api/period/Page',
+  prod: 'https://api.payuni.com.tw/api/period/Page',
+} as const
+
+/** PAYUNi 續期收款「狀態修改」端點——暫停/啟用/終止委託（取消訂閱用 ReviseTradeStatus=end）。 */
+export const PAYUNI_PERIOD_MDF_ENDPOINTS = {
+  test: 'https://sandbox-api.payuni.com.tw/api/period/mdfStatus',
+  prod: 'https://api.payuni.com.tw/api/period/mdfStatus',
+} as const
+
+/**
+ * PAYUNi 續期收款「卡號修改」支付頁端點——讓客戶重新輸入信用卡、綁定到既有委託（更新信用卡）。
+ * 支付頁流程（同 period/Page）：回傳表單自動 POST → PAYUNi 頁面收新卡 → 導回 ReturnURL。
+ * ⚠️ 內層 encryptInfo 的確切欄位待「續期收款卡號修改」文件確認後鎖定，勿在真卡實測前當定案。
+ */
+export const PAYUNI_PERIOD_EXCHANGE_ENDPOINTS = {
+  test: 'https://sandbox-api.payuni.com.tw/api/period/exchange',
+  prod: 'https://api.payuni.com.tw/api/period/exchange',
+} as const
+
 /**
  * 把 PAYUNI_ENV 正規化成 'test' | 'prod'。
  * ⚠️ **不要**用 `=== 'prod'` 硬比：`production`/`PROD`/前後空白 都該算正式,否則正式環境一個
@@ -151,9 +173,24 @@ export function buildUppForm(
  *    外層 Status 只代表「API 回應正常」,錢有沒有進來要看 TradeStatus（見 isPayuniPaid）。
  */
 export interface PayuniTradeResult {
+  /**
+   * 內層狀態碼。⚠️ **續期收款每期授權通知**用這個判付款成功（SUCCESS）,**不是** TradeStatus——
+   * 續期通知沒有 TradeStatus 欄位（見 isPeriodPaid）。單次付款(UPP)才用 TradeStatus。
+   */
+  Status?: string
+  /** 商店代號（續期通知欄位名是 MerchantId,非 MerID） */
+  MerchantId?: string
   MerID?: string
   /** 我方送出的商店訂單編號（帳本冪等鍵） */
   MerTradeNo?: string
+  /** 續期訂單編號 = `原單號_期數`（每期唯一）→ 續期帳本的冪等鍵 */
+  PeriodOrderNo?: string
+  /** 本次是第幾期扣款（1=首期委託建立;>1=續期） */
+  ThisPeriod?: string
+  /** 扣款總期數 */
+  TotalTimes?: string
+  /** 下次授權日期（本期最後一期此欄為空） */
+  NextAuthDate?: string
   /** PAYUNi 端交易序號（UNi 序號） */
   TradeNo?: string
   /** 交易金額 */
@@ -166,6 +203,12 @@ export interface PayuniTradeResult {
   Message?: string
   /** 授權時間 */
   PayTime?: string
+  /** 續期收款單號（約定扣款委託 ID；一筆會有多期扣款）——取消/換卡/改方案都用它 */
+  PeriodTradeNo?: string
+  /** 每期金額 */
+  PeriodAmt?: string
+  /** 首次授權金額 */
+  AuthAmt?: string
   [k: string]: string | undefined
 }
 
@@ -223,6 +266,15 @@ export function parsePayuniQueryResult(decrypted: Record<string, string | undefi
  */
 export function isQueryTradePaid(result: PayuniTradeResult): boolean {
   return String(result.TradeStatus ?? '') === '2' && !!String(result.PaymentDay ?? '').trim()
+}
+
+/**
+ * **續期收款每期授權通知**是否已授權成功。
+ * ⚠️ 續期通知**沒有 TradeStatus**——它用解密後的 `Status === 'SUCCESS'`（Message=授權成功）判定。
+ *    不能用 isPayuniPaid（那個看 TradeStatus,續期一律會判成沒付）。
+ */
+export function isPeriodPaid(result: PayuniTradeResult | null): boolean {
+  return String(result?.Status ?? '').trim().toUpperCase() === 'SUCCESS'
 }
 
 /**

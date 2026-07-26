@@ -78,7 +78,7 @@
 
             <!-- 續訂狀態：自動扣款這件事必須一眼看得到，而且**隨時退得掉**。
                  取消按鈕的顯示條件是 canCancel（= 還有生效中的委託），不是 autoRenew——
-                 扣款失敗或已被降級時，委託在藍新那邊還活著、還在刷卡，那正是最需要停掉它的時刻，
+                 扣款失敗或已被降級時，委託在 PAYUNi 那邊還活著、還在刷卡，那正是最需要停掉它的時刻，
                  絕不能讓警告訊息把取消入口蓋掉。 -->
             <el-alert
               v-if="planView.status === 'past_due'"
@@ -87,7 +87,10 @@
               show-icon
               title="這期的自動扣款尚未成功"
             >
-              <span class="text-xs">服務仍在正常運作。請確認信用卡是否過期或額度不足；幾天內仍未扣款成功，方案會降回免費層。</span>
+              <div class="billing-pastdue-body">
+                <span class="text-xs">服務仍在正常運作。多半是信用卡過期或額度不足——換一張卡即可，原方案與週期不變；幾天內仍未扣款成功，方案會降回免費層。</span>
+                <el-button v-if="recurringEnabled && canCancel" size="small" type="primary" :loading="updatingCard" @click="updateCard">更新信用卡</el-button>
+              </div>
             </el-alert>
 
             <div v-if="planView.cancelAtPeriodEnd" class="billing-renew-row">
@@ -102,7 +105,11 @@
                 </template>
                 <template v-else>自動扣款委託仍在生效中，若不想再被扣款請取消。</template>
               </span>
-              <el-button size="small" text :loading="canceling" @click="cancelSubscription">取消訂閱</el-button>
+              <div class="billing-renew-actions">
+                <!-- past_due 已在上方給了顯眼的更新卡入口；這裡只在正常續訂中提供「主動換卡」 -->
+                <el-button v-if="recurringEnabled && planView.status !== 'past_due'" size="small" text :loading="updatingCard" @click="updateCard">更新信用卡</el-button>
+                <el-button size="small" text :loading="canceling" @click="cancelSubscription">取消訂閱</el-button>
+              </div>
             </div>
           </div>
           <AdminPlanUpgradeDialog v-model="upgradeOpen" :current-plan-id="planView.id" />
@@ -249,6 +256,8 @@ const { plan: planView, state: planState, load: loadPlanSummary } = usePlanSumma
 
 const config = useRuntimeConfig()
 const invoiceEnabled = Boolean(config.public.invoiceEnabled)
+// 自動續訂開通時才有「委託」可換卡——未開通（單次付款）沒有卡可更新，隱藏相關入口。
+const recurringEnabled = Boolean(config.public.recurringEnabled)
 
 const upgradeOpen = ref(false)
 const loading = ref(false)
@@ -291,7 +300,7 @@ const visibleOrders = computed(() => {
 const hiddenOrderCount = computed(() => orders.value.length - visibleOrders.value.length)
 
 // ── 自動續訂 ──────────────────────────────────────────────
-/** 下次扣款日 = 本期到期日的隔天（藍新在錨定日當天扣款）。 */
+/** 下次扣款日 = 本期到期日的隔天（PAYUNi 在錨定日當天扣款）。 */
 const nextChargeDate = computed(() => {
   const end = planView.value?.currentPeriodEnd
   if (!end) return '—'
@@ -302,10 +311,31 @@ const nextChargeDate = computed(() => {
 })
 
 /**
- * 能不能取消 = 藍新那邊還有生效中的委託。**不是**看 autoRenew——
+ * 能不能取消 = PAYUNi 那邊還有生效中的委託。**不是**看 autoRenew——
  * 扣款失敗被降回免費層時 autoRenew 已經是 false，但卡還在被扣，那時最需要這個按鈕。
  */
 const canCancel = computed(() => planView.value?.hasMandate === true)
+
+// ── 更新信用卡（換卡）─────────────────────────────────────
+// 卡片過期/額度不足 → 續扣失敗（past_due）時的自助補救：換一張卡、原委託與週期不變，
+// 不必「取消再重訂」。導向 PAYUNi 卡號修改頁收新卡（同結帳的自動送出表單流程）。
+const updatingCard = ref(false)
+async function updateCard() {
+  if (!recurringEnabled) return
+  updatingCard.value = true
+  const overlay = ElLoading.service({ lock: true, text: '正在前往 PAYUNi 安全付款頁面…' })
+  try {
+    const res = await apiFetch<{ action: string; fields: Record<string, string> }>('/api/payment/update-card', { method: 'POST' })
+    if (!res.action) throw new Error('金流尚未設定')
+    submitToGateway(res.action, res.fields)
+    // 送出後瀏覽器即導向 PAYUNi；overlay 保持到頁面離開為止
+  }
+  catch (e: any) {
+    overlay.close()
+    updatingCard.value = false
+    showToast(e?.data?.statusMessage || e?.message || '無法更新信用卡，請稍後再試', 'error')
+  }
+}
 
 const canceling = ref(false)
 async function cancelSubscription() {

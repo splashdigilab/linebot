@@ -2,7 +2,7 @@ import { getDb } from '~~/server/utils/firebase'
 import { requireWorkspaceAccess } from '~~/server/utils/workspace-auth'
 import { BILLING_PLAN_ORDER, getBillingPlan } from '~~/shared/billing/plans'
 import type { BillingPlanId } from '~~/shared/billing/plans'
-import { buildPeriodPostData } from '~~/server/utils/newebpay'
+import { PAYUNI_PERIOD_ENDPOINTS, buildUppForm, resolvePayuniEnv } from '~~/server/utils/payuni'
 import { createPendingOrder, findRecentPendingOrder, newMerchantOrderNo } from '~~/server/utils/payment'
 import { getWorkspaceSubscription } from '~~/server/utils/billing'
 import { dayOfDate, taipeiDate } from '~~/shared/time'
@@ -12,15 +12,16 @@ import type { WorkspaceDoc } from '~~/shared/types/organization'
  * POST /api/payment/create-subscription
  * body: { workspaceId, planId }
  *
- * 建立藍新「信用卡定期定額委託」(NPA-B05) —— 客戶刷一次卡，之後每月自動扣款。
- * 回傳前端要自動 POST 到藍新的表單欄位（MerchantID_ / PostData_，**沒有 TradeSha**）。
+ * 建立 PAYUNi「續期收款」信用卡約定扣款委託 —— 客戶刷一次卡，之後每月由 PAYUNi 自動扣款。
+ * 回傳前端要自動 POST 到 PAYUNi 續期支付頁（/api/period/Page）的表單欄位（與 UPP 同一套加密）。
  *
- * 週期對齊我方的錨定日：`PeriodPoint` = 今天幾號 = 訂閱的 anchorDay。藍新對短月的
- * 夾法（沒有 31 號就扣月底）與 shared/time.ts 的 anchoredPeriod 相同,兩邊的續期日
- * 因此永遠對得起來。
+ * · `PeriodType=month` + `PeriodDate=錨定日`（今天幾號）→ 每月同一天扣款,與 shared/time.ts 的
+ *   anchoredPeriod 對齊（PAYUNi 對短月沒有的日期會用該月最後一天,兩邊續期日永遠對得起來）。
+ * · `FType=build`：委託建立當日就扣一期全額 → 客戶當場拿到完整一期（錨定日制,首期不折算天數）。
+ * · `API3D=1`：僅首次強制 3D,之後每期自動扣款無 3D（token 化）。
  *
- * `PeriodStartType=2`：委託成立當下立刻扣一期全額——客戶當場就拿到完整一期,
- * 首期不折算天數（這正是錨定日制的意義）。
+ * 換方案時**不在這裡終止舊委託**——建單只是產一張要送 PAYUNi 的表單,客戶可能放棄;等新委託
+ * 首期扣款成功（period-notify）後才終止舊委託,放棄付款的客戶保住原訂閱。
  */
 export default defineEventHandler(async (event) => {
   const { workspaceId, uid, token } = await requireWorkspaceAccess(event, 'admin')
@@ -36,23 +37,16 @@ export default defineEventHandler(async (event) => {
   }
 
   const config = useRuntimeConfig(event)
-  const merchantId = String(config.newebpayMerchantId || '').trim()
+  const merchantId = String(config.payuniMerchantId || '').trim()
   const base = String(config.appBaseUrl || '').trim().replace(/\/$/, '')
-  if (!merchantId || !config.newebpayHashKey || !config.newebpayHashIV) {
+  if (!merchantId || !config.payuniHashKey || !config.payuniHashIV) {
     throw createError({ statusCode: 500, statusMessage: '金流尚未設定' })
   }
-  if (!config.newebpayPeriodEnabled) {
+  if (!config.payuniPeriodEnabled) {
     throw createError({ statusCode: 400, statusMessage: '自動續訂尚未開通,請改用單次付款' })
   }
   if (!base) {
     throw createError({ statusCode: 500, statusMessage: '未設定對外網址(PUBLIC_BASE_URL)' })
-  }
-
-  // PayerEmail 是藍新的必填欄位；空值會讓委託在藍新端被退，客戶只會看到一個看不懂的
-  // 錯誤頁。寧可在這裡就講清楚。
-  const payerEmail = String(token.email || '').trim()
-  if (!payerEmail) {
-    throw createError({ statusCode: 400, statusMessage: '此帳號沒有 Email，無法建立自動扣款委託' })
   }
 
   const db = getDb()
@@ -60,23 +54,16 @@ export default defineEventHandler(async (event) => {
   if (!wsSnap.exists) throw createError({ statusCode: 404, statusMessage: '找不到此官方帳號' })
   const organizationId = (wsSnap.data() as WorkspaceDoc).organizationId ?? null
 
-  // ⚠️ 換方案時**不在這裡終止舊委託**。
-  // 建單只是「產生一張要送去藍新的表單」,客戶可能關掉分頁、刷卡失敗、改變主意而從未真的
-  // 付款。若此刻就終止舊委託,放棄付款的客戶就白白丟掉他原本還在用的訂閱（下期沒扣款 →
-  // 進寬限期 → 降回免費層）。改成把舊委託單號記在訂單上,等**新委託首期扣款成功**
-  // （period-notify 收到 SUCCESS）之後才終止舊委託——見 server/routes/newebpay/period-notify.post.ts。
+  // 換方案：記下舊委託,等新委託首期扣款成功後才終止（見 period-notify）。
   const currentSub = await getWorkspaceSubscription(workspaceId, db)
   const supersedesPeriodNo = currentSub?.periodNo ?? null
   const supersedesPeriodOrderNo = currentSub?.periodOrderNo ?? null
 
   const now = new Date()
-  // PeriodPoint 需 01–31 兩碼；今天幾號就是錨定日。
-  // ⚠️ 這個值必須**跟著訂單存下來**，開通時直接沿用：若開通時重算一次 taipeiDate,
-  //    跨午夜建單（23:59 建單、00:00 開通）會讓藍新的扣款日與我方的續期日差一天,
-  //    之後每個月都會在「我方到期 → 寬限期 → 藍新還沒扣款」的縫隙裡把客戶降級。
+  // 每月扣款日 = 今天幾號 = 訂閱錨定日。**跟著訂單存下**,開通時沿用不重算（跨午夜差一天會害後續降級）。
   const anchorDay = dayOfDate(taipeiDate(now))
 
-  // 去重：同帳號同方案近 30 分鐘內的 pending 單沿用同一單號，避免連點建出兩張委託
+  // 去重：同帳號同方案近 30 分鐘內的 pending 單沿用同一單號，避免連點建出兩張委託。
   const existing = await findRecentPendingOrder(workspaceId, planId, now, db)
   const amount = existing?.amount ?? plan.priceMonthly
   const merchantOrderNo = existing?.merchantOrderNo ?? newMerchantOrderNo(now)
@@ -85,40 +72,41 @@ export default defineEventHandler(async (event) => {
       {
         merchantOrderNo, workspaceId, organizationId, planId, amount,
         createdBy: uid, kind: 'period_first', anchorDay,
-        // 開通成功後由 period-notify 拿去終止（現在不動）
         supersedesPeriodNo, supersedesPeriodOrderNo,
       },
       db,
     )
   }
 
-  const keys = { hashKey: String(config.newebpayHashKey), hashIV: String(config.newebpayHashIV) }
-  const params: Record<string, string | number> = {
-    RespondType: 'JSON',
-    TimeStamp: Math.floor(now.getTime() / 1000),
-    Version: '1.5',
-    LangType: 'zh-Tw',
-    MerOrderNo: merchantOrderNo,
-    // ProdDesc 僅限中英數、空格、底線——不要放括號等符號，藍新會擋（PER10006）
-    ProdDesc: `${plan.name}方案 每月自動續訂`,
+  const keys = { merKey: String(config.payuniHashKey), merIV: String(config.payuniHashIV) }
+  const encryptInfo: Record<string, string | number> = {
+    MerID: merchantId,
+    MerTradeNo: merchantOrderNo,
+    // ⚠️ PAYUNi 必填（與 UPP 同一套）——少了它委託建單會被退。與單次付款 create-order 一致。
+    Timestamp: Math.floor(now.getTime() / 1000),
     PeriodAmt: amount,
-    PeriodType: 'M', // 每月
-    PeriodPoint: String(existing?.anchorDay ?? anchorDay).padStart(2, '0'),
-    PeriodStartType: 2, // 委託成立當下立刻扣一期全額
-    PeriodTimes: 99, // 藍新上限就是 99（PER10024）；到期前客戶早就取消或換方案了
-    PayerEmail: payerEmail,
-    EmailModify: 0, // 不讓客戶在藍新頁面改信箱（要與我方帳號一致）
-    PaymentInfo: 'N',
-    OrderInfo: 'N',
-    NotifyURL: `${base}/newebpay/period-notify`,
-    ReturnURL: `${base}/newebpay/return?ws=${encodeURIComponent(workspaceId)}&no=${merchantOrderNo}`,
+    ProdDesc: `${plan.name}方案 每月自動續訂`,
+    PeriodType: 'month', // 每月
+    // 每月扣款日；補零成兩碼（01–31），與 shared/time.ts 錨定日對齊（當月無該日 PAYUNi 用月底）
+    PeriodDate: String(existing?.anchorDay ?? anchorDay).padStart(2, '0'),
+    PeriodTimes: 99, // 執行扣款次數上限；到期前客戶早就取消或換方案
+    FType: 'build', // 委託建立當日就首扣一期 → 立即開通
+    API3D: 1, // 首次強制 3D；後續續期無 3D
+    Cardholder: 1, // 3D 需付款頁收持卡人英文名供發卡行驗證
+    NotifyURL: `${base}/payuni/period-notify`,
+    ReturnURL: `${base}/payuni/return?ws=${encodeURIComponent(workspaceId)}&no=${merchantOrderNo}`,
   }
+  // PAYUNi 消費者信箱欄位是 UsrMail（非藍新的 PayerEmail）——付款頁據此帶入信箱
+  const email = String(token.email || '').trim()
+  if (email) encryptInfo.UsrMail = email
+
+  const env = resolvePayuniEnv(config.payuniEnv)
+  const fields = buildUppForm(encryptInfo, keys)
 
   return {
     merchantOrderNo,
-    action: String(config.newebpayPeriodApiUrl || '').trim(),
+    action: PAYUNI_PERIOD_ENDPOINTS[env],
     method: 'POST',
-    // 定期定額只有這兩個外層欄位，沒有 TradeSha
-    fields: { MerchantID_: merchantId, PostData_: buildPeriodPostData(params, keys) },
+    fields,
   }
 })

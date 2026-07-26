@@ -116,6 +116,12 @@ export default defineNuxtConfig({
     payuniHashIV: process.env.PAYUNI_HASH_IV ?? '',
     payuniEnv: process.env.PAYUNI_ENV ?? 'test',
     /**
+     * 自動續訂（PAYUNi 續期收款 /api/period/Page）是否開通。
+     * 與單次付款共用同一組金鑰,只是換一支端點。opt-in（預設關）——驗證/部署好再開,
+     * 未開時結帳退回單次付款,不會壞。
+     */
+    payuniPeriodEnabled: process.env.PAYUNI_PERIOD_ENABLED === 'true',
+    /**
      * 信用卡定期定額（自動續訂）。與 MPG 共用同一組特店金鑰,只是換一支端點。
      * ⚠️ 定期定額是**申請制**——要先在藍新特店後台啟用「定期定額支付工具」才會通;
      *    未啟用時把 NEWEBPAY_PERIOD_ENABLED 留白,結帳會退回一次性付款,不會壞掉。
@@ -176,12 +182,16 @@ export default defineNuxtConfig({
         && process.env.PAYUNI_HASH_IV,
       ),
       /**
-       * 結帳是否走「自動續訂」（定期定額委託）而非一次性付款。
-       * ⚠️ 目前**一律 false**：已改用 PAYUNi 單次付款,PAYUNi 的定期定額（信用卡約定扣款）尚未實作。
-       *    留 false 確保前端**不會走到藍新那條殘留的 `create-subscription` 路徑**（那是藍新、金鑰也沒設,
-       *    一觸即壞）。等 PAYUNi 定期定額做好,再改成由 PAYUNI_PERIOD 之類旗標計算並接 PAYUNi 委託。
+       * 結帳是否走「自動續訂」（PAYUNi 續期收款 / 約定扣款）而非一次性付款。
+       * 前端據此決定確認文案（「每月自動扣款」vs「單次付款」）、走哪支建單 API、是否顯示取消訂閱。
+       * 三把金鑰都設好 **且** PAYUNI_PERIOD_ENABLED=true 才為 true（opt-in；未開就走單次付款）。
        */
-      recurringEnabled: false,
+      recurringEnabled: Boolean(
+        process.env.PAYUNI_MERCHANT_ID
+        && process.env.PAYUNI_HASH_KEY
+        && process.env.PAYUNI_HASH_IV
+        && process.env.PAYUNI_PERIOD_ENABLED === 'true',
+      ),
       /** 電子發票是否已開通（前端據此顯示／隱藏「發票資訊」設定卡）。四個值缺一不可。 */
       invoiceEnabled: Boolean(
         process.env.EZPAY_INVOICE_MERCHANT_ID

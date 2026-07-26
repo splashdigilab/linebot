@@ -8,13 +8,16 @@
  */
 import { runPaymentReconcile } from './payment'
 import { reconcilePayuniPending } from './payuni-reconcile'
-import { periodConfigFrom } from './newebpay-period'
+import { payuniPeriodConfigFrom, terminatePayuniPeriod } from './payuni-period'
 import { invoiceKeysFromConfig, reissueFailedInvoices } from './invoice'
 import { sendDueBillingEmails } from './billing-emails'
 
 export async function runBillingReconcile(config: Record<string, unknown>, now: Date = new Date()) {
   const payuni = await reconcilePayuniPending(config, now)
-  const result = await runPaymentReconcile(now, undefined, periodConfigFrom(config))
+  // 降級時終止 PAYUNi 續期委託（否則被降級的客戶還會被 PAYUNi 繼續扣款）
+  const periodCfg = payuniPeriodConfigFrom(config)
+  const terminatePeriod = periodCfg ? (periodNo: string) => terminatePayuniPeriod(periodNo, periodCfg) : null
+  const result = await runPaymentReconcile(now, undefined, terminatePeriod)
   const invoices = await reissueFailedInvoices(invoiceKeysFromConfig(config))
   const emails = await sendDueBillingEmails(now)
   return { ...result, payuni, invoices, emails }
